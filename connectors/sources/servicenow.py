@@ -502,20 +502,17 @@ class ServiceNowDataSource(BaseDataSource):
                 "label": "Service URL",
                 "order": 1,
                 "type": "str",
-                "value": "http://127.0.0.1:9318",
             },
             "username": {
                 "label": "Username",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "password": {
                 "label": "Password",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "services": {
                 "display": "textarea",
@@ -523,7 +520,6 @@ class ServiceNowDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "List of services is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": "*",
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -533,7 +529,6 @@ class ServiceNowDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_CLIENT_SUPPORT,
@@ -543,7 +538,6 @@ class ServiceNowDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": MAX_CONCURRENT_CLIENT_SUPPORT,
             },
         }
 

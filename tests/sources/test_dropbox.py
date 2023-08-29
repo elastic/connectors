@@ -16,7 +16,7 @@ from freezegun import freeze_time
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.dropbox import (
     DropBoxAdvancedRulesValidator,
     DropboxClient,
@@ -347,15 +347,6 @@ def setup_dropbox(source):
     source.configuration.get_field("app_key").value = "abc#123"
     source.configuration.get_field("app_secret").value = "abc#123"
     source.configuration.get_field("refresh_token").value = "abc#123"
-
-
-@pytest.mark.asyncio
-async def test_configuration():
-    """Tests the get configurations method of the Dropbox source class."""
-    config = DataSourceConfiguration(
-        config=DropboxDataSource.get_default_configuration()
-    )
-    assert config["path"] == PATH
 
 
 @pytest.mark.asyncio

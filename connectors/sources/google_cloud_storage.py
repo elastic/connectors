@@ -209,16 +209,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": DEFAULT_PEM_KEY,
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:4444/token",
-        }
 
         return {
             "service_account_credentials": {
@@ -226,7 +216,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "label": "Google Cloud service account JSON",
                 "order": 1,
                 "type": "str",
-                "value": json.dumps(default_credentials),
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -236,7 +225,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
             },
         }
 

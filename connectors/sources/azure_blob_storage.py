@@ -69,19 +69,16 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "label": "Azure Blob Storage account name",
                 "order": 1,
                 "type": "str",
-                "value": "devstoreaccount1",
             },
             "account_key": {
                 "label": "Azure Blob Storage account key",
                 "order": 2,
                 "type": "str",
-                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
             },
             "blob_endpoint": {
                 "label": "Azure Blob Storage blob endpoint",
                 "order": 3,
                 "type": "str",
-                "value": "http://127.0.0.1:10000/devstoreaccount1",
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -91,7 +88,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -104,7 +100,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "validations": [
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
-                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 
