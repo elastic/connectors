@@ -7,7 +7,7 @@
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
