@@ -514,20 +514,22 @@ async def test_configuration():
 
 
 @pytest.mark.parametrize(
-    "field, is_cloud",
+    "field, data_source",
     [
-        ("confluence_url", True),
-        ("account_email", True),
-        ("api_token", True),
-        ("username", False),
-        ("password", False),
+        ("confluence_url", "confluence_cloud"),
+        ("account_email", "confluence_cloud"),
+        ("api_token", "confluence_cloud"),
+        ("username", "confluence_server"),
+        ("password", "confluence_server"),
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, is_cloud):
+async def test_validate_configuration_for_empty_fields(field, data_source):
     async with create_source(ConfluenceDataSource) as source:
-        source.confluence_client.is_cloud = is_cloud
-        source.confluence_client.configuration.set_field(name=field, value="")
+        source.confluence_client.configuration.get_field(
+            "data_source"
+        ).value = data_source
+        source.confluence_client.configuration.get_field(field).value = ""
 
         # Execute
         with pytest.raises(Exception):
@@ -923,8 +925,8 @@ async def test_get_access_control_dls_enabled():
     async with create_source(ConfluenceDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
 
-        source.fetch_all_users = AsyncIterator([mock_users])
-        source.fetch_user = AsyncIterator([mock_user1])
+        source.atlassian_access_control.fetch_all_users = AsyncIterator([mock_users])
+        source.atlassian_access_control.fetch_user = AsyncIterator([mock_user1])
 
         user_documents = []
         async for user_doc in source.get_access_control():

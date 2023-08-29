@@ -440,7 +440,7 @@ def test_get_default_configuration():
 @pytest.mark.parametrize("field", ["repositories", "token"])
 async def test_validate_config_missing_fields_then_raise(field):
     async with create_source(GitHubDataSource) as source:
-        source.configuration.set_field(name=field, value="")
+        source.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()

@@ -344,9 +344,9 @@ def get_stream_reader():
 
 def setup_dropbox(source):
     # Set up default config with default values
-    source.configuration.set_field(name="app_key", value="abc#123")
-    source.configuration.set_field(name="app_secret", value="abc#123")
-    source.configuration.set_field(name="refresh_token", value="abc#123")
+    source.configuration.get_field("app_key").value = "abc#123"
+    source.configuration.get_field("app_secret").value = "abc#123"
+    source.configuration.get_field("refresh_token").value = "abc#123"
 
 
 @pytest.mark.asyncio
@@ -361,12 +361,12 @@ async def test_configuration():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field",
-    ["path", "app_key", "app_secret", "refresh_token"],
+    ["app_key", "app_secret", "refresh_token"],
 )
 async def test_validate_configuration_with_empty_fields_then_raise_exception(field):
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        source.dropbox_client.configuration.set_field(name=field, value="")
+        source.dropbox_client.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -376,7 +376,7 @@ async def test_validate_configuration_with_empty_fields_then_raise_exception(fie
 async def test_validate_configuration_with_valid_path():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        source.dropbox_client.configuration.set_field(name="path", value="/shared")
+        source.dropbox_client.configuration.get_field("path").value = "/shared"
 
         with patch.object(
             aiohttp.ClientSession,
