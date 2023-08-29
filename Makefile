@@ -73,7 +73,7 @@ default-config: install
 	bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
 docker-build:
-	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
+	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT -f app.Dockerfile .
 
 docker-run:
 	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG

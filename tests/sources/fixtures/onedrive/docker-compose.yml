@@ -74,7 +74,7 @@ services:
       - esnet
 
   onedrive:
-    build: .
+    build: ../../../../ftest.Dockerfile
     command: python fixture.py
     ports:
       - 10972:10972

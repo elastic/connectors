@@ -74,7 +74,7 @@ services:
       - esnet
   
   confluence:
-    build: .
+    build: ../../../../ftest.Dockerfile
     command: python fixture.py
     ports:
       - "9696:9696"

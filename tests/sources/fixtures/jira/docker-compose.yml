@@ -74,7 +74,7 @@ services:
       - esnet
 
   jira:
-    build: .
+    build: ../../../../ftest.Dockerfile
     command: python fixture.py
     ports:
       - "8080:8080"

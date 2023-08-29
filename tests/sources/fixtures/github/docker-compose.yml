@@ -74,7 +74,7 @@ services:
       - esnet
 
   github:
-    build: .
+    build: ../../../../ftest.Dockerfile
     command: python fixture.py
     ports:
       - "9091:9091"

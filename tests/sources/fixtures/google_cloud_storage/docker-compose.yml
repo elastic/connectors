@@ -25,7 +25,7 @@ services:
       - esnet
 
   gcs-mocker:
-    build: .
+    build: ../../../../ftest.Dockerfile
     command: python mocker.py
     ports:
       - "4444:4444"
