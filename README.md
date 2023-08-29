@@ -30,6 +30,7 @@ See the [official end-user documentation](https://www.elastic.co/guide/en/enterp
 - [SERVICENOW](docs/sync-rules/SERVICENOW.md)
 - [GITHUB](docs/sync-rules/GITHUB.md)
 - [NETWORK_DRIVE](docs/sync-rules/NETWORK_DRIVE.md)
+- [MICROSOFT_SQL](docs/sync-rules/MSSQL.md)
 
 ### Document level security
 
