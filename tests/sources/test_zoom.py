@@ -690,14 +690,17 @@ async def test_validate_config():
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
         ):
-            await source.validate_config()
+            try:
+                await source.validate_config()
+            except ConfigurableFieldValueError:
+                raise AssertionError("Should've been a valid config") from None
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["account_id", "client_id", "client_secret"])
 async def test_validate_config_missing_fields_then_raise(field):
     async with create_zoom_source() as source:
-        source.configuration.set_field(name=field, value="")
+        source.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -710,7 +713,10 @@ async def test_ping_for_successful_connection():
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
         ):
-            await source.ping()
+            try:
+                await source.ping()
+            except Exception as e:
+                raise AssertionError("Ping should've been successful") from e
 
 
 @pytest.mark.asyncio
