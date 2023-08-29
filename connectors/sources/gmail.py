@@ -14,12 +14,13 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     MessageFields,
     UserFields,
+    validate_service_account_json,
 )
 from connectors.utils import base64url_to_base64, iso_utc
 
@@ -158,13 +159,9 @@ class GMailDataSource(BaseDataSource):
             Exception: The format of service account json is invalid.
         """
         await super().validate_config()
-
-        try:
-            json.loads(self.configuration["service_account_credentials"])
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                f"Google Drive service account is not a valid JSON. Exception: {e}"
-            ) from e
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], "GMail"
+        )
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]
@@ -184,6 +181,7 @@ class GMailDataSource(BaseDataSource):
         return GoogleDirectoryClient(
             json_credentials=self._service_account_credentials,
             customer_id=self.configuration["customer_id"],
+            subject=self.configuration["subject"],
         )
 
     def _gmail_client(self, subject):

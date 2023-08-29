@@ -23,12 +23,15 @@ from connectors.access_control import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.sources.google import validate_service_account_json
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
     convert_to_b64,
     retryable,
 )
+
+GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -42,13 +45,6 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,parents"
 DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS = f"{DRIVE_ITEMS_FIELDS},permissions"
-
-# Google Service Account JSON includes "universe_domain" key. That argument is not
-# supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
-# service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
-SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
-    "universe_domain"
-}
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
 # mindful of the content extraction service resources
@@ -245,7 +241,10 @@ class GoogleDriveClient(GoogleAPIClient):
             json_credentials=json_credentials,
             api_name="drive",
             api_version="v3",
-            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            scopes=[
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+            ],
         )
 
     async def ping(self):
@@ -525,9 +524,13 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             GoogleDriveClient: An instance of the GoogleDriveClient.
         """
-        self._validate_service_account_json()
+        service_account_credentials = self.configuration["service_account_credentials"]
 
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+        validate_service_account_json(
+            service_account_credentials, GOOGLE_DRIVE_SERVICE_NAME
+        )
+
+        json_credentials = json.loads(service_account_credentials)
 
         return GoogleDriveClient(json_credentials=json_credentials)
 
@@ -538,11 +541,15 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             GoogleAdminDirectoryClient: An instance of the GoogleAdminDirectoryClient.
         """
-        self._validate_service_account_json()
+        service_account_credentials = self.configuration["service_account_credentials"]
+
+        validate_service_account_json(
+            service_account_credentials, "Google Admin Directory"
+        )
 
         self._validate_google_workspace_admin_email()
 
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+        json_credentials = json.loads(service_account_credentials)
 
         return GoogleAdminDirectoryClient(
             json_credentials=json_credentials,
@@ -557,31 +564,10 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         await super().validate_config()
 
-        self._validate_service_account_json()
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], GOOGLE_DRIVE_SERVICE_NAME
+        )
         self._validate_google_workspace_admin_email()
-
-    def _validate_service_account_json(self):
-        """Validates whether service account JSON is a valid JSON string and
-        checks for unexpected keys.
-
-        Raises:
-            ConfigurableFieldValueError: The service account json is ininvalid.
-        """
-
-        try:
-            json_credentials = json.loads(
-                self.configuration["service_account_credentials"]
-            )
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                f"Google Drive service account is not a valid JSON. Exception: {e}"
-            ) from e
-
-        for key in json_credentials.keys():
-            if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
-                raise ConfigurableFieldValueError(
-                    f"Google Drive service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
-                )
 
     def _validate_google_workspace_admin_email(self):
         """
@@ -1014,13 +1000,13 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Formatted file metadata.
         """
 
-        file_id = file.get("id")
+        file_id, file_name = file.get("id"), file.get("name")
 
         file_document = {
             "_id": file_id,
             "created_at": file.get("createdTime"),
             "last_updated": file.get("modifiedTime"),
-            "name": file.get("name"),
+            "name": file_name,
             "size": file.get("size") or 0,  # handle folders and shortcuts
             "_timestamp": file.get("modifiedTime"),
             "mime_type": file.get("mimeType"),
@@ -1070,9 +1056,18 @@ class GoogleDriveDataSource(BaseDataSource):
             # Read more: https://developers.google.com/drive/api/guides/shared-drives-diffs
             permissions = file.get("permissions", [])
             if not permissions:
-                permissions = await self._get_permissions_on_shared_drive(
-                    file_id=file_id
-                )
+                try:
+                    permissions = await self._get_permissions_on_shared_drive(
+                        file_id=file_id
+                    )
+                except HTTPError as exception:
+                    # Gracefully handle scenario when the service account does not
+                    # have permission to fetch ACL for a file.
+                    exception_log_msg = f"Unable to fetch permission list for the file {file_name}. Exception: {exception}."
+                    if exception.res.status_code == 403:
+                        self._logger.warning(exception_log_msg)
+                    else:
+                        self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
 

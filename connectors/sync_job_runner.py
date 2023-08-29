@@ -115,7 +115,7 @@ class SyncJobRunner:
             )
             self.data_provider.set_logger(self.sync_job.logger)
             if not await self.data_provider.changed():
-                self.sync_job.log_debug("No change in remote source, skipping...")
+                self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
@@ -137,8 +137,10 @@ class SyncJobRunner:
             self.elastic_server = SyncOrchestrator(self.es_config, self.sync_job.logger)
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
+                self.sync_job.log_info(f"Executing {job_type.value} sync")
                 await self._execute_content_sync_job(job_type, bulk_options)
             elif job_type == JobType.ACCESS_CONTROL:
+                self.sync_job.log_info("Executing access control sync")
                 await self._execute_access_control_sync_job(job_type, bulk_options)
             else:
                 raise UnsupportedJobType
@@ -225,7 +227,7 @@ class SyncJobRunner:
             try:
                 await self.job_reporting_task
             except asyncio.CancelledError:
-                self.sync_job.log_info("Job reporting task is stopped.")
+                self.sync_job.log_debug("Job reporting task is stopped.")
 
         result = (
             {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
@@ -263,9 +265,11 @@ class SyncJobRunner:
             )
 
         self.sync_job.log_info(
-            f"Sync done: {ingestion_stats.get('indexed_document_count')} indexed, "
-            f"{ingestion_stats.get('deleted_document_count')} deleted. "
-            f"({int(time.time() - self._start_time)} seconds)"  # pyright: ignore
+            f"Sync ended with status {sync_status.value} -- "
+            f"created: {result.get('doc_created', 0)} | "
+            f"updated: {result.get('doc_updated', 0)} | "
+            f"deleted: {result.get('doc_deleted', 0)} "
+            f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
 
     @with_concurrency_control()

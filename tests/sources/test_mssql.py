@@ -89,7 +89,9 @@ async def test_fetch_documents_from_query_negative(mock_apply_retry_strategy):
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
-    async with create_source(MSSQLDataSource) as source:
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
         ):

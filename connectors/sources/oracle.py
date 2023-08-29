@@ -17,7 +17,6 @@ from connectors.source import BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
-    WILDCARD,
     Queries,
     configured_tables,
     fetch,
@@ -287,33 +286,28 @@ class OracleDataSource(BaseDataSource):
                 "label": "Host",
                 "order": 1,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
                 "type": "int",
-                "value": 9090,
             },
             "username": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "Password_123",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "value": "xe",
             },
             "tables": {
                 "display": "textarea",
@@ -321,7 +315,6 @@ class OracleDataSource(BaseDataSource):
                 "options": [],
                 "order": 6,
                 "type": "list",
-                "value": WILDCARD,
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -331,7 +324,6 @@ class OracleDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -341,7 +333,6 @@ class OracleDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
             },
             "oracle_protocol": {
                 "display": "dropdown",
@@ -360,7 +351,6 @@ class OracleDataSource(BaseDataSource):
                 "order": 10,
                 "required": False,
                 "type": "str",
-                "value": DEFAULT_ORACLE_HOME,
             },
             "wallet_configuration_path": {
                 "default_value": "",
@@ -368,7 +358,6 @@ class OracleDataSource(BaseDataSource):
                 "order": 11,
                 "required": False,
                 "type": "str",
-                "value": "",
             },
         }
 

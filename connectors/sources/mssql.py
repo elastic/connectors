@@ -25,7 +25,6 @@ from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
     DEFAULT_WAIT_MULTIPLIER,
-    WILDCARD,
     Queries,
     configured_tables,
     fetch,
@@ -393,33 +392,28 @@ class MSSQLDataSource(BaseDataSource):
                 "label": "Host",
                 "order": 1,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
                 "type": "int",
-                "value": 9090,
             },
             "username": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "Password_123",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "value": "xe",
             },
             "tables": {
                 "display": "textarea",
@@ -428,7 +422,6 @@ class MSSQLDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": WILDCARD,
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -438,7 +431,6 @@ class MSSQLDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -448,34 +440,29 @@ class MSSQLDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
             },
             "schema": {
                 "label": "Schema",
                 "order": 9,
                 "type": "str",
-                "value": "dbo",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL verification",
                 "order": 10,
                 "type": "bool",
-                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 11,
                 "type": "str",
-                "value": "",
             },
             "validate_host": {
                 "display": "toggle",
                 "label": "Validate host",
                 "order": 12,
                 "type": "bool",
-                "value": False,
             },
         }
 
