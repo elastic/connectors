@@ -231,6 +231,7 @@ class SlackDataSource(BaseDataSource):
                 "order": 3,
                 "tooltip": "The Slack application bot will only be able to read conversation history from channels it has joined. The default requires it to be manually invited to channels. Enabling this allows it to automatically invite itself into all public channels.",
                 "type": "bool",
+                "value": False,
             },
             "sync_users": {
                 "display": "toggle",
@@ -238,6 +239,7 @@ class SlackDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "Whether or not Slack Users should be indexed as documents in Elasticsearch.",
                 "type": "bool",
+                "value": True,
             },
         }
 

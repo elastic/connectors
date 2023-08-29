@@ -619,6 +619,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "label": "Enable SSL",
                 "order": 5,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
