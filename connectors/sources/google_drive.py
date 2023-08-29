@@ -483,7 +483,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 1,
                 "tooltip": "This connectors authenticates as a service account to synchronize content from Google Drive.",
                 "type": "str",
-                "value": "",
             },
             "use_document_level_security": {
                 "display": "toggle",
@@ -491,7 +490,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 2,
                 "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": False,
             },
             "google_workspace_admin_email": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -501,7 +499,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
                 "type": "str",
                 "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
-                "value": "admin@your-organization.com",
             },
             "max_concurrency": {
                 "default_value": GOOGLE_API_MAX_CONCURRENCY,
@@ -513,7 +510,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "validations": [{"type": "greater_than", "constraint": 0}],
-                "value": GOOGLE_API_MAX_CONCURRENCY,
             },
         }
 
