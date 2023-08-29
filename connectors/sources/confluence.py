@@ -242,6 +242,7 @@ class ConfluenceDataSource(BaseDataSource):
                 ],
                 "order": 1,
                 "type": "str",
+                "value": CONFLUENCE_SERVER,
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
