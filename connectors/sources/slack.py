@@ -261,9 +261,8 @@ class SlackDataSource(BaseDataSource):
             yield message, None
 
     async def channels_and_messages(self):
-        delta = timedelta(days=self.n_days_to_fetch)
-        past_unix_timestamp = time.mktime((datetime.utcnow() - delta).timetuple())
-        current_unix_timestamp = time.mktime(datetime.utcnow().timetuple())
+        current_unix_timestamp = time.time()
+        past_unix_timestamp = current_unix_timestamp - self.n_days_to_fetch * 24 * 3600
         async for channel in self.slack_client.list_channels(
             not self.auto_join_channels
         ):
