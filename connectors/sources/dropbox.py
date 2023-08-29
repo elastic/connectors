@@ -552,28 +552,24 @@ class DropboxDataSource(BaseDataSource):
                 "required": False,
                 "tooltip": "Path is ignored when Advanced Sync Rules are used.",
                 "type": "str",
-                "value": "/",
             },
             "app_key": {
                 "label": "App Key",
                 "sensitive": True,
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "app_secret": {
                 "label": "App secret",
                 "sensitive": True,
                 "order": 3,
                 "type": "str",
-                "value": "abc#123",
             },
             "refresh_token": {
                 "label": "Refresh token",
                 "sensitive": True,
                 "order": 4,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": RETRY_COUNT,
@@ -583,7 +579,6 @@ class DropboxDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRY_COUNT,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -593,7 +588,6 @@ class DropboxDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": MAX_CONCURRENT_DOWNLOADS,
             },
         }
 

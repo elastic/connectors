@@ -1,0 +1,120 @@
+{
+        "name": "azure_blob_storage",
+        "index_name": "search-azure_blob_storage",
+        "service_type": "azure_blob_storage",
+        "sync_cursor": null,
+        "is_native": false,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
+        "last_sync_status": "canceled",
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+                "account_name": {
+                        "label": "Azure Blob Storage account name",
+                        "order": 1,
+                        "type": "str",
+                        "value": "devstoreaccount1"
+                },
+                "account_key": {
+                        "label": "Azure Blob Storage account key",
+                        "order": 2,
+                        "type": "str",
+                        "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+                },
+                "blob_endpoint": {
+                        "label": "Azure Blob Storage blob endpoint",
+                        "order": 3,
+                        "type": "str",
+                        "value": "http://127.0.0.1:10000/devstoreaccount1"
+                },
+                "retry_count": {
+                        "default_value": 3,
+                        "display": "numeric",
+                        "label": "Retries per request",
+                        "order": 4,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": null
+                },
+                "concurrent_downloads": {
+                        "default_value": 100,
+                        "display": "numeric",
+                        "label": "Maximum concurrent downloads",
+                        "order": 5,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "validations": [
+                                {"type": "less_than", "constraint": 101}
+                        ],
+                        "value": null
+                }
+        },
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        },
+                        "active": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        }
+                }
+
+        ],
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+        }
+}
