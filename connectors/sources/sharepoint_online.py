@@ -1059,26 +1059,22 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
                 "label": "Tenant name",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "label": "Client ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "secret_value": {
                 "label": "Secret value",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "site_collections": {
                 "display": "textarea",
@@ -1086,7 +1082,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "A comma-separated list of sites to ingest data from. Use * to include all available sites.",
                 "order": 5,
                 "type": "list",
-                "value": "",
             },
             "use_text_extraction_service": {
                 "display": "toggle",

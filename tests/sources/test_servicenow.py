@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the ServiceNow source class methods"""
+from contextlib import asynccontextmanager
 from unittest import mock
 
 import pytest
@@ -11,7 +12,7 @@ from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.servicenow import (
     InvalidResponse,
     ServiceNowAdvancedRulesValidator,
@@ -23,6 +24,18 @@ from tests.sources.support import create_source
 
 SAMPLE_RESPONSE = b'{"batch_request_id":"1","serviced_requests":[{"id":"1", "body":"eyJyZXN1bHQiOlt7Im5hbWUiOiJzbl9zbV9qb3VybmFsMDAwMiIsImxhYmVsIjoiU2VjcmV0cyBNYW5hZ2VtZW50IEpvdXJuYWwifV19","status_code":200,"status_text":"OK","execution_time":19}],"unserviced_requests":[]}'
 ADVANCED_SNIPPET = "advanced_snippet"
+
+
+@asynccontextmanager
+async def create_service_now_source():
+    async with create_source(
+        ServiceNowDataSource,
+        url="http://127.0.0.1:1234",
+        username="admin",
+        password="changeme",
+        services="*",
+    ) as source:
+        yield source
 
 
 class MockResponse:
@@ -60,21 +73,10 @@ class StreamerReader:
         yield self._res
 
 
-def test_get_configuration():
-    config = DataSourceConfiguration(ServiceNowDataSource.get_default_configuration())
-    assert config["services"] == ["*"]
-
-
-def setup_servicenow(source):
-    # Set up default config with default values
-    source.configuration.get_field("username").value = "admin"
-    source.configuration.get_field("password").value = "changeme"
-
-
 @pytest.mark.parametrize("field", ["username", "password", "services"])
 @pytest.mark.asyncio
 async def test_validate_config_missing_fields_then_raise(field):
-    async with create_source(ServiceNowDataSource) as source:
+    async with create_service_now_source() as source:
         source.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
@@ -83,8 +85,7 @@ async def test_validate_config_missing_fields_then_raise(field):
 
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_service_then_raise():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client.services = ["label_1", "label_3"]
 
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
@@ -110,8 +111,7 @@ async def test_validate_configuration_with_invalid_service_then_raise():
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         with mock.patch.object(
             ServiceNowClient,
             "get_table_length",
@@ -122,8 +122,7 @@ async def test_ping_for_successful_connection():
 
 @pytest.mark.asyncio
 async def test_ping_for_unsuccessful_connection_then_raise():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         with mock.patch.object(
             ServiceNowClient,
             "get_table_length",
@@ -135,8 +134,7 @@ async def test_ping_for_unsuccessful_connection_then_raise():
 
 @pytest.mark.asyncio
 async def test_tweak_bulk_options():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.concurrent_downloads = 10
         options = {"concurrent_downloads": 5}
 
@@ -146,8 +144,7 @@ async def test_tweak_bulk_options():
 
 @pytest.mark.asyncio
 async def test_get_data():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=SAMPLE_RESPONSE, headers={"Content-Type": "application/json"}
@@ -166,8 +163,7 @@ async def test_get_data():
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_get_data_with_retry(mock_apply_retry_strategy):
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=ServerDisconnectedError
@@ -180,8 +176,7 @@ async def test_get_data_with_retry(mock_apply_retry_strategy):
 
 @pytest.mark.asyncio
 async def test_get_table_length():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=SAMPLE_RESPONSE,
@@ -196,8 +191,7 @@ async def test_get_table_length():
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_get_table_length_with_retry(mock_apply_retry_strategy):
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=ServerDisconnectedError
@@ -210,8 +204,7 @@ async def test_get_table_length_with_retry(mock_apply_retry_strategy):
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_get_data_with_empty_response(mock_apply_retry_strategy):
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -228,8 +221,7 @@ async def test_get_data_with_empty_response(mock_apply_retry_strategy):
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_get_data_with_text_response(mock_apply_retry_strategy):
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -245,8 +237,7 @@ async def test_get_data_with_text_response(mock_apply_retry_strategy):
 
 @pytest.mark.asyncio
 async def test_filter_services_with_exception():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client.services = ["label_1", "label_3"]
 
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
@@ -259,8 +250,7 @@ async def test_filter_services_with_exception():
 
 @pytest.mark.asyncio
 async def test_get_docs_with_skipping_table_data():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=SAMPLE_RESPONSE,
@@ -286,8 +276,7 @@ async def test_get_docs_with_skipping_table_data():
 
 @pytest.mark.asyncio
 async def test_get_docs_with_skipping_attachment_data():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=SAMPLE_RESPONSE,
@@ -338,8 +327,7 @@ async def test_get_docs_with_skipping_attachment_data():
 
 @pytest.mark.asyncio
 async def test_get_docs_with_configured_services():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client.services = ["custom"]
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -412,8 +400,7 @@ async def test_get_docs_with_configured_services():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_with_doit():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
@@ -437,8 +424,7 @@ async def test_fetch_attachment_content_with_doit():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_with_upper_extension():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
@@ -462,8 +448,7 @@ async def test_fetch_attachment_content_with_upper_extension():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_without_doit():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
@@ -482,8 +467,7 @@ async def test_fetch_attachment_content_without_doit():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_with_exception():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=Exception("Something went wrong")
         )
@@ -503,8 +487,7 @@ async def test_fetch_attachment_content_with_exception():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_with_unsupported_extension_then_skip():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
@@ -524,8 +507,7 @@ async def test_fetch_attachment_content_with_unsupported_extension_then_skip():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_without_extension_then_skip():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
@@ -545,8 +527,7 @@ async def test_fetch_attachment_content_without_extension_then_skip():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
@@ -647,8 +628,7 @@ async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
 
         with mock.patch.object(
@@ -687,8 +667,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 )
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(filtering):
-    async with create_source(ServiceNowDataSource) as source:
-        setup_servicenow(source)
+    async with create_service_now_source() as source:
         source.servicenow_client.services = ["custom"]
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
