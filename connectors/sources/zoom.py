@@ -301,7 +301,7 @@ class ZoomClient:
 
 class ZoomDataSource(BaseDataSource):
     name = "Zoom"
-    service_type = "Zoom"
+    service_type = "zoom"
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -321,20 +321,17 @@ class ZoomDataSource(BaseDataSource):
                 "label": "Account ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "label": "Client ID",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "client_secret": {
                 "label": "Client secret",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "fetch_past_meeting_details": {
                 "display": "toggle",
