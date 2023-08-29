@@ -102,7 +102,7 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 "items": {"type": "string"},
             },
             "parentPathPattern": {"type": "string", "minLength": 1},
-            "userMailAccounts": {
+            "owners": {
                 "type": "array",
                 "minItems": 1,
                 "items": {"type": "string", "format": "email", "minLength": 1},
@@ -531,7 +531,7 @@ class OneDriveDataSource(BaseDataSource):
 
             for query_info in advanced_rules:
                 skipped_extensions = query_info.get("skipFilesWithExtensions")
-                user_mails = query_info.get("userMailAccounts")
+                user_mails = query_info.get("owners")
                 if user_mails is None:
                     user_mails = user_id_mail_map.keys()
 

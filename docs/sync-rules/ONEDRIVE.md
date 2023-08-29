@@ -6,7 +6,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
 The advanced sync rules consists of a set of rules where each rule can have one or more parameters out of these:
 
-1. userMailAccounts: list of user emails for which the rule would execute.
+1. owners: list of user emails of the owners for which the rule would execute.
 2. skipFilesWithExtensions: list of file extensions to be skipped for the sync.
 3. parentPathPattern: glob pattern specifying the path where the files to be synced are present. 
 
@@ -27,7 +27,7 @@ The advanced sync rules consists of a set of rules where each rule can have one 
 ```json
 [
   {
-    "userMailAccounts": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"],
+    "owners": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"],
     "skipFilesWithExtensions": [".py"]
   }
 ]
@@ -49,7 +49,7 @@ The advanced sync rules consists of a set of rules where each rule can have one 
 ```json
 [
   {
-    "userMailAccounts": ["user1-domain@onmicrosoft.com", "user3-domain@onmicrosoft.com"],
+    "owners": ["user1-domain@onmicrosoft.com", "user3-domain@onmicrosoft.com"],
     "skipFilesWithExtensions": [".pdf", ".py"],
     "parentPathPattern": "/drive/root:/hello/**/abc"
   }
@@ -61,7 +61,7 @@ The advanced sync rules consists of a set of rules where each rule can have one 
 ```json
 [
   {
-    "userMailAccounts": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"]
+    "owners": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"]
   },
   {
     "skipFilesWithExtensions": [".py"]
@@ -74,7 +74,7 @@ The advanced sync rules consists of a set of rules where each rule can have one 
 ```json
 [
   {
-    "userMailAccounts": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"],
+    "owners": ["user1-domain@onmicrosoft.com", "user2-domain@onmicrosoft.com"],
     "skipFilesWithExtensions": [".md"]
   },
   {

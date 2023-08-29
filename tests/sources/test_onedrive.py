@@ -642,7 +642,7 @@ async def test_get_docs(users_patch, files_patch):
             # valid: one custom query
             [
                 {
-                    "userMailAccounts": ["a1@onmicrosoft.com", "b1@onmicrosoft.com"],
+                    "owners": ["a1@onmicrosoft.com", "b1@onmicrosoft.com"],
                     "parentPathPattern": "/drive/root:/folder1/folder2",
                 }
             ],
@@ -654,11 +654,11 @@ async def test_get_docs(users_patch, files_patch):
             # valid: two custom queries
             [
                 {
-                    "userMailAccounts": ["a1@onmicrosoft.com"],
+                    "owners": ["a1@onmicrosoft.com"],
                     "skipFilesWithExtensions": [".py"],
                 },
                 {
-                    "userMailAccounts": ["b1@onmicrosoft.com", "c1@onmicrosoft.com"],
+                    "owners": ["b1@onmicrosoft.com", "c1@onmicrosoft.com"],
                     "parentPathPattern": "/drive/root:/hello/*",
                 },
             ],
@@ -669,8 +669,8 @@ async def test_get_docs(users_patch, files_patch):
         (
             # invalid: value empty
             [
-                {"userMailAccounts": ["a1@onmicrosoft.com"], "parentPathPattern": ""},
-                {"userMailAccounts": ["a1@onmicrosoft.com"]},
+                {"owners": ["a1@onmicrosoft.com"], "parentPathPattern": ""},
+                {"owners": ["a1@onmicrosoft.com"]},
             ],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
@@ -680,7 +680,7 @@ async def test_get_docs(users_patch, files_patch):
         ),
         (
             # invalid: unallowed key
-            [{"userMailAccounts": ["a1@onmicrosoft.com"], "path": "/drive/root:/a/**"}],
+            [{"owners": ["a1@onmicrosoft.com"], "path": "/drive/root:/a/**"}],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -688,8 +688,8 @@ async def test_get_docs(users_patch, files_patch):
             ),
         ),
         (
-            # invalid: invalid format in userMailAccounts
-            {"userMailAccounts": ["abccom.in"]},
+            # invalid: invalid format in owners
+            {"owners": ["abccom.in"]},
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -700,7 +700,7 @@ async def test_get_docs(users_patch, files_patch):
             # invalid: array of arrays -> wrong type
             [
                 {
-                    "userMailAccounts": ["a1@onmicrosoft.com"],
+                    "owners": ["a1@onmicrosoft.com"],
                     "skipFilesWithExtensions": [[".pdf", ".exe"], [".docs"]],
                 }
             ],
@@ -730,11 +730,11 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
                 ADVANCED_SNIPPET: {
                     "value": [
                         {
-                            "userMailAccounts": ["AdeleV@w076v.onmicrosoft.com"],
+                            "owners": ["AdeleV@w076v.onmicrosoft.com"],
                             "skipFilesWithExtensions": [".py"],
                         },
                         {
-                            "userMailAccounts": ["AlexW@w076v.onmicrosoft.com"],
+                            "owners": ["AlexW@w076v.onmicrosoft.com"],
                             "parentPathPattern": "/drive/root:/hello/*",
                         },
                     ],
