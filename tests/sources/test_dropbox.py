@@ -16,7 +16,7 @@ from freezegun import freeze_time
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.dropbox import (
     DropBoxAdvancedRulesValidator,
     DropboxClient,

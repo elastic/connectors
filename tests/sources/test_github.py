@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Github source class methods"""
-from unittest.mock import ANY, AsyncMock, Mock, patch
 from contextlib import asynccontextmanager
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -13,7 +13,7 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.github import (
     GitHubAdvancedRulesValidator,
     GitHubDataSource,
@@ -411,9 +411,16 @@ MOCK_COMMITS = [
     }
 ]
 
+
 @asynccontextmanager
 async def create_github_source():
-    async with  create_source(GitHubDataSource, data_source="github-server", token="changeme", repositories="*", ssl_enabled=False) as source:
+    async with create_source(
+        GitHubDataSource,
+        data_source="github-server",
+        token="changeme",
+        repositories="*",
+        ssl_enabled=False,
+    ) as source:
         yield source
 
 
