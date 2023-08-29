@@ -16,7 +16,7 @@ from aiohttp import StreamReader
 from freezegun import freeze_time
 
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.jira import JiraClient, JiraDataSource
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -498,7 +498,6 @@ async def test_get_session():
 async def test_close_with_client_session():
     async with create_jira_source() as source:
         source.jira_client._get_session()
-
 
     assert source.jira_client.session is None
 
