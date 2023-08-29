@@ -33,6 +33,22 @@ DATE = "2023-01-24T04:07:19+00:00"
 JSON_CREDENTIALS = {"key": "value"}
 
 
+@asynccontextmanager
+async def create_gmail_source(dls_enabled=False):
+    async with create_source(
+        GMailDataSource,
+        service_account_credentials=json.dumps(JSON_CREDENTIALS),
+        subject="subject",
+        customer_id="foo",
+        use_document_level_security=dls_enabled,
+    ) as source:
+        source.set_features(
+            Features({"document_level_security": {"enabled": dls_enabled}})
+        )
+        source._service_account_credentials = MagicMock()
+
+        yield source
+
 class TestGMailAdvancedRulesValidator:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -110,27 +126,6 @@ CREATION_DATE = "2023-01-01T13:37:00"
 @freeze_time(DATE)
 def test_message_doc(message, expected_doc):
     assert _message_doc(message) == expected_doc
-
-
-@asynccontextmanager
-async def create_gmail_source(dls_enabled=False):
-    async with create_source(
-        GMailDataSource,
-        service_account_credentials=json.dumps(JSON_CREDENTIALS),
-        subject="subject",
-        customer_id="foo",
-        use_document_level_security=dls_enabled,
-    ) as source:
-        source.set_features(
-            Features({"document_level_security": {"enabled": dls_enabled}})
-        )
-        source.configuration.get_field(
-            "use_document_level_security"
-        ).value = dls_enabled
-
-        source._service_account_credentials = MagicMock()
-
-        yield source
 
 
 class TestGMailDataSource:
