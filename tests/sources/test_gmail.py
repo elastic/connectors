@@ -49,6 +49,7 @@ async def create_gmail_source(dls_enabled=False):
 
         yield source
 
+
 class TestGMailAdvancedRulesValidator:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
