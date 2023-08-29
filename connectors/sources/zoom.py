@@ -5,6 +5,7 @@
 #
 """Zoom source module responsible to fetch documents from Zoom."""
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property, partial
@@ -34,9 +35,16 @@ CHAT_PAGE_SIZE = 50
 MEETING_PAGE_SIZE = 300
 FILE_SIZE_LIMIT = 10485760
 
-BASE_URL = "https://api.zoom.us/v2"
+if "OVERRIDE_URL" in os.environ:
+    override_url = os.environ["OVERRIDE_URL"]
+    BASE_URL = override_url
+    BASE_AUTH_URL = override_url
+else:
+    BASE_URL = "https://api.zoom.us/v2"
+    BASE_AUTH_URL = "https://zoom.us"
+
 AUTH = (
-    "https://zoom.us/oauth/token?grant_type=account_credentials&account_id={account_id}"
+    "{base_auth_url}/oauth/token?grant_type=account_credentials&account_id={account_id}"
 )
 APIS = {
     "USERS": "{base_url}/users?page_size={page_size}",
@@ -96,7 +104,7 @@ class ZoomAPIToken:
     )
     async def _fetch_token(self):
         self._logger.debug("Generating access token.")
-        url = AUTH.format(account_id=self.account_id)
+        url = AUTH.format(base_auth_url=BASE_AUTH_URL, account_id=self.account_id)
         content = f"{self.client_id}:{self.client_secret}"
         base64_credentials = get_base64_value(content=content.encode("utf-8"))
         request_headers = {
