@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Zoom source class methods"""
+from contextlib import asynccontextmanager
 from unittest import mock
 
 import aiohttp
@@ -400,14 +401,16 @@ def get_mock(mock_response):
     return async_mock
 
 
-def setup_zoom(source, fetch_past_meeting_details=False):
-    # Set up default config with default values
-    source.configuration.set_field(name="account_id", value="123")
-    source.configuration.set_field(name="client_id", value="id@123")
-    source.configuration.set_field(name="client_secret", value="secret#123")
-    source.configuration.set_field(
-        name="fetch_past_meeting_details", value=fetch_past_meeting_details
-    )
+@asynccontextmanager
+async def create_zoom_source(fetch_past_meeting_details=False):
+    async with create_source(ZoomDataSource) as source:
+        source.configuration.get_field("account_id").value = "123"
+        source.configuration.get_field("client_id").value = "id@123"
+        source.configuration.get_field("client_secret").value = "secret#123"
+        source.configuration.get_field(
+            "fetch_past_meeting_details"
+        ).value = fetch_past_meeting_details
+        yield source
 
 
 def mock_zoom_apis(url, headers):
@@ -502,8 +505,7 @@ def mock_token_response():
 
 @pytest.mark.asyncio
 async def test_fetch_for_successful_call():
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -521,8 +523,7 @@ async def test_fetch_for_successful_call():
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_for_unsuccessful_call(mock_apply_retry_strategy):
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -540,8 +541,7 @@ async def test_fetch_for_unsuccessful_call(mock_apply_retry_strategy):
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_for_unauthorized_error(mock_apply_retry_strategy):
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -565,8 +565,7 @@ async def test_fetch_for_unauthorized_error(mock_apply_retry_strategy):
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_for_notfound_error(mock_apply_retry_strategy):
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -590,8 +589,7 @@ async def test_fetch_for_notfound_error(mock_apply_retry_strategy):
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_fetch_for_other_client_error(mock_apply_retry_strategy):
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -614,8 +612,7 @@ async def test_fetch_for_other_client_error(mock_apply_retry_strategy):
 
 @pytest.mark.asyncio
 async def test_content_for_successful_call():
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -633,8 +630,7 @@ async def test_content_for_successful_call():
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_content_for_unsuccessful_call(mock_apply_retry_strategy):
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -651,8 +647,7 @@ async def test_content_for_unsuccessful_call(mock_apply_retry_strategy):
 
 @pytest.mark.asyncio
 async def test_scroll_for_successful_response():
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -671,8 +666,7 @@ async def test_scroll_for_successful_response():
 
 @pytest.mark.asyncio
 async def test_scroll_for_empty_response():
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -691,20 +685,22 @@ async def test_scroll_for_empty_response():
 
 @pytest.mark.asyncio
 async def test_validate_config():
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
         ):
-            await source.validate_config()
+            try:
+                await source.validate_config()
+            except ConfigurableFieldValueError:
+                raise AssertionError("Should've been a valid config") from None
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["account_id", "client_id", "client_secret"])
 async def test_validate_config_missing_fields_then_raise(field):
-    async with create_source(ZoomDataSource) as source:
-        source.configuration.set_field(name=field, value="")
+    async with create_zoom_source() as source:
+        source.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -712,20 +708,21 @@ async def test_validate_config_missing_fields_then_raise(field):
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
         ):
-            await source.ping()
+            try:
+                await source.ping()
+            except Exception as e:
+                raise AssertionError("Ping should've been successful") from e
 
 
 @pytest.mark.asyncio
 @mock.patch("connectors.utils.apply_retry_strategy")
 async def test_ping_for_unsuccessful_connection(mock_apply_retry_strategy):
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source)
+    async with create_zoom_source() as source:
         mock_apply_retry_strategy.return_value = mock.Mock()
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -747,7 +744,7 @@ async def test_ping_for_unsuccessful_connection(mock_apply_retry_strategy):
     ],
 )
 async def test_get_content(attachment, doit, expected_content):
-    async with create_source(ZoomDataSource) as source:
+    async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=mock_token_response(),
@@ -768,8 +765,7 @@ async def test_get_content(attachment, doit, expected_content):
 async def test_get_docs():
     document_without_attachment = []
     document_with_attachment = []
-    async with create_source(ZoomDataSource) as source:
-        setup_zoom(source, fetch_past_meeting_details=True)
+    async with create_zoom_source(fetch_past_meeting_details=True) as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE),
