@@ -1,6 +1,6 @@
 # Elastic Python connectors
 
-<img width="468" alt="search-icon" src="https://github.com/elastic/connectors-python/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
+<img width="250" alt="search-icon" src="https://github.com/elastic/connectors-python/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
 
 ## Connectors
 
@@ -15,6 +15,17 @@ These connectors are available as:
 You can get started quickly with Docker, using [these instructions](docs/DOCKER.md).
 We also have an end-to-end tutorial using the [PostgreSQL connector client](https://www.elastic.co/guide/en/enterprise-search/current/postgresql-connector-client-tutorial.html).
 
+### Connector documentation
+
+The main documentation for _using_ connectors lives in the Search solution's docs.
+Here are the main pages:
+
+- [Connectors overview](https://www.elastic.co/guide/en/enterprise-search/current/connectors.html)
+- [Connector clients](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html)
+- [Native connectors](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html)
+
+You'll also find the individual references for each connector there.
+For everything to do with _developing_ connectors, you'll find that here in this repo.
 
 ## Python connector framework
 
@@ -30,7 +41,7 @@ The framework serves two distinct, but related use cases:
 - Customizing an existing Elastic connector client
 - Building a new connector client
 
-## Guides
+### Guides for using the framework
 
 - [Code of Conduct](https://www.elastic.co/community/codeofconduct)
 - [Getting Support](docs/SUPPORT.md)
@@ -43,17 +54,3 @@ The framework serves two distinct, but related use cases:
 - [Configuration](docs/CONFIG.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
 - [Upgrading](docs/UPGRADING.md)
-
-### Advanced sync rules
-
-- [MySQL](docs/sync-rules/MYSQL.md)
-- [JIRA](docs/sync-rules/JIRA.md)
-- [CONFLUENCE](docs/sync-rules/CONFLUENCE.md)
-- [SERVICENOW](docs/sync-rules/SERVICENOW.md)
-- [GITHUB](docs/sync-rules/GITHUB.md)
-- [NETWORK_DRIVE](docs/sync-rules/NETWORK_DRIVE.md)
-
-### Document level security
-
-- [JIRA](docs/document-level-security/JIRA.md)
-- [CONFLUENCE](docs/document-level-security/CONFLUENCE.md)
