@@ -39,7 +39,9 @@ async def test_ping():
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
-    async with create_source(MSSQLDataSource) as source:
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
         ):
