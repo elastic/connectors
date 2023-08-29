@@ -522,7 +522,7 @@ class MSSQLDataSource(BaseDataSource):
                 yield row
         else:
             self._logger.warning(
-                f"Skipping query for tables {', '.join(tables)} as primary key column name is not present in query."
+                f"Skipping query {query} for tables {', '.join(tables)} as primary key column name is not present in query."
             )
 
     async def fetch_documents_from_table(self, table):
@@ -585,12 +585,13 @@ class MSSQLDataSource(BaseDataSource):
                 ],
             )
         )
+        last_update_time = (
+            max(last_update_times) if len(last_update_times) else iso_utc()
+        )
+
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
         ):
-            last_update_time = (
-                max(last_update_times) if len(last_update_times) else iso_utc()
-            )
             doc_id = f"{self.database}_{self.schema}_{hash_id([table for table in tables], row, primary_key_columns)}"
 
             yield self.serialize(

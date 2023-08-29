@@ -209,7 +209,9 @@ async def test_get_docs():
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
-    async with create_source(MSSQLDataSource) as source:
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
         ):
@@ -316,7 +318,9 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 )
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(filtering, expected_response):
-    async with create_source(MSSQLDataSource) as source:
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
         ):
