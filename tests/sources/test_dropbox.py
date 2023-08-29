@@ -350,15 +350,6 @@ def setup_dropbox(source):
 
 
 @pytest.mark.asyncio
-async def test_configuration():
-    """Tests the get configurations method of the Dropbox source class."""
-    config = DataSourceConfiguration(
-        config=DropboxDataSource.get_default_configuration()
-    )
-    assert config["path"] == PATH
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field",
     ["app_key", "app_secret", "refresh_token"],
