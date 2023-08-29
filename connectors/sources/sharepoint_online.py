@@ -1059,26 +1059,22 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
                 "label": "Tenant name",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "label": "Client ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "secret_value": {
                 "label": "Secret value",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "site_collections": {
                 "display": "textarea",
@@ -1086,7 +1082,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "A comma-separated list of sites to ingest data from. Use * to include all available sites.",
                 "order": 5,
                 "type": "list",
-                "value": "",
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -1094,7 +1089,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
-                "value": False,
             },
             "use_document_level_security": {
                 "display": "toggle",
@@ -1102,7 +1096,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": False,
             },
             "fetch_drive_item_permissions": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -1111,7 +1104,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 8,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
-                "value": True,
             },
             "fetch_unique_page_permissions": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -1120,7 +1112,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 9,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
-                "value": True,
             },
             "fetch_unique_list_permissions": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -1129,7 +1120,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 10,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
-                "value": True,
             },
             "fetch_unique_list_item_permissions": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -1138,7 +1128,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 11,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
-                "value": True,
             },
         }
 
