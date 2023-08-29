@@ -17,7 +17,6 @@ from smbprotocol.exceptions import LogonFailure, SMBOSError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import DataSourceConfiguration
 from connectors.sources.network_drive import (
     NASDataSource,
     NetworkDriveAdvancedRulesValidator,
@@ -96,18 +95,6 @@ def side_effect_function(MAX_CHUNK_SIZE):
         return None
     READ_COUNT += 1
     return b"Mock...."
-
-
-def test_get_configuration():
-    """Tests the get configurations method of the Network Drive source class."""
-    # Setup
-    klass = NASDataSource
-
-    # Execute
-    config = DataSourceConfiguration(config=klass.get_default_configuration())
-
-    # Assert
-    assert config["server_ip"] == "127.0.0.1"
 
 
 @pytest.mark.asyncio

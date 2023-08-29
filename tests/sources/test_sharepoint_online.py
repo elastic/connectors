@@ -6,6 +6,7 @@
 import asyncio
 import base64
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from io import BytesIO
@@ -98,17 +99,33 @@ ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
 DEFAULT_GROUPS_PATCHED = ["some default group"]
 
 
-def set_dls_enabled(source, dls_enabled):
-    source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
-    source.configuration.set_field("use_document_level_security", value=dls_enabled)
-
-
-def set_fetch_drive_item_permissions_enabled(source, enabled):
-    source.configuration.set_field("fetch_drive_item_permissions", value=enabled)
-
-
-def set_fetch_unique_list_permissions_enabled(source, enabled):
-    source.configuration.set_field("fetch_unique_list_permissions", value=enabled)
+@asynccontextmanager
+async def create_spo_source(
+    tenant_name="test",
+    site_collections=WILDCARD,
+    use_document_level_security=False,
+    use_text_extraction_service=False,
+    fetch_drive_item_permissions=True,
+    fetch_unique_list_permissions=True,
+):
+    async with create_source(
+        SharepointOnlineDataSource,
+        tenant_id="1",
+        client_id="2",
+        secret_value="3",
+        tenant_name=tenant_name,
+        site_collections=site_collections,
+        use_document_level_security=use_document_level_security,
+        use_text_extraction_service=use_text_extraction_service,
+        fetch_drive_item_permissions=fetch_drive_item_permissions,
+        fetch_unique_list_permissions=fetch_unique_list_permissions,
+    ) as source:
+        source.set_features(
+            Features(
+                {"document_level_security": {"enabled": use_document_level_security}}
+            )
+        )
+        yield source
 
 
 def dls_feature_flag_enabled(value):
@@ -1844,7 +1861,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_docs_without_access_control(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             source._dls_enabled = Mock(return_value=False)
 
             results = []
@@ -1896,8 +1913,7 @@ class TestSharepointOnlineDataSource:
         user = "user"
         expected_access_control = [group, email, user]
 
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
+        async with create_spo_source(use_document_level_security=True) as source:
             source._site_access_control = AsyncMock(
                 return_value=(expected_access_control, [])
             )
@@ -2008,7 +2024,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_docs_incrementally_with_empty_cursor(
         self, patch_sharepoint_client, sync_cursor
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             with pytest.raises(SyncCursorEmpty):
                 async for _doc, _download_func, _operation in source.get_docs_incrementally(
                     sync_cursor=sync_cursor
@@ -2017,7 +2033,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_docs_incrementally(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             source._site_access_control = AsyncMock(return_value=([], []))
 
         sync_cursor = {"site_drives": {}}
@@ -2060,10 +2076,9 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_site_lists(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
-            set_fetch_unique_list_permissions_enabled(source, False)
-
+        async with create_spo_source(
+            use_document_level_security=True, fetch_unique_list_permissions=False
+        ) as source:
             site = {"id": "1", "webUrl": "some url"}
             site_access_control = ["some site specific access control"]
             site_lists = []
@@ -2082,10 +2097,7 @@ class TestSharepointOnlineDataSource:
     async def test_site_lists_with_unique_role_assignments(
         self, patch_sharepoint_client
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
-            set_fetch_unique_list_permissions_enabled(source, True)
-
+        async with create_spo_source(use_document_level_security=True) as source:
             site = {"id": "1", "webUrl": "some url"}
             site_access_control = ["some site specific access control"]
             site_list_access_control = [
@@ -2119,9 +2131,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_download_function_for_folder(self):
-        async with create_source(
-            SharepointOnlineDataSource, site_collections=WILDCARD
-        ) as source:
+        async with create_spo_source() as source:
             drive_item = {
                 "name": "folder",
                 "folder": {},
@@ -2133,8 +2143,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_with_drive_item_permissions(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
+        async with create_spo_source(use_document_level_security=True) as source:
             drive_item = {"id": 2}
             patch_sharepoint_client.drive_item_permissions = AsyncIterator(
                 self.drive_item_permissions
@@ -2153,9 +2162,7 @@ class TestSharepointOnlineDataSource:
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
         self, patch_sharepoint_client
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
-
+        async with create_spo_source(use_document_level_security=True) as source:
             drive_id = 1
             drive_item_ids = ["1", "2"]
             drive_items_batch = [
@@ -2193,9 +2200,7 @@ class TestSharepointOnlineDataSource:
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_disabled(
         self,
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_fetch_drive_item_permissions_enabled(source, False)
-
+        async with create_spo_source(fetch_drive_item_permissions=False) as source:
             drive_id = 1
             drive_items_batch = [{"id": "1"}, {"id": "2"}]
 
@@ -2225,9 +2230,7 @@ class TestSharepointOnlineDataSource:
         user = _prefix_user("sorry-no-access-here")
         site_access_controls = [group, email, user]
 
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
-            set_fetch_drive_item_permissions_enabled(source, True)
+        async with create_spo_source(use_document_level_security=True) as source:
             source._site_access_control = AsyncMock(
                 return_value=(site_access_controls, [])
             )
@@ -2280,10 +2283,7 @@ class TestSharepointOnlineDataSource:
         admin_user = _prefix_user("admin-so-i-can-access-your-data")
         admin_site_access_controls = [admin_email, admin_user]
 
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
-            set_fetch_drive_item_permissions_enabled(source, True)
-
+        async with create_spo_source(use_document_level_security=True) as source:
             source._site_access_control = AsyncMock(
                 return_value=([], admin_site_access_controls)
             )
@@ -2306,9 +2306,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_download_function_for_deleted_item(self):
-        async with create_source(
-            SharepointOnlineDataSource, site_collections=WILDCARD
-        ) as source:
+        async with create_spo_source() as source:
             # deleted items don't have `name` property
             drive_item = {"id": "testid", "deleted": {"state": "deleted"}}
 
@@ -2318,9 +2316,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_download_function_for_unsupported_file(self):
-        async with create_source(
-            SharepointOnlineDataSource, site_collections=WILDCARD
-        ) as source:
+        async with create_spo_source() as source:
             drive_item = {
                 "id": "testid",
                 "name": "filename.randomextention",
@@ -2335,9 +2331,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_download_function_with_filtering_rule(self):
-        async with create_source(
-            SharepointOnlineDataSource, site_collections=WILDCARD
-        ) as source:
+        async with create_spo_source() as source:
             max_drive_item_age = 15
             drive_item = {
                 "name": "test",
@@ -2357,9 +2351,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_empty_config(self, patch_sharepoint_client):
-        async with create_source(
-            SharepointOnlineDataSource, site_collections=WILDCARD
-        ) as source:
+        async with create_source(SharepointOnlineDataSource) as source:
             with pytest.raises(ConfigurableFieldValueError) as e:
                 await source.validate_config()
 
@@ -2370,14 +2362,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
-        async with create_source(
-            SharepointOnlineDataSource,
-            tenant_id="1",
-            tenant_name="test",
-            client_id="2",
-            secret_value="3",
-            site_collections=WILDCARD,
-        ) as source:
+        async with create_spo_source() as source:
             await source.validate_config()
 
             # Assert that tokens are awaited
@@ -2390,13 +2375,8 @@ class TestSharepointOnlineDataSource:
     async def test_validate_config_when_invalid_tenant(self, patch_sharepoint_client):
         invalid_tenant_name = "wat"
 
-        async with create_source(
-            SharepointOnlineDataSource,
-            tenant_id="1",
+        async with create_spo_source(
             tenant_name=invalid_tenant_name,
-            client_id="2",
-            secret_value="3",
-            site_collections=WILDCARD,
         ) as source:
             patch_sharepoint_client.tenant_details.return_value = {
                 "NameSpaceType": "Unknown"
@@ -2414,12 +2394,7 @@ class TestSharepointOnlineDataSource:
         non_existing_site = "something"
         another_non_existing_site = "something-something"
 
-        async with create_source(
-            SharepointOnlineDataSource,
-            tenant_id="1",
-            tenant_name="test",
-            client_id="2",
-            secret_value="3",
+        async with create_spo_source(
             site_collections=[non_existing_site, another_non_existing_site],
         ) as source:
             with pytest.raises(Exception) as e:
@@ -2438,7 +2413,7 @@ class TestSharepointOnlineDataSource:
             await async_buffer.write(message)
 
         patch_sharepoint_client.download_attachment = download_func
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             download_result = await source.get_attachment_content(attachment, doit=True)
 
             assert download_result["_attachment"] == base64.b64encode(message).decode()
@@ -2459,7 +2434,7 @@ class TestSharepointOnlineDataSource:
             await async_buffer.write(message)
 
         patch_sharepoint_client.download_attachment = download_func
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             with patch.object(source._logger, "debug") as mock_method:
                 download_result = await source.get_attachment_content(
                     attachment, doit=True
@@ -2489,9 +2464,7 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_attachment = download_func
-            async with create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            ) as source:
+            async with create_spo_source(use_text_extraction_service=True) as source:
                 download_result = await source.get_attachment_content(
                     attachment, doit=True
                 )
@@ -2519,9 +2492,7 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_attachment = download_func
-            async with create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            ) as source:
+            async with create_spo_source(use_text_extraction_service=True) as source:
                 download_result = await source.get_attachment_content(
                     attachment, doit=True
                 )
@@ -2551,7 +2522,7 @@ class TestSharepointOnlineDataSource:
             await async_buffer.write(message)
 
         patch_sharepoint_client.download_drive_item = download_func
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             download_result = await source.get_drive_item_content(drive_item, doit=True)
 
             if expect_download:
@@ -2588,9 +2559,7 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_drive_item = download_func
-            async with create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            ) as source:
+            async with create_spo_source(use_text_extraction_service=True) as source:
                 download_result = await source.get_drive_item_content(
                     drive_item, doit=True
                 )
@@ -2625,9 +2594,7 @@ class TestSharepointOnlineDataSource:
                 await async_buffer.write(bytes(message, "utf-8"))
 
             patch_sharepoint_client.download_drive_item = download_func
-            async with create_source(
-                SharepointOnlineDataSource, use_text_extraction_service=True
-            ) as source:
+            async with create_spo_source(use_text_extraction_service=True) as source:
                 download_result = await source.get_drive_item_content(
                     drive_item, doit=True
                 )
@@ -2638,8 +2605,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_site_access_control(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
+        async with create_spo_source(use_document_level_security=True) as source:
             patch_sharepoint_client._validate_sharepoint_rest_url = Mock()
 
             site = {"id": 1, "webUrl": "some url"}
@@ -2714,8 +2680,7 @@ class TestSharepointOnlineDataSource:
     async def test_decorate_with_access_control(
         self, _dls_enabled, document, access_control, expected_decorated_document
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, _dls_enabled)
+        async with create_spo_source(use_document_level_security=True) as source:
             decorated_document = source._decorate_with_access_control(
                 document, access_control
             )
@@ -2756,20 +2721,20 @@ class TestSharepointOnlineDataSource:
     async def test_dls_enabled(
         self, dls_feature_flag, dls_config_value, expected_dls_enabled
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             source._features = Mock()
             source._features.document_level_security_enabled = Mock(
                 return_value=dls_feature_flag
             )
-            source.configuration.set_field(
-                "use_document_level_security", value=dls_config_value
-            )
+            source.configuration.get_field(
+                "use_document_level_security"
+            ).value = dls_config_value
 
             assert source._dls_enabled() == expected_dls_enabled
 
     @pytest.mark.asyncio
     async def test_dls_disabled_with_features_missing(self):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             source._features = None
 
             assert not source._dls_enabled()
@@ -2780,7 +2745,7 @@ class TestSharepointOnlineDataSource:
         TIMESTAMP_FORMAT_PATCHED,
     )
     async def test_user_access_control_doc(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             created_at = "2023-05-25T13:30:54Z"
             group_one = {"id": "group-one-id"}
             group_two = {"id": "group-two-id"}
@@ -2820,9 +2785,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, False)
-
+        async with create_spo_source() as source:
             patch_sharepoint_client.site_collections = AsyncIterator(
                 [{"siteCollection": {"hostname": "localhost"}}]
             )
@@ -2843,9 +2806,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_access_control_with_dls_enabled_and_fetch_all_users(
         self, patch_sharepoint_client
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
-            set_dls_enabled(source, True)
-
+        async with create_spo_source(use_document_level_security=True) as source:
             group = {"@odata.type": "#microsoft.graph.group", "id": "doop"}
             member_email = "member@acme.co"
             member = {
@@ -3047,7 +3008,7 @@ class TestSharepointOnlineDataSource:
     async def test_get_access_control_from_role_assignment(
         self, role_assignment, expected_access_control
     ):
-        async with create_source(SharepointOnlineDataSource) as source:
+        async with create_spo_source() as source:
             access_control = await source._get_access_control_from_role_assignment(
                 role_assignment
             )
