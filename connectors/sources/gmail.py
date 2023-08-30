@@ -144,6 +144,7 @@ class GMailDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
+                "value": True
             },
         }
 
