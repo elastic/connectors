@@ -74,7 +74,9 @@ services:
       - esnet
 
   jira:
-    build: ../../../../ftest.Dockerfile
+    build: 
+      context: ../../../../
+      dockerfile: ftest.Dockerfile
     command: python fixture.py
     ports:
       - "8080:8080"

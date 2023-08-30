@@ -74,7 +74,9 @@ services:
       - esnet
 
   dropbox:
-    build: ../../../../ftest.Dockerfile
+    build: 
+      context: ../../../../
+      dockerfile: ftest.Dockerfile
     command: python fixture.py
     ports:
       - "8085:8085"

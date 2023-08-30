@@ -74,7 +74,9 @@ services:
       - esnet
 
   sharepoint:
-    build: ../../../../ftest.Dockerfile
+    build: 
+      context: ../../../../
+      dockerfile: ftest.Dockerfile
     command: python fixture.py
     ports:
       - "8491:8491"

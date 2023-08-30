@@ -74,7 +74,9 @@ services:
       - esnet
 
   servicenow:
-    build: ../../../../ftest.Dockerfile
+    build: 
+      context: ../../../../
+      dockerfile: ftest.Dockerfile
     command: python fixture.py
     ports:
       - "9318:9318"
