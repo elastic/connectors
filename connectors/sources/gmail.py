@@ -130,12 +130,21 @@ class GMailDataSource(BaseDataSource):
                 "tooltip": "Google admin console -> Account -> Settings -> Customer Id",
                 "type": "str",
             },
+            "include_spam_and_trash": {
+                "display": "toggle",
+                "label": "Include spam and trash emails",
+                "order": 4,
+                "tooltip": "Will include spam and trash emails, when set to true.",
+                "type": "bool",
+                "value": False,
+            },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 4,
+                "order": 5,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
+                "value": True,
             },
         }
 
@@ -253,6 +262,11 @@ class GMailDataSource(BaseDataSource):
         return message_doc_with_access_control
 
     async def get_docs(self, filtering=None):
+        include_spam_and_trash = self.configuration["include_spam_and_trash"]
+
+        if include_spam_and_trash:
+            self._logger.debug("Including messages from spam and trash.")
+
         if self._filtering_enabled(filtering):
             self._logger.debug("Fetching documents using advanced rules.")
 
@@ -269,7 +283,9 @@ class GMailDataSource(BaseDataSource):
                 for message_query in message_queries:
                     self._logger.debug(f"Fetching messages for query: {message_query}.")
 
-                    async for message in gmail_client.messages(query=message_query):
+                    async for message in gmail_client.messages(
+                        query=message_query, includeSpamTrash=include_spam_and_trash
+                    ):
                         if not message:
                             continue
 
@@ -288,7 +304,9 @@ class GMailDataSource(BaseDataSource):
                 # reinitialization is needed to work around a 403 Forbidden error (see: https://issuetracker.google.com/issues/290567932)
                 gmail_client = self._gmail_client(email)
 
-                async for message in gmail_client.messages():
+                async for message in gmail_client.messages(
+                    includeSpamTrash=include_spam_and_trash
+                ):
                     if not message:
                         continue
 
