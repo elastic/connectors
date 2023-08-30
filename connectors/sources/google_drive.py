@@ -23,12 +23,15 @@ from connectors.access_control import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.sources.google import validate_service_account_json
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
     convert_to_b64,
     retryable,
 )
+
+GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -42,13 +45,6 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,parents"
 DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS = f"{DRIVE_ITEMS_FIELDS},permissions"
-
-# Google Service Account JSON includes "universe_domain" key. That argument is not
-# supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
-# service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
-SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
-    "universe_domain"
-}
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
 # mindful of the content extraction service resources
@@ -487,7 +483,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 1,
                 "tooltip": "This connectors authenticates as a service account to synchronize content from Google Drive.",
                 "type": "str",
-                "value": "",
             },
             "use_document_level_security": {
                 "display": "toggle",
@@ -495,7 +490,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 2,
                 "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": False,
             },
             "google_workspace_admin_email": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -505,7 +499,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
                 "type": "str",
                 "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
-                "value": "admin@your-organization.com",
             },
             "max_concurrency": {
                 "default_value": GOOGLE_API_MAX_CONCURRENCY,
@@ -517,7 +510,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "validations": [{"type": "greater_than", "constraint": 0}],
-                "value": GOOGLE_API_MAX_CONCURRENCY,
             },
         }
 
@@ -528,9 +520,13 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             GoogleDriveClient: An instance of the GoogleDriveClient.
         """
-        self._validate_service_account_json()
+        service_account_credentials = self.configuration["service_account_credentials"]
 
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+        validate_service_account_json(
+            service_account_credentials, GOOGLE_DRIVE_SERVICE_NAME
+        )
+
+        json_credentials = json.loads(service_account_credentials)
 
         return GoogleDriveClient(json_credentials=json_credentials)
 
@@ -541,11 +537,15 @@ class GoogleDriveDataSource(BaseDataSource):
         Returns:
             GoogleAdminDirectoryClient: An instance of the GoogleAdminDirectoryClient.
         """
-        self._validate_service_account_json()
+        service_account_credentials = self.configuration["service_account_credentials"]
+
+        validate_service_account_json(
+            service_account_credentials, "Google Admin Directory"
+        )
 
         self._validate_google_workspace_admin_email()
 
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+        json_credentials = json.loads(service_account_credentials)
 
         return GoogleAdminDirectoryClient(
             json_credentials=json_credentials,
@@ -560,31 +560,10 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         await super().validate_config()
 
-        self._validate_service_account_json()
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], GOOGLE_DRIVE_SERVICE_NAME
+        )
         self._validate_google_workspace_admin_email()
-
-    def _validate_service_account_json(self):
-        """Validates whether service account JSON is a valid JSON string and
-        checks for unexpected keys.
-
-        Raises:
-            ConfigurableFieldValueError: The service account json is ininvalid.
-        """
-
-        try:
-            json_credentials = json.loads(
-                self.configuration["service_account_credentials"]
-            )
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                f"Google Drive service account is not a valid JSON. Exception: {e}"
-            ) from e
-
-        for key in json_credentials.keys():
-            if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
-                raise ConfigurableFieldValueError(
-                    f"Google Drive service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
-                )
 
     def _validate_google_workspace_admin_email(self):
         """

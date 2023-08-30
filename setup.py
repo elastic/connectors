@@ -89,7 +89,7 @@ setup(
     packages=find_packages(),
     description=("Elastic Search Connectors."),
     long_description=long_description,
-    author="Ingestion Team",
+    author="Search Extract and Transform Team",
     author_email="tarek@ziade.org",
     include_package_data=True,
     zip_safe=False,

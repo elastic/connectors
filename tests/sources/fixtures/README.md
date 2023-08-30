@@ -10,6 +10,7 @@ Each fixture needs to implement the following:
   - fixture.py
   - requirements.txt
   - docker-compose.yml
+  - connector.json
 
 config.yml
 ==========
@@ -33,7 +34,6 @@ requirements.txt
 
 pip requirements. Lists all libs needed for `fixture.py` to run
 
-
 docker-compose.yml
 ==================
 
@@ -44,4 +44,7 @@ A Docker compose file that needs to run the whole stack:
 - Enterprise Search
 - Any backend server like MySQL
 
+connector.json
+==========
 
+This file should be a JSON representation of the connector document as it would exist in Elastic.

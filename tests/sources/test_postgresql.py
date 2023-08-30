@@ -5,6 +5,7 @@
 #
 """Tests the PostgreSQL database source class methods"""
 import ssl
+from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
@@ -23,6 +24,14 @@ POSTGRESQL_CONNECTION_STRING = (
 )
 SCHEMA = "public"
 TABLE = "emp_table"
+
+
+@asynccontextmanager
+async def create_postgresql_source():
+    async with create_source(
+        PostgreSQLDataSource, host="127.0.0.1", port="9090", database="xe", tables="*"
+    ) as source:
+        yield source
 
 
 class MockSsl:
@@ -142,7 +151,7 @@ def test_get_connect_args():
 @pytest.mark.asyncio
 async def test_postgresql_ping():
     # Setup
-    async with create_source(PostgreSQLDataSource) as source:
+    async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             await source.ping()
 
@@ -151,7 +160,7 @@ async def test_postgresql_ping():
 
 @pytest.mark.asyncio
 async def test_ping():
-    async with create_source(PostgreSQLDataSource) as source:
+    async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             await source.ping()
 
@@ -159,7 +168,7 @@ async def test_ping():
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
-    async with create_source(PostgreSQLDataSource) as source:
+    async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             source.engine = create_async_engine(POSTGRESQL_CONNECTION_STRING)
             actual_response = []

@@ -16,7 +16,6 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
-    WILDCARD,
     Queries,
     configured_tables,
     is_wildcard,
@@ -37,7 +36,6 @@ DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_SSL_ENABLED = False
-DEFAULT_SSL_CA = ""
 
 
 def parse_tables_string_to_list_of_tables(tables_string):
@@ -331,6 +329,22 @@ def generate_id(tables, row, primary_key_columns):
         f"{'_'.join([str(pk_value) for pk in primary_key_columns if (pk_value := row.get(pk)) is not None])}"
     )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def get_last_update_time(self, table):
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(self.queries.table_last_update_time(table))
+
+            result = await cursor.fetchone()
+
+            if result is not None:
+                return result[0]
+
+            return None
+
 
 class MySqlDataSource(BaseDataSource):
     """MySQL"""
@@ -356,54 +370,46 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Host",
                 "order": 1,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
                 "type": "int",
-                "value": 3306,
             },
             "user": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
-                "value": "root",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "value": "customerinfo",
             },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "order": 6,
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
                 "order": 7,
                 "type": "bool",
-                "value": DEFAULT_SSL_ENABLED,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
-                "value": DEFAULT_SSL_CA,
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -413,7 +419,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -423,7 +428,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
             },
         }
 

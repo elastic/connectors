@@ -8,11 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     GoogleServiceAccountClient,
     remove_universe_domain,
+    validate_service_account_json,
 )
 from tests.commons import AsyncIterator
 
@@ -45,6 +47,26 @@ def test_remove_universe_domain():
     remove_universe_domain(json_credentials)
 
     assert universe_domain not in json_credentials
+
+
+def test_validate_service_account_json_when_valid():
+    valid_service_account_credentials = '{"project_id": "dummy123"}'
+
+    try:
+        validate_service_account_json(
+            valid_service_account_credentials, "some google service"
+        )
+    except ConfigurableFieldValueError:
+        raise AssertionError("Should've been a valid config") from None
+
+
+def test_validate_service_account_json_when_invalid():
+    invalid_service_account_credentials = '{"invalid_key": "dummy123"}'
+
+    with pytest.raises(ConfigurableFieldValueError):
+        validate_service_account_json(
+            invalid_service_account_credentials, "some google service"
+        )
 
 
 class TestGoogleServiceAccountClient:

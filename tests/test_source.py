@@ -5,7 +5,7 @@
 #
 from datetime import datetime
 from decimal import Decimal
-from unittest import mock
+from unittest import TestCase, mock
 
 import pytest
 from bson import Decimal128
@@ -75,11 +75,50 @@ def test_field():
 
 
 def test_field_convert():
+    assert Field("name", field_type="str").value == ""
+    assert Field("name", value="", field_type="str").value == ""
+    assert Field("name", value="1", field_type="str").value == "1"
+    assert Field("name", value="foo", field_type="str").value == "foo"
+    assert Field("name", value=None, field_type="str").value == ""
+    assert (
+        Field("name", value={"foo": "bar"}, field_type="str").value == "{'foo': 'bar'}"
+    )
+
+    assert Field("name", field_type="int").value is None
     assert Field("name", value="1", field_type="int").value == 1
+    assert Field("name", value="", field_type="int").value is None
+    assert Field("name", value=None, field_type="int").value is None
+
+    assert Field("name", field_type="float").value is None
     assert Field("name", value="1.2", field_type="float").value == 1.2
-    assert Field("name", value="YeS", field_type="bool").value
+    assert Field("name", value="", field_type="float").value is None
+    assert Field("name", value=None, field_type="float").value is None
+
+    assert Field("name", field_type="bool").value is None
+    assert Field("name", value="foo", field_type="bool").value is True
+    assert Field("name", value="", field_type="bool").value is None
+    assert Field("name", value=None, field_type="bool").value is None
+
+    assert Field("name", field_type="list").value == []
+    assert Field("name", value="1", field_type="list").value == ["1"]
     assert Field("name", value="1,2,3", field_type="list").value == ["1", "2", "3"]
-    assert not Field("name", value="false", field_type="bool").value
+    assert Field("name", value=[1, 2], field_type="list").value == [1, 2]
+    assert Field("name", value=0, field_type="list").value == [0]
+    assert Field("name", value="", field_type="list").value == []
+    assert Field("name", value=None, field_type="list").value == []
+    assert Field("name", value=False, field_type="list").value == [False]
+    assert Field("name", value={"foo": "bar"}, field_type="list").value == [
+        ("foo", "bar")
+    ]
+    TestCase().assertCountEqual(
+        Field("name", value={"foo", "bar"}, field_type="list").value, ["foo", "bar"]
+    )
+
+    # unsupported cases that aren't converted
+    assert Field("name", value={"foo": "bar"}, field_type="dict").value == {
+        "foo": "bar"
+    }
+    assert Field("name", value="not a dict", field_type="dict").value == "not a dict"
 
 
 def test_data_source_configuration():
@@ -104,7 +143,7 @@ def test_default():
         # that is because `.value` does care about validation, it only returns a value
         # strings
         ("str", True, "default", "input", "input"),
-        ("str", True, "default", None, None),
+        ("str", True, "default", None, ""),
         ("str", True, "default", "", ""),
         ("str", False, "default", "input", "input"),
         ("str", False, "default", None, "default"),
@@ -119,17 +158,12 @@ def test_default():
         ("list", True, ["1", "2"], [], []),
         ("list", True, ["1", "2"], [""], [""]),
         ("list", True, ["1", "2"], [None], [None]),
-        ("list", True, ["1", "2"], None, None),
+        ("list", True, ["1", "2"], None, []),
         ("list", False, ["1", "2"], ["3", "4"], ["3", "4"]),
         ("list", False, ["1", "2"], [], ["1", "2"]),
         ("list", False, ["1", "2"], [""], ["1", "2"]),
         ("list", False, ["1", "2"], [None], ["1", "2"]),
         ("list", False, ["1", "2"], None, ["1", "2"]),
-        # booleans
-        ("bool", True, True, False, False),
-        ("bool", True, True, None, None),
-        ("bool", False, True, False, False),
-        ("bool", False, True, None, True),
     ],
 )
 def test_value_returns_correct_value(
@@ -225,7 +259,7 @@ def test_get_source_klasses():
             # list_type int
             {
                 "option_list": {
-                    "type": "int",
+                    "type": "list",
                     "value": [1, 2, 3],
                     "validations": [
                         {"type": ValidationTypes.LIST_TYPE.value, "constraint": "int"},
@@ -577,7 +611,7 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
         (
             {
-                "int_field": {
+                "list_field": {
                     "type": "list",
                     "required": True,
                     "value": [],
@@ -587,7 +621,7 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
         (
             {
-                "int_field": {
+                "list_field": {
                     "type": "list",
                     "required": True,
                     "value": None,
@@ -597,7 +631,7 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
         (
             {
-                "int_field": {
+                "bool_field": {
                     "type": "bool",
                     "required": True,
                     "value": None,

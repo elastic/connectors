@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import json
+from contextlib import asynccontextmanager
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,6 +31,24 @@ CUSTOMER_ID = "customer_id"
 DATE = "2023-01-24T04:07:19+00:00"
 
 JSON_CREDENTIALS = {"key": "value"}
+
+
+@asynccontextmanager
+async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
+    async with create_source(
+        GMailDataSource,
+        service_account_credentials=json.dumps(JSON_CREDENTIALS),
+        subject="subject",
+        customer_id="foo",
+        use_document_level_security=dls_enabled,
+        include_spam_and_trash=include_spam_and_trash
+    ) as source:
+        source.set_features(
+            Features({"document_level_security": {"enabled": dls_enabled}})
+        )
+        source._service_account_credentials = MagicMock()
+
+        yield source
 
 
 class TestGMailAdvancedRulesValidator:
@@ -110,24 +130,6 @@ def test_message_doc(message, expected_doc):
     assert _message_doc(message) == expected_doc
 
 
-def setup_source():
-    source = create_source(GMailDataSource)
-    source._service_account_credentials = MagicMock()
-
-    return source
-
-
-def set_dls_enabled(source, dls_enabled):
-    source.set_features(Features({"document_level_security": {"enabled": dls_enabled}}))
-    source.configuration.set_field("use_document_level_security", value=dls_enabled)
-
-
-def set_include_spam_and_trash(source, include_spam_and_trash):
-    source.configuration.set_field(
-        "include_spam_and_trash", value=include_spam_and_trash
-    )
-
-
 async def setup_messages_and_users_apis(
     patch_gmail_client, patch_google_directory_client, messages, users
 ):
@@ -157,7 +159,7 @@ class TestGMailDataSource:
     async def test_ping_successful(
         self, patch_gmail_client, patch_google_directory_client
     ):
-        async with setup_source() as source:
+        async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock()
             patch_google_directory_client.ping = AsyncMock()
 
@@ -170,7 +172,7 @@ class TestGMailDataSource:
     async def test_ping_gmail_client_fails(
         self, patch_gmail_client, patch_google_directory_client
     ):
-        async with setup_source() as source:
+        async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock(
                 side_effect=Exception("Something went wrong")
             )
@@ -183,7 +185,7 @@ class TestGMailDataSource:
     async def test_ping_google_directory_client_fails(
         self, patch_gmail_client, patch_google_directory_client
     ):
-        async with setup_source() as source:
+        async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock()
             patch_google_directory_client.ping = AsyncMock(side_effect=Exception)
 
@@ -192,13 +194,13 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(self):
-        valid_json = '{"key": "value"}'
+        valid_json = '{"project_id": "dummy123"}'
 
-        async with setup_source() as source:
-            source.configuration.set_field(
-                "service_account_credentials", value=valid_json
-            )
-            source.configuration.set_field("customer_id", value=CUSTOMER_ID)
+        async with create_gmail_source() as source:
+            source.configuration.get_field(
+                "service_account_credentials"
+            ).value = valid_json
+            source.configuration.get_field("customer_id").value = CUSTOMER_ID
 
             try:
                 await source.validate_config()
@@ -207,10 +209,10 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid(self):
-        async with setup_source() as source:
-            source.configuration.set_field(
-                "service_account_credentials", value="invalid json"
-            )
+        async with create_gmail_source() as source:
+            source.configuration.get_field(
+                "service_account_credentials"
+            ).value = "invalid json"
 
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
@@ -222,8 +224,7 @@ class TestGMailDataSource:
         users = [{UserFields.EMAIL.value: "user@google.com"}]
         patch_google_directory_client.users = AsyncIterator(users)
 
-        async with setup_source() as source:
-            set_dls_enabled(source, False)
+        async with create_gmail_source() as source:
             actual_users = []
 
             async for user in source.get_access_control():
@@ -247,8 +248,7 @@ class TestGMailDataSource:
         ]
         patch_google_directory_client.users = AsyncIterator(users)
 
-        async with setup_source() as source:
-            set_dls_enabled(source, True)
+        async with create_gmail_source(dls_enabled=True) as source:
             actual_users = []
 
             async for user in source.get_access_control():
@@ -280,9 +280,7 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with setup_source() as source:
-            set_dls_enabled(source, False)
-
+        async with create_gmail_source() as source:
             actual_messages = []
 
             async for doc in source.get_docs(filtering=None):
@@ -313,8 +311,7 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with setup_source() as source:
-            set_dls_enabled(source, False)
+        async with create_gmail_source() as source:
             actual_messages = []
             message_query = "some query"
             filter_ = Filter(
@@ -354,9 +351,7 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with setup_source() as source:
-            set_dls_enabled(source, True)
-
+        async with create_gmail_source(dls_enabled=True) as source:
             actual_messages = []
 
             async for doc in source.get_docs(filtering=None):
@@ -391,8 +386,7 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with setup_source() as source:
-            set_dls_enabled(source, True)
+        async with create_gmail_source(dls_enabled=True) as source:
             actual_messages = []
             message_query = "some query"
             filter_ = Filter(
@@ -436,8 +430,7 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with setup_source() as source:
-            set_include_spam_and_trash(source, True)
+        async with create_gmail_source(dls_enabled=False, include_spam_and_trash=True) as source:
             actual_messages = []
 
             async for doc in source.get_docs(filtering=None):
@@ -470,8 +463,7 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with setup_source() as source:
-            set_include_spam_and_trash(source, True)
+        async with create_gmail_source(dls_enabled=False, include_spam_and_trash=True) as source:
             actual_messages = []
 
             message_query = "some query"

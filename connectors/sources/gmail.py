@@ -14,12 +14,13 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     MessageFields,
     UserFields,
+    validate_service_account_json,
 )
 from connectors.utils import base64url_to_base64, iso_utc
 
@@ -104,43 +105,30 @@ class GMailDataSource(BaseDataSource):
         Returns:
             dict: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": "",
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:4444/token",
-        }
 
         return {
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "GMail service account JSON",
                 "order": 1,
-                "type": "str",
-                "value": json.dumps(default_credentials),
                 "required": True,
+                "type": "str",
             },
             "subject": {
                 "display": "text",
                 "label": "Subject",
                 "order": 2,
+                "required": True,
                 "tooltip": "Admin account email address",
                 "type": "str",
-                "value": "subject",
-                "required": True,
             },
             "customer_id": {
                 "display": "text",
                 "label": "Google customer id",
                 "order": 3,
+                "required": True,
                 "tooltip": "Google admin console -> Account -> Settings -> Customer Id",
                 "type": "str",
-                "value": "",
-                "required": True,
             },
             "include_spam_and_trash": {
                 "display": "toggle",
@@ -156,7 +144,6 @@ class GMailDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": True,
             },
         }
 
@@ -166,13 +153,9 @@ class GMailDataSource(BaseDataSource):
             Exception: The format of service account json is invalid.
         """
         await super().validate_config()
-
-        try:
-            json.loads(self.configuration["service_account_credentials"])
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                f"Google Drive service account is not a valid JSON. Exception: {e}"
-            ) from e
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], "GMail"
+        )
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]
