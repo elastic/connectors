@@ -227,7 +227,9 @@ class GMailClient:
         except Exception:
             raise
 
-    async def messages(self, query=None, pageSize=DEFAULT_PAGE_SIZE):
+    async def messages(
+        self, query=None, includeSpamTrash=False, pageSize=DEFAULT_PAGE_SIZE
+    ):
         fields = "id"
 
         async for page in self._client.api_call_paged(
@@ -235,6 +237,7 @@ class GMailClient:
             method="list",
             userId=self.user,
             q=query,
+            includeSpamTrash=includeSpamTrash,
             fields=f"nextPageToken,messages({fields})",
             pageSize=pageSize,
         ):
