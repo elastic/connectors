@@ -41,7 +41,7 @@ async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
         subject="subject",
         customer_id="foo",
         use_document_level_security=dls_enabled,
-        include_spam_and_trash=include_spam_and_trash
+        include_spam_and_trash=include_spam_and_trash,
     ) as source:
         source.set_features(
             Features({"document_level_security": {"enabled": dls_enabled}})
@@ -430,7 +430,9 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with create_gmail_source(dls_enabled=False, include_spam_and_trash=True) as source:
+        async with create_gmail_source(
+            dls_enabled=False, include_spam_and_trash=True
+        ) as source:
             actual_messages = []
 
             async for doc in source.get_docs(filtering=None):
@@ -463,7 +465,9 @@ class TestGMailDataSource:
             patch_gmail_client, patch_google_directory_client, messages, users
         )
 
-        async with create_gmail_source(dls_enabled=False, include_spam_and_trash=True) as source:
+        async with create_gmail_source(
+            dls_enabled=False, include_spam_and_trash=True
+        ) as source:
             actual_messages = []
 
             message_query = "some query"
