@@ -490,7 +490,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 2,
                 "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": True,
+                "value": False,
             },
             "google_workspace_admin_email": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],

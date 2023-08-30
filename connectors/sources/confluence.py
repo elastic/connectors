@@ -323,7 +323,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": True,
+                "value": False,
             },
         }
 
