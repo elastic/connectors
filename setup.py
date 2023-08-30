@@ -90,7 +90,7 @@ setup(
     description=("Elastic Search Connectors."),
     long_description=long_description,
     author="Search Extract and Transform Team",
-    author_email="tarek@ziade.org",
+    author_email="enterprise-search-ingestion-team@elastic.co",
     include_package_data=True,
     zip_safe=False,
     classifiers=classifiers,
