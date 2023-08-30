@@ -56,7 +56,7 @@ The advanced sync rules consists of a set of rules where each rule can have one 
 ]
 ```
 
-### Two Advanced rules for indexing the files and folders of user 1 and user 2, and only .py files of other users
+### Two Advanced rules for indexing the files and folders of user 1 and user 2, and all files of other users except .py files
 
 ```json
 [
@@ -69,7 +69,7 @@ The advanced sync rules consists of a set of rules where each rule can have one 
 ]
 ```
 
-### Two Advanced rules for indexing the .md files user 1 and user 2 and files/folders recursively inside folder abc 
+### Two Advanced rules for indexing all files of user 1 and user 2 except .md files, and files/folders recursively inside folder abc 
 
 ```json
 [
