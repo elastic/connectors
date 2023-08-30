@@ -3,7 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-
+import time
+from unittest import mock
 from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
@@ -204,14 +205,23 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     mock_client.close = AsyncMock()
     slack_data_source.slack_client = mock_client
 
-    docs = []
-    async for doc, _ in slack_data_source.get_docs():
-        docs.append(doc)
+    current_timestamp = time.time()
+    with mock.patch("time.time", return_value=current_timestamp):
+        old_timestamp = (
+            current_timestamp - configuration["fetch_last_n_days"] * 24 * 3600
+        )
+        docs = []
+        async for doc, _ in slack_data_source.get_docs():
+            docs.append(doc)
 
-    assert len(docs) == 3
-    assert docs[0]["type"] == "user"
-    assert docs[1]["type"] == "channel"
-    assert docs[2]["type"] == "message"
+        for channel in channels_response:
+            mock_client.list_messages.assert_called_once_with(
+                channel, old_timestamp, current_timestamp
+            )
+        assert len(docs) == 3
+        assert docs[0]["type"] == "user"
+        assert docs[1]["type"] == "channel"
+        assert docs[2]["type"] == "message"
 
 
 @pytest.mark.asyncio
