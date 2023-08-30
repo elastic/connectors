@@ -146,9 +146,9 @@ class FailsThenWork(FakeSource):
 
 
 class LargeFakeSource(FakeSource):
-    """Phatey"""
+    """Fake source returning large documents"""
 
-    name = "Phatey"
+    name = "Large Fake"
     service_type = "large_fake"
 
     async def get_docs(self, filtering=None):

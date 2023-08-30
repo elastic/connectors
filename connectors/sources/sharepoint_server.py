@@ -596,27 +596,23 @@ class SharepointServerDataSource(BaseDataSource):
                 "label": "SharePoint Server username",
                 "order": 1,
                 "type": "str",
-                "value": "demo_user",
             },
             "password": {
                 "label": "SharePoint Server password",
                 "sensitive": True,
                 "order": 2,
                 "type": "str",
-                "value": "abc@123",
             },
             "host_url": {
                 "label": "SharePoint host",
                 "order": 3,
                 "type": "str",
-                "value": "http://127.0.0.1:8491",
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of SharePoint site collections to index",
                 "order": 4,
                 "type": "list",
-                "value": "collection1",
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -630,7 +626,6 @@ class SharepointServerDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 6,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -640,7 +635,6 @@ class SharepointServerDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
             },
         }
 
