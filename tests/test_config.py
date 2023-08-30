@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.config import _nest_configs, load_config
+from connectors.config import _handle_config_conflicts, _nest_configs, load_config
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
@@ -80,3 +80,39 @@ def test_nest_config_when_root_field_does_exists():
     _nest_configs(config, "test", 50)
 
     assert config["test"] == 50
+
+
+@pytest.mark.parametrize(
+    "es_password, es_api_key, connector_api_key, result_api_key",
+    [
+        ("changeme", None, "123", "123"),
+        ("changeme", "456", "123", "456"),
+        ("something", None, "123", None),
+    ],
+)
+def test_resolve_single_connector_auth(
+    es_password, es_api_key, connector_api_key, result_api_key
+):
+    config = {
+        "elasticsearch": {"username": "elastic", "password": es_password},
+        "connectors": [
+            {"api_key": connector_api_key, "service_type": "foo", "connector_id": "abc"}
+        ],
+    }
+    if es_api_key:
+        config["elasticsearch"]["api_key"] = es_api_key
+
+    output = _handle_config_conflicts(config)
+    assert output["elasticsearch"].get("api_key") == result_api_key
+
+
+def test_do_not_resolve_multiple_connector_auth():
+    config = {
+        "elasticsearch": {"username": "elastic", "password": "changeme"},
+        "connectors": [
+            {"api_key": "123", "service_type": "foo", "connector_id": "abc"},
+            {"api_key": "456", "service_type": "bar", "connector_id": "def"},
+        ],
+    }
+    output = _handle_config_conflicts(config)
+    assert output["elasticsearch"].get("api_key") is None

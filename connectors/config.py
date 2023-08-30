@@ -160,6 +160,34 @@ def _nest_configs(configuration, field, value):
         current_leaf[last_key] = value
 
 
+def _handle_config_conflicts(configuration):
+    """
+    Sometimes, two distinct configuration values might be set in a way that conflict with one another.
+    This function is the place to address those interdependencies.
+    :param configuration: the resolved configuration values, unioned both explicit and default
+    :return: the post-processed configuration, where any known conflicts are addressed
+    """
+    configuration = _resolve_single_connector_auth(configuration)
+    # add other handler here
+    return configuration
+
+
+def _resolve_single_connector_auth(configuration):
+    connectors = configuration.get("connectors", [])
+    elasticsearch = configuration.get("elasticsearch", {})
+    default_elasticsearch = _default_config().get("elasticsearch")
+    has_single_connector_auth = len(connectors) == 1 and connectors[0].get("api_key")
+    has_default_auth = (
+        elasticsearch.get("username") == default_elasticsearch.get("username")
+        and elasticsearch.get("password") == default_elasticsearch.get("password")
+        and elasticsearch.get("api_key") == default_elasticsearch.get("api_key")
+    )
+    if has_single_connector_auth and has_default_auth:
+        elasticsearch["api_key"] = connectors[0]["api_key"]
+        configuration["elasticsearch"] = elasticsearch
+    return configuration
+
+
 def _merge_dicts(hsh1, hsh2):
     for k in set(hsh1.keys()).union(hsh2.keys()):
         if k in hsh1 and k in hsh2:
