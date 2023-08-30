@@ -28,7 +28,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: ftest.Dockerfile
-    command: python mocker.py
+    command: python tests/sources/fixtures/google_cloud_storage/mocker.py
     ports:
       - "4444:4444"
     volumes:

@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: ftest.Dockerfile
-    command: python fixture.py
+    command: python tests/sources/fixtures/jira/fixture.py
     ports:
       - "8080:8080"
     volumes:

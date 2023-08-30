@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: ftest.Dockerfile
-    command: python fixture.py
+    command: python tests/sources/fixtures/google_drive/fixture.py
     ports:
       - "10339:10339"
     volumes:

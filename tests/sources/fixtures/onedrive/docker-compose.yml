@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: ftest.Dockerfile
-    command: python fixture.py
+    command: python tests/sources/fixtures/onedrive/fixture.py
     ports:
       - 10972:10972
     volumes:

@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: ftest.Dockerfile
-    command: python fixture.py
+    command: python tests/sources/fixtures/sharepoint_online/fixture.py
     ports:
       - 10337:10337
     volumes:
