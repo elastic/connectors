@@ -342,6 +342,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 "label": "Enable SSL verification",
                 "order": 9,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],

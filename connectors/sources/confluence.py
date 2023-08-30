@@ -287,6 +287,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Enable SSL",
                 "order": 8,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
@@ -322,6 +323,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
+                "value": True,
             },
         }
 
