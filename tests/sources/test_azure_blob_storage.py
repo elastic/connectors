@@ -12,23 +12,10 @@ from unittest.mock import Mock, patch
 import pytest
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
-
-
-def test_get_configuration():
-    """Test get_configuration method of AzureBlobStorageDataSource class"""
-
-    # Setup
-    klass = AzureBlobStorageDataSource
-
-    # Execute
-    config = DataSourceConfiguration(klass.get_default_configuration())
-
-    # Assert
-    assert config["account_name"] == "devstoreaccount1"
 
 
 @pytest.mark.asyncio
@@ -465,7 +452,7 @@ async def test_validate_config_no_account_name():
 
     # Setup
     async with create_source(AzureBlobStorageDataSource) as source:
-        source.configuration.set_field(name="account_name", value="")
+        source.configuration.get_field("account_name").value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             # Execute
