@@ -521,20 +521,20 @@ class OneDriveDataSource(BaseDataSource):
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
-            user_id_mail_map = {}
+            user_mail_id_map = {}
             async for user in self.client.list_users():
-                user_id_mail_map[user["mail"]] = user["id"]
+                user_mail_id_map[user["mail"]] = user["id"]
 
             for query_info in advanced_rules:
                 skipped_extensions = query_info.get("skipFilesWithExtensions")
                 user_mails = query_info.get("owners")
                 if user_mails is None:
-                    user_mails = user_id_mail_map.keys()
+                    user_mails = user_mail_id_map.keys()
 
                 pattern = query_info.get("parentPathPattern", "")
 
                 for mail in user_mails:
-                    user_id = user_id_mail_map.get(mail)
+                    user_id = user_mail_id_map.get(mail)
                     async for entity in self.client.get_owned_files(
                         user_id, skipped_extensions, pattern
                     ):
