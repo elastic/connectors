@@ -14,7 +14,7 @@ from freezegun import freeze_time
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.logger import logger
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
@@ -145,16 +145,6 @@ async def patch_connection_pool():
         return_value=future_with_result(connection_pool),
     ):
         yield connection_pool
-
-
-def test_get_configuration():
-    """Test get_configuration method of MySQL"""
-    klass = MySqlDataSource
-
-    config = DataSourceConfiguration(klass.get_default_configuration())
-
-    assert config["host"] == "127.0.0.1"
-    assert config["port"] == 3306
 
 
 class Result:

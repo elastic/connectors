@@ -357,20 +357,17 @@ class OneDriveDataSource(BaseDataSource):
                 "label": "Azure application Client ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "client_secret": {
                 "label": "Azure application Client Secret",
                 "order": 2,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "tenant_id": {
                 "label": "Azure application Tenant ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -380,7 +377,6 @@ class OneDriveDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 3,
             },
         }
 

@@ -129,33 +129,28 @@ class NASDataSource(BaseDataSource):
                 "label": "Username",
                 "order": 1,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "label": "Password",
                 "order": 2,
                 "sensitive": True,
                 "type": "str",
-                "value": "abc@123",
             },
             "server_ip": {
                 "label": "SMB IP",
                 "order": 3,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "server_port": {
                 "display": "numeric",
                 "label": "SMB port",
                 "order": 4,
                 "type": "int",
-                "value": 445,
             },
             "drive_path": {
                 "label": "SMB path",
                 "order": 5,
                 "type": "str",
-                "value": "Folder1",
             },
         }
 

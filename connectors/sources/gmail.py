@@ -105,43 +105,30 @@ class GMailDataSource(BaseDataSource):
         Returns:
             dict: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": "",
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:4444/token",
-        }
 
         return {
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "GMail service account JSON",
                 "order": 1,
-                "type": "str",
-                "value": json.dumps(default_credentials),
                 "required": True,
+                "type": "str",
             },
             "subject": {
                 "display": "text",
                 "label": "Subject",
                 "order": 2,
+                "required": True,
                 "tooltip": "Admin account email address",
                 "type": "str",
-                "value": "subject",
-                "required": True,
             },
             "customer_id": {
                 "display": "text",
                 "label": "Google customer id",
                 "order": 3,
+                "required": True,
                 "tooltip": "Google admin console -> Account -> Settings -> Customer Id",
                 "type": "str",
-                "value": "",
-                "required": True,
             },
             "use_document_level_security": {
                 "display": "toggle",
@@ -149,7 +136,6 @@ class GMailDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
-                "value": True,
             },
         }
 
