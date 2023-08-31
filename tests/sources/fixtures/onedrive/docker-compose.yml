@@ -76,7 +76,7 @@ services:
   onedrive:
     build: 
       context: ../../../../
-      dockerfile: Dockerfile.ftest;
+      dockerfile: Dockerfile.ftest
     command: python tests/sources/fixtures/onedrive/fixture.py
     ports:
       - 10972:10972
