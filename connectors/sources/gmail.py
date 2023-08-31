@@ -172,7 +172,7 @@ class GMailDataSource(BaseDataSource):
             await self._gmail_client(self.configuration["subject"]).ping()
         except AuthError as e:
             raise ConfigurableFieldValueError(
-                f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'."
+                f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
             ) from e
 
     def advanced_rules_validators(self):
