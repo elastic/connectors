@@ -32,7 +32,7 @@ SUBJECT = "subject@email_address.com"
 
 DATE = "2023-01-24T04:07:19+00:00"
 
-JSON_CREDENTIALS = {"key": "value"}
+JSON_CREDENTIALS = {"project_id": "dummy123"}
 
 
 def dls_feature_enabled(value):
@@ -52,7 +52,7 @@ async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
     async with create_source(
         GMailDataSource,
         service_account_credentials=json.dumps(JSON_CREDENTIALS),
-        subject="subject",
+        subject=SUBJECT,
         customer_id="foo",
         use_document_level_security=dls_enabled,
         include_spam_and_trash=include_spam_and_trash,
@@ -208,15 +208,7 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(self):
-        valid_json = '{"project_id": "dummy123"}'
-
         async with create_gmail_source() as source:
-            source.configuration.get_field(
-                "service_account_credentials"
-            ).value = valid_json
-            source.configuration.get_field("customer_id").value = CUSTOMER_ID
-            source.configuration.get_field("subject").value = SUBJECT
-
             try:
                 await source.validate_config()
             except ConfigurableFieldValueError:
@@ -234,13 +226,7 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid_subject(self):
-        valid_json = '{"project_id": "dummy123"}'
-
         async with create_gmail_source() as source:
-            source.configuration.get_field(
-                "service_account_credentials"
-            ).value = valid_json
-            source.configuration.get_field("customer_id").value = CUSTOMER_ID
             source.configuration.get_field("subject").value = "invalid address"
 
             with pytest.raises(ConfigurableFieldValueError):
