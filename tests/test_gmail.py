@@ -5,7 +5,7 @@
 #
 import json
 from contextlib import asynccontextmanager
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -46,14 +46,13 @@ def dls_enabled(value):
 
 
 @asynccontextmanager
-async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
+async def create_gmail_source(dls_enabled=False):
     async with create_source(
         GMailDataSource,
         service_account_credentials=json.dumps(JSON_CREDENTIALS),
         subject="subject",
         customer_id="foo",
         use_document_level_security=dls_enabled,
-        include_spam_and_trash=include_spam_and_trash,
     ) as source:
         source.set_features(
             Features({"document_level_security": {"enabled": dls_enabled}})
@@ -341,9 +340,7 @@ class TestGMailDataSource:
             assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
             assert ACCESS_CONTROL not in actual_message
 
-            patch_gmail_client.messages.assert_called_once_with(
-                query=message_query, includeSpamTrash=ANY
-            )
+            patch_gmail_client.messages.assert_called_once_with(query=message_query)
 
     @freeze_time(TIME)
     @pytest.mark.asyncio
@@ -408,9 +405,6 @@ class TestGMailDataSource:
             async for doc in source.get_docs(filtering=filter_):
                 actual_messages.append(doc)
 
-            async for doc in source.get_docs(filtering=None):
-                actual_messages.append(doc)
-
             actual_message = actual_messages[0][0]
 
             assert len(actual_messages) == 1
@@ -420,86 +414,7 @@ class TestGMailDataSource:
             assert ACCESS_CONTROL in actual_message
             assert email in actual_message[ACCESS_CONTROL]
 
-            patch_gmail_client.messages.assert_called_once_with(
-                query=message_query, includeSpamTrash=ANY
-            )
-
-    @freeze_time(TIME)
-    @pytest.mark.asyncio
-    async def test_get_docs_without_filtering_and_include_spam_and_trash(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
-        email = "user@google.com"
-        users = [{UserFields.EMAIL.value: email}]
-        message = {
-            MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
-            MessageFields.CREATION_DATE.value: iso_utc(),
-        }
-        messages = [message]
-
-        await setup_messages_and_users_apis(
-            patch_gmail_client, patch_google_directory_client, messages, users
-        )
-
-        async with create_gmail_source(
-            dls_enabled=False, include_spam_and_trash=True
-        ) as source:
-            actual_messages = []
-
-            async for doc in source.get_docs(filtering=None):
-                actual_messages.append(doc)
-
-            actual_message = actual_messages[0][0]
-
-            assert len(actual_messages) == 1
-            assert actual_message["_id"] == message[MessageFields.ID.value]
-            assert len(actual_message["_attachment"]) > 0
-            assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
-
-            patch_gmail_client.messages.assert_called_once_with(includeSpamTrash=True)
-
-    @freeze_time(TIME)
-    @pytest.mark.asyncio
-    async def test_get_docs_with_filtering_and_include_spam_and_trash(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
-        email = "user@google.com"
-        users = [{UserFields.EMAIL.value: email}]
-        message = {
-            MessageFields.ID.value: "1",
-            MessageFields.FULL_MESSAGE.value: "abcd",
-            MessageFields.CREATION_DATE.value: iso_utc(),
-        }
-        messages = [message]
-
-        await setup_messages_and_users_apis(
-            patch_gmail_client, patch_google_directory_client, messages, users
-        )
-
-        async with create_gmail_source(
-            dls_enabled=False, include_spam_and_trash=True
-        ) as source:
-            actual_messages = []
-
-            message_query = "some query"
-            filter_ = Filter(
-                {"advanced_snippet": {"value": {"messages": [message_query]}}}
-            )
-
-            async for doc in source.get_docs(filtering=filter_):
-                actual_messages.append(doc)
-
-            actual_message = actual_messages[0][0]
-
-            assert len(actual_messages) == 1
-            assert actual_message["_id"] == message[MessageFields.ID.value]
-            assert len(actual_message["_attachment"]) > 0
-            assert actual_message["_timestamp"] == "2023-01-24T04:07:19+00:00"
-
-            patch_gmail_client.messages.assert_called_once_with(
-                query=message_query, includeSpamTrash=True
-            )
+            patch_gmail_client.messages.assert_called_once_with(query=message_query)
 
     @pytest.mark.parametrize(
         "feature_enabled_, rcf_enabled_, dls_enabled_",
