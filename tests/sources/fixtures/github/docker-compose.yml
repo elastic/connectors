@@ -76,7 +76,7 @@ services:
   github:
     build: 
       context: ../../../../
-      dockerfile: ftest.Dockerfile
+      dockerfile: Dockerfile.ftest
     command: python tests/sources/fixtures/github/fixture.py
     ports:
       - "9091:9091"

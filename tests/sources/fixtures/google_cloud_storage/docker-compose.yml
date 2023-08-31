@@ -27,7 +27,7 @@ services:
   gcs-mocker:
     build: 
       context: ../../../../
-      dockerfile: ftest.Dockerfile
+      dockerfile: Dockerfile.ftest
     command: python tests/sources/fixtures/google_cloud_storage/mocker.py
     ports:
       - "4444:4444"

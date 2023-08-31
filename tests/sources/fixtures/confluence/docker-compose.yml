@@ -76,7 +76,7 @@ services:
   confluence:
     build: 
       context: ../../../../
-      dockerfile: ftest.Dockerfile
+      dockerfile: Dockerfile.ftest
     command: python tests/sources/fixtures/confluence/fixture.py
     ports:
       - "9696:9696"

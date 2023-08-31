@@ -76,7 +76,7 @@ services:
   sharepoint_online:
     build: 
       context: ../../../../
-      dockerfile: ftest.Dockerfile
+      dockerfile: Dockerfile.ftest
     command: python tests/sources/fixtures/sharepoint_online/fixture.py
     ports:
       - 10337:10337

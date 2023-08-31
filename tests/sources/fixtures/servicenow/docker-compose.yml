@@ -76,7 +76,7 @@ services:
   servicenow:
     build: 
       context: ../../../../
-      dockerfile: ftest.Dockerfile
+      dockerfile: Dockerfile.ftest
     command: python tests/sources/fixtures/servicenow/fixture.py
     ports:
       - "9318:9318"
