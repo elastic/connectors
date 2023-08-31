@@ -451,6 +451,7 @@ class MSSQLDataSource(BaseDataSource):
                 "label": "Enable SSL verification",
                 "order": 10,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
@@ -463,6 +464,7 @@ class MSSQLDataSource(BaseDataSource):
                 "label": "Validate host",
                 "order": 12,
                 "type": "bool",
+                "value": False,
             },
         }
 

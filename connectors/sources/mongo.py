@@ -143,6 +143,7 @@ class MongoDataSource(BaseDataSource):
                 "label": "Direct connection",
                 "order": 6,
                 "type": "bool",
+                "value": False,
             },
         }
 

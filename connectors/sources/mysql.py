@@ -404,6 +404,7 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Enable SSL",
                 "order": 7,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
