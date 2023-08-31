@@ -29,6 +29,8 @@ TIME = "2023-01-24T04:07:19"
 
 CUSTOMER_ID = "customer_id"
 
+SUBJECT = "subject@email_address.com"
+
 DATE = "2023-01-24T04:07:19+00:00"
 
 JSON_CREDENTIALS = {"project_id": "dummy123"}
@@ -206,7 +208,7 @@ class TestGMailDataSource:
                 await source.ping()
 
     @pytest.mark.asyncio
-    async def test_validate_config_valid(self):
+    async def test_validate_config_valid(self, patch_gmail_client):
         valid_json = '{"project_id": "dummy123"}'
 
         async with create_gmail_source() as source:
@@ -214,6 +216,9 @@ class TestGMailDataSource:
                 "service_account_credentials"
             ).value = valid_json
             source.configuration.get_field("customer_id").value = CUSTOMER_ID
+            source.configuration.get_field("subject").value = SUBJECT
+
+            patch_gmail_client.ping = AsyncMock()
 
             try:
                 await source.validate_config()
