@@ -208,10 +208,11 @@ class GMailDataSource(BaseDataSource):
                 raise
 
     def _dls_enabled(self):
-        if self._features is None:
-            return False
-
-        return self._features.document_level_security_enabled()
+        return (
+            self._features is not None
+            and self._features.document_level_security_enabled()
+            and self.configuration["use_document_level_security"]
+        )
 
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
