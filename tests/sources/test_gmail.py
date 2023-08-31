@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
+from aiogoogle import AuthError
 from freezegun import freeze_time
 
 from connectors.protocol import Features, Filter
@@ -30,7 +31,7 @@ CUSTOMER_ID = "customer_id"
 
 DATE = "2023-01-24T04:07:19+00:00"
 
-JSON_CREDENTIALS = {"key": "value"}
+JSON_CREDENTIALS = {"project_id": "dummy123"}
 
 
 def dls_feature_enabled(value):
@@ -228,6 +229,19 @@ class TestGMailDataSource:
 
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_invalid_gmail_auth(self, patch_gmail_client):
+        async with create_gmail_source() as source:
+            patch_gmail_client.ping = AsyncMock(
+                side_effect=AuthError("some auth error")
+            )
+
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+
+            # Make sure this is a GMail auth error
+            assert "GMail auth" in str(e.value)
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(

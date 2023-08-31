@@ -6,7 +6,7 @@
 import json
 from enum import Enum
 
-from aiogoogle import Aiogoogle, HTTPError
+from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
@@ -173,6 +173,9 @@ class GoogleServiceAccountClient:
             self._logger.error(
                 f"Error occurred while generating the resource/method object for an API call. Error: {exception}"
             )
+            raise
+        except AuthError as exception:
+            self._logger.warning(f"Authentication error (401). Exception: {exception}.")
             raise
         except HTTPError as exception:
             self._logger.warning(
