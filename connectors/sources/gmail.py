@@ -7,6 +7,7 @@ import json
 from functools import cached_property
 
 import fastjsonschema
+from aiogoogle import AuthError
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
@@ -28,6 +29,12 @@ from connectors.utils import (
     iso_utc,
     validate_email_address,
 )
+
+CUSTOMER_ID_LABEL = "Google customer id"
+
+SUBJECT_LABEL = "Subject"
+
+SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 
 GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 
@@ -114,14 +121,14 @@ class GMailDataSource(BaseDataSource):
         return {
             "service_account_credentials": {
                 "display": "textarea",
-                "label": "GMail service account JSON",
+                "label": SERVICE_ACCOUNT_CREDENTIALS_LABEL,
                 "order": 1,
                 "required": True,
                 "type": "str",
             },
             "subject": {
                 "display": "text",
-                "label": "Subject",
+                "label": SUBJECT_LABEL,
                 "order": 2,
                 "required": True,
                 "tooltip": "Admin account email address",
@@ -130,7 +137,7 @@ class GMailDataSource(BaseDataSource):
             },
             "customer_id": {
                 "display": "text",
-                "label": "Google customer id",
+                "label": CUSTOMER_ID_LABEL,
                 "order": 3,
                 "required": True,
                 "tooltip": "Google admin console -> Account -> Settings -> Customer Id",
@@ -170,6 +177,16 @@ class GMailDataSource(BaseDataSource):
             raise ConfigurableFieldValueError(
                 f"Subject field value needs to be a valid email address. '{subject}' is invalid."
             )
+
+        await self._validate_gmail_auth()
+
+    async def _validate_gmail_auth(self):
+        try:
+            await self._gmail_client(self.configuration["subject"]).ping()
+        except AuthError as e:
+            raise ConfigurableFieldValueError(
+                f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
+            ) from e
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]
