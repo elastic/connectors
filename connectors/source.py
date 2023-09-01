@@ -12,6 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from functools import cache
+from pydoc import locate
 
 from bson import Decimal128
 
@@ -38,6 +39,14 @@ DEFAULT_CONFIGURATION = {
     "ui_restrictions": [],
     "validations": [],
     "value": "",
+}
+
+TYPE_DEFAULTS = {
+    str: "",
+    int: None,
+    float: None,
+    bool: None,
+    list: [],
 }
 
 
@@ -105,20 +114,32 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def _convert(self, value, field_type):
-        if not isinstance(value, str):
-            # we won't convert the value if it's not a str
+    def _convert(self, value, field_type_):
+        cast_type = locate(field_type_)
+        if cast_type not in TYPE_DEFAULTS:
+            # unsupported type
             return value
 
-        if field_type == "int":
-            return int(value)
-        elif field_type == "float":
-            return float(value)
-        elif field_type == "bool":
-            return value.lower() in ("y", "yes", "true", "1")
-        elif field_type == "list":
-            return [item.strip() for item in value.split(",")]
-        return value
+        if isinstance(value, cast_type):
+            return value
+
+        # list requires special type casting
+        if cast_type == list:
+            if isinstance(value, str):
+                return [item.strip() for item in value.split(",")] if value else []
+            elif isinstance(value, int):
+                return [value]
+            elif isinstance(value, set):
+                return list(value)
+            elif isinstance(value, dict):
+                return list(value.items())
+            else:
+                return [value] if value is not None else []
+
+        if value is None or value == "":
+            return TYPE_DEFAULTS[cast_type]
+
+        return cast_type(value)
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.
@@ -239,7 +260,7 @@ class DataSourceConfiguration:
 
     def set_defaults(self, default_config):
         for name, item in default_config.items():
-            self._defaults[name] = item["value"]
+            self._defaults[name] = item.get("value")
             if name in self._config:
                 self._config[name].field_type = item["type"]
 

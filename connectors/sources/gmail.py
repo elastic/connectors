@@ -20,8 +20,14 @@ from connectors.sources.google import (
     GoogleDirectoryClient,
     MessageFields,
     UserFields,
+    validate_service_account_json,
 )
-from connectors.utils import base64url_to_base64, iso_utc
+from connectors.utils import (
+    EMAIL_REGEX_PATTERN,
+    base64url_to_base64,
+    iso_utc,
+    validate_email_address,
+)
 
 GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 
@@ -104,48 +110,44 @@ class GMailDataSource(BaseDataSource):
         Returns:
             dict: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": "",
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:4444/token",
-        }
 
         return {
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "GMail service account JSON",
                 "order": 1,
-                "type": "str",
-                "value": json.dumps(default_credentials),
                 "required": True,
+                "type": "str",
             },
             "subject": {
                 "display": "text",
                 "label": "Subject",
                 "order": 2,
+                "required": True,
                 "tooltip": "Admin account email address",
                 "type": "str",
-                "value": "subject",
-                "required": True,
+                "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
             },
             "customer_id": {
                 "display": "text",
                 "label": "Google customer id",
                 "order": 3,
+                "required": True,
                 "tooltip": "Google admin console -> Account -> Settings -> Customer Id",
                 "type": "str",
-                "value": "",
-                "required": True,
+            },
+            "include_spam_and_trash": {
+                "display": "toggle",
+                "label": "Include spam and trash emails",
+                "order": 4,
+                "tooltip": "Will include spam and trash emails, when set to true.",
+                "type": "bool",
+                "value": False,
             },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 4,
+                "order": 5,
                 "tooltip": "Document level security ensures identities and permissions set in GMail are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": True,
@@ -158,13 +160,16 @@ class GMailDataSource(BaseDataSource):
             Exception: The format of service account json is invalid.
         """
         await super().validate_config()
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], "GMail"
+        )
 
-        try:
-            json.loads(self.configuration["service_account_credentials"])
-        except ValueError as e:
+        subject = self.configuration["subject"]
+
+        if not validate_email_address(subject):
             raise ConfigurableFieldValueError(
-                f"Google Drive service account is not a valid JSON. Exception: {e}"
-            ) from e
+                f"Subject field value needs to be a valid email address. '{subject}' is invalid."
+            )
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]
@@ -216,10 +221,11 @@ class GMailDataSource(BaseDataSource):
                 raise
 
     def _dls_enabled(self):
-        if self._features is None:
-            return False
-
-        return self._features.document_level_security_enabled()
+        return (
+            self._features is not None
+            and self._features.document_level_security_enabled()
+            and self.configuration["use_document_level_security"]
+        )
 
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
@@ -270,6 +276,11 @@ class GMailDataSource(BaseDataSource):
         return message_doc_with_access_control
 
     async def get_docs(self, filtering=None):
+        include_spam_and_trash = self.configuration["include_spam_and_trash"]
+
+        if include_spam_and_trash:
+            self._logger.debug("Including messages from spam and trash.")
+
         if self._filtering_enabled(filtering):
             self._logger.debug("Fetching documents using advanced rules.")
 
@@ -286,7 +297,9 @@ class GMailDataSource(BaseDataSource):
                 for message_query in message_queries:
                     self._logger.debug(f"Fetching messages for query: {message_query}.")
 
-                    async for message in gmail_client.messages(query=message_query):
+                    async for message in gmail_client.messages(
+                        query=message_query, includeSpamTrash=include_spam_and_trash
+                    ):
                         if not message:
                             continue
 
@@ -305,7 +318,9 @@ class GMailDataSource(BaseDataSource):
                 # reinitialization is needed to work around a 403 Forbidden error (see: https://issuetracker.google.com/issues/290567932)
                 gmail_client = self._gmail_client(email)
 
-                async for message in gmail_client.messages():
+                async for message in gmail_client.messages(
+                    includeSpamTrash=include_spam_and_trash
+                ):
                     if not message:
                         continue
 

@@ -80,7 +80,13 @@ async def test_ping():
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
-    async with create_source(OracleDataSource) as source:
+    async with create_source(
+        OracleDataSource,
+        username="admin",
+        password="changeme",
+        database="xe",
+        tables="*",
+    ) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(OracleQueries())
         ):
