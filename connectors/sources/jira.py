@@ -330,6 +330,7 @@ class JiraDataSource(BaseDataSource):
                 "label": "Enable SSL",
                 "order": 8,
                 "type": "bool",
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
@@ -365,6 +366,7 @@ class JiraDataSource(BaseDataSource):
                 "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
+                "value": False,
             },
         }
 

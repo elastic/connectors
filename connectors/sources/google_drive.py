@@ -6,7 +6,6 @@
 import asyncio
 import json
 import os
-import re
 from functools import cached_property, partial
 
 import aiofiles
@@ -25,10 +24,12 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.google import validate_service_account_json
 from connectors.utils import (
+    EMAIL_REGEX_PATTERN,
     TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
     convert_to_b64,
     retryable,
+    validate_email_address,
 )
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
@@ -58,9 +59,6 @@ GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
-
-# Regular expression pattern to match a basic email format (no whitespace, valid domain)
-EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
 
 class RetryableAiohttpSession(AiohttpSession):
@@ -490,6 +488,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 2,
                 "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
+                "value": False,
             },
             "google_workspace_admin_email": {
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
@@ -592,7 +591,7 @@ class GoogleDriveDataSource(BaseDataSource):
                     "Google Workspace admin email cannot be empty when Document Level Security is enabled."
                 )
 
-            if not re.fullmatch(EMAIL_REGEX_PATTERN, google_workspace_admin_email):
+            if not validate_email_address(google_workspace_admin_email):
                 raise ConfigurableFieldValueError(
                     "Google Workspace admin email is malformed or contains whitespace characters."
                 )

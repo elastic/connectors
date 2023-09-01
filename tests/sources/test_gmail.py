@@ -28,9 +28,23 @@ TIME = "2023-01-24T04:07:19"
 
 CUSTOMER_ID = "customer_id"
 
+SUBJECT = "subject@email_address.com"
+
 DATE = "2023-01-24T04:07:19+00:00"
 
-JSON_CREDENTIALS = {"key": "value"}
+JSON_CREDENTIALS = {"project_id": "dummy123"}
+
+
+def dls_feature_enabled(value):
+    return value
+
+
+def dls_rcf_enabled(value):
+    return value
+
+
+def dls_enabled(value):
+    return value
 
 
 @asynccontextmanager
@@ -38,7 +52,7 @@ async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
     async with create_source(
         GMailDataSource,
         service_account_credentials=json.dumps(JSON_CREDENTIALS),
-        subject="subject",
+        subject=SUBJECT,
         customer_id="foo",
         use_document_level_security=dls_enabled,
         include_spam_and_trash=include_spam_and_trash,
@@ -194,25 +208,26 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(self):
-        valid_json = '{"project_id": "dummy123"}'
-
         async with create_gmail_source() as source:
-            source.configuration.get_field(
-                "service_account_credentials"
-            ).value = valid_json
-            source.configuration.get_field("customer_id").value = CUSTOMER_ID
-
             try:
                 await source.validate_config()
             except ConfigurableFieldValueError:
                 raise AssertionError("Should've been a valid config") from None
 
     @pytest.mark.asyncio
-    async def test_validate_config_invalid(self):
+    async def test_validate_config_invalid_service_account_credentials(self):
         async with create_gmail_source() as source:
             source.configuration.get_field(
                 "service_account_credentials"
             ).value = "invalid json"
+
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_invalid_subject(self):
+        async with create_gmail_source() as source:
+            source.configuration.get_field("subject").value = "invalid address"
 
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
@@ -488,3 +503,24 @@ class TestGMailDataSource:
             patch_gmail_client.messages.assert_called_once_with(
                 query=message_query, includeSpamTrash=True
             )
+
+    @pytest.mark.parametrize(
+        "feature_enabled_, rcf_enabled_, dls_enabled_",
+        [
+            (dls_feature_enabled(False), dls_rcf_enabled(False), dls_enabled(False)),
+            (dls_feature_enabled(True), dls_rcf_enabled(False), dls_enabled(False)),
+            (dls_feature_enabled(False), dls_rcf_enabled(True), dls_enabled(False)),
+            (dls_feature_enabled(None), dls_rcf_enabled(True), dls_enabled(False)),
+            (dls_feature_enabled(True), dls_rcf_enabled(True), dls_enabled(True)),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_dls_enabled(self, feature_enabled_, rcf_enabled_, dls_enabled_):
+        async with create_gmail_source(dls_enabled=rcf_enabled_) as source:
+            # `dls_enabled` sets both the feature flag and the config value in create_gmail_source
+            # -> set dls feature flag after instantiation again
+            source.set_features(
+                Features({"document_level_security": {"enabled": feature_enabled_}})
+            )
+
+            assert source._dls_enabled() == dls_enabled_
