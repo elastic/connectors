@@ -354,9 +354,20 @@ def side_effect_function(url, headers):
     Args:
         url, ssl: Params required for get call
     """
-    if url == "https://graph.microsoft.com/v1.0/users":
+    if url == "https://graph.microsoft.com/v1.0/users?$top=999":
         return get_json_mock(
-            mock_response={"value": [{"mail": "test.user@gmail.com"}]}, status=200
+            mock_response={
+                "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token",
+                "value": [{"mail": "test.user@gmail.com"}],
+            },
+            status=200,
+        )
+    elif (
+        url
+        == "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token"
+    ):
+        return get_json_mock(
+            mock_response={"value": [{"mail": "dummy.user@gmail.com"}]}, status=200
         )
 
 
@@ -506,6 +517,26 @@ async def test_ping_for_cloud_for_failed_connection(
             ):
                 with pytest.raises(raised_exception):
                     await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_get_users_for_cloud():
+    async with create_source(OutlookDataSource) as source:
+        users = []
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=get_json_mock(
+                mock_response={"access_token": "fake-token"}, status=200
+            ),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=side_effect_function,
+            ):
+                async for response in source.client._get_user_instance.get_users():
+                    user_mails = [user["mail"] for user in response["value"]]
+                    users.extend(user_mails)
+                assert users == ["test.user@gmail.com", "dummy.user@gmail.com"]
 
 
 @pytest.mark.asyncio

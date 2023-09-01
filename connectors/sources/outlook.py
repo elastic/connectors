@@ -54,6 +54,7 @@ OUTLOOK_SERVER = "outlook_server"
 OUTLOOK_CLOUD = "outlook_cloud"
 API_SCOPE = "https://graph.microsoft.com/.default"
 EWS_ENDPOINT = "https://outlook.office365.com/EWS/Exchange.asmx"
+TOP = 999
 
 DEFAULT_TIMEZONE = "UTC"
 
@@ -387,18 +388,24 @@ class Office365Users:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def get_users(self):
-        try:
-            access_token = await self._fetch_token()
-            async with self._get_session.get(
-                url="https://graph.microsoft.com/v1.0/users",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                },
-            ) as response:
-                yield await response.json()
-        except Exception:
-            raise
+        access_token = await self._fetch_token()
+        url = f"https://graph.microsoft.com/v1.0/users?$top={TOP}"
+        while True:
+            try:
+                async with self._get_session.get(
+                    url=url,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json",
+                    },
+                ) as response:
+                    json_response = await response.json()
+                    yield json_response
+                    url = json_response.get("@odata.nextLink")
+                    if url is None:
+                        break
+            except Exception:
+                raise
 
     async def get_user_accounts(self):
         async for users in self.get_users():
