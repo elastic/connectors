@@ -167,17 +167,10 @@ async def test_ping_when_called_then_does_not_raise(*args):
     admin_mock = Mock()
     command_mock = AsyncMock()
     admin_mock.command = command_mock
-    async with create_source(
-        MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
-        user="foo",
-        password="password",
-    ) as source:
-        source.client.admin = admin_mock
-        await source.ping()
+    source = create_connector()
+
+    source.client.admin = admin_mock
+    await source.ping()
 
 
 @pytest.mark.asyncio
