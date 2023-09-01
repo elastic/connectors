@@ -23,7 +23,12 @@ from connectors.sources.google import (
     UserFields,
     validate_service_account_json,
 )
-from connectors.utils import base64url_to_base64, iso_utc
+from connectors.utils import (
+    EMAIL_REGEX_PATTERN,
+    base64url_to_base64,
+    iso_utc,
+    validate_email_address,
+)
 
 CUSTOMER_ID_LABEL = "Google customer id"
 
@@ -128,6 +133,7 @@ class GMailDataSource(BaseDataSource):
                 "required": True,
                 "tooltip": "Admin account email address",
                 "type": "str",
+                "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
             },
             "customer_id": {
                 "display": "text",
@@ -164,6 +170,13 @@ class GMailDataSource(BaseDataSource):
         validate_service_account_json(
             self.configuration["service_account_credentials"], "GMail"
         )
+
+        subject = self.configuration["subject"]
+
+        if not validate_email_address(subject):
+            raise ConfigurableFieldValueError(
+                f"Subject field value needs to be a valid email address. '{subject}' is invalid."
+            )
 
         await self._validate_gmail_auth()
 
