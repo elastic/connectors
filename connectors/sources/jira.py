@@ -322,7 +322,6 @@ class JiraDataSource(BaseDataSource):
                 "label": "Jira Server username",
                 "order": 2,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
@@ -330,14 +329,12 @@ class JiraDataSource(BaseDataSource):
                 "sensitive": True,
                 "order": 3,
                 "type": "str",
-                "value": "changeme",
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
                 "order": 4,
                 "type": "str",
-                "value": "me@example.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
@@ -345,13 +342,11 @@ class JiraDataSource(BaseDataSource):
                 "order": 5,
                 "sensitive": True,
                 "type": "str",
-                "value": "abc#123",
             },
             "jira_url": {
                 "label": "Jira host url",
                 "order": 6,
                 "type": "str",
-                "value": "http://127.0.0.1:8080",
             },
             "projects": {
                 "display": "textarea",
@@ -359,7 +354,6 @@ class JiraDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": "*",
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -373,7 +367,6 @@ class JiraDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 9,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -383,7 +376,6 @@ class JiraDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 3,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -396,7 +388,6 @@ class JiraDataSource(BaseDataSource):
                 "validations": [
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
-                "value": MAX_CONCURRENT_DOWNLOADS,
             },
             "use_document_level_security": {
                 "display": "toggle",
