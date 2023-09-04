@@ -193,6 +193,16 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
+          - path:
+              - "connectors/sources/gmail.py"
+              - "tests/sources/fixtures/gmail/**"
+            config:
+              label: "🔨 GMail"
+              command:
+                - ".buildkite/run_nigthly.sh gmail small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
           - path: 
             - "connectors/sources/dropbox.py"
             - "tests/sources/fixtures/dropbox/**"

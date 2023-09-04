@@ -54,6 +54,8 @@ MESSAGE_IDS_TO_MESSAGE_CONTENT = {
 
 app = Flask(__name__)
 
+# TODO: consider data size
+
 
 @app.route("/gmail/v1/users/<string:user_id>/profile", methods=["GET"])
 def user_profile(user_id):
