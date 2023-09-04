@@ -187,9 +187,8 @@ class MicrosoftTeamsClient:
         return await self._get_json(absolute_url=url)
 
     async def _get_json(self, absolute_url):
-        self._logger.debug(f"Fetching url: {absolute_url}")
-        async for response in self._get(absolute_url=absolute_url):
-            return await response.json()
+        response = await anext(self._get(absolute_url=absolute_url))
+        return await response.json()
 
     @retryable(
         retries=RETRY_COUNT,
