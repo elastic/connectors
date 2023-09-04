@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import json
+import os
 from enum import Enum
 
 from aiogoogle import Aiogoogle, AuthError, HTTPError
@@ -16,6 +17,12 @@ from connectors.utils import RetryStrategy, retryable
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
 # service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
+
+GMAIL_EMULATOR_HOST = os.environ.get("GMAIL_EMULATOR_HOST")
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
+
 SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
     "universe_domain"
 }
@@ -157,6 +164,11 @@ class GoogleServiceAccountClient:
                 workspace_client = await google_client.discover(
                     api_name=self.api, api_version=self.api_version
                 )
+
+                if RUNNING_FTEST and GMAIL_EMULATOR_HOST:
+                    workspace_client.discovery_document["rootUrl"] = (
+                        GMAIL_EMULATOR_HOST + "/"
+                    )
 
                 if isinstance(resource, list):
                     resource_object = getattr(workspace_client, resource[0])
