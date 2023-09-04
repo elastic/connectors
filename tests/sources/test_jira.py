@@ -586,8 +586,8 @@ async def test_ping_for_failed_connection_exception(client_session_get):
 @pytest.mark.asyncio
 async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
     """This function test _validate_configuration when certification is empty when ssl is enabled"""
-
-    async with create_source(JiraDataSource, ssl_enabled=True) as source:
+    async with create_jira_source() as source:
+        source.configuration.get_field("ssl_enabled").value = True
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
