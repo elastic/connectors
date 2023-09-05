@@ -56,7 +56,7 @@ async def test_raise_on_invalid_configuration():
 
     with pytest.raises(
         ConfigurableFieldValueError,
-        match="Google Cloud service account is not a valid JSON",
+        match="Google Cloud Storage service account is not a valid JSON",
     ):
         await gcs_object.validate_config()
 
