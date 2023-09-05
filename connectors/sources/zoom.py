@@ -69,7 +69,7 @@ class TokenError(Exception):
     pass
 
 
-class NotFound(Exception):
+class ZoomResourceNotFound(Exception):
     pass
 
 
@@ -145,7 +145,7 @@ class ZoomAPISession:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=NotFound,
+        skipped_exceptions=ZoomResourceNotFound,
     )
     async def _get(self, absolute_url):
         try:
@@ -164,7 +164,7 @@ class ZoomAPISession:
                 await self._api_token.get(is_cache=False)
                 raise
             elif exception.status == 404:
-                raise NotFound("Resource Not Found") from exception
+                raise ZoomResourceNotFound("Resource Not Found") from exception
             else:
                 raise
         except Exception:

@@ -403,13 +403,13 @@ def get_mock(mock_response):
 
 @asynccontextmanager
 async def create_zoom_source(fetch_past_meeting_details=False):
-    async with create_source(ZoomDataSource) as source:
-        source.configuration.get_field("account_id").value = "123"
-        source.configuration.get_field("client_id").value = "id@123"
-        source.configuration.get_field("client_secret").value = "secret#123"
-        source.configuration.get_field(
-            "fetch_past_meeting_details"
-        ).value = fetch_past_meeting_details
+    async with create_source(
+        ZoomDataSource,
+        account_id="123",
+        client_id="id@123",
+        client_secret="secret#123",
+        fetch_past_meeting_details=fetch_past_meeting_details,
+    ) as source:
         yield source
 
 
