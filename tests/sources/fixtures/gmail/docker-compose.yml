@@ -82,6 +82,7 @@ services:
     restart: always
     environment:
       - DATA_SIZE=${DATA_SIZE}
+
 volumes:
   esdata:
     driver: local
