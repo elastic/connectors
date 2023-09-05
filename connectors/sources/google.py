@@ -18,7 +18,7 @@ from connectors.utils import RetryStrategy, retryable
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
 # service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
 
-GMAIL_EMULATOR_HOST = os.environ.get("GMAIL_EMULATOR_HOST")
+GOOGLE_API_EMULATOR_HOST = os.environ.get("GOOGLE_API_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
@@ -165,9 +165,9 @@ class GoogleServiceAccountClient:
                     api_name=self.api, api_version=self.api_version
                 )
 
-                if RUNNING_FTEST and GMAIL_EMULATOR_HOST:
+                if RUNNING_FTEST and GOOGLE_API_EMULATOR_HOST:
                     workspace_client.discovery_document["rootUrl"] = (
-                        GMAIL_EMULATOR_HOST + "/"
+                        GOOGLE_API_EMULATOR_HOST + "/"
                     )
 
                 if isinstance(resource, list):
