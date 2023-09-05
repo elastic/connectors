@@ -5,13 +5,12 @@
 #
 """Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms.
 """
-from copy import copy
 import os
+from copy import copy
 from datetime import date
 from functools import cached_property, partial
-from tempfile import NamedTemporaryFile
-from urllib.parse import urlparse
 
+import aiofiles
 import aiohttp
 import exchangelib
 import pytz
@@ -194,9 +193,9 @@ class SSLFailed(Exception):
 class ManageCertificate:
     cert_file = "outlook_cert.cer"
 
-    def store_certificate(self, certificate):
-        with open(self.cert_file, "w") as file:
-            file.write(certificate)
+    async def store_certificate(self, certificate):
+        async with aiofiles.open(self.cert_file, "w") as file:
+            await file.write(certificate)
 
     def get_certificate_path(self):
         return os.path.join(os.getcwd(), self.cert_file)
@@ -212,7 +211,10 @@ class RootCAAdapter(requests.adapters.HTTPAdapter):
     def cert_verify(self, conn, url, verify, cert):
         try:
             super().cert_verify(
-                conn=conn, url=url, verify=ManageCertificate().get_certificate_path(), cert=cert
+                conn=conn,
+                url=url,
+                verify=ManageCertificate().get_certificate_path(),
+                cert=cert,
             )
         except Exception as exception:
             raise SSLFailed(
@@ -304,7 +306,7 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        ManageCertificate().store_certificate(certificate=self.ssl_ca)
+        await ManageCertificate().store_certificate(certificate=self.ssl_ca)
         BaseProtocol.HTTP_ADAPTER_CLS = (
             RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
         )
