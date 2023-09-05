@@ -15,6 +15,7 @@ import aiohttp
 import exchangelib
 import pytz
 import requests.adapters
+from aiofiles.os import remove
 from exchangelib import (
     IMPERSONATION,
     OAUTH2,
@@ -200,9 +201,9 @@ class ManageCertificate:
     def get_certificate_path(self):
         return os.path.join(os.getcwd(), self.cert_file)
 
-    def remove_certificate_file(self):
+    async def remove_certificate_file(self):
         if os.path.exists(self.cert_file):
-            os.remove(self.cert_file)
+            await remove(self.cert_file)
 
 
 class RootCAAdapter(requests.adapters.HTTPAdapter):
@@ -247,7 +248,7 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        ManageCertificate().remove_certificate_file()
+        await ManageCertificate().remove_certificate_file()
 
     def _fetch_normal_users(self, search_query):
         try:
