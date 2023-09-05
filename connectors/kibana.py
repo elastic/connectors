@@ -225,7 +225,11 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX} document")
-        await es.client.index(index=CONNECTORS_INDEX, id=config["connectors"][0]["connector_id"], document=doc)
+        await es.client.index(
+            index=CONNECTORS_INDEX,
+            id=config["connectors"][0]["connector_id"],
+            document=doc,
+        )
 
         logger.info(f"Prepare {index_name}")
         mappings = Mappings.default_text_fields_mappings(
