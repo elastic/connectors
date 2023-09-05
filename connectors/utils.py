@@ -10,6 +10,7 @@ import hashlib
 import inspect
 import os
 import platform
+import re
 import shutil
 import ssl
 import subprocess
@@ -36,6 +37,10 @@ DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
+
+# Regular expression pattern to match a basic email format (no whitespace, valid domain)
+EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
+
 TIKA_SUPPORTED_FILETYPES = [
     ".txt",
     ".py",
@@ -902,3 +907,11 @@ def base64url_to_base64(string):
 
     string = string.replace("-", "+")
     return string.replace("_", "/")
+
+
+def validate_email_address(email_address):
+    """Validates an email address against a regular expression.
+    This method does not include any remote check against an SMTP server for example."""
+
+    # non None values indicate a match
+    return re.fullmatch(EMAIL_REGEX_PATTERN, email_address) is not None

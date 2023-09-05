@@ -161,8 +161,15 @@ class FilteringValidator:
         self._logger = logger_ or logger
 
     async def validate(self, filtering):
-        self._logger.debug("Filtering validation started")
+        def _is_valid_str(result):
+            if result is None:
+                return "Unknown (check validator implementation as it should never return 'None')"
+
+            return "valid" if result.is_valid else "invalid"
+
+        self._logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
+        basic_rules_ids = [basic_rule["id"] for basic_rule in basic_rules]
 
         filtering_validation_result = FilteringValidationResult()
 
@@ -173,10 +180,19 @@ class FilteringValidator:
                 for result in results:
                     filtering_validation_result += result
 
+                    logger.debug(
+                        f"Basic rules set: '{basic_rules_ids}' validation result (Validator: {validator.__name__}): {_is_valid_str(result)}"
+                    )
+
             if issubclass(validator, BasicRuleValidator):
                 for basic_rule in basic_rules:
                     # pass rule by rule (validate rule in isolation)
-                    filtering_validation_result += validator.validate(basic_rule)
+                    validator_result = validator.validate(basic_rule)
+                    filtering_validation_result += validator_result
+
+                    logger.debug(
+                        f"{str(basic_rule)} validation result (Validator: {validator.__name__}): {_is_valid_str(validator_result)}"
+                    )
 
         if filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()

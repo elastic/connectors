@@ -883,14 +883,12 @@ class GitHubDataSource(BaseDataSource):
                 "label": "GitHub URL",
                 "order": 2,
                 "type": "str",
-                "value": "http://127.0.0.1:9091",
             },
             "token": {
                 "label": "GitHub Token",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
             },
             "repositories": {
                 "display": "textarea",
@@ -898,7 +896,6 @@ class GitHubDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -912,7 +909,6 @@ class GitHubDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 6,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "display_value": RETRIES,
@@ -923,7 +919,6 @@ class GitHubDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "value": RETRIES,
-                "validations": [{"type": "less_than", "constraint": 10}],
             },
         }
 

@@ -50,6 +50,7 @@ from connectors.utils import (
     ssl_context,
     truncate_id,
     url_encode,
+    validate_email_address,
     validate_index_name,
 )
 
@@ -854,3 +855,18 @@ class TestExtractionService:
 )
 def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
     assert base64url_to_base64(base64url_encoded_value) == base64_expected_value
+
+
+@pytest.mark.parametrize(
+    "email_address, is_valid",
+    [
+        ("subject@email_address.com", True),
+        ("subject", False),
+        ("@email_address.com", False),
+        ("", False),
+        ("subject @email_address.com", False),
+        ("subject@email_address", False),
+    ],
+)
+def test_validate_email_address(email_address, is_valid):
+    assert validate_email_address(email_address) == is_valid

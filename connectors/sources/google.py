@@ -3,13 +3,22 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import json
 from enum import Enum
 
-from aiogoogle import Aiogoogle, HTTPError
+from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
+from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
+
+# Google Service Account JSON includes "universe_domain" key. That argument is not
+# supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
+# service account JSON but will be dropped before being passed to aiogoogle.auth.creds.ServiceAccountCreds.
+SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
+    "universe_domain"
+}
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -27,6 +36,28 @@ class MessageFields(Enum):
     ID = "id"
     CREATION_DATE = "internalDate"
     FULL_MESSAGE = "raw"
+
+
+def validate_service_account_json(service_account_credentials, google_service):
+    """Validates whether service account JSON is a valid JSON string and
+    checks for unexpected keys.
+
+    Raises:
+        ConfigurableFieldValueError: The service account json is invalid.
+    """
+
+    try:
+        json_credentials = json.loads(service_account_credentials)
+    except ValueError as e:
+        raise ConfigurableFieldValueError(
+            f"{google_service} service account is not a valid JSON. Exception: {e}"
+        ) from e
+
+    for key in json_credentials.keys():
+        if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
+            raise ConfigurableFieldValueError(
+                f"{google_service} service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
+            )
 
 
 class GoogleServiceAccountClient:
@@ -143,6 +174,9 @@ class GoogleServiceAccountClient:
                 f"Error occurred while generating the resource/method object for an API call. Error: {exception}"
             )
             raise
+        except AuthError as exception:
+            self._logger.warning(f"Authentication error (401). Exception: {exception}.")
+            raise
         except HTTPError as exception:
             self._logger.warning(
                 f"Response code: {exception.res.status_code} Exception: {exception}."
@@ -159,8 +193,10 @@ def remove_universe_domain(json_credentials):
 
 
 class GoogleDirectoryClient:
-    def __init__(self, json_credentials, customer_id, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, json_credentials, customer_id, subject, timeout=DEFAULT_TIMEOUT):
         remove_universe_domain(json_credentials)
+
+        json_credentials["subject"] = subject
         self._customer_id = customer_id
         self._client = GoogleServiceAccountClient(
             json_credentials=json_credentials,
@@ -225,7 +261,9 @@ class GMailClient:
         except Exception:
             raise
 
-    async def messages(self, query=None, pageSize=DEFAULT_PAGE_SIZE):
+    async def messages(
+        self, query=None, includeSpamTrash=False, pageSize=DEFAULT_PAGE_SIZE
+    ):
         fields = "id"
 
         async for page in self._client.api_call_paged(
@@ -233,6 +271,7 @@ class GMailClient:
             method="list",
             userId=self.user,
             q=query,
+            includeSpamTrash=includeSpamTrash,
             fields=f"nextPageToken,messages({fields})",
             pageSize=pageSize,
         ):

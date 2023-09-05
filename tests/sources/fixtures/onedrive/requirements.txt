@@ -1,3 +1,0 @@
-flask==2.3.2
-flask_limiter==3.3.1
-faker==18.11.2

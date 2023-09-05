@@ -1,0 +1,111 @@
+{
+        "name": "network_drive",
+        "index_name": "search-network_drive",
+        "service_type": "network_drive",
+        "sync_cursor": null,
+        "is_native": false,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
+        "last_sync_status": "canceled",
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+                "username": {
+                        "label": "Username",
+                        "order": 1,
+                        "type": "str",
+                        "value": "admin"
+                },
+                "password": {
+                        "label": "Password",
+                        "order": 2,
+                        "sensitive": true,
+                        "type": "str",
+                        "value": "abc@123"
+                },
+                "server_ip": {
+                        "label": "SMB IP",
+                        "order": 3,
+                        "type": "str",
+                        "value": "127.0.0.1"
+                },
+                "server_port": {
+                        "display": "numeric",
+                        "label": "SMB port",
+                        "order": 4,
+                        "type": "int",
+                        "value": 445
+                },
+                "drive_path": {
+                        "label": "SMB path",
+                        "order": 5,
+                        "type": "str",
+                        "value": "Folder1"
+                }
+        },
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        },
+                        "active": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        }
+                }
+
+        ],
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+        }
+}
