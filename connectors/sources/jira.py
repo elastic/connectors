@@ -163,7 +163,7 @@ class JiraClient:
         await self.session.close()
         self.session = None
 
-    async def _handle_client_errors(self, exception):
+    async def _handle_client_errors(self, url, exception):
         if exception.status == 429:
             response_headers = exception.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -183,8 +183,10 @@ class JiraClient:
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
         elif exception.status == 404:
+            self._logger.error(f"Getting Not Found Error for url: {url}")
             raise NotFound
         elif exception.status == 500:
+            self._logger.error("Internal Server Error occurred")
             raise InternalServerError
         else:
             raise
@@ -223,7 +225,7 @@ class JiraClient:
                 await self.close_session()
                 raise
             except ClientResponseError as exception:
-                await self._handle_client_errors(exception=exception)
+                await self._handle_client_errors(url=url, exception=exception)
 
     async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
