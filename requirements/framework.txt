@@ -23,3 +23,4 @@ dropbox==11.36.2
 beautifulsoup4==4.12.2
 gidgethub==5.2.1
 wcmatch==8.4.1
+msal==1.23.0
