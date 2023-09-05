@@ -13,7 +13,6 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
@@ -23,7 +22,6 @@ BLOB_SCHEMA = {
     "size": "size",
     "container": "container",
 }
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
@@ -45,7 +43,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.connection_string = None
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
@@ -58,10 +55,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Raises:
             Exception: Invalid configured concurrent_downloads
         """
-        if self.concurrent_downloads > MAX_CONCURRENT_DOWNLOADS:
-            raise Exception(
-                f"Configured concurrent downloads can't be set more than {MAX_CONCURRENT_DOWNLOADS}."
-            )
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
@@ -73,70 +66,64 @@ class AzureBlobStorageDataSource(BaseDataSource):
         """
         return {
             "account_name": {
-                "value": "devstoreaccount1",
                 "label": "Azure Blob Storage account name",
+                "order": 1,
                 "type": "str",
             },
             "account_key": {
-                "value": "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
                 "label": "Azure Blob Storage account key",
+                "order": 2,
                 "type": "str",
             },
             "blob_endpoint": {
-                "value": "http://127.0.0.1:10000/devstoreaccount1",
                 "label": "Azure Blob Storage blob endpoint",
+                "order": 3,
                 "type": "str",
             },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
-            },
             "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
                 "label": "Retries per request",
+                "order": 4,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
             },
             "concurrent_downloads": {
-                "value": MAX_CONCURRENT_DOWNLOADS,
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
+                "display": "numeric",
                 "label": "Maximum concurrent downloads",
+                "order": 5,
+                "required": False,
                 "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
             },
         }
 
     def _configure_connection_string(self):
-        """Validates whether user input is empty or not for configuration fields and generate connection string
-
-        Raises:
-            Exception: Configured keys can't be empty
+        """Generates connection string for ABS
 
         Returns:
             str: Connection string with user input configuration fields
         """
-        keys = ["account_name", "account_key", "blob_endpoint"]
-        empty_configuration_fields = list(
-            filter(lambda field: self.configuration[field] == "", keys)
-        )
-
-        if empty_configuration_fields:
-            raise Exception(
-                f"Configured keys: {empty_configuration_fields} can't be empty."
-            )
 
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        logger.info("Validating configurations & Generating connection string...")
+        self._logger.info("Generating connection string...")
         self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(
                 conn_str=self.connection_string, retry_total=self.retry_count
             ) as azure_base_client:
                 await azure_base_client.get_account_information()
-                logger.info("Successfully connected to the Azure Blob Storage.")
+                self._logger.info("Successfully connected to the Azure Blob Storage.")
         except Exception:
-            logger.exception("Error while connecting to the Azure Blob Storage.")
+            self._logger.exception("Error while connecting to the Azure Blob Storage.")
             raise
 
     def prepare_blob_doc(self, blob, container_metadata):
@@ -174,20 +161,22 @@ class AzureBlobStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size > 0):
+        if not (doit and blob_size > 0):
             return
 
         blob_name = blob["title"]
-        if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.warning(f"{blob_name} can't be extracted")
+        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
+            self._logger.warning(f"{blob_name} can't be extracted")
             return
 
         if blob["tier"] == "Archive":
-            logger.warning(f"{blob_name} can't be downloaded as blob tier is archive")
+            self._logger.warning(
+                f"{blob_name} can't be downloaded as blob tier is archive"
+            )
             return
 
         if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
@@ -206,7 +195,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 temp_filename = async_buffer.name
                 async for content in data.chunks():
                     await async_buffer.write(content)
-            logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
+            self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
             await asyncio.to_thread(convert_to_b64, source=temp_filename)
             async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
                 # base64 on macOS will add a EOL, so we strip() here

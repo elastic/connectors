@@ -1,7 +1,0 @@
-elasticsearch:
-  host: http://nowhere.com:9200
-  user: elastic
-  password: ${elasticsearch.password}
-  headers:
-    X-Elastic-Auth: SomeYeahValue
-    X-Something: 1

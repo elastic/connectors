@@ -1,5 +1,5 @@
-aiohttp==3.8.3
-elasticsearch[async]==8.6.1
+aiohttp==3.8.5
+elasticsearch[async]==8.8.0
 elastic-transport==8.4.0
 pyyaml==6.0
 envyaml==1.10.211231
@@ -8,7 +8,7 @@ pympler==1.0.1
 cron-schedule-triggers==0.0.11
 pytz==2019.3
 python-dateutil==2.8.2
-aiogoogle==4.5.0
+aiogoogle==5.3.0
 uvloop==0.17.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
 base64io==1.0.3
@@ -16,3 +16,10 @@ azure-storage-blob==12.13.0
 SQLAlchemy==2.0.1
 oracledb==1.2.2
 asyncpg==0.27.0
+python-tds==1.12.0
+sqlalchemy-pytds==0.3.5
+pyOpenSSL==23.1.1
+dropbox==11.36.2
+beautifulsoup4==4.12.2
+gidgethub==5.2.1
+wcmatch==8.4.1

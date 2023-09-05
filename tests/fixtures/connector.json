@@ -1,0 +1,110 @@
+{
+        "name": "mongodb",
+        "service_type": "mongodb",
+        "index_name": "search-mongodb",
+        "sync_cursor": null,
+        "is_native": true,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
+        "last_sync_status": null,
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+            "collection": {
+                "label": "Collection",
+                "order": 1,
+                "type": "str",
+                "value": "sample_collection"
+            },
+            "database": {
+                "label": "Database",
+                "order": 2,
+                "type": "str",
+                "value": "sample_database"
+            },
+            "direct_connection": {
+                "display": "toggle",
+                "label": "Direct connection?",
+                "order": 3,
+                "type": "bool",
+                "value": true
+            },
+            "host": {
+                "label": "Server Hostname",
+                "order": 4,
+                "type": "str",
+                "value": "mongodb://127.0.0.1:27021"
+            },
+            "user": {
+                "label": "Username",
+                "order": 5,
+                "type": "str",
+                "value": ""
+            },
+            "password": {
+                "label": "Password",
+                "order": 6,
+                "sensitive": true,
+                "type": "str",
+                "value": ""
+            }
+        },
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                        "advanced_snippet": {
+                          "updated_at": "2023-01-31T16:41:27.341Z",
+                          "created_at": "2023-01-31T16:38:49.244Z",
+                          "value": {}
+                        },
+                        "rules": [
+                          {
+                              "field": "_",
+                              "updated_at": "2023-01-31T16:41:27.341Z",
+                              "created_at": "2023-01-31T16:38:49.244Z",
+                              "rule": "regex",
+                              "id": "DEFAULT",
+                              "value": ".*",
+                              "order": 1,
+                              "policy": "include"
+                          }
+                        ],
+                        "validation": {"state": "valid", "errors": []}
+                  },
+                  "active": {
+                        "advanced_snippet": {
+                          "updated_at": "2023-01-31T16:41:27.341Z",
+                          "created_at": "2023-01-31T16:38:49.244Z",
+                          "value": {}
+                        },
+                        "rules": [
+                          {
+                              "field": "_",
+                              "updated_at": "2023-01-31T16:41:27.341Z",
+                              "created_at": "2023-01-31T16:38:49.244Z",
+                              "rule": "regex",
+                              "id": "DEFAULT",
+                              "value": ".*",
+                              "order": 1,
+                              "policy": "include"
+                          }
+                        ],
+                        "validation": {"state": "valid", "errors": []}
+                        }
+                }
+        ],
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+        }
+}

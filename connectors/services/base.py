@@ -3,22 +3,76 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+"""Provides:
+
+- `BaseService`: a base class for running a service in the CLI
+- `MultiService`: a meta-service that runs several services against the same
+  config
+- `get_services` and `get_service`: factories
+"""
 import asyncio
 import time
+from copy import deepcopy
 
 from connectors.logger import logger
 from connectors.utils import CancellableSleeps
+
+__all__ = [
+    "MultiService",
+    "ServiceAlreadyRunningError",
+    "get_service",
+    "get_services",
+    "BaseService",
+]
 
 
 class ServiceAlreadyRunningError(Exception):
     pass
 
 
-class BaseService:
+_SERVICES = {}
+
+
+def get_services(names, config):
+    """Instantiates a list of services given their names and a config.
+
+    returns a `MultiService` instance.
+    """
+    return MultiService(*[get_service(name, config) for name in names])
+
+
+def get_service(name, config):
+    """Instantiates a service object given a name and a config"""
+    return _SERVICES[name](config)
+
+
+class _Registry(type):
+    """Metaclass used to register a service class in an internal registry."""
+
+    def __new__(cls, name, bases, dct):
+        service_name = dct.get("name")
+        class_instance = super().__new__(cls, name, bases, dct)
+        if service_name is not None:
+            _SERVICES[service_name] = class_instance
+        return class_instance
+
+
+class BaseService(metaclass=_Registry):
+    """Base class for creating a service.
+
+    Any class deriving from this class will get added to the registry,
+    given its `name` class attribute (unless it's not set).
+
+    A concrete service class needs to implement `_run`.
+    """
+
+    name = None  # using None here avoids registering this class
+
     def __init__(self, config):
         self.config = config
         self.service_config = self.config["service"]
         self.es_config = self.config["elasticsearch"]
+        self.connectors = self._parse_connectors()
         self.running = False
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
@@ -31,6 +85,7 @@ class BaseService:
         raise NotImplementedError()
 
     async def run(self):
+        """Runs the service"""
         if self.running:
             raise ServiceAlreadyRunningError(
                 f"{self.__class__.__name__} is already running."
@@ -39,9 +94,6 @@ class BaseService:
         self.running = True
         try:
             await self._run()
-        except Exception as e:
-            logger.critical(e, exc_info=True)
-            self.raise_if_spurious(e)
         finally:
             self.stop()
 
@@ -61,15 +113,47 @@ class BaseService:
         self.errors[0] = errors
         self.errors[1] = first
 
+    def _parse_connectors(self):
+        connectors = {}
+        configured_connectors = deepcopy(self.config.get("connectors"))
+        if configured_connectors is not None:
+            for connector in configured_connectors:
+                connector_id = connector.get("connector_id")
+                if not connector_id:
+                    logger.warning(
+                        f"Found invalid connector configuration. Connector id is missing for {connector}"
+                    )
+                    continue
+
+                connector_id = str(connector_id)
+                if connector_id in connectors:
+                    logger.warning(
+                        f"Found duplicate configuration for connector {connector_id}, overriding with the later config"
+                    )
+                connectors[connector_id] = connector
+
+        if not connectors:
+            if "connector_id" in self.config and "service_type" in self.config:
+                connector_id = str(self.config["connector_id"])
+                connectors[connector_id] = {
+                    "connector_id": connector_id,
+                    "service_type": self.config["service_type"],
+                }
+
+        return connectors
+
 
 class MultiService:
+    """Wrapper class to run multiple services against the same config."""
+
     def __init__(self, *services):
         self._services = services
 
     async def run(self):
+        """Runs every service in a task and wait for all tasks."""
         tasks = [asyncio.create_task(service.run()) for service in self._services]
 
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
 
         for task in pending:
             task.cancel()

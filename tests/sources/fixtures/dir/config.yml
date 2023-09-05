@@ -1,0 +1,9 @@
+elasticsearch:
+  host: http://localhost:9200
+  username: elastic
+  password: changeme
+
+connectors:
+  -
+    connector_id: 'dir'
+    service_type: 'dir'

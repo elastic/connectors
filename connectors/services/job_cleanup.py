@@ -7,27 +7,27 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
-from connectors.byoc import ConnectorIndex, SyncJobIndex
+from connectors.es.index import DocumentNotFoundError
 from connectors.logger import logger
+from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
 
 IDLE_JOB_ERROR = "The job has not seen any update for some time."
 
 
 class JobCleanUpService(BaseService):
+    name = "cleanup"
+
     def __init__(self, config):
         super().__init__(config)
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
-        self.native_service_types = self.config.get("native_service_types", [])
-        if "connector_id" in self.config:
-            self.connector_ids = [self.config.get("connector_id")]
-        else:
-            self.connector_ids = []
+        self.native_service_types = self.config.get("native_service_types", []) or []
+        self.connector_ids = list(self.connectors.keys())
         self.connector_index = None
         self.sync_job_index = None
 
     async def _run(self):
-        logger.info("Successfully started Job cleanup task...")
+        logger.debug("Successfully started Job cleanup task...")
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
@@ -47,7 +47,7 @@ class JobCleanUpService(BaseService):
 
     async def _process_orphaned_jobs(self):
         try:
-            logger.info("Start cleaning up orphaned jobs...")
+            logger.debug("Cleaning up orphaned jobs")
             connector_ids = []
             existing_content_indices = set()
             async for connector in self.connector_index.all_connectors():
@@ -68,7 +68,7 @@ class JobCleanUpService(BaseService):
                 job_ids.append(job.id)
 
             if len(job_ids) == 0:
-                logger.info("No orphaned jobs found. Skipping...")
+                logger.debug("No orphaned jobs found, skipping cleaning")
                 return
 
             # delete content indices in case they are re-created by sync job
@@ -78,7 +78,7 @@ class JobCleanUpService(BaseService):
             if len(result["failures"]) > 0:
                 logger.error(f"Error found when deleting jobs: {result['failures']}")
             logger.info(
-                f"Successfully deleted {result['deleted']} out of {result['total']} orphaned jobs."
+                f"Successfully deleted {result['deleted']} out of {result['total']} orphaned jobs"
             )
         except Exception as e:
             logger.critical(e, exc_info=True)
@@ -86,7 +86,7 @@ class JobCleanUpService(BaseService):
 
     async def _process_idle_jobs(self):
         try:
-            logger.info("Start cleaning up idle jobs...")
+            logger.debug("Start cleaning up idle jobs...")
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.supported_connectors(
@@ -104,15 +104,21 @@ class JobCleanUpService(BaseService):
                     await job.fail(message=IDLE_JOB_ERROR)
                     marked_count += 1
 
-                    connector = await self.connector_index.fetch_by_id(
-                        doc_id=connector_id
-                    )
-                    if connector is None:
+                    try:
+                        connector = await self.connector_index.fetch_by_id(
+                            doc_id=connector_id
+                        )
+                    except DocumentNotFoundError:
                         logger.warning(
                             f"Could not found connector by id #{connector_id}"
                         )
                         continue
-                    job = await self.sync_job_index.fetch_by_id(doc_id=job_id)
+
+                    try:
+                        await job.reload()
+                    except DocumentNotFoundError:
+                        logger.warning(f"Could not reload sync job #{job_id}")
+                        job = None
                     await connector.sync_done(job=job)
                 except Exception as e:
                     logger.error(f"Failed to mark idle job #{job_id} as error: {e}")
@@ -120,7 +126,7 @@ class JobCleanUpService(BaseService):
                     total_count += 1
 
             if total_count == 0:
-                logger.info("No idle jobs found. Skipping...")
+                logger.debug("No idle jobs found. Skipping...")
             else:
                 logger.info(
                     f"Successfully marked #{marked_count} out of #{total_count} idle jobs as error."

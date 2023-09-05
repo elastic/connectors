@@ -1,0 +1,5 @@
+connectors:
+  -
+    connector_id: 'sharepoint_online'
+    service_type: 'sharepoint_online'
+

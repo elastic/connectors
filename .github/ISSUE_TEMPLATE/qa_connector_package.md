@@ -11,10 +11,11 @@ assignees: ''
 
 **Note:** always test with the latest Build Candidate on Elastic Cloud, using the full Elastic stack
 
-- [ ] Start the whole stack from scratch and navigate to Enterprise Search -> Content
+- [ ] Start the whole stack from scratch and navigate to Enterprise Search
 - [ ] Check that no indices are shown in the top level Indices list
-- [ ] Click on "Create new index" - a new page is open where you can select an ingestion method
-- [ ] Chose Build a connector option
+- [ ] Click on "Create an Elasticsearch index" - a new page is open where you can select an ingestion method
+- [ ] Choose Connector -> Use a connector
+- [ ] Choose the connector you want to test and Continue
 - [ ] Create an index with a valid name and Universal language
 -------
 
@@ -23,7 +24,7 @@ assignees: ''
 - [ ] Connector can be deleted from the Indices page and it can be recreated with the same name after
 - [ ] Pull connectors repository, run `make install` but do not run connector yet
 
-- [ ] Create an index with a valid name and non-universal language and check language was saved correctly
+
 - [ ] Verify that you are redirected to "configuration" page where you can create an api key and can copy connector id / whole section of config into the connector
 - [ ] Update connector configuration with the api_key and connector_id, plus choose a service_type to test and set it in config
 - [ ] Start the connector by running `make run` - verify that it starts and does not actually do anything yet
@@ -39,4 +40,4 @@ assignees: ''
 - [ ] Verify that index mappings are correct on the `index mappings` tab
 
 
-Record a short demo showing the connectors's configuration and that there were documents ingested
+**Record a short demo showing the connectors' configuration and that there were documents ingested**

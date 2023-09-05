@@ -1,0 +1,4 @@
+connectors:
+  -
+    connector_id: 'abs'
+    service_type: 'azure_blob_storage'

@@ -11,6 +11,10 @@ from connectors.logger import logger
 DEFAULT_PAGE_SIZE = 100
 
 
+class DocumentNotFoundError(Exception):
+    pass
+
+
 class ESIndex(ESClient):
     """
     Encapsulates the work with Elasticsearch index.
@@ -41,7 +45,12 @@ class ESIndex(ESClient):
         raise NotImplementedError
 
     async def fetch_by_id(self, doc_id):
-        await self.client.indices.refresh(index=self.index_name)
+        resp_body = await self.fetch_response_by_id(doc_id)
+        return self._create_object(resp_body)
+
+    async def fetch_response_by_id(self, doc_id):
+        if not self.serverless:
+            await self.client.indices.refresh(index=self.index_name)
 
         try:
             resp = await self.client.get(index=self.index_name, id=doc_id)
@@ -49,29 +58,45 @@ class ESIndex(ESClient):
             logger.critical(f"The server returned {e.status_code}")
             logger.critical(e.body, exc_info=True)
             if e.status_code == 404:
-                return None
+                raise DocumentNotFoundError(
+                    f"Couldn't find document in {self.index_name} by id {doc_id}"
+                ) from e
             raise
 
-        return self._create_object(resp.body)
+        return resp.body
 
     async def index(self, doc):
-        resp = await self.client.index(index=self.index_name, document=doc)
-        return resp["_id"]
+        return await self.client.index(index=self.index_name, document=doc)
 
-    async def update(self, doc_id, doc):
-        await self.client.update(index=self.index_name, id=doc_id, doc=doc)
+    async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
+        return await self.client.update(
+            index=self.index_name,
+            id=doc_id,
+            doc=doc,
+            if_seq_no=if_seq_no,
+            if_primary_term=if_primary_term,
+        )
 
-    async def get_all_docs(self, query=None, page_size=DEFAULT_PAGE_SIZE):
+    async def update_by_script(self, doc_id, script):
+        return await self.client.update(
+            index=self.index_name,
+            id=doc_id,
+            script=script,
+        )
+
+    async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
 
         Args:
             query (dict): Represents an Elasticsearch query
+            sort (list): A list of fields to sort the result
             page_size (int): Number of documents per query
         Returns:
             Iterator
         """
-        await self.client.indices.refresh(index=self.index_name)
+        if not self.serverless:
+            await self.client.indices.refresh(index=self.index_name)
 
         if query is None:
             query = {"match_all": {}}
@@ -84,9 +109,11 @@ class ESIndex(ESClient):
                 resp = await self.client.search(
                     index=self.index_name,
                     query=query,
+                    sort=sort,
                     from_=offset,
                     size=page_size,
                     expand_wildcards="hidden",
+                    seq_no_primary_term=True,
                 )
             except ApiError as e:
                 logger.critical(f"The server returned {e.status_code}")

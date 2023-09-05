@@ -1,0 +1,4 @@
+connectors:
+  -
+    connector_id: 'mongo'
+    service_type: 'mongodb'

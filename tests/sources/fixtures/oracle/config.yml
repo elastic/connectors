@@ -1,0 +1,5 @@
+connectors:
+  -
+    connector_id: 'oracle'
+    service_type: 'oracle'
+

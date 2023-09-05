@@ -2,4 +2,4 @@ include Makefile README.rst config.yml CONTRIBUTE.rst LICENSE
 recursive-include connectors/ *.yml
 recursive-include requirements/ *.txt
 include connectors/VERSION
-include connectors/sources/tests/fixtures/google_cloud_storage/service_account_dummy_cert.pem
+include tests/sources/fixtures/google_cloud_storage/service_account_dummy_cert.pem

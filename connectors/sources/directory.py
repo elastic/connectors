@@ -12,11 +12,9 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
 
@@ -30,25 +28,23 @@ class DirectoryDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.directory = os.path.abspath(self.configuration["directory"])
         self.pattern = self.configuration["pattern"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
 
     @classmethod
     def get_default_configuration(cls):
         return {
             "directory": {
-                "value": DEFAULT_DIR,
                 "label": "Directory path",
+                "order": 1,
                 "type": "str",
+                "validations": [],
+                "value": DEFAULT_DIR,
             },
             "pattern": {
-                "value": "**/*.*",
+                "display": "text",
                 "label": "File glob-like pattern",
+                "order": 2,
                 "type": "str",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
+                "value": "**/*.*",
             },
         }
 
@@ -62,14 +58,10 @@ class DirectoryDataSource(BaseDataSource):
         return hashlib.md5(str(path).encode("utf8")).hexdigest()
 
     async def _download(self, path, timestamp=None, doit=None):
-        if not (
-            self.enable_content_extraction
-            and doit
-            and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES
-        ):
+        if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 
-        print(f"Reading {path}")
+        self._logger.info(f"Reading {path}")
         with open(file=path, mode="rb") as f:
             return {
                 "_id": self.get_id(path),
@@ -78,7 +70,7 @@ class DirectoryDataSource(BaseDataSource):
             }
 
     async def get_docs(self, filtering=None):
-        logger.debug(f"Reading {self.directory}...")
+        self._logger.debug(f"Reading {self.directory}...")
         root_directory = Path(self.directory)
 
         for path_object in root_directory.glob(self.pattern):

@@ -149,18 +149,27 @@ class FilteringValidator:
     calling their validate methods and aggregating the result in one FilteringValidationResult.
     """
 
-    def __init__(self, basic_rules_validators=None, advanced_rules_validators=None):
+    def __init__(
+        self, basic_rules_validators=None, advanced_rules_validators=None, logger_=None
+    ):
         self.basic_rules_validators = (
             [] if basic_rules_validators is None else basic_rules_validators
         )
         self.advanced_rules_validators = (
             [] if advanced_rules_validators is None else advanced_rules_validators
         )
+        self._logger = logger_ or logger
 
     async def validate(self, filtering):
-        logger.info("Filtering validation started")
+        def _is_valid_str(result):
+            if result is None:
+                return "Unknown (check validator implementation as it should never return 'None')"
+
+            return "valid" if result.is_valid else "invalid"
+
+        self._logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
-        advanced_rules = filtering.get_advanced_rules()
+        basic_rules_ids = [basic_rule["id"] for basic_rule in basic_rules]
 
         filtering_validation_result = FilteringValidationResult()
 
@@ -171,18 +180,39 @@ class FilteringValidator:
                 for result in results:
                     filtering_validation_result += result
 
+                    logger.debug(
+                        f"Basic rules set: '{basic_rules_ids}' validation result (Validator: {validator.__name__}): {_is_valid_str(result)}"
+                    )
+
             if issubclass(validator, BasicRuleValidator):
                 for basic_rule in basic_rules:
                     # pass rule by rule (validate rule in isolation)
-                    filtering_validation_result += validator.validate(basic_rule)
+                    validator_result = validator.validate(basic_rule)
+                    filtering_validation_result += validator_result
 
-        for validator in self.advanced_rules_validators:
-            filtering_validation_result += await validator.validate(advanced_rules)
+                    logger.debug(
+                        f"{str(basic_rule)} validation result (Validator: {validator.__name__}): {_is_valid_str(validator_result)}"
+                    )
 
-        logger.info(f"Filtering validation result: {filtering_validation_result.state}")
-        logger.info(
-            f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors] if filtering_validation_result.errors else 'None'}"
+        if filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            advanced_rules_validators = (
+                self.advanced_rules_validators
+                if isinstance(self.advanced_rules_validators, list)
+                else [self.advanced_rules_validators]
+            )
+
+            for validator in advanced_rules_validators:
+                filtering_validation_result += await validator.validate(advanced_rules)
+
+        self._logger.debug(
+            f"Filtering validation result: {filtering_validation_result.state}"
         )
+
+        if filtering_validation_result.errors:
+            self._logger.error(
+                f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors]}"
+            )
 
         return filtering_validation_result
 

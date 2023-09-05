@@ -1,0 +1,4 @@
+connectors:
+  -
+    connector_id: 'mysql'
+    service_type: 'mysql'

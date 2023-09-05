@@ -9,7 +9,7 @@ import asyncio
 import json
 import os
 import urllib.parse
-from functools import partial
+from functools import cached_property, partial
 
 import aiofiles
 from aiofiles.os import remove
@@ -18,8 +18,8 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -44,91 +44,75 @@ BLOB_ADAPTER = {
 }
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_CONTENT_EXTRACTION = True
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
-DEFAULT_PEM_FILE = os.path.join(
-    os.path.dirname(__file__),
-    "tests",
-    "fixtures",
-    "google_cloud_storage",
-    "service_account_dummy_cert.pem",
-)
+DEFAULT_PEM_KEY = """
+-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDY3E8o1NEFcjMM
+HW/5ZfFJw29/8NEqpViNjQIx95Xx5KDtJ+nWn9+OW0uqsSqKlKGhAdAo+Q6bjx2c
+uXVsXTu7XrZUY5Kltvj94DvUa1wjNXs606r/RxWTJ58bfdC+gLLxBfGnB6CwK0YQ
+xnfpjNbkUfVVzO0MQD7UP0Hl5ZcY0Puvxd/yHuONQn/rIAieTHH1pqgW+zrH/y3c
+59IGThC9PPtugI9ea8RSnVj3PWz1bX2UkCDpy9IRh9LzJLaYYX9RUd7++dULUlat
+AaXBh1U6emUDzhrIsgApjDVtimOPbmQWmX1S60mqQikRpVYZ8u+NDD+LNw+/Eovn
+xCj2Y3z1AgMBAAECggEAWDBzoqO1IvVXjBA2lqId10T6hXmN3j1ifyH+aAqK+FVl
+GjyWjDj0xWQcJ9ync7bQ6fSeTeNGzP0M6kzDU1+w6FgyZqwdmXWI2VmEizRjwk+/
+/uLQUcL7I55Dxn7KUoZs/rZPmQDxmGLoue60Gg6z3yLzVcKiDc7cnhzhdBgDc8vd
+QorNAlqGPRnm3EqKQ6VQp6fyQmCAxrr45kspRXNLddat3AMsuqImDkqGKBmF3Q1y
+xWGe81LphUiRqvqbyUlh6cdSZ8pLBpc9m0c3qWPKs9paqBIvgUPlvOZMqec6x4S6
+ChbdkkTRLnbsRr0Yg/nDeEPlkhRBhasXpxpMUBgPywKBgQDs2axNkFjbU94uXvd5
+znUhDVxPFBuxyUHtsJNqW4p/ujLNimGet5E/YthCnQeC2P3Ym7c3fiz68amM6hiA
+OnW7HYPZ+jKFnefpAtjyOOs46AkftEg07T9XjwWNPt8+8l0DYawPoJgbM5iE0L2O
+x8TU1Vs4mXc+ql9F90GzI0x3VwKBgQDqZOOqWw3hTnNT07Ixqnmd3dugV9S7eW6o
+U9OoUgJB4rYTpG+yFqNqbRT8bkx37iKBMEReppqonOqGm4wtuRR6LSLlgcIU9Iwx
+yfH12UWqVmFSHsgZFqM/cK3wGev38h1WBIOx3/djKn7BdlKVh8kWyx6uC8bmV+E6
+OoK0vJD6kwKBgHAySOnROBZlqzkiKW8c+uU2VATtzJSydrWm0J4wUPJifNBa/hVW
+dcqmAzXC9xznt5AVa3wxHBOfyKaE+ig8CSsjNyNZ3vbmr0X04FoV1m91k2TeXNod
+jMTobkPThaNm4eLJMN2SQJuaHGTGERWC0l3T18t+/zrDMDCPiSLX1NAvAoGBAN1T
+VLJYdjvIMxf1bm59VYcepbK7HLHFkRq6xMJMZbtG0ryraZjUzYvB4q4VjHk2UDiC
+lhx13tXWDZH7MJtABzjyg+AI7XWSEQs2cBXACos0M4Myc6lU+eL+iA+OuoUOhmrh
+qmT8YYGu76/IBWUSqWuvcpHPpwl7871i4Ga/I3qnAoGBANNkKAcMoeAbJQK7a/Rn
+wPEJB+dPgNDIaboAsh1nZhVhN5cvdvCWuEYgOGCPQLYQF0zmTLcM+sVxOYgfy8mV
+fbNgPgsP5xmu6dw2COBKdtozw0HrWSRjACd1N4yGu75+wPCcX/gQarcjRcXXZeEa
+NtBLSfcqPULqD+h7br9lEJio
+-----END PRIVATE KEY-----
+"""
+REQUIRED_CREDENTIAL_KEYS = [
+    "type",
+    "project_id",
+    "private_key_id",
+    "private_key",
+    "client_email",
+    "client_id",
+    "auth_uri",
+    "token_uri",
+]
 
 
-class GoogleCloudStorageDataSource(BaseDataSource):
-    """Google Cloud Storage"""
+class GoogleCloudStorageClient:
+    """A google client to handle api calls made to Google Cloud Storage."""
 
-    name = "Google Cloud Storage"
-    service_type = "google_cloud_storage"
-
-    def __init__(self, configuration):
-        """Set up the connection to the Google Cloud Storage Client.
+    def __init__(self, retry_count, json_credentials):
+        """Initialize the ServiceAccountCreds class using which api calls will be made.
 
         Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+            retry_count (int): Maximum retries for the failed requests.
+            json_credentials (dict): Service account credentials json.
         """
-        super().__init__(configuration=configuration)
-        if not self.configuration["service_account_credentials"]:
-            raise Exception("service_account_credentials can't be empty.")
-
-        self.credentials = (
-            self.configuration["service_account_credentials"]
-            .strip()
-            .encode("unicode_escape")
-            .decode()
-        )
+        self.retry_count = retry_count
         self.service_account_credentials = ServiceAccountCreds(
             scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
-            **json.loads(
-                self.configuration["service_account_credentials"]
-                if RUNNING_FTEST
-                else self.credentials
-            ),
+            **json_credentials,
         )
         self.user_project_id = self.service_account_credentials.project_id
-        self.retry_count = self.configuration["retry_count"]
-        self.enable_content_extraction = self.configuration["enable_content_extraction"]
+        self._logger = logger
 
-    @classmethod
-    def get_default_configuration(cls):
-        """Get the default configuration for Google Cloud Storage.
+    def set_logger(self, logger_):
+        self._logger = logger_
 
-        Returns:
-            dictionary: Default configuration.
-        """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": open(DEFAULT_PEM_FILE).read(),
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:443/token",
-        }
-        return {
-            "service_account_credentials": {
-                "value": json.dumps(default_credentials),
-                "label": "JSON string for Google Cloud service account",
-                "type": "str",
-            },
-            "retry_count": {
-                "value": DEFAULT_RETRY_COUNT,
-                "label": "Maximum retries for failed requests",
-                "type": "int",
-            },
-            "enable_content_extraction": {
-                "value": DEFAULT_CONTENT_EXTRACTION,
-                "label": "Enable content extraction (true/false)",
-                "type": "bool",
-            },
-        }
-
-    async def _api_call(
+    async def api_call(
         self,
         resource,
         method,
@@ -136,7 +120,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         full_response=False,
         **kwargs,
     ):
-        """Method for adding retries whenever exception raised during an api calls
+        """Make a GET call for Google Cloud Storage with retry for the failed API calls.
 
         Args:
             resource (aiogoogle.resource.Resource): Resource name for which api call will be made.
@@ -160,7 +144,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                         api_name=API_NAME, api_version=API_VERSION
                     )
                     if RUNNING_FTEST and not sub_method and STORAGE_EMULATOR_HOST:
-                        logger.debug(
+                        self._logger.debug(
                             f"Using the storage emulator at {STORAGE_EMULATOR_HOST}"
                         )
                         # Redirecting calls to fake Google Cloud Storage server for e2e test.
@@ -178,6 +162,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                         )
                         async for page_items in first_page_with_next_attached:
                             yield page_items
+                            retry_counter = 0
                     else:
                         if sub_method:
                             method_object = getattr(method_object, sub_method)
@@ -186,7 +171,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                         )
                     break
             except AttributeError as error:
-                logger.error(
+                self._logger.error(
                     f"Error occurred while generating the resource/method object for an API call. Error: {error}"
                 )
                 raise
@@ -194,27 +179,118 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 retry_counter += 1
                 if retry_counter > self.retry_count:
                     raise exception
-                logger.warning(
+                self._logger.warning(
                     f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
                 )
                 await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
+
+
+class GoogleCloudStorageDataSource(BaseDataSource):
+    """Google Cloud Storage"""
+
+    name = "Google Cloud Storage"
+    service_type = "google_cloud_storage"
+
+    def __init__(self, configuration):
+        """Set up the connection to the Google Cloud Storage Client.
+
+        Args:
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+        """
+        super().__init__(configuration=configuration)
+
+    def _set_internal_logger(self):
+        self._google_storage_client.set_logger(self._logger)
+
+    @classmethod
+    def get_default_configuration(cls):
+        """Get the default configuration for Google Cloud Storage.
+
+        Returns:
+            dictionary: Default configuration.
+        """
+
+        return {
+            "service_account_credentials": {
+                "display": "textarea",
+                "label": "Google Cloud service account JSON",
+                "order": 1,
+                "type": "str",
+            },
+            "retry_count": {
+                "default_value": DEFAULT_RETRY_COUNT,
+                "display": "numeric",
+                "label": "Maximum retries for failed requests",
+                "order": 2,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+            },
+        }
+
+    async def validate_config(self):
+        """Validates whether user inputs are valid or not for configuration field.
+
+        Raises:
+            Exception: The format of service account json is invalid.
+        """
+        await super().validate_config()
+
+        try:
+            json.loads(self.configuration["service_account_credentials"])
+        except ValueError as e:
+            raise ConfigurableFieldValueError(
+                "Google Cloud service account is not a valid JSON."
+            ) from e
+
+    @cached_property
+    def _google_storage_client(self):
+        """Initialize and return the GoogleCloudStorageClient
+
+        Returns:
+            GoogleCloudStorageClient: An instance of the GoogleCloudStorageClient.
+        """
+        json_credentials = json.loads(self.configuration["service_account_credentials"])
+
+        if (
+            json_credentials.get("private_key")
+            and "\n" not in json_credentials["private_key"]
+        ):
+            json_credentials["private_key"] = get_pem_format(
+                key=json_credentials["private_key"].strip(),
+                postfix="-----END PRIVATE KEY-----",
+            )
+
+        required_credentials = {
+            key: value
+            for key, value in json_credentials.items()
+            if key in REQUIRED_CREDENTIAL_KEYS
+        }
+
+        return GoogleCloudStorageClient(
+            json_credentials=required_credentials,
+            retry_count=self.configuration["retry_count"],
+        )
 
     async def ping(self):
         """Verify the connection with Google Cloud Storage"""
         if RUNNING_FTEST:
             return
+
         try:
             await anext(
-                self._api_call(
+                self._google_storage_client.api_call(
                     resource="projects",
                     method="serviceAccount",
                     sub_method="get",
-                    projectId=self.user_project_id,
+                    projectId=self._google_storage_client.user_project_id,
                 )
             )
-            logger.info("Successfully connected to the Google Cloud Storage.")
+            self._logger.info("Successfully connected to the Google Cloud Storage.")
         except Exception:
-            logger.exception("Error while connecting to the Google Cloud Storage.")
+            self._logger.exception(
+                "Error while connecting to the Google Cloud Storage."
+            )
             raise
 
     async def fetch_buckets(self):
@@ -223,12 +299,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self._api_call(
+        async for bucket in self._google_storage_client.api_call(
             resource="buckets",
             method="list",
             full_response=True,
-            project=self.user_project_id,
-            userProject=self.user_project_id,
+            project=self._google_storage_client.user_project_id,
+            userProject=self._google_storage_client.user_project_id,
         ):
             yield bucket
 
@@ -242,12 +318,12 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
-            async for blob in self._api_call(
+            async for blob in self._google_storage_client.api_call(
                 resource="objects",
                 method="list",
                 full_response=True,
                 bucket=bucket["id"],
-                userProject=self.user_project_id,
+                userProject=self._google_storage_client.user_project_id,
             ):
                 yield blob
 
@@ -266,7 +342,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         blob_name = urllib.parse.quote(blob_document["name"], safe="'")
         blob_document[
             "url"
-        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self.user_project_id}"
+        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self._google_storage_client.user_project_id}"
         return blob_document
 
     def get_blob_document(self, blobs):
@@ -293,20 +369,20 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             dictionary: Content document with id, timestamp & text
         """
         blob_size = int(blob["size"])
-        if not (self.enable_content_extraction and doit and blob_size):
+        if not (doit and blob_size):
             return
 
         blob_name = blob["name"]
-        if os.path.splitext(blob_name)[-1] not in TIKA_SUPPORTED_FILETYPES:
-            logger.debug(f"{blob_name} can't be extracted")
+        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
+            self._logger.debug(f"{blob_name} can't be extracted")
             return
 
         if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            logger.warning(
+            self._logger.warning(
                 f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
             )
             return
-        logger.debug(f"Downloading {blob_name}")
+        self._logger.debug(f"Downloading {blob_name}")
         document = {
             "_id": blob["id"],
             "_timestamp": blob["_timestamp"],
@@ -314,19 +390,19 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         source_file_name = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             await anext(
-                self._api_call(
+                self._google_storage_client.api_call(
                     resource="objects",
                     method="get",
                     bucket=blob["bucket_name"],
                     object=blob_name,
                     alt="media",
-                    userProject=self.user_project_id,
+                    userProject=self._google_storage_client.user_project_id,
                     pipe_to=async_buffer,
                 )
             )
             source_file_name = async_buffer.name
 
-        logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
+        self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
         await asyncio.to_thread(
             convert_to_b64,
             source=source_file_name,
@@ -335,7 +411,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             # base64 on macOS will add a EOL, so we strip() here
             document["_attachment"] = (await target_file.read()).strip()
         await remove(str(source_file_name))
-        logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
+        self._logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
         return document
 
     async def get_docs(self, filtering=None):

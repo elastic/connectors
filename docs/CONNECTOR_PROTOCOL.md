@@ -19,6 +19,28 @@ Connectors can:
 
 At this stage, our assumption is that one connector will manage one index, and one index will have only one connector associated with it. This may change in the future.
 
+### Data freshness
+
+Data from remote sources are synced via [sync jobs](DEVELOPING.md#syncing), which means there can be data discrepancy between the remote source and Elasticsearch until the next sync job runs.
+
+We don't currently support streaming options for real-time data updates. In order to achieve (near) real-time data availability, [implement incremental sync](DEVELOPING.md#how-an-incremental-sync-works) for the data source, with a frequency that matches your needs.
+
+Kibana won't allow you to configure a schedule more frequently than every hour, but you can do so via the Elasticsearch API (through Kibana Dev Tools, or cURL, etc):
+
+```
+# Update to every 5 seconds
+POST /.elastic-connectors/_update/<_id>
+{
+  "doc": {
+    "scheduling": {
+      "incremental": {
+        "interval": "0/5 * * * * ?"
+      }
+    }
+  }
+}
+```
+
 ## Communication protocol
 
 All communication will need to go through Elasticsearch. We've created a connector index called `.elastic-connectors`, where a document represents a connector. In addition, there's a connector job index called `.elastic-connectors-sync-jobs`, which holds the job history. You can find the definitions for these indices in the next section.
@@ -33,8 +55,28 @@ This is our main communication index, used to communicate the connector's config
   api_key_id: string;   -> ID of the current API key in use
   configuration: {
     [key]: {
-      label: string     -> The label to be displayed for the field in Kibana
-      value: string,    -> The value of the field configured in Kibana
+      default_value: any;   -> The value used if `value` is empty (only for non-required fields)
+      depends_on: [         -> Array of dependencies, field will not be validated unless dependencies are met
+        field: string;      -> The key for the field that this will depend on
+        value: string | number | boolean;   -> The value required to have this dependency met
+      ];
+      display: string;      -> What UI element this field should use
+      label: string;        -> The label to be displayed for the field in Kibana
+      options: [                -> Array of options for list-type fields, used for Kibana inputs
+        label: string;          -> Option label for UI element
+        value: string | number; -> Option value for UI element
+      ];
+      order: number;        -> The order the configurable field will appear in the UI
+      required: boolean;    -> Whether or not the field needs a value
+      sensitive: boolean;   -> Whether or not to obfuscate the field in Kibana
+      tooltip: string;      -> Text for populating the Kibana tooltip element
+      type: string;         -> The field value type (str, int, bool, list)
+      ui_restrictions: string[];    -> List of places in the UI to restrict the field to
+      validations: [                         -> Array of rules to validate the field's value against
+        type: string;                        -> The validation type
+        constraint: string | number | list;  -> The rule to use for this validation
+      ];
+      value: any;           -> The value of the field configured in Kibana
     }
   };                    -> Definition and values of configurable
                            fields
@@ -62,9 +104,9 @@ This is our main communication index, used to communicate the connector's config
     };                                  -> Features to enable/disable for this connector
   };
   filtering: [          -> Array of filtering rules, connectors use the first entry by default
-    {          
+    {
       domain: string,     -> what data domain these rules apply to
-      active: {           -> "active" rules are run in jobs. 
+      active: {           -> "active" rules are run in jobs.
         rules: {
           id: string,         -> rule identifier
           policy: string,     -> one of ["include", "exclude"]
@@ -94,12 +136,18 @@ This is our main communication index, used to communicate the connector's config
   index_name: string;   -> The name of the content index where data will be written to
   is_native: boolean;   -> Whether this is a native connector
   language: string;     -> the language used for the analyzer
+  last_access_control_sync_error: string;   -> Optional last access control sync job error message
+  last_access_control_sync_scheduled_at: date;    -> Date/time when the last access control sync job is scheduled (UTC)
+  last_access_control_sync_status: string:  -> Status of the last access control sync job, or null if no job has been executed
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
-  last_indexed_document_count: number;    -> How many documents were indexed in the last job  
+  last_incremental_sync_scheduled_at: date; -> Date/time when the last incremental sync job is scheduled (UTC)
+  last_indexed_document_count: number;    -> How many documents were indexed in the last job
   last_seen: date;      -> Connector writes check-in date-time regularly (UTC)
-  last_sync_error: string;   -> Optional last job error message
-  last_sync_status: string;  -> Status of the last job, or null if no job has been executed
+  last_sync_error: string;   -> Optional last full or incremental sync job error message
+  last_sync_status: string;  -> Status of the last content sync job, or null if no job has been executed
+  last_permissions_sync_status: string:  -> Status of the last permissions sync job, or null if no job has been executed
   last_synced: date;    -> Date/time of last job (UTC)
+  last_sync_scheduled_at: date;    -> Date/time when the last full sync job is scheduled (UTC)
   name: string; -> the name to use for the connector
   pipeline: {
     extract_binary_content: boolean; -> Whether the `request_pipeline` should handle binary data
@@ -108,12 +156,14 @@ This is our main communication index, used to communicate the connector's config
     run_ml_inference: boolean; -> Whether the `request_pipeline` should run the ML Inference pipeline
   }
   scheduling: {
-    enabled: boolean; -> Whether job schedule is enabled
-    interval: string; -> Quartz Cron syntax
+    [job_type]: {       -> Can be one of access_control, incremental or full
+      enabled: boolean; -> Whether job schedule is enabled
+      interval: string; -> Quartz Cron syntax
+    }
   };
   service_type: string; -> Service type of the connector
   status: string;       -> Connector status Enum, see below
-  sync_now: boolean;    -> Flag to signal user wants to initiate a job
+  sync_cursor: object;  -> Cursor object of the last sync job, used to run incremental sync
 }
 ```
 **Possible values for 'status'**
@@ -145,7 +195,26 @@ This is our main communication index, used to communicate the connector's config
     "features": {
       "properties": {
         "filtering_advanced_config": { "type": "boolean" },
-        "filtering_rules": { "type": "boolean" }
+        "filtering_rules": { "type": "boolean" },
+        "incremental_sync": {
+          properties: {
+            "enabled": { type: 'boolean' }
+          }
+        },
+        "sync_rules": {
+          properties: {
+            "basic": {
+              properties: {
+                "enabled": { type: 'boolean' }
+              }
+            },
+            "advanced": {
+              properties: {
+                "enabled": { type: 'boolean' }
+              }
+            }
+          }
+        }
       }
     },
     "filtering" : {
@@ -224,10 +293,15 @@ This is our main communication index, used to communicate the connector's config
     "index_name" : { "type" : "keyword" },
     "is_native" : { "type" : "boolean" },
     "language" : { "type" : "keyword" },
+    "last_access_control_sync_error": { "type": "keyword" },
+    "last_access_control_sync_scheduled_at": { "type": "date" },
+    "last_access_control_sync_status" : { "type" : "keyword" },
     "last_deleted_document_count" : { "type" : "long" },
+    "last_incremental_sync_scheduled_at" : { "type" : "date" },
     "last_indexed_document_count" : { "type" : "long" },
     "last_seen" : { "type" : "date" },
     "last_sync_error" : { "type" : "keyword" },
+    "last_sync_scheduled_at" : { "type" : "date" },
     "last_sync_status" : { "type" : "keyword" },
     "last_synced" : { "type" : "date" },
     "name" : { "type" : "keyword" },
@@ -241,13 +315,29 @@ This is our main communication index, used to communicate the connector's config
     },
     "scheduling" : {
       "properties" : {
-        "enabled" : { "type" : "boolean" },
-        "interval" : { "type" : "text" }
+        "access_control": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        },
+        "incremental": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        },
+        "full": {
+          "properties" : {
+            "enabled" : { "type" : "boolean" },
+            "interval" : { "type" : "text" }
+          }
+        }
       }
     },
     "service_type" : { "type" : "keyword" },
     "status" : { "type" : "keyword" },
-    "sync_now" : { "type" : "boolean" }
+    "sync_cursor" : { "type" : "object" }
   }
 }
 ```
@@ -256,7 +346,7 @@ This is our main communication index, used to communicate the connector's config
 In addition to the connector index `.elastic-connectors`, we have an additional index to log all jobs run by connectors. This is the `.elastic-connectors-sync-jobs` index. Each JSON document will have the following structure:
 ```
 {
-  cancelation_requested_at: date; -> The date/time when the cancelation of the job is requested
+  cancelation_requested_at: date; -> The date/time when the cancellation of the job is requested
   canceled_at: date; -> The date/time when the job is canceled
   completed_at: date; -> The data/time when the job is completed
   connector: {              -> Connector snapshot
@@ -294,13 +384,15 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
         run_ml_inference: boolean;
       };
       service_type: string;   -> Service type of the connector
+      sync_cursor: object;    -> The sync cursor used to start the job
     }
   ];
   created_at: date; -> The date/time when the job is created
   deleted_document_count: number; -> Number of documents deleted in the job
   error: string; -> Optional error message
   indexed_document_count: number; -> Number of documents indexed in the job
-  indexed_document_volume: number; -> The volume (in bytes) of documents indexed in the job
+  indexed_document_volume: number; -> The volume (in MiB) of documents indexed in the job
+  job_type; -> The job type of the sync job
   last_seen: date; -> Connector writes check-in date-time regularly (UTC)
   metadata: object; -> Connector-specific metadata
   started_at: date; -> The date/time when the job is started
@@ -314,11 +406,16 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
 **Possible values for `status`**
 - `pending` -> A job is just enqueued.
 - `in_progress` -> A job is successfully started.
-- `canceling` -> The cancelation of the job is initiated.
+- `canceling` -> The cancellation of the job is initiated.
 - `canceled` -> A job is canceled.
 - `suspended` -> A job is successfully started.
 - `completed` -> A job is successfully completed.
 - `error` -> A job failed.
+
+**Possible values for `job_type`**
+- `full` -> A full sync job to sync all data.
+- `incremental` -> An incremental sync job to sync changes from the last sync job.
+- `access_control` -> An access control sync job to sync identities.
 
 #### Elasticsearch mappings for `.elastic-connectors-sync-jobs`:
 ```
@@ -375,7 +472,8 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
             "run_ml_inference" : { "type" : "boolean" }
           }
         },
-        "service_type" : { "type" : "keyword" }
+        "service_type" : { "type" : "keyword" },
+        "sync_cursor" : { "type" : "object" }
       }
     },
     "created_at" : { "type" : "date" },
@@ -383,6 +481,7 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
     "error" : { "type" : "keyword" },
     "indexed_document_count" : { "type" : "integer" },
     "indexed_document_volume" : { "type" : "integer" },
+    "job_type" : { "type" : "keyword" },
     "last_seen" : { "type" : "date" },
     "metadata" : { "type" : "object" },
     "started_at" : { "type" : "date" },
@@ -410,7 +509,7 @@ For every half hour, and every time a job is executed, the connector should upda
 For custom connectors, the connector should also update `configuration` field if its status is `created`.
 
 The connector should also sync data for connectors:
-- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `sync_now` flag, as well as `scheduling` and `custom_scheduling` values. 
+- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `scheduling` and `custom_scheduling` values.
 - Set the index mappings of the to-be-written-to index if not already present.
 - Sync with the data source and index resulting documents into the correct index.
 - Log jobs to `.elastic-connectors-sync-jobs`.
@@ -443,9 +542,9 @@ sequenceDiagram
         and Rule Validation
             Connector->>Elasticsearch: Updates validation state of filtering rules
         and Job
-            Connector->>Elasticsearch: Reads sync_now flag and job schedule and filtering rules
-            opt Sync_now is true or sync_schedule requires synchronization
-                Connector->>Elasticsearch: Sets sync_now to false and last_sync_status to in_progress
+            Connector->>Elasticsearch: Reads job schedule and filtering rules
+            opt sync_schedule requires synchronization
+                Connector->>Elasticsearch: Sets last_sync_status to in_progress
                 Connector->>Data source: Queries data
                 Connector->>Elasticsearch: Indexes filtered data
                 alt Job is successfully completed

@@ -2,6 +2,7 @@
 -r framework.txt
 
 aiomysql==0.1.1
+pymongo==4.5.0
 motor==3.0.0
-aioboto3==10.1.0
+aioboto3==10.3.0
 smbprotocol==1.9.0

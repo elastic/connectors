@@ -12,6 +12,7 @@ executes the `main` function of this module, which starts the service.
 """
 import asyncio
 import functools
+import json
 import logging
 import os
 import signal
@@ -21,11 +22,9 @@ from connectors import __version__
 from connectors.config import load_config
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
-from connectors.services.base import MultiService
-from connectors.services.job_cleanup import JobCleanUpService
-from connectors.services.sync import SyncService
-from connectors.source import get_source_klasses
-from connectors.utils import get_event_loop
+from connectors.services import get_services
+from connectors.source import get_source_klass, get_source_klasses
+from connectors.utils import ExtractionService, get_event_loop
 
 __all__ = ["main"]
 
@@ -37,8 +36,9 @@ def _parser():
     parser.add_argument(
         "--action",
         type=str,
-        default="poll",
-        choices=["poll", "list"],
+        default=["schedule", "execute", "cleanup"],
+        choices=["schedule", "execute", "list", "config", "cleanup"],
+        nargs="+",
         help="What elastic-ingest should do",
     )
 
@@ -81,6 +81,13 @@ def _parser():
     )
 
     parser.add_argument(
+        "--service-type",
+        type=str,
+        default=None,
+        help="Service type to get default configuration for if action is config",
+    )
+
+    parser.add_argument(
         "--uvloop",
         action="store_true",
         default=False,
@@ -90,7 +97,7 @@ def _parser():
     return parser
 
 
-async def _start_service(config, loop):
+async def _start_service(actions, config, loop):
     """Starts the service.
 
     Steps:
@@ -107,7 +114,7 @@ async def _start_service(config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    multiservice = MultiService(SyncService(config), JobCleanUpService(config))
+    multiservice = get_services(actions, config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
 
@@ -127,11 +134,15 @@ def run(args):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
+    logger.info(f"Running connector service version {__version__}")
 
     # load config
     config = {}
     try:
         config = load_config(args.config_file)
+        ExtractionService.set_extraction_config(
+            config.get("extraction_service", None)
+        )  # Not perfect, let's revisit
     except Exception as e:
         # If something goes wrong while parsing config file, we still want
         # to set up the logger so that Cloud deployments report errors to
@@ -147,15 +158,37 @@ def run(args):
     )
 
     # just display the list of connectors
-    if args.action == "list":
+    if args.action == ["list"]:
         print("Registered connectors:")
         for source in get_source_klasses(config):
             print(f"- {source.name}")
         print("Bye")
         return 0
 
+    if args.action == ["config"]:
+        service_type = args.service_type
+        print(f"Getting default configuration for service type {service_type}")
+
+        source_list = config["sources"]
+        if service_type not in source_list:
+            print(f"Could not find a connector for service type {service_type}")
+            return -1
+
+        source_klass = get_source_klass(source_list[service_type])
+        print(json.dumps(source_klass.get_simple_configuration(), indent=2))
+        print("Bye")
+        return 0
+
+    if "list" in args.action:
+        print("Cannot use the `list` action with other actions")
+        return -1
+
+    if "config" in args.action:
+        print("Cannot use the `config` action with other actions")
+        return -1
+
     loop = get_event_loop(args.uvloop)
-    coro = _start_service(config, loop)
+    coro = _start_service(args.action, config, loop)
 
     try:
         return loop.run_until_complete(coro)
@@ -178,4 +211,5 @@ def main(args=None):
     if args.version:
         print(__version__)
         return 0
+
     return run(args)

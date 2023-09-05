@@ -1,0 +1,35 @@
+
+elasticsearch.host: http://nowhere.com:9200
+elasticsearch:
+  user: elastic
+  password: ${elasticsearch.password}
+  bulk:
+    queue_max_size: 1024
+    chunck_size: 250
+  max_wait_duration: 1
+  initial_backoff_duration: 0
+  backoff_multiplier: 0
+
+service:
+  idling: 0.5
+  heartbeat: 300
+  max_errors: 20
+  max_errors_span: 600
+  max_concurrent_content_syncs: 10
+  max_concurrent_access_control_syncs: 10
+  log_level: INFO
+
+connectors:
+  -
+    connector_id: '1'
+
+sources:
+  fake: fake_sources:FakeSource
+  fake_with_incremental: fake_sources:FakeSourceWithIncrementalSync
+  large_fake: fake_sources:LargeFakeSource
+  fail_once: fake_sources:FailsThenWork
+  fake_ts: fake_sources:FakeSourceTS
+  filtering_state_valid: fake_sources:FakeSourceFilteringValid
+  filtering_state_invalid: fake_sources:FakeSourceFilteringStateInvalid
+  filtering_state_edited: fake_sources:FakeSourceFilteringStateEdited
+  filtering_errors_present: fake_sources:FakeSourceFilteringErrorsPresent

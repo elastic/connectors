@@ -1,0 +1,104 @@
+steps:
+  - label: "🔨 MySQL"
+    command:
+      - ".buildkite/run_nigthly.sh mysql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Network Drive"
+    command:
+      - ".buildkite/run_nigthly.sh network_drive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Amazon S3"
+    command:
+      - ".buildkite/run_nigthly.sh s3"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Google Cloud Storage"
+    command:
+      - ".buildkite/run_nigthly.sh google_cloud_storage"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Azure Blob Storage"
+    command:
+      - ".buildkite/run_nigthly.sh azure_blob_storage"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Postgresql"
+    command:
+      - ".buildkite/run_nigthly.sh postgresql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 System Directory"
+    command:
+      - ".buildkite/run_nigthly.sh dir"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Oracle Database"
+    command:
+      - ".buildkite/run_nigthly.sh oracle"
+    env:
+      SKIP_AARCH64: "true"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Sharepoint Server"
+    command:
+      - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Sharepoint Online"
+    command:
+      - ".buildkite/run_nigthly.sh sharepoint_online medium"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Microsoft SQL"
+    command:
+      - ".buildkite/run_nigthly.sh mssql"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Jira"
+    command:
+      - ".buildkite/run_nigthly.sh jira"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Confluence"
+    command:
+      - ".buildkite/run_nigthly.sh confluence"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 ServiceNow"
+    command:
+      - ".buildkite/run_nigthly.sh servicenow"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 MongoDB"
+    command:
+      - ".buildkite/run_nigthly.sh mongodb"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+#   - label: "🔨 MongoDB Serverless"
+#     command:
+#       - ".buildkite/run_nigthly.sh mongodb_serverless"
+#     artifact_paths:
+#       - "perf8-report-*/**/*"
+  - label: "🔨 GitHub"
+    command:
+      - ".buildkite/run_nigthly.sh github"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Google Drive"
+    command:
+      - ".buildkite/run_nigthly.sh google_drive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Dropbox"
+    command:
+      - ".buildkite/run_nigthly.sh dropbox"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 OneDrive"
+    command:
+      - ".buildkite/run_nigthly.sh onedrive"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+
