@@ -10,7 +10,7 @@ import time
 from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
-from elasticsearch import ApiError, AsyncElasticsearch, ConflictError, NotFoundError
+from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
 from elasticsearch import ConnectionError as ElasticConnectionError
 
 from connectors import __version__
@@ -171,8 +171,10 @@ class ESClient:
         for index in indices:
             logger.debug(f"Checking index {index}")
             if not await self.client.indices.exists(index=index):
-                await self.client.index(index=index, document={}, id='.connectors-create-doc')
-                await self.client.delete(index=index, id='.connectors-create-doc')
+                await self.client.index(
+                    index=index, document={}, id=".connectors-create-doc"
+                )
+                await self.client.delete(index=index, id=".connectors-create-doc")
                 logger.debug(f"Created index {index}")
 
     async def delete_indices(self, indices):

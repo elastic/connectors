@@ -50,26 +50,6 @@ async def test_es_unavailable(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_index_missing(mock_responses):
-    mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=False)
-    mock_index_exists(mock_responses, JOBS_INDEX, exist=True)
-    preflight = PreflightCheck(config)
-    result = await preflight.run()
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_job_index_missing(mock_responses):
-    mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=True)
-    mock_index_exists(mock_responses, JOBS_INDEX, exist=False)
-    preflight = PreflightCheck(config)
-    result = await preflight.run()
-    assert result is False
-
-
-@pytest.mark.asyncio
 async def test_both_indices_missing(mock_responses):
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=False)

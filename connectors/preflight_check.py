@@ -95,7 +95,7 @@ class PreflightCheck:
                 # Using concrete write index to create these to ensure ES-installed template takes
 
                 await self.es_client.ensure_exists(
-                    indices=[CONNECTORS_INDEX + '-v1', JOBS_INDEX +'-v1']
+                    indices=[CONNECTORS_INDEX + "-v1", JOBS_INDEX + "-v1"]
                 )
                 return True
             except Exception as e:
