@@ -208,7 +208,9 @@ class TestGMailDataSource:
                 await source.ping()
 
     @pytest.mark.asyncio
-    async def test_validate_config_valid(self, patch_gmail_client):
+    async def test_validate_config_valid(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
         valid_json = '{"project_id": "dummy123"}'
 
         async with create_gmail_source() as source:
@@ -219,6 +221,7 @@ class TestGMailDataSource:
             source.configuration.get_field("subject").value = SUBJECT
 
             patch_gmail_client.ping = AsyncMock()
+            patch_google_directory_client.ping = AsyncMock()
 
             try:
                 await source.validate_config()
@@ -244,17 +247,35 @@ class TestGMailDataSource:
                 await source.validate_config()
 
     @pytest.mark.asyncio
-    async def test_validate_config_invalid_gmail_auth(self, patch_gmail_client):
+    async def test_validate_config_invalid_gmail_auth(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
         async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock(
                 side_effect=AuthError("some auth error")
             )
+            patch_google_directory_client.ping = AsyncMock()
 
             with pytest.raises(ConfigurableFieldValueError) as e:
                 await source.validate_config()
 
             # Make sure this is a GMail auth error
             assert "GMail auth" in str(e.value)
+
+    @pytest.mark.asyncio
+    async def test_validate_config_invalid_google_directory_auth(
+        self, patch_google_directory_client
+    ):
+        async with create_gmail_source() as source:
+            patch_google_directory_client.ping = AsyncMock(
+                side_effect=AuthError("some auth error")
+            )
+
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+
+            # Make sure this is a Google Directory auth error
+            assert "Google Directory auth" in str(e.value)
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(

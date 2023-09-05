@@ -13,11 +13,17 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 from aiohttp import StreamReader
+from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
-from connectors.sources.jira import JiraClient, JiraDataSource
+from connectors.sources.jira import (
+    InternalServerError,
+    JiraClient,
+    JiraDataSource,
+    NotFound,
+)
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -66,6 +72,9 @@ MOCK_ISSUE = {
                 "size": 200,
             }
         ],
+        "issuerestriction": {
+            "issuerestrictions": {},
+        },
     },
 }
 EXPECTED_ISSUE = {
@@ -84,6 +93,7 @@ EXPECTED_ISSUE = {
                 "size": 200,
             }
         ],
+        "issuerestriction": {"issuerestrictions": {}},
     },
 }
 
@@ -91,7 +101,7 @@ MOCK_ISSUE_TYPE_BUG = {
     "id": "1234",
     "key": "TP-2",
     "fields": {
-        "project": {"name": "test_project"},
+        "project": {"name": "test_project", "key": "TP"},
         "updated": "2023-02-01T01:02:20",
         "issuetype": {"name": "Bug"},
         "attachment": [
@@ -102,6 +112,13 @@ MOCK_ISSUE_TYPE_BUG = {
                 "size": 200,
             }
         ],
+        "issuerestriction": {
+            "issuerestrictions": {
+                "projectrole": [
+                    {"restrictionValue": "10002"},
+                ]
+            }
+        },
     },
 }
 EXPECTED_ISSUE_TYPE_BUG = {
@@ -109,7 +126,7 @@ EXPECTED_ISSUE_TYPE_BUG = {
     "_timestamp": "2023-02-01T01:02:20",
     "Type": "Bug",
     "Issue": {
-        "project": {"name": "test_project"},
+        "project": {"name": "test_project", "key": "TP"},
         "updated": "2023-02-01T01:02:20",
         "issuetype": {"name": "Bug"},
         "attachment": [
@@ -120,6 +137,13 @@ EXPECTED_ISSUE_TYPE_BUG = {
                 "size": 200,
             }
         ],
+        "issuerestriction": {
+            "issuerestrictions": {
+                "projectrole": [
+                    {"restrictionValue": "10002"},
+                ]
+            }
+        },
     },
 }
 
@@ -145,6 +169,14 @@ EXPECTED_ATTACHMENT = {
     "title": "test_file.txt",
     "Type": "Attachment",
     "issue": "TP-1",
+    "_timestamp": "2023-02-01T01:02:20",
+    "size": 200,
+}
+EXPECTED_ATTACHMENT_FOR_BUG = {
+    "_id": "TP-2-10001",
+    "title": "test_file.txt",
+    "Type": "Attachment",
+    "issue": "TP-2",
     "_timestamp": "2023-02-01T01:02:20",
     "size": 200,
 }
@@ -323,7 +355,7 @@ def side_effect_function(url, ssl):
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1":
         return get_json_mock(mock_response=MOCK_ISSUE)
     elif url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=100":
-        mocked_issue_data = {"issues": [MOCK_ISSUE], "total": 1}
+        mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG], "total": 1}
         return get_json_mock(mock_response=mocked_issue_data)
     elif url == f"{HOST_URL}/rest/api/2/myself":
         return get_json_mock(mock_response=MOCK_MYSELF)
@@ -339,14 +371,24 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=0"
     ):
         return get_json_mock(mock_response=MOCK_USER)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=100"
+    ):
+        return get_json_mock(mock_response=[])
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=0"
     ):
         return get_json_mock(mock_response=MOCK_USER)
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=100"
+    ):
+        return get_json_mock(mock_response=[])
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1?fields=security":
         return get_json_mock(mock_response=MOCK_SECURITY_LEVEL)
     elif (
@@ -380,8 +422,11 @@ async def test_validate_configuration_for_empty_fields(field, data_source):
 
 
 @pytest.mark.asyncio
-async def test_api_call_negative():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_negative(mock_apply_retry_strategy):
     """Tests the api_call function while getting an exception."""
+
+    mock_apply_retry_strategy.return_value = mock.Mock()
 
     async with create_jira_source() as source:
         source.jira_client.retry_count = 0
@@ -401,8 +446,11 @@ async def test_api_call_negative():
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_server_is_down():
+@mock.patch("connectors.utils.apply_retry_strategy")
+async def test_api_call_when_server_is_down(mock_apply_retry_strategy):
     """Tests the api_call function while server gets disconnected."""
+
+    mock_apply_retry_strategy.return_value = mock.Mock()
 
     async with create_jira_source() as source:
         source.jira_client.retry_count = 0
@@ -414,6 +462,91 @@ async def test_api_call_when_server_is_down():
         ):
             with pytest.raises(aiohttp.ServerDisconnectedError):
                 await anext(source.jira_client.api_call(url_name="ping"))
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+async def test_get_with_429_status():
+    initial_response = ClientResponseError(None, None)
+    initial_response.status = 429
+    initial_response.message = "rate-limited"
+    initial_response.headers = {"Retry-After": 0.1}
+
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    async with create_jira_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=[initial_response, retried_response],
+        ):
+            async for response in source.jira_client.api_call(
+                url="http://localhost:1000/sample"
+            ):
+                result = await response.json()
+
+    assert result == payload
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+async def test_get_with_429_status_without_retry_after_header():
+    initial_response = ClientResponseError(None, None)
+    initial_response.status = 429
+    initial_response.message = "rate-limited"
+
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    with patch("connectors.sources.jira.DEFAULT_RETRY_SECONDS", 0):
+        async with create_jira_source() as source:
+            with patch(
+                "aiohttp.ClientSession.get",
+                side_effect=[initial_response, retried_response],
+            ):
+                async for response in source.jira_client.api_call(
+                    url="http://localhost:1000/sample"
+                ):
+                    result = await response.json()
+
+        assert result == payload
+
+
+@pytest.mark.asyncio
+async def test_get_with_404_status():
+    error = ClientResponseError(None, None)
+    error.status = 404
+
+    async with create_jira_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(NotFound):
+                async for response in source.jira_client.api_call(
+                    url="http://localhost:1000/err"
+                ):
+                    await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+async def test_get_with_500_status():
+    error = ClientResponseError(None, None)
+    error.status = 500
+
+    async with create_jira_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(InternalServerError):
+                async for response in source.jira_client.api_call(
+                    url="http://localhost:1000/err"
+                ):
+                    await response.json()
 
 
 @pytest.mark.asyncio
@@ -505,6 +638,7 @@ async def test_close_with_client_session():
 @pytest.mark.asyncio
 async def test_close_without_client_session():
     """Test close method when the session does not exist"""
+
     async with create_jira_source() as source:
         assert source.jira_client.session is None
 
@@ -523,6 +657,7 @@ async def test_get_timezone():
 @pytest.mark.asyncio
 async def test_get_projects():
     """Test _get_projects method"""
+
     async with create_jira_source() as source:
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
             await source._get_projects()
@@ -541,6 +676,7 @@ async def test_get_projects():
 @pytest.mark.asyncio
 async def test_get_projects_for_specific_project():
     """Test _get_projects method for specific project key"""
+
     async with create_jira_source() as source:
         source.jira_client.projects = ["DP"]
         async_project_response = AsyncMock()
@@ -583,6 +719,7 @@ async def test_verify_projects_with_unavailable_project_keys():
 @pytest.mark.asyncio
 async def test_put_issue():
     """Test _put_issue method"""
+
     async with create_jira_source() as source:
         source.get_content = Mock(return_value=EXPECTED_CONTENT)
 
@@ -594,6 +731,7 @@ async def test_put_issue():
 @pytest.mark.asyncio
 async def test_put_attachment_positive():
     """Test _put_attachment method"""
+
     async with create_jira_source() as source:
         source.get_content = Mock(
             return_value={
@@ -613,6 +751,7 @@ async def test_put_attachment_positive():
 @pytest.mark.asyncio
 async def test_get_content():
     """Tests the get content method."""
+
     async with create_jira_source() as source:
         with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
             with mock.patch(
@@ -630,6 +769,7 @@ async def test_get_content():
 @pytest.mark.asyncio
 async def test_get_content_with_upper_extension():
     """Tests the get content method."""
+
     async with create_jira_source() as source:
         with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
             with mock.patch(
@@ -650,6 +790,7 @@ async def test_get_content_with_upper_extension():
 @pytest.mark.asyncio
 async def test_get_content_when_filesize_is_large():
     """Tests the get content method for file size greater than max limit."""
+
     async with create_jira_source() as source:
         RESPONSE_CONTENT = "# This is the dummy file"
 
@@ -672,6 +813,7 @@ async def test_get_content_when_filesize_is_large():
 @pytest.mark.asyncio
 async def test_get_content_for_unsupported_filetype():
     """Tests the get content method for file type is not supported."""
+
     async with create_jira_source() as source:
         RESPONSE_CONTENT = "# This is the dummy file"
 
@@ -718,7 +860,13 @@ async def test_get_docs():
         source.jira_client.projects = ["*"]
         source.get_content = Mock(return_value=EXPECTED_CONTENT)
 
-        EXPECTED_RESPONSES = [EXPECTED_ISSUE, EXPECTED_ATTACHMENT, *EXPECTED_PROJECT]
+        EXPECTED_RESPONSES = [
+            EXPECTED_ISSUE,
+            EXPECTED_ISSUE_TYPE_BUG,
+            EXPECTED_ATTACHMENT,
+            EXPECTED_ATTACHMENT_FOR_BUG,
+            *EXPECTED_PROJECT,
+        ]
         with mock.patch.object(
             source.jira_client._get_session(), "get", side_effect=side_effect_function
         ):
@@ -758,48 +906,6 @@ async def test_get_docs_with_advanced_rules(filtering, expected_docs):
             async for item, _ in source.get_docs(filtering):
                 yielded_docs.append(item)
         assert yielded_docs == expected_docs
-
-
-@pytest.mark.parametrize(
-    "user_info, result",
-    [
-        (
-            {
-                "self": "url1",
-                "accountId": "607194d6bc3c3f006f4c35d6",
-                "accountType": "atlassian",
-                "displayName": "user1",
-                "active": True,
-            },
-            True,
-        ),
-        (
-            {
-                "self": "url1",
-                "accountId": "607194d6bc3c3f006f4c35d6",
-                "accountType": "app",
-                "displayName": "user1",
-                "active": True,
-            },
-            False,
-        ),
-        (
-            {
-                "self": "url1",
-                "accountId": "607194d6bc3c3f006f4c35d6",
-                "accountType": "atlassian",
-                "displayName": "user1",
-                "active": False,
-            },
-            False,
-        ),
-    ],
-)
-@pytest.mark.asyncio
-async def test_active_atlassian_user(user_info, result):
-    async with create_jira_source() as source:
-        actual_result = source._is_active_atlassian_user(user_info=user_info)
-        assert actual_result == result
 
 
 @pytest.mark.asyncio
@@ -881,7 +987,7 @@ async def test_get_access_control_dls_enabled():
         "_id": "607194d6bc3c3f006f4c35d6",
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
-            "username": "username:user1",
+            "display_name": "name:user1",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {
@@ -889,8 +995,8 @@ async def test_get_access_control_dls_enabled():
                 "params": {
                     "access_control": [
                         "account_id:607194d6bc3c3f006f4c35d6",
-                        "group:607194d6bc3c3f006f4c35d8",
-                        "application_role:607194d6bc3c3f006f4c35d9",
+                        "group_id:607194d6bc3c3f006f4c35d8",
+                        "role_key:607194d6bc3c3f006f4c35d9",
                     ]
                 }
             },
@@ -903,8 +1009,8 @@ async def test_get_access_control_dls_enabled():
                                     "terms": {
                                         "_allow_access_control.enum": [
                                             "account_id:607194d6bc3c3f006f4c35d6",
-                                            "group:607194d6bc3c3f006f4c35d8",
-                                            "application_role:607194d6bc3c3f006f4c35d9",
+                                            "group_id:607194d6bc3c3f006f4c35d8",
+                                            "role_key:607194d6bc3c3f006f4c35d9",
                                         ]
                                     }
                                 },
@@ -919,8 +1025,8 @@ async def test_get_access_control_dls_enabled():
     async with create_jira_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
 
-        source._fetch_all_users = AsyncIterator([mock_users])
-        source._fetch_user = AsyncIterator([mock_user1])
+        source.atlassian_access_control.fetch_all_users = AsyncIterator([mock_users])
+        source.atlassian_access_control.fetch_user = AsyncIterator([mock_user1])
 
         user_documents = []
         async for user_doc in source.get_access_control():
@@ -937,7 +1043,7 @@ async def test_get_docs_with_dls_enabled():
         | {
             "_allow_access_control": [
                 "account_id:607194d6bc3c3f006f4c35d6",
-                "username:user1",
+                "name:user1",
             ]
         }
         for project in copy(EXPECTED_PROJECT)
@@ -949,8 +1055,16 @@ async def test_get_docs_with_dls_enabled():
             "_allow_access_control": [
                 "account_id:5ff5815e34847e0069fedee3",
                 "account_id:user-1",
-                "group:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
-                "username:Test User",
+                "group_id:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "name:Test-User",
+            ]
+        },
+        copy(EXPECTED_ISSUE_TYPE_BUG)
+        | {
+            "_allow_access_control": [
+                "account_id:5ff5815e34847e0069fedee3",
+                "group_id:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "name:Test-User",
             ]
         },
         copy(EXPECTED_ATTACHMENT)
@@ -958,8 +1072,16 @@ async def test_get_docs_with_dls_enabled():
             "_allow_access_control": [
                 "account_id:5ff5815e34847e0069fedee3",
                 "account_id:user-1",
-                "group:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
-                "username:Test User",
+                "group_id:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "name:Test-User",
+            ]
+        },
+        copy(EXPECTED_ATTACHMENT_FOR_BUG)
+        | {
+            "_allow_access_control": [
+                "account_id:5ff5815e34847e0069fedee3",
+                "group_id:d614bbb8-703d-4d41-a51a-0c3cfcef9318",
+                "name:Test-User",
             ]
         },
         *expected_projects_with_access_controls,
