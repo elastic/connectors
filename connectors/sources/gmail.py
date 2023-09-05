@@ -3,10 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import json
 from functools import cached_property
 
 import fastjsonschema
+from aiogoogle import AuthError
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import ACCESS_CONTROL, es_access_control_query
@@ -14,15 +14,27 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     MessageFields,
     UserFields,
+    load_service_account_json,
     validate_service_account_json,
 )
-from connectors.utils import base64url_to_base64, iso_utc
+from connectors.utils import (
+    EMAIL_REGEX_PATTERN,
+    base64url_to_base64,
+    iso_utc,
+    validate_email_address,
+)
+
+CUSTOMER_ID_LABEL = "Google customer id"
+
+SUBJECT_LABEL = "Subject"
+
+SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 
 GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
 
@@ -88,6 +100,10 @@ def _message_doc(message):
     return es_doc
 
 
+def _filtering_enabled(filtering):
+    return filtering is not None and filtering.has_advanced_rules()
+
+
 class GMailDataSource(BaseDataSource):
     """GMail"""
 
@@ -109,22 +125,23 @@ class GMailDataSource(BaseDataSource):
         return {
             "service_account_credentials": {
                 "display": "textarea",
-                "label": "GMail service account JSON",
+                "label": SERVICE_ACCOUNT_CREDENTIALS_LABEL,
                 "order": 1,
                 "required": True,
                 "type": "str",
             },
             "subject": {
                 "display": "text",
-                "label": "Subject",
+                "label": SUBJECT_LABEL,
                 "order": 2,
                 "required": True,
                 "tooltip": "Admin account email address",
                 "type": "str",
+                "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
             },
             "customer_id": {
                 "display": "text",
-                "label": "Google customer id",
+                "label": CUSTOMER_ID_LABEL,
                 "order": 3,
                 "required": True,
                 "tooltip": "Google admin console -> Account -> Settings -> Customer Id",
@@ -149,14 +166,62 @@ class GMailDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        """Validates whether user inputs are valid or not for configuration field.
+        """Validates whether user inputs are valid or not for configuration fields.
+
         Raises:
             Exception: The format of service account json is invalid.
+            ConfigurableFieldValueError: Subject email is invalid or Google Directory/GMail API authentication failed.
+
         """
         await super().validate_config()
         validate_service_account_json(
             self.configuration["service_account_credentials"], "GMail"
         )
+
+        subject = self.configuration["subject"]
+
+        if not validate_email_address(subject):
+            raise ConfigurableFieldValueError(
+                f"Subject field value needs to be a valid email address. '{subject}' is invalid."
+            )
+
+        await self._validate_google_directory_auth()
+        await self._validate_gmail_auth()
+
+    async def _validate_gmail_auth(self):
+        """
+        Validates, whether the provided configuration values allow the connector to authenticate against GMail API.
+        Failed authentication indicates, that either the provided credentials are incorrect or mandatory GMail API
+        OAuth2 scopes are not configured.
+
+        Raises:
+            ConfigurableFieldValueError: Provided credentials are wrong or OAuth2 scopes are missing.
+
+        """
+        try:
+            await self._gmail_client(self.configuration["subject"]).ping()
+        except AuthError as e:
+            raise ConfigurableFieldValueError(
+                f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
+            ) from e
+
+    async def _validate_google_directory_auth(self):
+        """
+        Validates, whether the provided configuration values allow the connector to authenticate against Google
+        Directory API. Failed authentication indicates, that either the provided credentials are incorrect or mandatory
+        Google Directory API OAuth2 scopes are not configured.
+
+        Raises:
+            ConfigurableFieldValueError: Provided credentials are wrong or OAuth2 scopes are missing.
+
+        """
+
+        try:
+            await self._google_directory_client.ping()
+        except AuthError as e:
+            raise ConfigurableFieldValueError(
+                f"Google Directory authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for Google Directory are setup correctly."
+            ) from e
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]
@@ -166,8 +231,8 @@ class GMailDataSource(BaseDataSource):
 
     @cached_property
     def _service_account_credentials(self):
-        service_account_credentials = json.loads(
-            self.configuration["service_account_credentials"]
+        service_account_credentials = load_service_account_json(
+            self.configuration["service_account_credentials"], "GMail"
         )
         return service_account_credentials
 
@@ -208,10 +273,11 @@ class GMailDataSource(BaseDataSource):
                 raise
 
     def _dls_enabled(self):
-        if self._features is None:
-            return False
-
-        return self._features.document_level_security_enabled()
+        return (
+            self._features is not None
+            and self._features.document_level_security_enabled()
+            and self.configuration["use_document_level_security"]
+        )
 
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
@@ -235,7 +301,15 @@ class GMailDataSource(BaseDataSource):
         return document
 
     async def get_access_control(self):
+        """Yields all users found in the Google Workspace associated with the configured service account.
+
+        Yields:
+            dict: dict representing a user
+
+        """
+
         if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping access control sync.")
             return
 
         async for user in self._google_directory_client.users():
@@ -243,9 +317,6 @@ class GMailDataSource(BaseDataSource):
                 access_control = [user.get(UserFields.EMAIL.value)]
 
                 yield self._user_access_control_doc(user, access_control)
-
-    def _filtering_enabled(self, filtering):
-        return filtering is not None and filtering.has_advanced_rules()
 
     async def _message_doc_with_access_control(
         self, access_control, gmail_client, message
@@ -262,12 +333,26 @@ class GMailDataSource(BaseDataSource):
         return message_doc_with_access_control
 
     async def get_docs(self, filtering=None):
+        """Yields messages for all users present in the Google Workspace.
+        Includes spam and trash messages, if the corresponding configuration value is set to `True`.
+
+        Args:
+            filtering (optional): Advanced filtering rules. Defaults to None.
+
+        Yields:
+            dict, partial: dict containing messages for each user,
+                            partial download content function
+
+        """
+
         include_spam_and_trash = self.configuration["include_spam_and_trash"]
 
         if include_spam_and_trash:
             self._logger.debug("Including messages from spam and trash.")
+        else:
+            self._logger.debug("Ignoring messages from spam and trash.")
 
-        if self._filtering_enabled(filtering):
+        if _filtering_enabled(filtering):
             self._logger.debug("Fetching documents using advanced rules.")
 
             advanced_rules = filtering.get_advanced_rules()

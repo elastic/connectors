@@ -1,4 +1,4 @@
-.PHONY: test lint autoformat run ftest install dev release docker-build docker-run docker-push
+.PHONY: test lint autoformat run ftest install release docker-build docker-run docker-push
 
 PYTHON=python3.10
 ARCH=$(shell uname -m)
@@ -13,9 +13,6 @@ bin/python:
 
 install: bin/python bin/elastic-ingest
 
-dev: install
-	bin/pip install -r requirements/tests.txt
-
 bin/elastic-ingest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/python setup.py develop
@@ -28,6 +25,7 @@ bin/black: bin/python
 bin/pytest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/tests.txt
+	bin/pip install -r requirements/ftest.txt
 
 clean:
 	rm -rf bin lib include

@@ -74,8 +74,10 @@ services:
       - esnet
 
   github:
-    build: .
-    command: python fixture.py
+    build: 
+      context: ../../../../
+      dockerfile: Dockerfile.ftest
+    command: python tests/sources/fixtures/github/fixture.py
     ports:
       - "9091:9091"
     volumes:

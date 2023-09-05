@@ -26,13 +26,6 @@ async def test_access_control_query():
                     "filter": {
                         "bool": {
                             "should": [
-                                {
-                                    "bool": {
-                                        "must_not": {
-                                            "exists": {"field": ACCESS_CONTROL}
-                                        }
-                                    }
-                                },
                                 {"terms": {f"{ACCESS_CONTROL}.enum": access_control}},
                             ]
                         }
