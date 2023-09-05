@@ -31,6 +31,7 @@ from connectors.sources.sharepoint_online import (
     MicrosoftAPISession,
     MicrosoftSecurityToken,
     NotFound,
+    BadRequestError,
     PermissionsMissing,
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
@@ -1256,6 +1257,22 @@ class TestSharepointOnlineClient:
         assert not await client.site_list_item_has_unique_role_assignments(
             site_list_item_role_assignments_url, list_title, list_item_id
         )
+
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_has_unique_role_assignments_bad_request(
+            self, client, patch_fetch
+    ):
+        site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        patch_fetch.side_effect = BadRequestError()
+
+        assert not await client.site_list_item_has_unique_role_assignments(
+            site_list_item_role_assignments_url, list_title, list_item_id
+        )
+
 
     @pytest.mark.asyncio
     async def test_site_list_item_role_assignments(self, client, patch_scroll):
