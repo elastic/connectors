@@ -514,7 +514,7 @@ The connector should also sync data for connectors:
 - Sync with the data source and index resulting documents into the correct index.
 - Log jobs to `.elastic-connectors-sync-jobs`.
 
-**Sequence diagram (Content syncs)**:
+**Sequence diagram (content syncs)**:
 ```mermaid
 sequenceDiagram
     actor User
