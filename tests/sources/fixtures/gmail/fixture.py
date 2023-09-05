@@ -3,14 +3,14 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+"""Module imitating the Google Directory and the GMail API"""
 import base64
 import os
 import random
 import string
 
+from faker import Faker
 from flask import Flask
-
-from connectors.utils import iso_utc
 
 
 def generate_random_base64_string(length):
@@ -36,29 +36,38 @@ DATA_SIZE = os.environ.get("DATA_SIZE")
 MESSAGE_ONE_ID = "1"
 MESSAGE_TWO_ID = "2"
 
-USER_TO_MESSAGE_IDS = {"1": [MESSAGE_ONE_ID], "2": [MESSAGE_TWO_ID]}
+fake = Faker()
 
-MESSAGE_IDS_TO_MESSAGE_CONTENT = {
-    MESSAGE_ONE_ID: {
-        "id": MESSAGE_ONE_ID,
-        "raw": generate_random_base64_string(length=100),
-        "internalDate": iso_utc(),
-    },
-    MESSAGE_TWO_ID: {
-        "id": MESSAGE_TWO_ID,
-        "raw": generate_random_base64_string(length=100),
-        "internalDate": iso_utc(),
-    },
+
+def distribute_list_uniformly_across_keys(keys, input_list):
+    result_dict = {key: [] for key in keys}
+    num_keys = len(keys)
+
+    for index, element in enumerate(input_list):
+        # Select the key in a round-robin fashion
+        key = keys[index % num_keys]
+        result_dict[key].append(element)
+
+    return result_dict
+
+
+USER_IDS = ["1", "2", "3"]
+USER_TO_MESSAGE_IDS = distribute_list_uniformly_across_keys(
+    USER_IDS, [message_id for message_id in range(DOCS_COUNT.get(DATA_SIZE, "small"))]
+)
+
+SAMPLE_MESSAGE = {
+    "id": "some id",
+    "raw": generate_random_base64_string(length=100),
+    "internalDate": None,
 }
 
 
 app = Flask(__name__)
 
-# TODO: consider data size
-
 
 @app.route("/gmail/v1/users/<string:user_id>/profile", methods=["GET"])
-def user_profile(user_id):
+def user_profile(_user_id):
     return {
         "emailAddress": "some email",
         "messagesTotal": 10,
@@ -75,13 +84,13 @@ def messages(user_id):
 @app.route(
     "/gmail/v1/users/<string:user_id>/messages/<string:message_id>", methods=["GET"]
 )
-def message(_, message_id):
-    return MESSAGE_IDS_TO_MESSAGE_CONTENT[message_id]
+def message(_user_id, _message_id):
+    return SAMPLE_MESSAGE
 
 
 @app.route("/admin/directory/v1/users", methods=["GET"])
 def users_list():
-    return [{"primaryEmail": "user1@test.com"}, {"primaryEmail": "user2@test.com"}]
+    return [{"primaryEmail": fake.email()} for _ in USER_IDS]
 
 
 @app.route("/token", methods=["POST"])
