@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import json
 import os
 from functools import cached_property, partial
 
@@ -22,7 +21,10 @@ from connectors.access_control import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.sources.google import validate_service_account_json
+from connectors.sources.google import (
+    load_service_account_json,
+    validate_service_account_json,
+)
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
     TIKA_SUPPORTED_FILETYPES,
@@ -33,6 +35,7 @@ from connectors.utils import (
 )
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
+GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME = "Google Admin Directory"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -525,7 +528,9 @@ class GoogleDriveDataSource(BaseDataSource):
             service_account_credentials, GOOGLE_DRIVE_SERVICE_NAME
         )
 
-        json_credentials = json.loads(service_account_credentials)
+        json_credentials = load_service_account_json(
+            service_account_credentials, GOOGLE_DRIVE_SERVICE_NAME
+        )
 
         return GoogleDriveClient(json_credentials=json_credentials)
 
@@ -539,12 +544,14 @@ class GoogleDriveDataSource(BaseDataSource):
         service_account_credentials = self.configuration["service_account_credentials"]
 
         validate_service_account_json(
-            service_account_credentials, "Google Admin Directory"
+            service_account_credentials, GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME
         )
 
         self._validate_google_workspace_admin_email()
 
-        json_credentials = json.loads(service_account_credentials)
+        json_credentials = load_service_account_json(
+            service_account_credentials, GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME
+        )
 
         return GoogleAdminDirectoryClient(
             json_credentials=json_credentials,
