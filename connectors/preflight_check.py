@@ -92,8 +92,10 @@ class PreflightCheck:
         while self.running:
             try:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.es_client.check_exists(
-                    indices=[CONNECTORS_INDEX, JOBS_INDEX]
+                # Using concrete write index to create these to ensure ES-installed template takes
+
+                await self.es_client.ensure_exists(
+                    indices=[CONNECTORS_INDEX + '-v1', JOBS_INDEX +'-v1']
                 )
                 return True
             except Exception as e:

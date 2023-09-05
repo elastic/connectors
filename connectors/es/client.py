@@ -164,23 +164,16 @@ class ESClient:
         await self.close()
         return False
 
-    async def check_exists(self, indices=None, pipelines=None):
+    async def ensure_exists(self, indices=None):
         if indices is None:
             indices = []
-        if pipelines is None:
-            pipelines = []
 
         for index in indices:
-            logger.debug(f"Checking for index {index} presence")
+            logger.debug(f"Checking index {index}")
             if not await self.client.indices.exists(index=index):
-                raise PreflightCheckError(f"Could not find index {index}")
-
-        for pipeline in pipelines:
-            logger.debug(f"Checking for pipeline {pipeline} presence")
-            try:
-                await self.client.ingest.get_pipeline(id=pipeline)
-            except NotFoundError as e:
-                raise PreflightCheckError(f"Could not find pipeline {pipeline}") from e
+                await self.client.index(index=index, document={}, id='.connectors-create-doc')
+                await self.client.delete(index=index, id='.connectors-create-doc')
+                logger.debug(f"Created index {index}")
 
     async def delete_indices(self, indices):
         await self.client.indices.delete(index=indices, ignore_unavailable=True)
