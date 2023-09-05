@@ -301,6 +301,12 @@ class GMailDataSource(BaseDataSource):
         return document
 
     async def get_access_control(self):
+        """Yields all users found in the Google Workspace associated with the configured service account.
+
+        Yields:
+            dict: dict representing a user
+        """
+
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping access control sync.")
             return
