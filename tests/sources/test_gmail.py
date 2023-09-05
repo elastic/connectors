@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
+from aiogoogle import AuthError
 from freezegun import freeze_time
 
 from connectors.protocol import Features, Filter
@@ -28,9 +29,11 @@ TIME = "2023-01-24T04:07:19"
 
 CUSTOMER_ID = "customer_id"
 
+SUBJECT = "subject@email_address.com"
+
 DATE = "2023-01-24T04:07:19+00:00"
 
-JSON_CREDENTIALS = {"key": "value"}
+JSON_CREDENTIALS = {"project_id": "dummy123"}
 
 
 def dls_feature_enabled(value):
@@ -50,7 +53,7 @@ async def create_gmail_source(dls_enabled=False, include_spam_and_trash=False):
     async with create_source(
         GMailDataSource,
         service_account_credentials=json.dumps(JSON_CREDENTIALS),
-        subject="subject",
+        subject=SUBJECT,
         customer_id="foo",
         use_document_level_security=dls_enabled,
         include_spam_and_trash=include_spam_and_trash,
@@ -205,7 +208,9 @@ class TestGMailDataSource:
                 await source.ping()
 
     @pytest.mark.asyncio
-    async def test_validate_config_valid(self):
+    async def test_validate_config_valid(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
         valid_json = '{"project_id": "dummy123"}'
 
         async with create_gmail_source() as source:
@@ -213,6 +218,10 @@ class TestGMailDataSource:
                 "service_account_credentials"
             ).value = valid_json
             source.configuration.get_field("customer_id").value = CUSTOMER_ID
+            source.configuration.get_field("subject").value = SUBJECT
+
+            patch_gmail_client.ping = AsyncMock()
+            patch_google_directory_client.ping = AsyncMock()
 
             try:
                 await source.validate_config()
@@ -220,7 +229,7 @@ class TestGMailDataSource:
                 raise AssertionError("Should've been a valid config") from None
 
     @pytest.mark.asyncio
-    async def test_validate_config_invalid(self):
+    async def test_validate_config_invalid_service_account_credentials(self):
         async with create_gmail_source() as source:
             source.configuration.get_field(
                 "service_account_credentials"
@@ -228,6 +237,45 @@ class TestGMailDataSource:
 
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_invalid_subject(self):
+        async with create_gmail_source() as source:
+            source.configuration.get_field("subject").value = "invalid address"
+
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_invalid_gmail_auth(
+        self, patch_gmail_client, patch_google_directory_client
+    ):
+        async with create_gmail_source() as source:
+            patch_gmail_client.ping = AsyncMock(
+                side_effect=AuthError("some auth error")
+            )
+            patch_google_directory_client.ping = AsyncMock()
+
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+
+            # Make sure this is a GMail auth error
+            assert "GMail auth" in str(e.value)
+
+    @pytest.mark.asyncio
+    async def test_validate_config_invalid_google_directory_auth(
+        self, patch_google_directory_client
+    ):
+        async with create_gmail_source() as source:
+            patch_google_directory_client.ping = AsyncMock(
+                side_effect=AuthError("some auth error")
+            )
+
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+
+            # Make sure this is a Google Directory auth error
+            assert "Google Directory auth" in str(e.value)
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(
