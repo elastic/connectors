@@ -305,6 +305,7 @@ class GMailDataSource(BaseDataSource):
 
         Yields:
             dict: dict representing a user
+
         """
 
         if not self._dls_enabled():
