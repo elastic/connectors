@@ -219,13 +219,16 @@ class RootCAAdapter(requests.adapters.HTTPAdapter):
 class ExchangeUsers:
     """Fetch users from Exchange Active Directory"""
 
-    def __init__(self, ad_server, domain, exchange_server, user, password, ssl_enabled):
+    def __init__(
+        self, ad_server, domain, exchange_server, user, password, ssl_enabled, ssl_ca
+    ):
         self.ad_server = Server(host=ad_server)
         self.domain = domain
         self.exchange_server = exchange_server
         self.user = user
         self.password = password
         self.ssl_enabled = ssl_enabled
+        self.ssl_ca = ssl_ca
 
     @cached_property
     def _create_connection(self):
@@ -298,8 +301,9 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        global global_dns_name
+        global global_dns_name, global_cert
         global_dns_name = self.exchange_server
+        global_cert = self.ssl_ca
 
         BaseProtocol.HTTP_ADAPTER_CLS = (
             RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
@@ -586,11 +590,10 @@ class OutlookClient:
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
 
-        global global_cert
         if self.ssl_enabled and self.certificate:
-            global_cert = get_pem_format(self.certificate)
+            ssl_ca = get_pem_format(self.certificate)
         else:
-            global_cert = ""
+            ssl_ca = ""
 
         return ExchangeUsers(
             ad_server=self.configuration["active_directory_server"],
@@ -599,6 +602,7 @@ class OutlookClient:
             user=self.configuration["username"],
             password=self.configuration["password"],
             ssl_enabled=self.ssl_enabled,
+            ssl_ca=ssl_ca,
         )
 
     async def ping(self):
@@ -713,7 +717,7 @@ class OutlookDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange Server",
                 "order": 5,
-                "tooltip": "This configuration field is expected server's IP address. E.g. 127.0.0.1",
+                "tooltip": "Exchange server's IP address. E.g. 127.0.0.1",
                 "type": "str",
                 "value": "",
             },
@@ -721,7 +725,7 @@ class OutlookDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Active Directory Server",
                 "order": 6,
-                "tooltip": "This configuration field is expected AD server's IP address. E.g. 127.0.0.1",
+                "tooltip": "Active Directory server's IP address. E.g. 127.0.0.1",
                 "type": "str",
                 "value": "",
             },
@@ -744,7 +748,7 @@ class OutlookDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server domain name",
                 "order": 9,
-                "tooltip": "This configuration field is expected a domain name such as gmail.com, outlook.com",
+                "tooltip": "Domain name such as gmail.com, outlook.com",
                 "type": "str",
                 "value": "",
             },
