@@ -19,8 +19,8 @@ from connectors.logger import logger, set_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
-CONNECTORS_INDEX = ".elastic-connectors"
-JOBS_INDEX = ".elastic-connectors-sync-jobs"
+CONNECTORS_INDEX = ".elastic-connectors-v1"
+JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 DEFAULT_FILTERING = [
     {
