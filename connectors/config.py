@@ -19,6 +19,7 @@ def load_config(config_file):
         _nest_configs(nested_yaml_config, key, value)
     configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
+    configuration = _handle_config_conflicts(configuration)
     return configuration
 
 
