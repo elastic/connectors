@@ -564,7 +564,7 @@ sequenceDiagram
     end
 ```
 
-**Sequence diagram (Access control syncs)**:
+**Sequence diagram (access control syncs)**:
 ```mermaid
 sequenceDiagram
     actor User
