@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import json
 from functools import cached_property
 
 import fastjsonschema
@@ -21,6 +20,7 @@ from connectors.sources.google import (
     GoogleDirectoryClient,
     MessageFields,
     UserFields,
+    load_service_account_json,
     validate_service_account_json,
 )
 from connectors.utils import (
@@ -231,8 +231,8 @@ class GMailDataSource(BaseDataSource):
 
     @cached_property
     def _service_account_credentials(self):
-        service_account_credentials = json.loads(
-            self.configuration["service_account_credentials"]
+        service_account_credentials = load_service_account_json(
+            self.configuration["service_account_credentials"], "GMail"
         )
         return service_account_credentials
 
