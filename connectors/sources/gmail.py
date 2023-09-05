@@ -342,6 +342,7 @@ class GMailDataSource(BaseDataSource):
         Yields:
             dict, partial: dict containing messages for each user,
                             partial download content function
+
         """
 
         include_spam_and_trash = self.configuration["include_spam_and_trash"]
