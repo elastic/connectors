@@ -5,8 +5,8 @@
 #
 """Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms.
 """
-import warnings
 from copy import copy
+import os
 from datetime import date
 from functools import cached_property, partial
 from tempfile import NamedTemporaryFile
@@ -191,25 +191,29 @@ class SSLFailed(Exception):
     pass
 
 
-global_dns_name = ""
-global_cert = ""
+class ManageCertificate:
+    cert_file = "outlook_cert.cer"
+
+    def store_certificate(self, certificate):
+        with open(self.cert_file, "w") as file:
+            file.write(certificate)
+
+    def get_certificate_path(self):
+        return os.path.join(os.getcwd(), self.cert_file)
+
+    def remove_certificate_file(self):
+        if os.path.exists(self.cert_file):
+            os.remove(self.cert_file)
 
 
 class RootCAAdapter(requests.adapters.HTTPAdapter):
     """Class to verify SSL Certificate for Exchange Servers"""
 
-    def cert_verify(self, conn, url, ssl_certificate_file, cert):
+    def cert_verify(self, conn, url, verify, cert):
         try:
-            with NamedTemporaryFile(mode="w", delete=False, suffix=".cer") as file:
-                file.write(global_cert)
-
-                ssl_certificate_file = {
-                    global_dns_name: file.name,
-                }[urlparse(url).hostname]
-
-                super().cert_verify(
-                    conn=conn, url=url, verify=ssl_certificate_file, cert=cert
-                )
+            super().cert_verify(
+                conn=conn, url=url, verify=ManageCertificate().get_certificate_path(), cert=cert
+            )
         except Exception as exception:
             raise SSLFailed(
                 f"Something went wrong while verifying SSL certificate. Error: {exception}"
@@ -241,7 +245,7 @@ class ExchangeUsers:
         )
 
     async def close(self):
-        pass
+        ManageCertificate().remove_certificate_file()
 
     def _fetch_normal_users(self, search_query):
         try:
@@ -290,7 +294,6 @@ class ExchangeUsers:
             ) from e
 
     async def get_users(self):
-        warnings.filterwarnings("default")
         ldap_domain_name_list = ["DC=" + domain for domain in self.domain.split(".")]
         search_query = ",".join(ldap_domain_name_list)
 
@@ -301,10 +304,7 @@ class ExchangeUsers:
             yield user
 
     async def get_user_accounts(self):
-        global global_dns_name, global_cert
-        global_dns_name = self.exchange_server
-        global_cert = self.ssl_ca
-
+        ManageCertificate().store_certificate(certificate=self.ssl_ca)
         BaseProtocol.HTTP_ADAPTER_CLS = (
             RootCAAdapter if self.ssl_enabled else NoVerifyHTTPAdapter
         )
