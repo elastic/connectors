@@ -562,7 +562,9 @@ async def test_ping_for_successful_connection():
 async def test_ping_for_failed_connection_exception(mock_get):
     async with create_source(MicrosoftTeamsDataSource) as source:
         with patch.object(
-            MicrosoftTeamsClient, "fetch", side_effect=Exception("Something went wrong")
+            MicrosoftTeamsClient,
+            "fetch",
+            side_effect=Exception("Something went wrong"),
         ):
             with pytest.raises(Exception):
                 await source.ping()
@@ -945,7 +947,11 @@ async def test_call_api_with_404(
 
 
 @pytest.mark.asyncio
-async def test_call_api_with_os_error(microsoft_client, mock_responses, patch_sleep):
+async def test_call_api_with_os_error(
+    microsoft_client,
+    mock_responses,
+    patch_sleep,
+):
     url = "http://localhost:1234/download-some-sample-file"
 
     not_found_error = ClientOSError()
@@ -967,7 +973,11 @@ async def test_call_api_with_os_error(microsoft_client, mock_responses, patch_sl
 
 
 @pytest.mark.asyncio
-async def test_call_api_with_500(microsoft_client, mock_responses, patch_sleep):
+async def test_call_api_with_500(
+    microsoft_client,
+    mock_responses,
+    patch_sleep,
+):
     url = "http://localhost:1234/download-some-sample-file"
 
     not_found_error = ClientResponseError(
