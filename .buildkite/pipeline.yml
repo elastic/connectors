@@ -212,3 +212,13 @@ steps:
                 - ".buildkite/run_nigthly.sh onedrive small"
               artifact_paths:
                 - "perf8-report-*/**/*"
+
+          - path:
+              - "connectors/sources/salesforce.py"
+              - "tests/sources/fixtures/salesforce/**"
+            config:
+              label: "🔨 Salesforce"
+              command:
+                - ".buildkite/run_nigthly.sh salesforce small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
