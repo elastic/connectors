@@ -4,9 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import math
-from faker import Faker
-from random import choices
 from functools import cached_property
+from random import choices
+
+from faker import Faker
+
 
 class AsyncIterator:
     """
@@ -67,15 +69,20 @@ class AsyncIterator:
                 f"Expected kwargs: {kwargs}. Actual kwargs: {self.call_kwargs[0]}."
             )
 
+
 class WeightedFakeProvider:
     def __init__(self, seed=None, weights=None):
         self.seed = seed
         if weights and len(weights) != 4:
-            raise Exception(f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}")
+            raise Exception(
+                f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}"
+            )
         self.weights = weights or [0.58, 0.3, 0.1, 0.02]
-        
+
         if math.fsum(self.weights) != 1:
-            raise Exception(f"Sum of weights should be equal to 1. Sum of provided weights {self.weights} is {math.fsum(self.weights)}")
+            raise Exception(
+                f"Sum of weights should be equal to 1. Sum of provided weights {self.weights} is {math.fsum(self.weights)}"
+            )
         self.fake_provider = FakeProvider(seed=seed)
 
     @cached_property
@@ -84,7 +91,7 @@ class WeightedFakeProvider:
             self.fake_provider.small_text(),
             self.fake_provider.medium_text(),
             self.fake_provider.large_text(),
-            self.fake_provider.extra_large_text()
+            self.fake_provider.extra_large_text(),
         ]
 
     @cached_property
@@ -93,15 +100,15 @@ class WeightedFakeProvider:
             self.fake_provider.small_html(),
             self.fake_provider.medium_html(),
             self.fake_provider.large_html(),
-            self.fake_provider.extra_large_html()
+            self.fake_provider.extra_large_html(),
         ]
-
 
     def get_text(self):
         return choices(self._texts, self.weights)[0]
 
     def get_html(self):
         return choices(self._htmls, self.weights)[0]
+
 
 class FakeProvider:
     def __init__(self, seed=None):

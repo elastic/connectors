@@ -7,11 +7,10 @@
 """
 import io
 import os
-import random
-import string
 import time
 
 from flask import Flask, request
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
@@ -32,6 +31,7 @@ match DATA_SIZE:
         SPACE_OBJECT_COUNT = 250
         ATTACHMENT_COUNT = 7
 
+
 def get_num_docs():
     # 2 is multiplier cause SPACE_OBJECTs will be delivered twice:
     # Test returns SPACE_OBJECT_COUNT objects for each type of content
@@ -39,6 +39,7 @@ def get_num_docs():
     # - blogpost
     # - page
     print(SPACE_COUNT + SPACE_OBJECT_COUNT * ATTACHMENT_COUNT * 2)
+
 
 class ConfluenceAPI:
     def __init__(self):
@@ -193,7 +194,9 @@ class ConfluenceAPI:
         Returns:
             data_reader (io.BytesIO): object of io.BytesIO.
         """
-        data_reader = io.BytesIO(bytes(self.attachments[attachment_id], encoding="utf-8"))
+        data_reader = io.BytesIO(
+            bytes(self.attachments[attachment_id], encoding="utf-8")
+        )
         return data_reader
 
 
