@@ -8,24 +8,34 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     GoogleServiceAccountClient,
+    load_service_account_json,
     remove_universe_domain,
+    validate_service_account_json,
 )
 from tests.commons import AsyncIterator
 
 JSON_CREDENTIALS = {"key": "value"}
 CUSTOMER_ID = "customer_id"
+SUBJECT = "subject@domain.com"
 
 
-def setup_gmail_client():
-    return GMailClient(JSON_CREDENTIALS, CUSTOMER_ID, "me")
+def setup_gmail_client(json_credentials=None):
+    if json_credentials is None:
+        json_credentials = JSON_CREDENTIALS
+
+    return GMailClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
-def setup_google_directory_client():
-    return GoogleDirectoryClient(JSON_CREDENTIALS, CUSTOMER_ID)
+def setup_google_directory_client(json_credentials=None):
+    if json_credentials is None:
+        json_credentials = JSON_CREDENTIALS
+
+    return GoogleDirectoryClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
 def setup_google_service_account_client():
@@ -38,6 +48,55 @@ def test_remove_universe_domain():
     remove_universe_domain(json_credentials)
 
     assert universe_domain not in json_credentials
+
+
+def test_validate_service_account_json_when_valid():
+    valid_service_account_credentials = '{"project_id": "dummy123"}'
+
+    try:
+        validate_service_account_json(
+            valid_service_account_credentials, "some google service"
+        )
+    except ConfigurableFieldValueError:
+        raise AssertionError("Should've been a valid config") from None
+
+
+def test_validate_service_account_json_when_invalid():
+    invalid_service_account_credentials = '{"invalid_key": "dummy123"}'
+
+    with pytest.raises(ConfigurableFieldValueError):
+        validate_service_account_json(
+            invalid_service_account_credentials, "some google service"
+        )
+
+
+def test_load_service_account_json_valid_unescaped():
+    valid_unescaped_service_account_credentials = '{"project_id": "dummy123"}'
+
+    json_credentials = load_service_account_json(
+        valid_unescaped_service_account_credentials, "some google service"
+    )
+
+    assert isinstance(json_credentials, dict)
+
+
+def test_load_service_account_json_valid_escaped():
+    valid_unescaped_service_account_credentials = '"{\\"project_id\\": \\"dummy123\\"}"'
+
+    json_credentials = load_service_account_json(
+        valid_unescaped_service_account_credentials, "some google service"
+    )
+
+    assert isinstance(json_credentials, dict)
+
+
+def test_load_service_account_json_not_valid():
+    valid_unescaped_service_account_credentials = "xd"
+
+    with pytest.raises(ConfigurableFieldValueError):
+        load_service_account_json(
+            valid_unescaped_service_account_credentials, "some google service"
+        )
 
 
 class TestGoogleServiceAccountClient:
@@ -188,6 +247,14 @@ class TestGoogleDirectoryClient:
 
         assert actual_users == users[0]["users"]
 
+    def test_subject_added_to_service_account_credentials(
+        self, patch_google_service_account_client
+    ):
+        json_credentials = {}
+        setup_google_directory_client(json_credentials=json_credentials)
+
+        assert "subject" in json_credentials
+
 
 class TestGMailClient:
     @pytest_asyncio.fixture
@@ -253,3 +320,11 @@ class TestGMailClient:
         actual_message = await gmail_client.message("1")
 
         assert actual_message == message
+
+    def test_subject_added_to_service_account_credentials(
+        self, patch_google_service_account_client
+    ):
+        json_credentials = {}
+        setup_gmail_client(json_credentials=json_credentials)
+
+        assert "subject" in json_credentials

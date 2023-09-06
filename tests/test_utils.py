@@ -50,6 +50,7 @@ from connectors.utils import (
     ssl_context,
     truncate_id,
     url_encode,
+    validate_email_address,
     validate_index_name,
 )
 
@@ -198,6 +199,21 @@ async def test_mem_queue_too_large_item():
 
     with pytest.raises(asyncio.QueueFull) as e:
         await queue.put("x")
+
+    assert e is not None
+
+
+@pytest.mark.asyncio
+async def test_mem_queue_put_nowait():
+    queue = MemQueue(
+        maxsize=5, maxmemsize=1000, refresh_interval=0.1, refresh_timeout=0.5
+    )
+    # make queue full by size
+    for i in range(5):
+        queue.put_nowait(i)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("x")
 
     assert e is not None
 
@@ -839,3 +855,18 @@ class TestExtractionService:
 )
 def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
     assert base64url_to_base64(base64url_encoded_value) == base64_expected_value
+
+
+@pytest.mark.parametrize(
+    "email_address, is_valid",
+    [
+        ("subject@email_address.com", True),
+        ("subject", False),
+        ("@email_address.com", False),
+        ("", False),
+        ("subject @email_address.com", False),
+        ("subject@email_address", False),
+    ],
+)
+def test_validate_email_address(email_address, is_valid):
+    assert validate_email_address(email_address) == is_valid

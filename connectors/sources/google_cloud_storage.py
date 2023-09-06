@@ -6,7 +6,6 @@
 """Google Cloud Storage source module responsible to fetch documents from Google Cloud Storage.
 """
 import asyncio
-import json
 import os
 import urllib.parse
 from functools import cached_property, partial
@@ -18,7 +17,11 @@ from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource
+from connectors.sources.google import (
+    load_service_account_json,
+    validate_service_account_json,
+)
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
@@ -209,16 +212,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": DEFAULT_PEM_KEY,
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:4444/token",
-        }
 
         return {
             "service_account_credentials": {
@@ -226,7 +219,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "label": "Google Cloud service account JSON",
                 "order": 1,
                 "type": "str",
-                "value": json.dumps(default_credentials),
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -236,7 +228,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
             },
         }
 
@@ -248,12 +239,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """
         await super().validate_config()
 
-        try:
-            json.loads(self.configuration["service_account_credentials"])
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                "Google Cloud service account is not a valid JSON."
-            ) from e
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], "Google Cloud Storage"
+        )
 
     @cached_property
     def _google_storage_client(self):
@@ -262,7 +250,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             GoogleCloudStorageClient: An instance of the GoogleCloudStorageClient.
         """
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+        json_credentials = load_service_account_json(
+            self.configuration["service_account_credentials"], "Google Cloud Storage"
+        )
 
         if (
             json_credentials.get("private_key")

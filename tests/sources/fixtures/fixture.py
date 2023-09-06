@@ -5,6 +5,7 @@
 #
 import importlib
 import importlib.util
+import logging
 import os
 import pprint
 import signal
@@ -18,7 +19,12 @@ from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 from retry import retry
 
+from connectors.logger import set_extra_logger
+
 CONNECTORS_INDEX = ".elastic-connectors"
+
+logger = logging.getLogger("ftest")
+set_extra_logger(logger, log_level=logging.DEBUG, prefix="FTEST")
 
 
 @retry(tries=3, delay=1.0)
@@ -118,17 +124,20 @@ def _monitor_service(pid):
 def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
+    action = args.action
 
-    if args.action in ("start_stack", "stop_stack"):
+    logger.info(f"Executing action: '{action}'.")
+
+    if action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
-        if args.action == "start_stack":
+        if action == "start_stack":
             os.system("docker compose pull")
             os.system("docker compose up -d")
         else:
             os.system("docker compose down --volumes")
         return
 
-    if args.action == "monitor":
+    if action == "monitor":
         if args.pid == 0:
             print("Invalid pid specified, exit the monitor process.")
             return
@@ -145,7 +154,7 @@ def main(args=None):
         func = getattr(module, args.action)
         return func()
     else:
-        if args.action == "get_num_docs":
+        if action == "get_num_docs":
             # returns default
             match os.environ.get("DATA_SIZE", "medium"):
                 case "small":
@@ -154,16 +163,16 @@ def main(args=None):
                     print("1500")
                 case _:
                     print("3000")
-        elif args.action == "description":
-            print(
+        elif action == "description":
+            logger.info(
                 f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.'
             )
-        elif args.action == "check_stack":
+        elif action == "check_stack":
             # default behavior: we wait until elasticsearch is responding
             pprint.pprint(wait_for_es())
         else:
-            print(
-                f"Fixture {args.name} does not have an {args.action} action, skipping"
+            logger.info(
+                f"Fixture {args.name} does not have an {args.action} action, skipping."
             )
 
 

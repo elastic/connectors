@@ -285,14 +285,6 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
 
-    def __str__(self):
-        return (
-            "Extractor <"
-            f"create: {self.total_docs_created} |"
-            f"update: {self.total_docs_updated} |"
-            f"delete: {self.total_docs_deleted}>"
-        )
-
     async def _get_existing_ids(self):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
 
@@ -366,12 +358,12 @@ class Extractor:
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
         """
-        self._logger.info("Starting doc lookups")
         generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
 
         start = time.time()
+        self._logger.info("Collecting local document ids")
         existing_ids = {k: v async for (k, v) in self._get_existing_ids()}
         self._logger.debug(
             f"Found {len(existing_ids)} docs in {self.index} (duration "
@@ -382,12 +374,13 @@ class Extractor:
                 f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
             )
 
+        self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    self._logger.info(str(self))
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -441,7 +434,7 @@ class Extractor:
 
                 await asyncio.sleep(0)
         except Exception as e:
-            self._logger.critical("The document fetcher failed", exc_info=True)
+            self._logger.critical("Document fetcher failed", exc_info=True)
             await self.queue.put("FETCH_ERROR")
             self.fetch_error = e
             return
@@ -458,17 +451,17 @@ class Extractor:
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
         """
-        self._logger.info("Starting doc lookups incrementally")
         generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
 
+        self._logger.info("Iterating on remote documents incrementally when possible")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    self._logger.info(str(self))
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -548,7 +541,7 @@ class Extractor:
                 doc, _, _ = doc
                 count += 1
                 if count % self.display_every == 0:
-                    self._logger.info(str(self))
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
                 doc_exists = doc_id in existing_ids
@@ -604,6 +597,14 @@ class Extractor:
                 }
             )
             self.total_docs_deleted += 1
+
+    def _log_progress(self):
+        self._logger.info(
+            "Sync progress -- "
+            f"created: {self.total_docs_created} | "
+            f"updated: {self.total_docs_updated} | "
+            f"deleted: {self.total_docs_deleted}"
+        )
 
 
 class IndexMissing(Exception):

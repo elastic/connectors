@@ -321,20 +321,17 @@ class S3DataSource(BaseDataSource):
                 "label": "AWS Buckets",
                 "order": 1,
                 "type": "list",
-                "value": "ent-search-ingest-dev",
             },
             "aws_access_key_id": {
                 "label": "AWS Access Key Id",
                 "order": 2,
                 "type": "str",
-                "value": "A1B2C3D4",
             },
             "aws_secret_access_key": {
                 "label": "AWS Secret Key",
                 "order": 3,
-                "type": "str",
-                "value": "A1B2C3D4",
                 "sensitive": True,
+                "type": "str",
             },
             "read_timeout": {
                 "default_value": DEFAULT_READ_TIMEOUT,
@@ -344,7 +341,6 @@ class S3DataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_READ_TIMEOUT,
             },
             "connect_timeout": {
                 "default_value": DEFAULT_CONNECTION_TIMEOUT,
@@ -354,7 +350,6 @@ class S3DataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_CONNECTION_TIMEOUT,
             },
             "max_attempts": {
                 "default_value": DEFAULT_MAX_RETRY_ATTEMPTS,
@@ -364,7 +359,6 @@ class S3DataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_MAX_RETRY_ATTEMPTS,
             },
             "page_size": {
                 "default_value": DEFAULT_PAGE_SIZE,
@@ -374,6 +368,5 @@ class S3DataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_PAGE_SIZE,
             },
         }

@@ -7,17 +7,22 @@
 """
 import asyncio
 import os
-from copy import copy
 from datetime import datetime, timedelta
 from functools import cached_property, partial
 from urllib import parse
 
 import aiofiles
 import aiohttp
+import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
+from wcmatch import glob
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
@@ -85,6 +90,52 @@ class InternalServerError(Exception):
 
 class NotFound(Exception):
     pass
+
+
+class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "skipFilesWithExtensions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string"},
+            },
+            "parentPathPattern": {"type": "string", "minLength": 1},
+            "owners": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "format": "email", "minLength": 1},
+            },
+        },
+        "minProperties": 1,
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        try:
+            OneDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
 
 
 class AccessToken:
@@ -256,11 +307,19 @@ class OneDriveClient:
             for user_detail in response:
                 yield user_detail
 
-    async def get_owned_files(self, user_id):
+    async def get_owned_files(self, user_id, skipped_extensions=None, pattern=""):
         async for response in self.paginated_api_call(url_name=DELTA, user_id=user_id):
             for file in response:
                 if file.get("name", "") != "root":
-                    yield file
+                    parent_path = file.get("parentReference", {}).get("path")
+                    is_match = glob.globmatch(parent_path, pattern, flags=glob.GLOBSTAR)
+                    has_skipped_extension = os.path.splitext(file["name"])[-1] in (
+                        skipped_extensions or []
+                    )
+                    if has_skipped_extension or (pattern and not is_match):
+                        continue
+                    else:
+                        yield file
 
 
 class OneDriveDataSource(BaseDataSource):
@@ -268,6 +327,7 @@ class OneDriveDataSource(BaseDataSource):
 
     name = "OneDrive"
     service_type = "onedrive"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to OneDrive
@@ -297,20 +357,17 @@ class OneDriveDataSource(BaseDataSource):
                 "label": "Azure application Client ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "client_secret": {
                 "label": "Azure application Client Secret",
                 "order": 2,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "tenant_id": {
                 "label": "Azure application Tenant ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -320,9 +377,11 @@ class OneDriveDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 3,
             },
         }
+
+    def advanced_rules_validators(self):
+        return [OneDriveAdvancedRulesValidator(self)]
 
     async def close(self):
         """Closes unclosed client session"""
@@ -459,12 +518,40 @@ class OneDriveDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
 
-        async for user in self.client.list_users():
-            user_id = user.get("id")
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-            async for entity in self.client.get_owned_files(user_id):
-                entity = self.prepare_doc(entity)
-                if entity["type"] == FILE:
-                    yield entity, partial(self.get_content, copy(entity), user_id)
-                else:
-                    yield entity, None
+            user_mail_id_map = {}
+            async for user in self.client.list_users():
+                user_mail_id_map[user["mail"]] = user["id"]
+
+            for query_info in advanced_rules:
+                skipped_extensions = query_info.get("skipFilesWithExtensions")
+                user_mails = query_info.get("owners")
+                if user_mails is None:
+                    user_mails = user_mail_id_map.keys()
+
+                pattern = query_info.get("parentPathPattern", "")
+
+                for mail in user_mails:
+                    user_id = user_mail_id_map.get(mail)
+                    async for entity in self.client.get_owned_files(
+                        user_id, skipped_extensions, pattern
+                    ):
+                        entity = self.prepare_doc(entity)
+                        if entity["type"] == FILE:
+                            yield entity, partial(
+                                self.get_content, entity.copy(), user_id
+                            )
+                        else:
+                            yield entity, None
+        else:
+            async for user in self.client.list_users():
+                user_id = user.get("id")
+
+                async for entity in self.client.get_owned_files(user_id):
+                    entity = self.prepare_doc(entity)
+                    if entity["type"] == FILE:
+                        yield entity, partial(self.get_content, entity.copy(), user_id)
+                    else:
+                        yield entity, None

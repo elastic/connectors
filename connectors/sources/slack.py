@@ -7,7 +7,7 @@
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
@@ -215,33 +215,30 @@ class SlackDataSource(BaseDataSource):
                 "label": "Authentication Token",
                 "tooltip": "The Slack Authentication Token for the slack application you created. See the docs for details.",
                 "order": 1,
-                "type": "str",
                 "sensitive": True,
-                "required": True,
-                "value": "",
+                "type": "str",
             },
             "fetch_last_n_days": {
-                "label": "Days of message history to fetch",
-                "tooltip": "How far back in time to request message history from slack. Messages older than this will not be indexed.",
-                "order": 2,
-                "type": "int",
-                "value": 180,
                 "display": "numeric",
+                "label": "Days of message history to fetch",
+                "order": 2,
+                "tooltip": "How far back in time to request message history from slack. Messages older than this will not be indexed.",
+                "type": "int",
             },
             "auto_join_channels": {
-                "label": "Automatically join channels",
-                "tooltip": "The Slack application bot will only be able to read conversation history from channels it has joined. The default requires it to be manually invited to channels. Enabling this allows it to automatically invite itself into all public channels.",
-                "order": 3,
-                "type": "bool",
                 "display": "toggle",
+                "label": "Automatically join channels",
+                "order": 3,
+                "tooltip": "The Slack application bot will only be able to read conversation history from channels it has joined. The default requires it to be manually invited to channels. Enabling this allows it to automatically invite itself into all public channels.",
+                "type": "bool",
                 "value": False,
             },
             "sync_users": {
-                "label": "Sync users",
-                "tooltip": "Whether or not Slack Users should be indexed as documents in Elasticsearch.",
-                "order": 4,
-                "type": "bool",
                 "display": "toggle",
+                "label": "Sync users",
+                "order": 4,
+                "tooltip": "Whether or not Slack Users should be indexed as documents in Elasticsearch.",
+                "type": "bool",
                 "value": True,
             },
         }
@@ -264,9 +261,8 @@ class SlackDataSource(BaseDataSource):
             yield message, None
 
     async def channels_and_messages(self):
-        delta = timedelta(days=self.n_days_to_fetch)
-        past_unix_timestamp = time.mktime((datetime.utcnow() - delta).timetuple())
-        current_unix_timestamp = time.mktime(datetime.utcnow().timetuple())
+        current_unix_timestamp = time.time()
+        past_unix_timestamp = current_unix_timestamp - self.n_days_to_fetch * 24 * 3600
         async for channel in self.slack_client.list_channels(
             not self.auto_join_channels
         ):

@@ -513,16 +513,6 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def site_group(self, site_web_url, group_principal_id):
-        self._validate_sharepoint_rest_url(site_web_url)
-
-        url = f"{site_web_url}/_api/web/sitegroups/getbyid({group_principal_id})"
-
-        try:
-            return await self._rest_api_client.fetch(url)
-        except NotFound:
-            return {}
-
     async def user_information_list(self, site_id):
         expand = "fields"
         url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
@@ -930,16 +920,8 @@ def _prefix_group(group):
     return prefix_identity("group", group)
 
 
-def _prefix_site_group(site_group):
-    return prefix_identity("site_group", site_group)
-
-
 def _prefix_user(user):
     return prefix_identity("user", user)
-
-
-def _prefix_site_user_id(site_user_id):
-    return prefix_identity("site_user_id", site_user_id)
 
 
 def _prefix_user_id(user_id):
@@ -1077,26 +1059,22 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
                 "label": "Tenant name",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "label": "Client ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "secret_value": {
                 "label": "Secret value",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "site_collections": {
                 "display": "textarea",
@@ -1104,7 +1082,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "A comma-separated list of sites to ingest data from. Use * to include all available sites.",
                 "order": 5,
                 "type": "list",
-                "value": "",
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -1711,20 +1688,12 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             user_id = _get_id(granted_to_v2, "user")
             group_id = _get_id(granted_to_v2, "group")
-            site_group_id = _get_id(granted_to_v2, "siteGroup")
-            site_user_id = _get_id(granted_to_v2, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
 
             if group_id:
                 access_control.append(_prefix_group(group_id))
-
-            if site_group_id:
-                access_control.append(_prefix_site_group(site_group_id))
-
-            if site_user_id:
-                access_control.append(_prefix_site_user_id(site_user_id))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
