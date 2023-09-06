@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from connectors.preflight_check import PreflightCheck
-from connectors.protocol import CONNECTORS_INDEX, JOBS_INDEX
+from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 host = "http://localhost:9200"
@@ -41,6 +41,16 @@ def mock_index_exists(mock_responses, index, exist=True, repeat=False):
     mock_responses.head(f"{host}/{index}", status=status, repeat=repeat)
 
 
+def mock_index(mock_responses, index, doc_id, repeat=False):
+    status = 200
+    mock_responses.put(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
+
+
+def mock_delete(mock_responses, index, doc_id, repeat=False):
+    status = 200
+    mock_responses.delete(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
+
+
 @pytest.mark.asyncio
 async def test_es_unavailable(mock_responses):
     mock_es_info(mock_responses, healthy=False, repeat=True)
@@ -50,40 +60,60 @@ async def test_es_unavailable(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connector_index_missing(mock_responses):
+async def test_connectors_index_missing(mocker, mock_responses):
+    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=False)
-    mock_index_exists(mock_responses, JOBS_INDEX, exist=True)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=True)
+    mock_index(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
+    mock_delete(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
     preflight = PreflightCheck(config)
-    result = await preflight.run()
-    assert result is False
+    spy = mocker.spy(preflight.es_client.client, "index")
+    delete_spy = mocker.spy(preflight.es_client.client, "delete")
+    await preflight.run()
+    spy.assert_called_with(index=CONCRETE_CONNECTORS_INDEX, document={}, id=doc_id)
+    delete_spy.assert_called_with(index=CONCRETE_CONNECTORS_INDEX, id=doc_id)
 
 
 @pytest.mark.asyncio
-async def test_job_index_missing(mock_responses):
+async def test_jobs_index_missing(mocker, mock_responses):
+    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=True)
-    mock_index_exists(mock_responses, JOBS_INDEX, exist=False)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=True)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
+    mock_index(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
+    mock_delete(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
     preflight = PreflightCheck(config)
-    result = await preflight.run()
-    assert result is False
+    spy = mocker.spy(preflight.es_client.client, "index")
+    delete_spy = mocker.spy(preflight.es_client.client, "delete")
+    await preflight.run()
+    spy.assert_called_with(index=CONCRETE_JOBS_INDEX, document={}, id=doc_id)
+    delete_spy.assert_called_with(index=CONCRETE_JOBS_INDEX, id=doc_id)
 
 
 @pytest.mark.asyncio
-async def test_both_indices_missing(mock_responses):
+async def test_both_indices_missing(mocker, mock_responses):
+    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=False)
-    mock_index_exists(mock_responses, JOBS_INDEX, exist=False)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
+    mock_index(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
+    mock_index(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
+    mock_delete(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
+    mock_delete(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
     preflight = PreflightCheck(config)
-    result = await preflight.run()
-    assert result is False
+    spy = mocker.spy(preflight.es_client.client, "index")
+    delete_spy = mocker.spy(preflight.es_client.client, "delete")
+    await preflight.run()
+    assert spy.call_count == 2
+    assert delete_spy.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_pass(mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config)
     result = await preflight.run()
     assert result is True
@@ -93,8 +123,8 @@ async def test_pass(mock_responses):
 async def test_es_transient_error(mock_responses):
     mock_es_info(mock_responses, healthy=False)
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config)
     result = await preflight.run()
     assert result is True
@@ -103,10 +133,10 @@ async def test_es_transient_error(mock_responses):
 @pytest.mark.asyncio
 async def test_index_exist_transient_error(mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, exist=False)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX, repeat=True)
-    mock_index_exists(mock_responses, JOBS_INDEX, exist=False)
-    mock_index_exists(mock_responses, JOBS_INDEX, repeat=True)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, repeat=True)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, repeat=True)
     preflight = PreflightCheck(config)
     result = await preflight.run()
     assert result is True
@@ -116,8 +146,8 @@ async def test_index_exist_transient_error(mock_responses):
 @patch("connectors.preflight_check.logger")
 async def test_native_config_is_warned(patched_logger, mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["native_service_types"] = ["foo", "bar"]
     del local_config["connectors"]
@@ -139,8 +169,8 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
 @patch("connectors.preflight_check.logger")
 async def test_native_config_is_forced(patched_logger, mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["native_service_types"] = ["foo", "bar"]
     local_config["_force_allow_native"] = True
@@ -154,8 +184,8 @@ async def test_native_config_is_forced(patched_logger, mock_responses):
 @patch("connectors.preflight_check.logger")
 async def test_client_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["connectors"][0]["connector_id"] = "foo"
     local_config["connectors"][0]["service_type"] = "bar"
@@ -169,8 +199,8 @@ async def test_client_config(patched_logger, mock_responses):
 @patch("connectors.preflight_check.logger")
 async def test_unmodified_default_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["connectors"][0]["connector_id"] = "changeme"
     local_config["connectors"][0]["service_type"] = "changeme"
@@ -186,8 +216,8 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
 @patch("connectors.preflight_check.logger")
 async def test_missing_mode_config(patched_logger, mock_responses):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     del local_config["connectors"]
     preflight = PreflightCheck(local_config)
@@ -202,8 +232,8 @@ async def test_extraction_service_enabled_and_found_writes_info_log(
     patched_logger, mock_responses
 ):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
@@ -226,8 +256,8 @@ async def test_extraction_service_enabled_but_missing_logs_warning(
     patched_logger, mock_responses
 ):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)
@@ -250,8 +280,8 @@ async def test_extraction_service_enabled_but_missing_logs_critical(
     patched_logger, mock_responses
 ):
     mock_es_info(mock_responses)
-    mock_index_exists(mock_responses, CONNECTORS_INDEX)
-    mock_index_exists(mock_responses, JOBS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
     local_config = deepcopy(config)
     local_config["extraction_service"] = {"host": "http://localhost:8090"}
     preflight = PreflightCheck(local_config)

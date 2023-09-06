@@ -40,12 +40,10 @@ def mock_index_creation(index, mock_responses, hidden=True):
 def test_main(patch_logger, mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
 
-    mock_index_creation(".elastic-connectors", mock_responses)
     mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_doc/1",
+        "http://nowhere.com:9200/.elastic-connectors-v1/_doc/1",
         headers=headers,
     )
-    mock_index_creation(".elastic-connectors-sync-jobs", mock_responses)
     mock_index_creation("data", mock_responses, hidden=False)
     mock_responses.get(
         "http://nowhere.com:9200/_ingest/pipeline/ent-search-generic-ingestion",
