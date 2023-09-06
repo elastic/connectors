@@ -19,6 +19,7 @@ from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 
 from connectors.logger import set_extra_logger
+from connectors.utils import retryable
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
@@ -26,6 +27,7 @@ logger = logging.getLogger("ftest")
 set_extra_logger(logger, log_level=logging.DEBUG, prefix="FTEST")
 
 
+@retryable(retries=3, interval=1)
 def wait_for_es(url="http://localhost:9200", user="elastic", password="changeme"):
     print("Waiting for Elasticsearch to be up and running")
     basic = HTTPBasicAuth(user, password)
