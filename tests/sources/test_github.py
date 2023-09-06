@@ -477,10 +477,9 @@ async def test_get_user_repos():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_ping_with_unsuccessful_connection(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_ping_with_unsuccessful_connection():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         with patch.object(
             source.github_client,
             "ping",
@@ -491,10 +490,9 @@ async def test_ping_with_unsuccessful_connection(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_validate_config_with_invalid_token_then_raise():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         source.github_client.post = AsyncMock(
             return_value=({"user": "username"}, {"X-OAuth-Scopes": ""})
         )
@@ -506,12 +504,9 @@ async def test_validate_config_with_invalid_token_then_raise(mock_apply_retry_st
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_validate_config_with_inaccessible_repositories_then_raise(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_validate_config_with_inaccessible_repositories_then_raise():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
         source.github_client.post = AsyncMock(
             return_value=({"dummy": "dummy"}, {"X-OAuth-Scopes": "repo"})
@@ -522,20 +517,18 @@ async def test_validate_config_with_inaccessible_repositories_then_raise(
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_get_invalid_repos_with_max_retries(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_invalid_repos_with_max_retries():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         with pytest.raises(Exception):
             source.github_client.post = AsyncMock(side_effect=Exception())
             await source.get_invalid_repos()
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_get_response_with_rate_limit_exceeded(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_response_with_rate_limit_exceeded():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         with patch.object(
             source.github_client._get_client,
             "getitem",
@@ -576,10 +569,9 @@ async def test_get_retry_after():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_post_with_errors(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_post_with_errors():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         source.github_client._get_session.post = Mock(
             return_value=get_json_mock(
                 mock_response={
@@ -595,10 +587,9 @@ async def test_post_with_errors(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_post_with_unauthorized(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_post_with_unauthorized():
     async with create_github_source() as source:
-        mock_apply_retry_strategy.return_value = Mock()
         source.github_client._get_session.post = Mock(
             side_effect=ClientResponseError(
                 status=401,
