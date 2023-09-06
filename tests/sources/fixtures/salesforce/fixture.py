@@ -97,7 +97,7 @@ OBJECTS_WITH_CONTENT_DOCUMENTS = [
 
 
 def generate_string(size):
-    "".join([random.choice(RANDOMISER_CHARSET) for _ in range(size)])
+    return "".join([random.choice(RANDOMISER_CHARSET) for _ in range(size)])
 
 
 # We pre-generate 50 content document ids so we can randomly link them to multiple objects
