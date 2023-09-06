@@ -74,8 +74,10 @@ services:
       - esnet
 
   zoom:
-    build: .
-    command: python fixture.py
+    build: 
+      context: ../../../../
+      dockerfile: Dockerfile.ftest
+    command: python tests/sources/fixtures/zoom/fixture.py
     ports:
       - 10971:10971
     volumes:
