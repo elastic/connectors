@@ -103,6 +103,7 @@ def _default_config():
             "slack": "connectors.sources.slack:SlackDataSource",
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",
+            "zoom": "connectors.sources.zoom:ZoomDataSource",
         },
     }
 
