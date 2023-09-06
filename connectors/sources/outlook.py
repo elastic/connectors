@@ -576,6 +576,13 @@ class OutlookClient:
         self.configuration = configuration
         self._logger = logger
         self.is_cloud = self.configuration["data_source"] == OUTLOOK_CLOUD
+        self.ssl_enabled = self.configuration.get("ssl_enabled", False)
+        self.certificate = self.configuration.get("ssl_ca", None)
+
+        if self.ssl_enabled and self.certificate:
+            self.ssl_ca = get_pem_format(self.certificate)
+        else:
+            self.ssl_ca = ""
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -589,14 +596,6 @@ class OutlookClient:
                 tenant_id=self.configuration["tenant_id"],
             )
 
-        self.ssl_enabled = self.configuration["ssl_enabled"]
-        self.certificate = self.configuration["ssl_ca"]
-
-        if self.ssl_enabled and self.certificate:
-            ssl_ca = get_pem_format(self.certificate)
-        else:
-            ssl_ca = ""
-
         return ExchangeUsers(
             ad_server=self.configuration["active_directory_server"],
             domain=self.configuration["domain"],
@@ -604,7 +603,7 @@ class OutlookClient:
             user=self.configuration["username"],
             password=self.configuration["password"],
             ssl_enabled=self.ssl_enabled,
-            ssl_ca=ssl_ca,
+            ssl_ca=self.ssl_ca,
         )
 
     async def ping(self):
