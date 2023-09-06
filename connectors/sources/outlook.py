@@ -139,6 +139,7 @@ CALENDAR_FIELDS = [
 ]
 
 END_SIGNAL = "FINISHED"
+CERT_FILE = "outlook_cert.cer"
 
 
 def ews_format_to_datetime(source_datetime, timezone):
@@ -192,18 +193,16 @@ class SSLFailed(Exception):
 
 
 class ManageCertificate:
-    cert_file = "outlook_cert.cer"
-
     async def store_certificate(self, certificate):
-        async with aiofiles.open(self.cert_file, "w") as file:
+        async with aiofiles.open(CERT_FILE, "w") as file:
             await file.write(certificate)
 
     def get_certificate_path(self):
-        return os.path.join(os.getcwd(), self.cert_file)
+        return os.path.join(os.getcwd(), CERT_FILE)
 
     async def remove_certificate_file(self):
-        if os.path.exists(self.cert_file):
-            await remove(self.cert_file)
+        if os.path.exists(CERT_FILE):
+            await remove(CERT_FILE)
 
 
 class RootCAAdapter(requests.adapters.HTTPAdapter):
