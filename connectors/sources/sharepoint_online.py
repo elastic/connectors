@@ -1170,6 +1170,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
+        if WILDCARD in configured_root_sites:
+            return
 
         remote_sites = []
 
@@ -1178,9 +1180,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"], [WILDCARD]
             ):
                 remote_sites.append(site["name"])
-
-        if WILDCARD in configured_root_sites:
-            return
 
         missing = [x for x in configured_root_sites if x not in remote_sites]
 

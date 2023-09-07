@@ -2369,6 +2369,7 @@ class TestSharepointOnlineDataSource:
         # Therefore it's important
         patch_sharepoint_client.graph_api_token.get.assert_awaited()
         patch_sharepoint_client.rest_api_token.get.assert_awaited()
+        patch_sharepoint_client.site_collections.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_validate_config_when_invalid_tenant(self, patch_sharepoint_client):
