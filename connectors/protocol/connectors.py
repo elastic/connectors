@@ -42,6 +42,8 @@ from connectors.utils import (
 __all__ = [
     "CONNECTORS_INDEX",
     "JOBS_INDEX",
+    "CONCRETE_CONNECTORS_INDEX",
+    "CONCRETE_JOBS_INDEX",
     "ConnectorIndex",
     "Filter",
     "SyncJobIndex",
@@ -65,6 +67,8 @@ __all__ = [
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
+CONCRETE_CONNECTORS_INDEX = CONNECTORS_INDEX + "-v1"
+CONCRETE_JOBS_INDEX = JOBS_INDEX + "-v1"
 
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
