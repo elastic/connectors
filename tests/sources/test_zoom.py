@@ -6,6 +6,7 @@
 """Tests the Zoom source class methods"""
 from contextlib import asynccontextmanager
 from unittest import mock
+from unittest.mock import Mock, patch
 
 import aiohttp
 import pytest
@@ -521,8 +522,8 @@ async def test_fetch_for_successful_call():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_for_unsuccessful_call(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_for_unsuccessful_call():
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -539,8 +540,8 @@ async def test_fetch_for_unsuccessful_call(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_for_unauthorized_error(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_for_unauthorized_error():
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -563,8 +564,8 @@ async def test_fetch_for_unauthorized_error(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_for_notfound_error(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_for_notfound_error():
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -587,8 +588,8 @@ async def test_fetch_for_notfound_error(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_for_other_client_error(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_for_other_client_error():
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -628,8 +629,8 @@ async def test_content_for_successful_call():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_content_for_unsuccessful_call(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_content_for_unsuccessful_call():
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -720,10 +721,9 @@ async def test_ping_for_successful_connection():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_ping_for_unsuccessful_connection(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_ping_for_unsuccessful_connection():
     async with create_zoom_source() as source:
-        mock_apply_retry_strategy.return_value = mock.Mock()
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=get_mock(mock_response=TokenError),

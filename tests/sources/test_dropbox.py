@@ -378,13 +378,10 @@ async def test_validate_configuration_with_valid_path():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_validate_configuration_with_invalid_path_then_raise_exception(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_validate_configuration_with_invalid_path_then_raise_exception():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
         source.dropbox_client.path = "/abc"
 
         with patch.object(
@@ -418,13 +415,10 @@ async def test_set_access_token():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_set_access_token_with_incorrect_app_key_then_raise_exception(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_set_access_token_with_incorrect_app_key_then_raise_exception():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
 
         with patch.object(
             aiohttp.ClientSession,
@@ -441,13 +435,10 @@ async def test_set_access_token_with_incorrect_app_key_then_raise_exception(
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
 
         with patch.object(
             aiohttp.ClientSession,
@@ -607,12 +598,10 @@ def patch_default_wait_multiplier():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_when_token_is_expired(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_api_call_when_token_is_expired():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
 
         with patch.object(
             aiohttp.ClientSession,
