@@ -40,7 +40,7 @@ def wait_for_es(url="http://localhost:9200", user="elastic", password="changeme"
         return session.get(url, auth=basic).json()
     except Exception as e:
         # we're going to display some docker info here
-        logger.error(f"Failed to reach out Elasticsearch {repr(e)}")
+        logger.error(f"Failed to reach out to Elasticsearch {repr(e)}")
         os.system("docker ps -a")
         os.system("docker logs es01")
         raise
