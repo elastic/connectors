@@ -106,3 +106,8 @@ steps:
       - ".buildkite/run_nigthly.sh salesforce"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Zoom"
+    command:
+      - ".buildkite/run_nigthly.sh zoom"
+    artifact_paths:
+      - "perf8-report-*/**/*"
