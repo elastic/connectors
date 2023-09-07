@@ -29,16 +29,18 @@ set_extra_logger(logger, log_level=logging.DEBUG, prefix="FTEST")
 
 @retryable(retries=3, interval=1)
 def wait_for_es(url="http://localhost:9200", user="elastic", password="changeme"):
-    print("Waiting for Elasticsearch to be up and running")
+    logger.info("Waiting for Elasticsearch to be up and running")
+
     basic = HTTPBasicAuth(user, password)
-    s = requests.Session()
+    session = requests.Session()
     retries = Retry(total=5, backoff_factor=1.0, status_forcelist=[500, 502, 503, 504])
-    s.mount("http://", HTTPAdapter(max_retries=retries))
+    session.mount("http://", HTTPAdapter(max_retries=retries))
+
     try:
-        return s.get(url, auth=basic).json()
+        return session.get(url, auth=basic).json()
     except Exception as e:
         # we're going to display some docker info here
-        print(f"Failed to reach out Elasticsearch {repr(e)}")
+        logger.error(f"Failed to reach out Elasticsearch {repr(e)}")
         os.system("docker ps -a")
         os.system("docker logs es01")
         raise
@@ -94,10 +96,10 @@ def _monitor_service(pid):
                 if time.time() - start > 30:
                     raise Exception(f"{CONNECTORS_INDEX} not present after 30s")
 
-                print(f"{CONNECTORS_INDEX} not present, waiting...")
+                logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)
             else:
-                print(f"{CONNECTORS_INDEX} detected")
+                logger.info(f"{CONNECTORS_INDEX} detected")
                 break
 
         start = time.time()
@@ -110,13 +112,14 @@ def _monitor_service(pid):
             lapsed = time.time() - start
             if last_synced != new_last_synced or lapsed > timeout:
                 if lapsed > timeout:
-                    print("Took too long to complete the sync job, give up!")
+                    logger.error("Took too long to complete the sync job, give up!")
                 break
             time.sleep(1)
     except Exception as e:
-        print(f"Failed to monitor the sync job. Something bad happened: {e}")
+        logger.error(f"Failed to monitor the sync job. Something bad happened: {e}")
     finally:
         # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
+        logger.debug(f"Trying to kill the process with PID '{pid}'")
         os.kill(pid, signal.SIGINT)
         es_client.close()
 
@@ -139,7 +142,7 @@ def main(args=None):
 
     if action == "monitor":
         if args.pid == 0:
-            print("Invalid pid specified, exit the monitor process.")
+            logger.error(f"Invalid pid {args.pid} specified, exit the monitor process.")
             return
         _monitor_service(args.pid)
         return
@@ -171,7 +174,7 @@ def main(args=None):
             # default behavior: we wait until elasticsearch is responding
             pprint.pprint(wait_for_es())
         else:
-            logger.info(
+            logger.warning(
                 f"Fixture {args.name} does not have an {args.action} action, skipping."
             )
 
