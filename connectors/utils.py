@@ -432,22 +432,26 @@ def retryable(
             processed_skipped_exceptions = skipped_exceptions
 
         if inspect.isasyncgenfunction(func):
-            return retryable_asyncgen_function(
+            return retryable_async_generator(
                 func, retries, interval, strategy, processed_skipped_exceptions
             )
         elif inspect.iscoroutinefunction(func):
-            return retryable_coroutine_function(
+            return retryable_async_function(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        elif inspect.isfunction(func):
+            return retryable_sync_function(
                 func, retries, interval, strategy, processed_skipped_exceptions
             )
         else:
-            return retryable_sync_function(
-                func, retries, interval, strategy, processed_skipped_exceptions
+            raise NotImplementedError(
+                f"Retryable decorator is not implemented for {func.__class__}."
             )
 
     return wrapper
 
 
-def retryable_coroutine_function(func, retries, interval, strategy, skipped_exceptions):
+def retryable_async_function(func, retries, interval, strategy, skipped_exceptions):
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1
@@ -468,7 +472,7 @@ def retryable_coroutine_function(func, retries, interval, strategy, skipped_exce
     return wrapped
 
 
-def retryable_asyncgen_function(func, retries, interval, strategy, skipped_exceptions):
+def retryable_async_generator(func, retries, interval, strategy, skipped_exceptions):
     @functools.wraps(func)
     async def wrapped(*args, **kwargs):
         retry = 1

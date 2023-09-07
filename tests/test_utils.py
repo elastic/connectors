@@ -375,7 +375,7 @@ class CustomGeneratorException(Exception):
 
 @pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
-async def test_exponential_backoff_retry_asyncgen_function():
+async def test_exponential_backoff_retry_async_generator():
     mock_gen = Mock()
     num_retries = 10
 
@@ -449,7 +449,7 @@ def test_exponential_backoff_retry_sync_function():
 
 @pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
-async def test_exponential_backoff_retry():
+async def test_exponential_backoff_retry_async_function():
     mock_func = Mock()
     num_retries = 10
 
@@ -482,7 +482,7 @@ async def test_exponential_backoff_retry():
     [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
 )
 @pytest.mark.asyncio
-async def test_skipped_exceptions_retry_asyncgen_function(skipped_exceptions):
+async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
     mock_gen = Mock()
     num_retries = 10
 
@@ -507,7 +507,7 @@ async def test_skipped_exceptions_retry_asyncgen_function(skipped_exceptions):
     "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
 )
 @pytest.mark.asyncio
-async def test_skipped_exceptions_retry_coroutine_function(skipped_exceptions):
+async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
     mock_func = Mock()
     num_retries = 10
 
@@ -545,6 +545,14 @@ async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
         await raises()
 
         assert mock_func.call_count == 1
+
+
+def test_retryable_not_implemented_error():
+    with pytest.raises(NotImplementedError):
+
+        @retryable()
+        class NotSupported:
+            pass
 
 
 class MockSSL:
