@@ -435,9 +435,17 @@ def retryable(
             return retryable_async_generator(
                 func, retries, interval, strategy, processed_skipped_exceptions
             )
-        else:
+        elif inspect.iscoroutinefunction(func):
             return retryable_async_function(
                 func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        elif inspect.isfunction(func):
+            return retryable_sync_function(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        else:
+            raise NotImplementedError(
+                f"Retryable decorator is not implemented for {func.__class__}."
             )
 
     return wrapper
@@ -456,7 +464,9 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await apply_retry_strategy(strategy, interval, retry)
+                await asyncio.sleep(
+                    time_to_sleep_between_retries(strategy, interval, retry)
+                )
                 retry += 1
 
     return wrapped
@@ -478,20 +488,41 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await apply_retry_strategy(strategy, interval, retry)
+                await asyncio.sleep(
+                    time_to_sleep_between_retries(strategy, interval, retry)
+                )
                 retry += 1
 
     return wrapped
 
 
-async def apply_retry_strategy(strategy, interval, retry):
+def retryable_sync_function(func, retries, interval, strategy, skipped_exceptions):
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if retry >= retries or e.__class__ in skipped_exceptions:
+                    raise e
+                logger.debug(
+                    f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
+                )
+                time.sleep(time_to_sleep_between_retries(strategy, interval, retry))
+                retry += 1
+
+    return wrapped
+
+
+def time_to_sleep_between_retries(strategy, interval, retry):
     match strategy:
         case RetryStrategy.CONSTANT:
-            await asyncio.sleep(interval)
+            return interval
         case RetryStrategy.LINEAR_BACKOFF:
-            await asyncio.sleep(interval * retry)
+            return interval * retry
         case RetryStrategy.EXPONENTIAL_BACKOFF:
-            await asyncio.sleep(interval**retry)
+            return interval**retry
         case _:
             raise UnknownRetryStrategyError()
 

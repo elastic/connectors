@@ -45,6 +45,46 @@ class MessageFields(Enum):
     FULL_MESSAGE = "raw"
 
 
+def load_service_account_json(service_account_credentials_json, google_service):
+    """
+    Load and parse a Google service account JSON configuration.
+
+    Args:
+        service_account_credentials_json (str): A JSON string containing
+            service account credentials.
+        google_service (str): The name of the Google service being configured (e.g., "Google Cloud").
+
+    Returns:
+        dict: A dictionary representing the parsed JSON credentials.
+
+    Raises:
+        ConfigurableFieldValueError: If the provided JSON is invalid or cannot be loaded.
+    """
+
+    def _load_json(json_string):
+        try:
+            json_credentials = json.loads(json_string)
+        except ValueError as e:
+            raise ConfigurableFieldValueError(
+                f"{google_service} service account is not a valid JSON. Exception: {e}"
+            ) from e
+
+        return json_credentials
+
+    json_credentials = _load_json(service_account_credentials_json)
+
+    if isinstance(json_credentials, dict):
+        return json_credentials
+    elif isinstance(json_credentials, str):
+        # Handle case of escaped json string from the user input,
+        # in that case we need to call json.loads() twice
+        return _load_json(json_credentials)
+    else:
+        raise ConfigurableFieldValueError(
+            f"{google_service} service account is not a valid JSON."
+        )
+
+
 def validate_service_account_json(service_account_credentials, google_service):
     """Validates whether service account JSON is a valid JSON string and
     checks for unexpected keys.
@@ -53,12 +93,9 @@ def validate_service_account_json(service_account_credentials, google_service):
         ConfigurableFieldValueError: The service account json is invalid.
     """
 
-    try:
-        json_credentials = json.loads(service_account_credentials)
-    except ValueError as e:
-        raise ConfigurableFieldValueError(
-            f"{google_service} service account is not a valid JSON. Exception: {e}"
-        ) from e
+    json_credentials = load_service_account_json(
+        service_account_credentials, google_service
+    )
 
     for key in json_credentials.keys():
         if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:

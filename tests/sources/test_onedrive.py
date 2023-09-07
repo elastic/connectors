@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the OneDrive source class methods"""
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 from aiohttp import StreamReader
@@ -441,7 +441,7 @@ async def test_get_token_raises_correct_exception_when_any_other_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -467,7 +467,7 @@ async def test_get_with_429_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status_without_retry_after_header():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -511,7 +511,7 @@ async def test_get_with_404_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_500_status():
     error = ClientResponseError(None, None)
     error.status = 500
