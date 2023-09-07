@@ -47,9 +47,8 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_ping_negative(mock_apply_retry_strategy):
-    mock_apply_retry_strategy.return_value = Mock()
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_ping_negative():
     with pytest.raises(Exception):
         async with create_source(MSSQLDataSource) as source:
             with patch.object(Engine, "connect", side_effect=Exception()):
@@ -57,9 +56,8 @@ async def test_ping_negative(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_documents_from_table_negative(mock_apply_retry_strategy):
-    mock_apply_retry_strategy.return_value = Mock()
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_documents_from_table_negative():
     async with create_source(MSSQLDataSource) as source:
         with patch.object(
             source.mssql_client,
@@ -71,9 +69,8 @@ async def test_fetch_documents_from_table_negative(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_documents_from_query_negative(mock_apply_retry_strategy):
-    mock_apply_retry_strategy.return_value = Mock()
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_documents_from_query_negative():
     async with create_source(MSSQLDataSource) as source:
         with patch.object(
             source,

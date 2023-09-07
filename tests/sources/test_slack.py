@@ -5,7 +5,7 @@
 #
 import time
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -133,10 +133,8 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_handle_throttled_error(
-    mock_apply_retry_strategy, slack_client, mock_responses
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_handle_throttled_error(slack_client, mock_responses):
     channel = {"id": 1, "name": "test"}
     error_response_data = {"error": "rate_limited"}
     response_data = {"messages": [{"text": "message", "type": "message"}]}
@@ -172,8 +170,8 @@ async def test_ping(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_bad_ping(mock_apply_retry_strategy, slack_client, mock_responses):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_bad_ping(slack_client, mock_responses):
     response_data = {"error": "not_authed"}
     mock_responses.get(
         "https://slack.com/api/auth.test",
