@@ -96,7 +96,9 @@ def _monitor_service(pid):
 
             if len(response["hits"]["hits"]) == 0:
                 if time.time() - start > index_present_timeout:
-                    raise Exception(f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds.")
+                    raise Exception(
+                        f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds."
+                    )
 
                 logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)
@@ -114,7 +116,9 @@ def _monitor_service(pid):
             lapsed = time.time() - start
             if last_synced != new_last_synced or lapsed > sync_job_timeout:
                 if lapsed > sync_job_timeout:
-                    logger.error(f"Took too long to complete the sync job (over {sync_job_timeout} minutes), give up!")
+                    logger.error(
+                        f"Took too long to complete the sync job (over {sync_job_timeout} minutes), give up!"
+                    )
                 break
             time.sleep(1)
     except Exception as e:
