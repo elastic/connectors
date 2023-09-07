@@ -919,8 +919,10 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
 def _prefix_group(group):
     return prefix_identity("group", group)
 
+
 def _prefix_group_pretty(group):
     return prefix_identity("debug_group_pretty", group)
+
 
 def _prefix_user(user):
     return prefix_identity("user", user)
@@ -1226,7 +1228,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 if domain_group_id:
                     user_access_control.add(_prefix_group(domain_group_id))
-                    user_access_control.add(_prefix_group_pretty(user['Title']))
+                    user_access_control.add(_prefix_group_pretty(user["Title"]))
 
             if is_person(user):
                 login_name = _get_login_name(user.get("Name"))
@@ -1697,7 +1699,11 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             if group_id:
                 access_control.append(_prefix_group(group_id))
-                access_control.append(_prefix_group_pretty(granted_to_v2.get("group").get("displayName", "")))
+                access_control.append(
+                    _prefix_group_pretty(
+                        granted_to_v2.get("group").get("displayName", "")
+                    )
+                )
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -1907,7 +1913,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
                 dynamic_group_id = _get_login_name(login_name)
                 access_control.append(_prefix_group(dynamic_group_id))
-                access_control.append(_prefix_group_pretty(user.get('Title')))
+                access_control.append(_prefix_group_pretty(user.get("Title")))
             else:
                 access_control = _access_control_for_user(user)
         else:
