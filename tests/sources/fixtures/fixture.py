@@ -84,7 +84,9 @@ def _es_client():
 
 def _monitor_service(pid):
     es_client = _es_client()
-    timeout = 20 * 60  # 20 minutes timeout
+    sync_job_timeout = 20 * 60  # 20 minutes timeout
+    index_present_timeout = 30  # 30 seconds
+
     try:
         # we should have something like connectorIndex.search()[0].last_synced
         # once we have ConnectorIndex and Connector class ready
@@ -93,8 +95,8 @@ def _monitor_service(pid):
             response = es_client.search(index=CONNECTORS_INDEX, size=1)
 
             if len(response["hits"]["hits"]) == 0:
-                if time.time() - start > 30:
-                    raise Exception(f"{CONNECTORS_INDEX} not present after 30s")
+                if time.time() - start > index_present_timeout:
+                    raise Exception(f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds.")
 
                 logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)
@@ -110,9 +112,9 @@ def _monitor_service(pid):
             response = es_client.get(index=CONNECTORS_INDEX, id=connector_id)
             new_last_synced = response["_source"]["last_synced"]
             lapsed = time.time() - start
-            if last_synced != new_last_synced or lapsed > timeout:
-                if lapsed > timeout:
-                    logger.error("Took too long to complete the sync job, give up!")
+            if last_synced != new_last_synced or lapsed > sync_job_timeout:
+                if lapsed > sync_job_timeout:
+                    logger.error(f"Took too long to complete the sync job (over {sync_job_timeout} minutes), give up!")
                 break
             time.sleep(1)
     except Exception as e:
