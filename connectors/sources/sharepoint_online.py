@@ -296,7 +296,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs):
                         yield item
                     break
-                except NotFound:
+                except (NotFound, BadRequestError):
                     raise
                 except Exception:
                     if retry >= retries:
