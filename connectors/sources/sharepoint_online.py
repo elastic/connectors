@@ -66,9 +66,10 @@ else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
 
-DEFAULT_RETRY_COUNT = 3
+DEFAULT_RETRY_COUNT = 5
 DEFAULT_RETRY_SECONDS = 30
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
+DEFAULT_BACKOFF_MULTIPLIER = 5
 FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
@@ -113,7 +114,10 @@ class InternalServerError(Exception):
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
-    pass
+    # def __init__(self, retry_seconds, message='Microsoft Graph API throttling error'):
+    #     self.message = message
+    #     self.retry_seconds = retry_seconds
+    #     super().__init__(self.message)
 
 
 class InvalidSharepointTenant(Exception):
@@ -286,6 +290,7 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             return access_token, expires_in
 
 
+
 def retryable_aiohttp_call(retries):
     # TODO: improve utils.retryable to allow custom logic
     # that can help choose what to retry
@@ -295,7 +300,7 @@ def retryable_aiohttp_call(retries):
             retry = 1
             while retry <= retries:
                 try:
-                    async for item in func(*args, **kwargs):
+                    async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
                 except (NotFound, BadRequestError):
@@ -376,7 +381,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _post(self, absolute_url, payload=None):
+    async def _post(self, absolute_url, payload=None, retry_count=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -392,11 +397,12 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            import pdb; pdb.set_trace();
+            await self._handle_client_response_error(absolute_url, e, retry_count)
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _get(self, absolute_url):
+    async def _get(self, absolute_url, retry_count=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -413,20 +419,24 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            await self._handle_client_response_error(absolute_url, e, retry_count)
 
-    async def _handle_client_response_error(self, absolute_url, e):
+    async def _handle_client_response_error(self, absolute_url, e, retry_count):
         if e.status == 429 or e.status == 503:
             response_headers = e.headers or {}
+
             if "Retry-After" in response_headers:
-                retry_seconds = int(response_headers["Retry-After"])
+                retry_after = int(response_headers["Retry-After"])
             else:
                 self._logger.warning(
                     f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
-                retry_seconds = DEFAULT_RETRY_SECONDS
-            self._logger.debug(
-                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                retry_after = DEFAULT_RETRY_SECONDS
+
+            retry_seconds = self._compute_retry_after(retry_after, retry_count, DEFAULT_BACKOFF_MULTIPLIER)
+
+            self._logger.warning(
+                f"Rate Limited by Sharepoint: a new attempt will be performed in {retry_seconds} seconds (retry-after header: {retry_after}, retry_count: {retry_count}, backoff: {DEFAULT_BACKOFF_MULTIPLIER})"
             )
 
             await self._sleeps.sleep(retry_seconds)
@@ -447,6 +457,13 @@ class MicrosoftAPISession:
         else:
             raise
 
+    def _compute_retry_after(self, retry_after, retry_count, backoff):
+        # wait what Sharepoint API asked after the first failure
+        # apply backoff if API is still not available
+        if retry_count <= 1:
+            return retry_after
+        else:
+            return retry_after * retry_count * backoff
 
 class SharepointOnlineClient:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):

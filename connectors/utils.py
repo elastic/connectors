@@ -352,6 +352,7 @@ class ConcurrentTasks:
             logger.error(
                 f"Exception found for task {task.get_name()}: {task.exception()}"
             )
+            raise task.exception()
         if result_callback is not None:
             result_callback(task.result())
         # global callback
