@@ -9,15 +9,28 @@
 import io
 import json
 import os
-import random
-import string
 
 from flask import Flask, jsonify, make_response, request
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-FILE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+match DATA_SIZE:
+    case "small":
+        FILES_FOLDERS_COUNT = 1200
+        RECEIVED_FILES_COUNT = 100
+        DELETED_FILES_FOLDER_COUNT=100
+    case "medium":
+        FILES_FOLDERS_COUNT = 2400
+        RECEIVED_FILES_COUNT = 200
+        DELETED_FILES_FOLDER_COUNT=200
+    case "large":
+        FILES_FOLDERS_COUNT = 4800
+        RECEIVED_FILES_COUNT = 400
+        DELETED_FILES_FOLDER_COUNT=400
 
 
 class DropboxAPI:
@@ -82,10 +95,10 @@ class DropboxAPI:
     def files_list_folder(self):
         response = {"entries": [], "cursor": "fake-cursor", "has_more": True}
         if self.first_sync:
-            end_files_folders = 1201
+            end_files_folders = int(FILES_FOLDERS_COUNT / 2) + 1
             self.first_sync = False
         else:
-            end_files_folders = 1001
+            end_files_folders = int(FILES_FOLDERS_COUNT / 2) + 1 - DELETED_FILES_FOLDER_COUNT
         for entry in range(1, end_files_folders):
             folder_entry = {
                 ".tag": "folder",
@@ -105,9 +118,9 @@ class DropboxAPI:
 
             file_entry = {
                 ".tag": "file",
-                "name": f"test_file{entry}.txt",
-                "path_lower": f"/test_folder{entry}/test_file{entry}.txt",
-                "path_display": f"/test_folder{entry}/test_file{entry}.txt",
+                "name": f"test_file{entry}.html",
+                "path_lower": f"/test_folder{entry}/test_file{entry}.html",
+                "path_display": f"/test_folder{entry}/test_file{entry}.html",
                 "id": f"id:file{entry}",
                 "client_modified": "2023-01-01T01:01:01Z",
                 "server_modified": "2023-01-01T01:01:01Z",
@@ -121,7 +134,7 @@ class DropboxAPI:
 
     def files_list_folder_continue(self):
         response = {"entries": [], "cursor": "fake-cursor", "has_more": False}
-        for entry in range(1201, 2401):
+        for entry in range(int(FILES_FOLDERS_COUNT / 2) + 1, FILES_FOLDERS_COUNT + 1):
             folder_entry = {
                 ".tag": "folder",
                 "name": f"test_folder{entry}",
@@ -140,9 +153,9 @@ class DropboxAPI:
 
             file_entry = {
                 ".tag": "file",
-                "name": f"test_file{entry}.txt",
-                "path_lower": f"/test_folder{entry}/test_file{entry}.txt",
-                "path_display": f"/test_folder{entry}/test_file{entry}.txt",
+                "name": f"test_file{entry}.html",
+                "path_lower": f"/test_folder{entry}/test_file{entry}.html",
+                "path_display": f"/test_folder{entry}/test_file{entry}.html",
                 "id": f"id:file{entry}",
                 "client_modified": "2023-01-01T01:01:01Z",
                 "server_modified": "2023-01-01T01:01:01Z",
@@ -156,18 +169,18 @@ class DropboxAPI:
 
     def get_received_files(self):
         response = {"entries": [], "cursor": "fake-cursor"}
-        for entry in range(1, 101):
+        for entry in range(1, int(RECEIVED_FILES_COUNT / 2) + 1):
             response["entries"].append(
                 {
                     "access_type": {".tag": "viewer"},
                     "id": f"id:shared_file{entry}",
-                    "name": f"shared-file{entry}.txt",
+                    "name": f"shared-file{entry}.html",
                     "policy": {
                         "acl_update_policy": {".tag": "editors"},
                         "shared_link_policy": {".tag": "anyone"},
                         "viewer_info_policy": {".tag": "enabled"},
                     },
-                    "preview_url": f"https://www.dropbox.com/scl/fi/{entry}/shared-file{entry}.txt",
+                    "preview_url": f"https://www.dropbox.com/scl/fi/{entry}/shared-file{entry}.html",
                     "time_invited": "2023-01-01T01:01:01Z",
                 }
             )
@@ -175,18 +188,18 @@ class DropboxAPI:
 
     def get_received_files_continue(self):
         response = {"entries": [], "cursor": None}
-        for entry in range(101, 201):
+        for entry in range(int(RECEIVED_FILES_COUNT / 2) + 1, RECEIVED_FILES_COUNT + 1):
             response["entries"].append(
                 {
                     "access_type": {".tag": "viewer"},
                     "id": f"id:shared_file{entry}",
-                    "name": f"shared-file{entry}.txt",
+                    "name": f"shared-file{entry}.html",
                     "policy": {
                         "acl_update_policy": {".tag": "editors"},
                         "shared_link_policy": {".tag": "anyone"},
                         "viewer_info_policy": {".tag": "enabled"},
                     },
-                    "preview_url": f"https://www.dropbox.com/scl/fi/{entry}/shared-file{entry}.txt",
+                    "preview_url": f"https://www.dropbox.com/scl/fi/{entry}/shared-file{entry}.html",
                     "time_invited": "2023-01-01T01:01:01Z",
                 }
             )
@@ -256,13 +269,13 @@ class DropboxAPI:
         return jsonify(res)
 
     def download_file(self):
-        return io.BytesIO(bytes(FILE_DATA, encoding="utf-8"))
+        return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
     def download_paper_file(self):
-        return io.BytesIO(bytes(FILE_DATA, encoding="utf-8"))
+        return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
     def download_shared_file(self):
-        return io.BytesIO(bytes(FILE_DATA, encoding="utf-8"))
+        return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 
 if __name__ == "__main__":
