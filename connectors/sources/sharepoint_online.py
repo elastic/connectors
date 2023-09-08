@@ -94,6 +94,7 @@ class NotFound(Exception):
 
     pass
 
+
 class BadRequestError(Exception):
     """Internal exception class to handle 400's from the API.
 
@@ -101,6 +102,7 @@ class BadRequestError(Exception):
     be translated as empty resutls, and let us return []."""
 
     pass
+
 
 class InternalServerError(Exception):
     """Exception class to indicate that something went wrong on the server side."""
@@ -715,7 +717,9 @@ class SharepointOnlineClient:
         except NotFound:
             return False
         except BadRequestError:
-            self._logger.warning(f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`")
+            self._logger.warning(
+                f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
             return False
 
     async def site_list_item_role_assignments(
