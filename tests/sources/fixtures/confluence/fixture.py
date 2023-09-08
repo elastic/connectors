@@ -31,8 +31,9 @@ match DATA_SIZE:
         SPACE_OBJECT_COUNT = 250
         ATTACHMENT_COUNT = 7
     case _:
-        raise Exception(f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'")
-
+        raise Exception(
+            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        )
 
 
 def get_num_docs():
