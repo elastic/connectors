@@ -6,6 +6,7 @@
 """Tests the ServiceNow source class methods"""
 from contextlib import asynccontextmanager
 from unittest import mock
+from unittest.mock import Mock, patch
 
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
@@ -161,10 +162,9 @@ async def test_get_data():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_data_with_retry(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_data_with_retry():
     async with create_service_now_source() as source:
-        mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=ServerDisconnectedError
         )
@@ -189,10 +189,9 @@ async def test_get_table_length():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_table_length_with_retry(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_table_length_with_retry():
     async with create_service_now_source() as source:
-        mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=ServerDisconnectedError
         )
@@ -202,10 +201,9 @@ async def test_get_table_length_with_retry(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_data_with_empty_response(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_data_with_empty_response():
     async with create_service_now_source() as source:
-        mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=b"",
@@ -219,10 +217,9 @@ async def test_get_data_with_empty_response(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_get_data_with_text_response(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_data_with_text_response():
     async with create_service_now_source() as source:
-        mock_apply_retry_strategy.return_value = mock.Mock()
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=b"Text",
