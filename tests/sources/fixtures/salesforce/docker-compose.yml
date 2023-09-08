@@ -74,10 +74,8 @@ services:
       - esnet
 
   salesforce:
-    build:
-      context: ../../../../
-      dockerfile: Dockerfile.ftest
-    command: python tests/sources/fixtures/salesforce/fixture.py
+    build: .
+    command: python fixture.py
     ports:
       - "10338:10338"
     volumes:
