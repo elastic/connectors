@@ -101,4 +101,8 @@ steps:
       - ".buildkite/run_nigthly.sh onedrive"
     artifact_paths:
       - "perf8-report-*/**/*"
-
+  - label: "🔨 Salesforce"
+    command:
+      - ".buildkite/run_nigthly.sh salesforce"
+    artifact_paths:
+      - "perf8-report-*/**/*"
