@@ -16,6 +16,7 @@ from pydoc import locate
 
 from bson import Decimal128
 
+from connectors.error_monitor import LimitError
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
@@ -385,6 +386,7 @@ class BaseDataSource:
         self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
+        self.error_monitor = None
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
@@ -398,6 +400,9 @@ class BaseDataSource:
         # if there are internal class (e.g. Client class) to which the logger need to be set,
         # this method needs to be implemented
         pass
+
+    def set_error_monitor(self, error_monitor):
+        self.error_monitor = error_monitor
 
     @classmethod
     def get_simple_configuration(cls):
@@ -660,7 +665,14 @@ class BaseDataSource:
         return self._sync_cursor
 
     def handle_isolated_error(self, e, identifier):
-        self._logger.warning(f"Unexpected error, '{e}' when processing {identifier}. Skipping.", exc_info=True)
+        if isinstance(e, LimitError):
+            raise e
+        else:
+            self._logger.warning(
+                f"Unexpected error, '{e}' when processing {identifier}. Skipping.",
+                exc_info=True,
+            )
+            self.error_monitor.note_error(e)
 
     @staticmethod
     def is_premium():

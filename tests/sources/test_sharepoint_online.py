@@ -24,6 +24,7 @@ from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
+    BadRequestError,
     DriveItemsPage,
     GraphAPIToken,
     InternalServerError,
@@ -31,7 +32,6 @@ from connectors.sources.sharepoint_online import (
     MicrosoftAPISession,
     MicrosoftSecurityToken,
     NotFound,
-    BadRequestError,
     PermissionsMissing,
     SharepointOnlineAdvancedRulesValidator,
     SharepointOnlineClient,
@@ -638,11 +638,11 @@ class TestMicrosoftAPISession:
 
     @pytest.mark.asyncio
     async def test_call_api_with_400_without_retry_after_header(
-            self,
-            microsoft_api_session,
-            mock_responses,
-            patch_sleep,
-            patch_cancellable_sleeps,
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
     ):
         url = "http://localhost:1234/download-some-sample-file"
 
@@ -1279,10 +1279,9 @@ class TestSharepointOnlineClient:
             site_list_item_role_assignments_url, list_title, list_item_id
         )
 
-
     @pytest.mark.asyncio
     async def test_site_list_item_has_unique_role_assignments_bad_request(
-            self, client, patch_fetch
+        self, client, patch_fetch
     ):
         site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         list_title = "list_title"
@@ -1293,7 +1292,6 @@ class TestSharepointOnlineClient:
         assert not await client.site_list_item_has_unique_role_assignments(
             site_list_item_role_assignments_url, list_title, list_item_id
         )
-
 
     @pytest.mark.asyncio
     async def test_site_list_item_role_assignments(self, client, patch_scroll):

@@ -94,6 +94,7 @@ class NotFound(Exception):
 
     pass
 
+
 class BadRequestError(Exception):
     """Internal exception class to handle 400's from the API.
 
@@ -101,6 +102,7 @@ class BadRequestError(Exception):
     be translated as empty resutls, and let us return []."""
 
     pass
+
 
 class InternalServerError(Exception):
     """Exception class to indicate that something went wrong on the server side."""
@@ -534,7 +536,9 @@ class SharepointOnlineClient:
         except NotFound:
             return
         except Exception as e:
-            self._logger.warning(f"Unexpected error: {e} when fetching User Information List for site: '{site_id}'. Skipping")
+            self._logger.warning(
+                f"Unexpected error: {e} when fetching User Information List for site: '{site_id}'. Skipping"
+            )
             return
 
     async def user(self, user_principal_name):
@@ -718,7 +722,9 @@ class SharepointOnlineClient:
         except NotFound:
             return False
         except BadRequestError:
-            self._logger.warning(f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`")
+            self._logger.warning(
+                f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
             return False
 
     async def site_list_item_role_assignments(
@@ -1463,9 +1469,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                                     site_drive, site_access_control
                                 ), None
 
-                                async for page in self.client.drive_items(site_drive["id"]):
+                                async for page in self.client.drive_items(
+                                    site_drive["id"]
+                                ):
                                     try:
-                                        for drive_items_batch in iterable_batches_generator(
+                                        for (
+                                            drive_items_batch
+                                        ) in iterable_batches_generator(
                                             page.items, SPO_API_MAX_BATCH_SIZE
                                         ):
                                             async for drive_item in self._drive_items_batch_with_permissions(
@@ -1473,8 +1483,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                                             ):
                                                 try:
                                                     drive_item["_id"] = drive_item["id"]
-                                                    drive_item["object_type"] = "drive_item"
-                                                    drive_item["_timestamp"] = drive_item.get(
+                                                    drive_item[
+                                                        "object_type"
+                                                    ] = "drive_item"
+                                                    drive_item[
+                                                        "_timestamp"
+                                                    ] = drive_item.get(
                                                         "lastModifiedDateTime"
                                                     )
 
@@ -1484,25 +1498,38 @@ class SharepointOnlineDataSource(BaseDataSource):
                                                         "fetch_drive_item_permissions"
                                                     ]:
                                                         drive_item = self._decorate_with_access_control(
-                                                            drive_item, site_access_control
+                                                            drive_item,
+                                                            site_access_control,
                                                         )
 
                                                     yield drive_item, self.download_function(
                                                         drive_item, max_drive_item_age
                                                     )
                                                 except Exception as e:
-                                                    self.handle_isolated_error(e, f"Drive Item: '{drive_item.get('id')}' from Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                                    self.handle_isolated_error(
+                                                        e,
+                                                        f"Drive Item: '{drive_item.get('id')}' from Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'",
+                                                    )
                                     except Exception as e:
-                                        self.handle_isolated_error(e, f"Drive Items for delta link: '{self.get_drive_delta_link(site_drive.get('id'))}' from Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                        self.handle_isolated_error(
+                                            e,
+                                            f"Drive Items for delta link: '{self.get_drive_delta_link(site_drive.get('id'))}' from Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'",
+                                        )
                                     finally:
                                         self.update_drive_delta_link(
-                                            drive_id=site_drive["id"], link=page.delta_link()
+                                            drive_id=site_drive["id"],
+                                            link=page.delta_link(),
                                         )
                             except Exception as e:
-                                self.handle_isolated_error(e, f"Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                self.handle_isolated_error(
+                                    e,
+                                    f"Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'",
+                                )
 
                         # Sync site list and site list items
-                        async for site_list in self.site_lists(site, site_access_control):
+                        async for site_list in self.site_lists(
+                            site, site_access_control
+                        ):
                             try:
                                 # Always include site admins in site list access controls
                                 site_list = self._decorate_with_access_control(
@@ -1523,12 +1550,20 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         )
                                         yield list_item, download_func
                                     except Exception as e:
-                                        self.handle_isolated_error(e, f"List Item: '{list_item}' from list {site_list.get('id')} from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                        self.handle_isolated_error(
+                                            e,
+                                            f"List Item: '{list_item}' from list {site_list.get('id')} from Site: '{site.get('id')}' with parent: '{site_hostname}'",
+                                        )
                             except Exception as e:
-                                self.handle_isolated_error(e, f"Site List: '{site_list}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                self.handle_isolated_error(
+                                    e,
+                                    f"Site List: '{site_list}' from Site: '{site.get('id')}' with parent: '{site_hostname}'",
+                                )
 
                         # Sync site pages
-                        async for site_page in self.site_pages(site, site_access_control):
+                        async for site_page in self.site_pages(
+                            site, site_access_control
+                        ):
                             try:
                                 # Always include site admins in site page access controls
                                 site_page = self._decorate_with_access_control(
@@ -1536,9 +1571,14 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 )
                                 yield site_page, None
                             except Exception as e:
-                                self.handle_isolated_error(e, f"Site Page: '{site_page.get('Id')}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                self.handle_isolated_error(
+                                    e,
+                                    f"Site Page: '{site_page.get('Id')}' from Site: '{site.get('id')}' with parent: '{site_hostname}'",
+                                )
                     except Exception as e:
-                        self.handle_isolated_error(e, f"Site: '{site}' with parent: '{site_hostname}'")
+                        self.handle_isolated_error(
+                            e, f"Site: '{site}' with parent: '{site_hostname}'"
+                        )
             except Exception as e:
                 self.handle_isolated_error(e, f"Site Collection: '{site_collection}'")
 

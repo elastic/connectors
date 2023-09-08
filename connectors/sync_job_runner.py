@@ -8,6 +8,7 @@ import time
 
 import elasticsearch
 
+from connectors.error_monitor import ErrorMonitor
 from connectors.es import Mappings
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
@@ -71,6 +72,7 @@ class SyncJobRunner:
         - `sync_job`: The sync job to run
         - `connector`: The connector of the sync job
         - `es_config`: The elasticsearch configuration to build connection to Elasticsearch server
+        - `service_config`: The connector service configuration. Mainly useful for configured limits
 
     """
 
@@ -80,12 +82,14 @@ class SyncJobRunner:
         sync_job,
         connector,
         es_config,
+        service_config,
     ):
         self.source_klass = source_klass
         self.data_provider = None
         self.sync_job = sync_job
         self.connector = connector
         self.es_config = es_config
+        self.service_config = service_config
         self.elastic_server = None
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
@@ -120,6 +124,15 @@ class SyncJobRunner:
                 return
 
             self.data_provider.set_features(self.connector.features)
+            self.data_provider.set_error_monitor(
+                ErrorMonitor(
+                    self.sync_job.logger,
+                    self.service_config["max_sync_job_errors"],
+                    self.service_config["max_consecutive_sync_job_errors"],
+                    self.service_config["max_sync_job_error_ratio"],
+                    self.service_config["sync_job_error_ratio_window_size"],
+                )
+            )
 
             self.sync_job.log_debug("Validating configuration")
             self.data_provider.validate_config_fields()
@@ -347,15 +360,18 @@ class SyncJobRunner:
                     filtering=self.sync_job.filtering
                 ):
                     yield doc, lazy_download, OP_INDEX
+                    self.data_provider.error_monitor.note_success()
             case JobType.INCREMENTAL:
                 async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
                     yield doc, lazy_download, operation
+                    self.data_provider.error_monitor.note_success()
             case JobType.ACCESS_CONTROL:
                 async for doc in self.data_provider.get_access_control():
                     yield doc, None, None
+                    self.data_provider.error_monitor.note_success()
             case _:
                 raise UnsupportedJobType
 
