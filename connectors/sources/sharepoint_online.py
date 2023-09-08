@@ -114,11 +114,6 @@ class InternalServerError(Exception):
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
-    # def __init__(self, retry_seconds, message='Microsoft Graph API throttling error'):
-    #     self.message = message
-    #     self.retry_seconds = retry_seconds
-    #     super().__init__(self.message)
-
 
 class InvalidSharepointTenant(Exception):
     """Exception class to notify that tenant name is invalid or does not match tenant id provided"""
@@ -457,8 +452,8 @@ class MicrosoftAPISession:
             raise
 
     def _compute_retry_after(self, retry_after, retry_count, backoff):
-        # wait what Sharepoint API asked after the first failure
-        # apply backoff if API is still not available
+        # Wait for what Sharepoint API asks after the first failure.
+        # Apply backoff if API is still not available.
         if retry_count <= 1:
             return retry_after
         else:
