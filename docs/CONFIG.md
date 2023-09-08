@@ -29,6 +29,40 @@ You'll need to carry out the following steps:
     make run
     ```
 
+
+
+### ℹ️ **NOTE: API keys for connector clients**
+
+You can configure multiple connectors in your `config.yml` file.
+
+The Kibana UI enables you to create API keys that are scoped to a specific index/connector.
+If you don't create an API key for a specific connector, the top-level `elasticsearch.api_key` or `elasticsearch.username:elasticsearch.password` value is used.
+
+If these top-level Elasticsearch credentials are not sufficiently privileged to write to individual connector indices, you'll need to create these additional, scoped API keys.
+
+#### Example configuration
+
+Use this example as a guide:
+
+```yaml
+# Replace the values for `api_key`, `connector_id`, and `service_type` with the values you printed in Kibana.
+
+elasticsearch:
+  api_key: <key1>
+  # Used to write data to .elastic-connectors and .elastic-connectors-sync-jobs
+  # Any connectors without a specific `api_key` value will default to using this key
+connectors:
+  - connector_id: 1234
+    api_key: <key2>
+    # Used to write data to the `search-*` index associated with connector 1234
+    # You may have multiple connectors in your config file!
+  - connector_id: 5678
+  api_key: <key3>
+  # Used to write data to the `search-*` index associated with connector 5678
+  - connector_id: abcd
+  # No explicit api key specified, so this connector will used <key1>
+```
+
 ## Connector service on Elastic Cloud
 
 When you have an Enterprise Search deployment on Elastic Cloud (post 8.5.0), the connector service is **automatically deployed**.
