@@ -510,16 +510,6 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def site_group(self, site_web_url, group_principal_id):
-        self._validate_sharepoint_rest_url(site_web_url)
-
-        url = f"{site_web_url}/_api/web/sitegroups/getbyid({group_principal_id})"
-
-        try:
-            return await self._rest_api_client.fetch(url)
-        except NotFound:
-            return {}
-
     async def user_information_list(self, site_id):
         expand = "fields"
         url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
@@ -934,16 +924,8 @@ def _prefix_group(group):
     return _prefix_identity("group", group)
 
 
-def _prefix_site_group(site_group):
-    return _prefix_identity("site_group", site_group)
-
-
 def _prefix_user(user):
     return _prefix_identity("user", user)
-
-
-def _prefix_site_user_id(site_user_id):
-    return _prefix_identity("site_user_id", site_user_id)
 
 
 def _prefix_user_id(user_id):
@@ -1748,20 +1730,12 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             user_id = _get_id(granted_to_v2, "user")
             group_id = _get_id(granted_to_v2, "group")
-            site_group_id = _get_id(granted_to_v2, "siteGroup")
-            site_user_id = _get_id(granted_to_v2, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
 
             if group_id:
                 access_control.append(_prefix_group(group_id))
-
-            if site_group_id:
-                access_control.append(_prefix_site_group(site_group_id))
-
-            if site_user_id:
-                access_control.append(_prefix_site_user_id(site_user_id))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
