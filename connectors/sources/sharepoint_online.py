@@ -397,7 +397,6 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            import pdb; pdb.set_trace();
             await self._handle_client_response_error(absolute_url, e, retry_count)
 
     @asynccontextmanager
