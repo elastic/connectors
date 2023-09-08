@@ -629,10 +629,31 @@ class TestMicrosoftAPISession:
         not_found_error.message = "Something went wrong"
 
         mock_responses.get(url, exception=not_found_error)
-        mock_responses.get(url, exception=not_found_error)
-        mock_responses.get(url, exception=not_found_error)
 
         with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._get(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_400_without_retry_after_header(
+            self,
+            microsoft_api_session,
+            mock_responses,
+            patch_sleep,
+            patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        bad_request_error = ClientResponseError(None, None)
+        bad_request_error.status = 400
+        bad_request_error.message = "You did something wrong"
+
+        mock_responses.get(url, exception=bad_request_error)
+
+        with pytest.raises(BadRequestError) as e:
             async with microsoft_api_session._get(url) as _:
                 pass
 
