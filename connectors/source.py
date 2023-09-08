@@ -659,6 +659,9 @@ class BaseDataSource:
         """Returns the sync cursor of the current sync"""
         return self._sync_cursor
 
+    def handle_isolated_error(self, e, identifier):
+        self._logger.warning(f"Unexpected error, '{e}' when processing {identifier}. Skipping.", exc_info=True)
+
     @staticmethod
     def is_premium():
         """Returns True if this DataSource is a Premium (paid license gated) connector.

@@ -1464,68 +1464,83 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 ), None
 
                                 async for page in self.client.drive_items(site_drive["id"]):
-                                    for drive_items_batch in iterable_batches_generator(
-                                        page.items, SPO_API_MAX_BATCH_SIZE
-                                    ):
-                                        async for drive_item in self._drive_items_batch_with_permissions(
-                                            site_drive["id"], drive_items_batch
+                                    try:
+                                        for drive_items_batch in iterable_batches_generator(
+                                            page.items, SPO_API_MAX_BATCH_SIZE
                                         ):
-                                            drive_item["_id"] = drive_item["id"]
-                                            drive_item["object_type"] = "drive_item"
-                                            drive_item["_timestamp"] = drive_item.get(
-                                                "lastModifiedDateTime"
-                                            )
+                                            async for drive_item in self._drive_items_batch_with_permissions(
+                                                site_drive["id"], drive_items_batch
+                                            ):
+                                                try:
+                                                    drive_item["_id"] = drive_item["id"]
+                                                    drive_item["object_type"] = "drive_item"
+                                                    drive_item["_timestamp"] = drive_item.get(
+                                                        "lastModifiedDateTime"
+                                                    )
 
-                                            # Drive items should inherit site access controls only if
-                                            # 'fetch_drive_item_permissions' is disabled in the config
-                                            if not self.configuration[
-                                                "fetch_drive_item_permissions"
-                                            ]:
-                                                drive_item = self._decorate_with_access_control(
-                                                    drive_item, site_access_control
-                                                )
+                                                    # Drive items should inherit site access controls only if
+                                                    # 'fetch_drive_item_permissions' is disabled in the config
+                                                    if not self.configuration[
+                                                        "fetch_drive_item_permissions"
+                                                    ]:
+                                                        drive_item = self._decorate_with_access_control(
+                                                            drive_item, site_access_control
+                                                        )
 
-                                            yield drive_item, self.download_function(
-                                                drive_item, max_drive_item_age
-                                            )
-
-                                    self.update_drive_delta_link(
-                                        drive_id=site_drive["id"], link=page.delta_link()
-                                    )
+                                                    yield drive_item, self.download_function(
+                                                        drive_item, max_drive_item_age
+                                                    )
+                                                except Exception as e:
+                                                    self.handle_isolated_error(e, f"Drive Item: '{drive_item.get('id')}' from Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                    except Exception as e:
+                                        self.handle_isolated_error(e, f"Drive Items for delta link: '{self.get_drive_delta_link(site_drive.get('id'))}' from Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                                    finally:
+                                        self.update_drive_delta_link(
+                                            drive_id=site_drive["id"], link=page.delta_link()
+                                        )
                             except Exception as e:
-                                self._logger.warning(f"Unexpected error, '{e}' when processing Site Drive: '{site_drive}' from Site: '{site['id']}' with parent: '{site_hostname}'. Skipping.", exc_info=True)
+                                self.handle_isolated_error(e, f"Site Drive: '{site_drive}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
 
                         # Sync site list and site list items
                         async for site_list in self.site_lists(site, site_access_control):
-                            # Always include site admins in site list access controls
-                            site_list = self._decorate_with_access_control(
-                                site_list, site_admin_access_control
-                            )
-                            yield site_list, None
-
-                            async for list_item, download_func in self.site_list_items(
-                                site=site,
-                                site_list_id=site_list["id"],
-                                site_list_name=site_list["name"],
-                                site_access_control=site_access_control,
-                            ):
-                                # Always include site admins in list item access controls
-                                list_item = self._decorate_with_access_control(
-                                    list_item, site_admin_access_control
+                            try:
+                                # Always include site admins in site list access controls
+                                site_list = self._decorate_with_access_control(
+                                    site_list, site_admin_access_control
                                 )
-                                yield list_item, download_func
+                                yield site_list, None
+
+                                async for list_item, download_func in self.site_list_items(
+                                    site=site,
+                                    site_list_id=site_list["id"],
+                                    site_list_name=site_list["name"],
+                                    site_access_control=site_access_control,
+                                ):
+                                    try:
+                                        # Always include site admins in list item access controls
+                                        list_item = self._decorate_with_access_control(
+                                            list_item, site_admin_access_control
+                                        )
+                                        yield list_item, download_func
+                                    except Exception as e:
+                                        self.handle_isolated_error(e, f"List Item: '{list_item}' from list {site_list.get('id')} from Site: '{site.get('id')}' with parent: '{site_hostname}'")
+                            except Exception as e:
+                                self.handle_isolated_error(e, f"Site List: '{site_list}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
 
                         # Sync site pages
                         async for site_page in self.site_pages(site, site_access_control):
-                            # Always include site admins in site page access controls
-                            site_page = self._decorate_with_access_control(
-                                site_page, site_admin_access_control
-                            )
-                            yield site_page, None
+                            try:
+                                # Always include site admins in site page access controls
+                                site_page = self._decorate_with_access_control(
+                                    site_page, site_admin_access_control
+                                )
+                                yield site_page, None
+                            except Exception as e:
+                                self.handle_isolated_error(e, f"Site Page: '{site_page.get('Id')}' from Site: '{site.get('id')}' with parent: '{site_hostname}'")
                     except Exception as e:
-                        sefl._logger.warning(f"Unexpected error, '{e}' when processing Site: '{site}' with parent: '{site_hostname}'. Skipping.", exc_info=True)
+                        self.handle_isolated_error(e, f"Site: '{site}' with parent: '{site_hostname}'")
             except Exception as e:
-                self._logger.warning(f"Unexpected error, '{e}' when processing Site Collection: '{site_collection}'. Skipping.", exc_info=True)
+                self.handle_isolated_error(e, f"Site Collection: '{site_collection}'")
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
