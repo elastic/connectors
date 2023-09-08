@@ -15,7 +15,7 @@ from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -30,6 +30,9 @@ match DATA_SIZE:
         SPACE_COUNT = 100
         SPACE_OBJECT_COUNT = 250
         ATTACHMENT_COUNT = 7
+    case _:
+        raise Exception(f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'")
+
 
 
 def get_num_docs():
