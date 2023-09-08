@@ -114,6 +114,8 @@ class InternalServerError(Exception):
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
+    pass
+
 
 class InvalidSharepointTenant(Exception):
     """Exception class to notify that tenant name is invalid or does not match tenant id provided"""
