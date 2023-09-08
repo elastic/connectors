@@ -29,11 +29,9 @@ You'll need to carry out the following steps:
     make run
     ```
 
-
-
 ### ℹ️ **NOTE: API keys for connector clients**
 
-You can configure multiple connectors in your `config.yml` file.
+As of `v8.10.0` you can configure multiple connectors in your `config.yml` file.
 
 The Kibana UI enables you to create API keys that are scoped to a specific index/connector.
 If you don't create an API key for a specific connector, the top-level `elasticsearch.api_key` or `elasticsearch.username:elasticsearch.password` value is used.
