@@ -287,7 +287,6 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             return access_token, expires_in
 
 
-
 def retryable_aiohttp_call(retries):
     # TODO: improve utils.retryable to allow custom logic
     # that can help choose what to retry
@@ -429,7 +428,9 @@ class MicrosoftAPISession:
                 )
                 retry_after = DEFAULT_RETRY_SECONDS
 
-            retry_seconds = self._compute_retry_after(retry_after, retry_count, DEFAULT_BACKOFF_MULTIPLIER)
+            retry_seconds = self._compute_retry_after(
+                retry_after, retry_count, DEFAULT_BACKOFF_MULTIPLIER
+            )
 
             self._logger.warning(
                 f"Rate Limited by Sharepoint: a new attempt will be performed in {retry_seconds} seconds (retry-after header: {retry_after}, retry_count: {retry_count}, backoff: {DEFAULT_BACKOFF_MULTIPLIER})"
@@ -460,6 +461,7 @@ class MicrosoftAPISession:
             return retry_after
         else:
             return retry_after * retry_count * backoff
+
 
 class SharepointOnlineClient:
     def __init__(self, tenant_id, tenant_name, client_id, client_secret):
