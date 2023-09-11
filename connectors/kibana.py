@@ -15,7 +15,7 @@ import elasticsearch
 from connectors.config import load_config
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.es.sink import SyncOrchestrator
-from connectors.logger import logger, set_logger
+from connectors.logger import set_extra_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
@@ -88,6 +88,9 @@ DEFAULT_PIPELINE = {
         }
     ],
 }
+
+logger = logging.getLogger("kibana-fake")
+set_extra_logger(logger, log_level=logging.DEBUG, prefix="KBN-FAKE")
 
 
 async def prepare(service_type, index_name, config, connector_definition=None):
@@ -330,7 +333,6 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"config file at '{config_file}' does not exist")
 
-    set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = load_config(config_file)
     connector_definition = None
     if (
