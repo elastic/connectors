@@ -325,11 +325,17 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('raw, output', [
-    ({"ref": DBRef("foo", "bar")}, {"ref": {"$ref":"foo", "$id":"bar"}}),
-    ({"dec": Decimal128("1.25")}, {"dec": 1.25}),
-    ({"id": ObjectId("507f1f77bcf86cd799439011")}, {"id": "507f1f77bcf86cd799439011"})
-])
+@pytest.mark.parametrize(
+    "raw, output",
+    [
+        ({"ref": DBRef("foo", "bar")}, {"ref": {"$ref": "foo", "$id": "bar"}}),
+        ({"dec": Decimal128("1.25")}, {"dec": 1.25}),
+        (
+            {"id": ObjectId("507f1f77bcf86cd799439011")},
+            {"id": "507f1f77bcf86cd799439011"},
+        ),
+    ],
+)
 async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
