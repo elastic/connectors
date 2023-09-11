@@ -367,9 +367,14 @@ class MicrosoftTeamsClient:
         return await self._get_json(absolute_url=url)
 
     async def pipe(self, url, stream):
-        async for response in self._get(absolute_url=url, is_token=False):
-            async for data in response.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
-                await stream.write(data)
+        try:
+            async for response in self._get(absolute_url=url, use_token=False):
+                async for data in response.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
+                    await stream.write(data)
+        except Exception as exception:
+            self._logger.warning(
+                f"Data for {url} is being skipped. Error: {exception}."
+            )
 
     async def scroll(self, url):
         scroll_url = url
@@ -384,8 +389,13 @@ class MicrosoftTeamsClient:
             scroll_url = graph_data.get("@odata.nextLink")
 
     async def _get_json(self, absolute_url):
-        async for response in self._get(absolute_url=absolute_url):
-            return await response.json()
+        try:
+            async for response in self._get(absolute_url=absolute_url):
+                return await response.json()
+        except Exception as exception:
+            self._logger.warning(
+                f"Data for {absolute_url} is being skipped. Error: {exception}."
+            )
 
     @retryable(
         retries=RETRY_COUNT,
@@ -393,9 +403,9 @@ class MicrosoftTeamsClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[NotFound, PermissionsMissing],
     )
-    async def _get(self, absolute_url, is_token=True):
+    async def _get(self, absolute_url, use_token=True):
         try:
-            if is_token:
+            if use_token:
                 if any(
                     substring in absolute_url
                     for substring in [
@@ -441,7 +451,7 @@ class MicrosoftTeamsClient:
             )
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError(
-                f"Received Too many request error for {absolute_url}: Exception: {e}"
+                f"Service is throttled because too many requests have been made to {absolute_url}: Exception: {e}"
             ) from e
         elif e.status == 403:
             raise PermissionsMissing(
@@ -648,11 +658,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 f"Files without extension are not supported, skipping {filename}."
             )
             return
-        if "." not in filename:
-            self._logger.debug(
-                f"Files without extension are not supported by TIKA, skipping {filename}."
-            )
-            return
         if attachment_extension[-1].lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.debug(
                 f"Files with the extension {attachment_extension[-1]} are not supported, skipping {filename}."
@@ -703,7 +708,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             dictionary: Modified document with the help of adapter schema.
         """
         for elasticsearch_field, sharepoint_field in document_type().items():
-            document[elasticsearch_field] = item[sharepoint_field]
+            document[elasticsearch_field] = item.get(sharepoint_field)
 
     async def validate_config(self):
         await super().validate_config()
@@ -744,33 +749,35 @@ class MicrosoftTeamsDataSource(BaseDataSource):
     def get_calendar_detail(self, calendar):
         body = ""
         organizer = calendar.get("organizer", {}).get("emailAddress").get("name")
-        if calendar.get("recurrence"):
-            recurrence_range = calendar.get("recurrence", {}).get("range")
-            pattern = calendar.get("recurrence", {}).get("pattern")
+        calendar_recurrence = calendar.get("recurrence")
+        if calendar_recurrence:
+            recurrence_range = calendar_recurrence.get("range")
+            pattern = calendar_recurrence.get("pattern")
             occurrence = f"{pattern['interval']}" if pattern.get("interval") else ""
+            pattern_type = pattern.get("type", "")
 
             # In case type of meeting is daily so body will be: Recurrence: Occurs every 1 day starting {startdate}
             # until {enddate}
-            if pattern.get("type", "") == "daily":
+            if pattern_type == "daily":
                 days = f"{occurrence} day"
 
             # If type of meeting  is yearly so body will be: Recurrence: Occurs every year on day 5 of march starting
             # {date} until {enddate}
-            elif pattern.get("type", "") in ["absoluteYearly", "relativeYearly"]:
+            elif pattern_type in ["absoluteYearly", "relativeYearly"]:
                 day_pattern = (
                     f"on day {pattern['dayOfMonth']}"
                     if pattern.get("dayOfMonth")
-                    else "on {pattern['index']} {','.join(pattern['daysOfWeek'])}"
+                    else f"on {pattern['index']} {','.join(pattern['daysOfWeek'])}"
                 )
                 days = f"year {day_pattern} of {month_name[pattern['month']]}"
 
             # If type of meeting  is monthly so body will be: Recurrence: Occurs every month on day 5 of march
             # starting {date} until {enddate}
-            elif pattern.get("type", "") in ["absoluteMonthly", "relativeMonthly"]:
+            elif pattern_type in ["absoluteMonthly", "relativeMonthly"]:
                 days_pattern = (
                     f"on day {pattern['dayOfMonth']}"
                     if pattern.get("dayOfMonth")
-                    else "on {pattern['index']} {','.join(pattern['daysOfWeek'])}"
+                    else f"on {pattern['index']} {','.join(pattern['daysOfWeek'])}"
                 )
                 days = f"{occurrence} month {days_pattern}"
 
@@ -837,7 +844,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 else "",
                 "channel": channel_name,
                 "message": html_to_text(html=item.get("body", {}).get("content")),
-                "attached_documents": self.get_attachment_names(
+                "attached_documents": self.format_attachment_names(
                     attachments=item["attachments"]
                 )
                 if item.get("attachments")
@@ -881,7 +888,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
         return document
 
-    async def get_user_chat_messages(self, chat, message):
+    async def format_user_chat_messages(self, chat, message):
         if chat.get("topic"):
             message.update({"title": chat["topic"]})
         else:
@@ -903,7 +910,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         )
         return message
 
-    async def get_user_chat_attachments(self, **kwargs):
+    async def format_user_chat_attachments(self, **kwargs):
         async for attachments in self.client.get_user_chat_attachments(
             sender_id=kwargs["sender_id"],
             attachment_name=kwargs["attachment_name"],
@@ -965,7 +972,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         return document
 
-    def get_attachment_names(self, attachments):
+    def format_attachment_names(self, attachments):
         attachment_list = []
         for attachment in attachments:
             if attachment.get("contentType") == "tabReference":
@@ -980,7 +987,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             "unknownFutureValue" not in message.get("messageType")
         ):
             if document_type == UserEndpointName.CHATS_MESSAGE.value:
-                message_document = await self.get_user_chat_messages(
+                message_document = await self.format_user_chat_messages(
                     chat=chat, message=message
                 )
                 await self.queue.put(
@@ -1036,7 +1043,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                             attachment.get("name")
                             and attachment.get("contentType") == "reference"
                         ):
-                            await self.get_user_chat_attachments(
+                            await self.format_user_chat_attachments(
                                 sender_id=message["from"]["user"]["id"],
                                 attachment_name=attachment["name"],
                             )
