@@ -10,6 +10,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from bson import DBRef, ObjectId
 from bson.decimal128 import Decimal128
 
 from connectors.protocol import Filter
@@ -321,3 +322,14 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
             collection=configured_collection_name,
         ) as source:
             await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('raw, output', [
+    ({"ref": DBRef("foo", "bar")}, {"ref": {"$ref":"foo", "$id":"bar"}}),
+    ({"dec": Decimal128("1.25")}, {"dec": 1.25}),
+    ({"id": ObjectId("507f1f77bcf86cd799439011")}, {"id": "507f1f77bcf86cd799439011"})
+])
+async def test_serialize(raw, output):
+    async with create_mongo_source() as source:
+        assert source.serialize(raw) == output
