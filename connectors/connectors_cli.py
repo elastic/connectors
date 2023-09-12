@@ -10,27 +10,29 @@ This is the main entry point of the framework. When the project is installed as
 a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
-import asyncio
-import functools
-import json
-import logging
+# import asyncio
+# import functools
+# import json
+# import logging
 import os
-import signal
-from argparse import ArgumentParser
+# import signal
+# from argparse import ArgumentParser
 
-from connectors import __version__
-from connectors.config import load_config
-from connectors.logger import logger, set_logger
-from connectors.preflight_check import PreflightCheck
-from connectors.services import get_services
-from connectors.source import get_source_klass, get_source_klasses
-from connectors.utils import ExtractionService, get_event_loop
+# from connectors.config import load_config
+# from connectors.logger import logger, set_logger
+# from connectors.preflight_check import PreflightCheck
+# from connectors.services import get_services
+# from connectors.source import get_source_klass, get_source_klasses
+# from connectors.utils import ExtractionService, get_event_loop
 
-from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
-from connectors.es.sink import SyncOrchestrator
-from connectors.logger import logger, set_logger
-from connectors.source import get_source_klass
-from connectors.utils import validate_index_name
+# from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
+# from connectors.es.sink import SyncOrchestrator
+# from connectors.logger import logger, set_logger
+# from connectors.source import get_source_klass
+# from connectors.utils import validate_index_name
+
+import click
+from connectors import __version__  # NOQA
 
 __all__ = ["main"]
 
@@ -175,140 +177,118 @@ JOB_INDEX_MAPPINGS = {
     },
 }
 
+# Main group
+def print_version(ctx, param, value):
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo(__version__)
 
-def _parser():
-    """Parses command-line arguments using ArgumentParser and returns it"""
-    main_parser = ArgumentParser(prog="connectors")
+# @TODO print help page when no arguments passed
+@click.group(invoke_without_command=True)
+@click.option('-v', '--version', is_flag=True, callback=print_version,
+              expose_value=False, is_eager=True)
+def cli():
+    pass
+    # ctx = click.get_current_context()
+    # click.echo(ctx.get_help())
+    # ctx.exit()
 
-    main_parser.add_argument(
-        "-c",
-        "--config-file",
-        type=str,
-        help="Configuration file",
-        default=os.path.join(os.path.dirname(__file__), "..", "config.yml"),
-    )
+@click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
+def login():
+    click.echo('login command')
 
-    main_parser.add_argument(
-        'namespace',
-        type=str,
-        choices=['connector', 'job', 'index']
-    )
+cli.add_command(login)
 
-    main_parser.add_argument(
-        "--version",
-        action="store_true",
-        default=False,
-        help="Display the version and exit.",
-    )
+# Connector group
+@click.group(invoke_without_command=True)
+def connector():
+    click.echo('test connector')
 
-    return main_parser
-
-# async def ensure_index_exists():
+cli.add_command(connector)
 
 
-# async def create_connectors_index():
+# Index group
+@click.group(invoke_without_command=True)
+def index():
+    click.echo('testing index')
 
-# async def _start_service(actions, config, loop):
-#     """Starts the service.
+cli.add_command(index)
 
-#     Steps:
-#     - performs a preflight check using `PreflightCheck`
-#     - instantiates a `MultiService` instance and runs its `run` async function
+# Job group
+@click.group(invoke_without_command=True)
+def job():
+    click.echo('testing job')
+
+cli.add_command(job)
+
+
+# def run(args):
+#     """Loads the config file, sets the logger and executes an action.
+#     Actions:
+#     - list: prints out a list of all connectors and exits
+#     - poll: starts the event loop and run forever (default)
 #     """
-#     preflight = PreflightCheck(config)
-#     for sig in (signal.SIGINT, signal.SIGTERM):
-#         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
+
+#     print(f"Framework version is {__version__}")
+
+#     # # load config
+#     config = {}
 #     try:
-#         if not await preflight.run():
-#             return -1
-#     finally:
-#         for sig in (signal.SIGINT, signal.SIGTERM):
-#             loop.remove_signal_handler(sig)
+#         config = load_config(args.config_file)
+#         import pdb; pdb.set_trace();
+#     except Exception as e:
+#     #     # If something goes wrong while parsing config file, we still want
+#     #     # to set up the logger so that Cloud deployments report errors to
+#     #     # logs properly
+#         print(f"Could not parse {args.config_file}:\n{e}")
+#         raise
 
-#     multiservice = get_services(actions, config)
-#     for sig in (signal.SIGINT, signal.SIGTERM):
-#         loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
+#     # import pdb; pdb.set_trace();
+#     # # just display the list of connectors
+#     # if args.action == ["list"]:
+#     #     print("Registered connectors:")
+#     #     for source in get_source_klasses(config):
+#     #         print(f"- {source.name}")
+#     #     print("Bye")
+#     #     return 0
 
-#     if "PERF8" in os.environ:
-#         import perf8
+#     # if args.action == ["config"]:
+#     #     service_type = args.service_type
+#     #     print(f"Getting default configuration for service type {service_type}")
 
-#         async with perf8.measure():
-#             return await multiservice.run()
-#     else:
-#         return await multiservice.run()
+#     #     source_list = config["sources"]
+#     #     if service_type not in source_list:
+#     #         print(f"Could not find a connector for service type {service_type}")
+#     #         return -1
 
+#     #     source_klass = get_source_klass(source_list[service_type])
+#     #     print(json.dumps(source_klass.get_simple_configuration(), indent=2))
+#     #     print("Bye")
+#     #     return 0
 
-def run(args):
-    """Loads the config file, sets the logger and executes an action.
-    Actions:
-    - list: prints out a list of all connectors and exits
-    - poll: starts the event loop and run forever (default)
-    """
+#     # if "list" in args.action:
+#     #     print("Cannot use the `list` action with other actions")
+#     #     return -1
 
-    import pdb; pdb.set_trace();
-    print(f"Framework version is {__version__}")
+#     # if "config" in args.action:
+#     #     print("Cannot use the `config` action with other actions")
+#     #     return -1
 
-    # # load config
-    config = {}
-    try:
-        config = load_config(args.config_file)
-        import pdb; pdb.set_trace();
-    except Exception as e:
-    #     # If something goes wrong while parsing config file, we still want
-    #     # to set up the logger so that Cloud deployments report errors to
-    #     # logs properly
-        print(f"Could not parse {args.config_file}:\n{e}")
-        raise
+#     # loop = get_event_loop(args.uvloop)
+#     # coro = _start_service(args.action, config, loop)
 
-    # import pdb; pdb.set_trace();
-    # # just display the list of connectors
-    # if args.action == ["list"]:
-    #     print("Registered connectors:")
-    #     for source in get_source_klasses(config):
-    #         print(f"- {source.name}")
-    #     print("Bye")
-    #     return 0
+#     # try:
+#     #     return loop.run_until_complete(coro)
+#     # except asyncio.CancelledError:
+#     #     return 0
+#     # finally:
+#     #     logger.info("Bye")
 
-    # if args.action == ["config"]:
-    #     service_type = args.service_type
-    #     print(f"Getting default configuration for service type {service_type}")
-
-    #     source_list = config["sources"]
-    #     if service_type not in source_list:
-    #         print(f"Could not find a connector for service type {service_type}")
-    #         return -1
-
-    #     source_klass = get_source_klass(source_list[service_type])
-    #     print(json.dumps(source_klass.get_simple_configuration(), indent=2))
-    #     print("Bye")
-    #     return 0
-
-    # if "list" in args.action:
-    #     print("Cannot use the `list` action with other actions")
-    #     return -1
-
-    # if "config" in args.action:
-    #     print("Cannot use the `config` action with other actions")
-    #     return -1
-
-    # loop = get_event_loop(args.uvloop)
-    # coro = _start_service(args.action, config, loop)
-
-    # try:
-    #     return loop.run_until_complete(coro)
-    # except asyncio.CancelledError:
-    #     return 0
-    # finally:
-    #     logger.info("Bye")
-
-    return -1
+#     return -1
 
 
 def main(args=None):
-    parser = _parser()
-    args = parser.parse_args(args=args)
-    if args.version:
-        print(__version__)
-        return 0
+    cli()
 
-    return run(args)
+if __name__ == '__main__':
+    main()
