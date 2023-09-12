@@ -158,6 +158,9 @@ class DataGenerator:
                 item["folder"] = file["folder"]
             else:
                 item["file"] = file["file"]
+                item[
+                    "@microsoft.graph.downloadUrl"
+                ] = f"{ROOT}/users/{user_id}/drive/items/{file['id']}/content"
 
             results.append(item)
 
