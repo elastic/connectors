@@ -178,9 +178,9 @@ JOB_INDEX_MAPPINGS = {
 
 def _parser():
     """Parses command-line arguments using ArgumentParser and returns it"""
-    parser = ArgumentParser(prog="elastic-ingest")
+    main_parser = ArgumentParser(prog="connectors")
 
-    parser.add_argument(
+    main_parser.add_argument(
         "-c",
         "--config-file",
         type=str,
@@ -188,31 +188,25 @@ def _parser():
         default=os.path.join(os.path.dirname(__file__), "..", "config.yml"),
     )
 
-    parser.add_argument(
-        'category',
+    main_parser.add_argument(
+        'namespace',
         type=str,
-        choices=['connectors', 'jobs']
+        choices=['connector', 'job', 'index']
     )
 
-    parser.add_argument(
-        'action',
-        type=str,
-        choices=['list', 'create']
-    )
-
-    parser.add_argument(
+    main_parser.add_argument(
         "--version",
         action="store_true",
         default=False,
         help="Display the version and exit.",
     )
 
-    return parser
+    return main_parser
 
-async def ensure_index_exists():
+# async def ensure_index_exists():
 
 
-async def create_connectors_index():
+# async def create_connectors_index():
 
 # async def _start_service(actions, config, loop):
 #     """Starts the service.

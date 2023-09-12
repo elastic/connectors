@@ -99,6 +99,6 @@ setup(
       [console_scripts]
       elastic-ingest = connectors.cli:main
       fake-kibana = connectors.kibana:main
-      connectors-cli = connectors.connectors_cli:main
+      connectors = connectors.connectors_cli:main
       """,
 )
