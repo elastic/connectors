@@ -32,7 +32,9 @@ import os
 # from connectors.utils import validate_index_name
 
 import click
+import yaml
 from connectors import __version__  # NOQA
+
 
 __all__ = ["main"]
 
@@ -187,36 +189,46 @@ def print_version(ctx, param, value):
 @click.group(invoke_without_command=True)
 @click.option('-v', '--version', is_flag=True, callback=print_version,
               expose_value=False, is_eager=True)
-def cli():
+@click.option('-c', '--config', type=click.File('rb'), default='bin/config.yml')
+@click.pass_context
+def cli(ctx, config):
+    if config:
+        ctx.ensure_object(dict)
+        ctx.obj['config'] = yaml.safe_load(config)
     pass
+
     # ctx = click.get_current_context()
     # click.echo(ctx.get_help())
     # ctx.exit()
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
-def login():
+@click.pass_obj
+def login(obj):
     click.echo('login command')
 
 cli.add_command(login)
 
 # Connector group
 @click.group(invoke_without_command=True)
-def connector():
-    click.echo('test connector')
+@click.pass_obj
+def connector(obj):
+    click.echo('testing connector')
 
 cli.add_command(connector)
 
 
 # Index group
 @click.group(invoke_without_command=True)
-def index():
+@click.pass_obj
+def index(obj):
     click.echo('testing index')
 
 cli.add_command(index)
 
 # Job group
 @click.group(invoke_without_command=True)
-def job():
+@click.pass_obj
+def job(obj):
     click.echo('testing job')
 
 cli.add_command(job)
