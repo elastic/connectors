@@ -77,7 +77,7 @@ The "Client Secret" refers to a confidential piece of information generated when
 
 #### `Recording Age Limit (Months)`  (required)
 
-Set the maximum age (in months) for retaining recordings. This configuration parameter allows you to define a time limit, measured in months, for which recordings will be indexed.
+How far back in time to request recordings from zoom. Recordings older than this will not be indexed. This configuration parameter allows you to define a time limit, measured in months, for which recordings will be indexed.
 
 #### `Fetch past meeting details`
 

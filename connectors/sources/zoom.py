@@ -341,12 +341,6 @@ class ZoomDataSource(BaseDataSource):
                 "sensitive": True,
                 "type": "str",
             },
-            "recording_age": {
-                "label": "Recording Age Limit (Months)",
-                "order": 5,
-                "tooltip": "Set the maximum age (in months) for retaining recordings.",
-                "type": "int",
-            },
             "fetch_past_meeting_details": {
                 "display": "toggle",
                 "label": "Fetch past meeting details",
@@ -354,6 +348,13 @@ class ZoomDataSource(BaseDataSource):
                 "tooltip": "Enable this option to fetch past past meeting details. This setting can increase sync time.",
                 "type": "bool",
                 "value": False,
+            },
+            "recording_age": {
+                "display": "numeric",
+                "label": "Recording Age Limit (Months)",
+                "order": 5,
+                "tooltip": "How far back in time to request recordings from zoom. Recordings older than this will not be indexed.",
+                "type": "int",
             },
         }
 
