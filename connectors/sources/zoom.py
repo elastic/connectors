@@ -265,7 +265,7 @@ class ZoomClient:
     async def get_recordings(self, user_id):
         # Zoom recording does not retrieve data that is more than 4 months old.
         end_date = datetime.utcnow()
-        for _ in range(4):
+        for _ in range(self.configuration["recording_age"]):
             start_date = end_date + timedelta(days=-30)
             url = APIS["RECORDING"].format(
                 base_url=BASE_URL,
@@ -340,6 +340,12 @@ class ZoomDataSource(BaseDataSource):
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
+            },
+            "recording_age": {
+                "label": "Recording Age Limit (Months)",
+                "order": 5,
+                "tooltip": "Set the maximum age (in months) for retaining recordings.",
+                "type": "int",
             },
             "fetch_past_meeting_details": {
                 "display": "toggle",

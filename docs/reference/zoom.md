@@ -75,6 +75,10 @@ The "Client Secret" refers to a confidential piece of information generated when
 
 - `eieiUJRsiH543P5NbYadavczjkqgdRTw`
 
+#### `Recording Age Limit (Months)`  (required)
+
+Set the maximum age (in months) for retaining recordings. This configuration parameter allows you to define a time limit, measured in months, for which recordings will be indexed.
+
 #### `Fetch past meeting details`
 
 Retrieve more information about previous meetings, including their details and participants. Default value is `False`. Enable this option to fetch past meeting details. This setting can increase sync time.
@@ -126,7 +130,6 @@ $ make ftest NAME=zoom
 ## Known issues
 
 - *Meetings* - Users can only index meetings that are less than a month old.
-- *Recordings* - Users can only index recordings that are less than 4 months old.
 - *Chat Messages & Files* - Users can only index chats and files that are less than 6 months old.
 
 ### General 
