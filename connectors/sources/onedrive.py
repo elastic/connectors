@@ -52,8 +52,8 @@ ITEM_FIELDS = "id,name,lastModifiedDateTime,content.downloadUrl,createdDateTime,
 
 ENDPOINTS = {
     PING: "drives",
-    USERS: "users?$top={page_size}",
-    DELTA: "users/{user_id}/drive/root/delta?$select={item_fields}&$top={page_size}",
+    USERS: "users",
+    DELTA: "users/{user_id}/drive/root/delta",
 }
 
 if "OVERRIDE_URL" in os.environ:
@@ -275,9 +275,7 @@ class OneDriveClient:
             else:
                 raise
 
-    async def paginated_api_call(self, url_name, **url_kwargs):
-        url = parse.urljoin(BASE_URL, ENDPOINTS[url_name].format(**url_kwargs))
-
+    async def paginated_api_call(self, url):
         while True:
             try:
                 async for response in self.get(
@@ -296,24 +294,23 @@ class OneDriveClient:
                         return
             except Exception as exception:
                 self._logger.warning(
-                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
+                    f"Skipping data for {url}. Exception: {exception}."
                 )
                 break
 
     async def list_users(self):
-        async for response in self.paginated_api_call(
-            url_name=USERS, page_size=FETCH_SIZE
-        ):
+        url = f"{parse.urljoin(BASE_URL, ENDPOINTS[USERS])}?$top={FETCH_SIZE}"
+
+        async for response in self.paginated_api_call(url):
             for user_detail in response:
                 yield user_detail
 
     async def get_owned_files(self, user_id, skipped_extensions=None, pattern=""):
-        async for response in self.paginated_api_call(
-            url_name=DELTA,
-            user_id=user_id,
-            page_size=FETCH_SIZE,
-            item_fields=ITEM_FIELDS,
-        ):
+        params = f"?$select={ITEM_FIELDS}&$top={FETCH_SIZE}"
+        delta_endpoint = ENDPOINTS[DELTA].format(user_id=user_id)
+
+        url = f"{parse.urljoin(BASE_URL, delta_endpoint)}{params}"
+        async for response in self.paginated_api_call(url):
             for file in response:
                 if file.get("name", "") != "root":
                     parent_path = file.get("parentReference", {}).get("path")
@@ -482,11 +479,6 @@ class OneDriveDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and file content
         """
-        if not download_url:
-            self._logger.warning(
-                f"Not downloading file: {file['title']}, field \"@microsoft.graph.downloadUrl\" is missing"
-            )
-            return
 
         attachment_size = int(file["size"])
         if not (doit and attachment_size > 0):
@@ -562,7 +554,7 @@ class OneDriveDataSource(BaseDataSource):
                         user_id, skipped_extensions, pattern
                     ):
                         entity = self.prepare_doc(entity)
-                        if entity["type"] == FILE:
+                        if entity["type"] == FILE and download_url:
                             yield entity, partial(
                                 self.get_content, entity.copy(), download_url
                             )
@@ -574,7 +566,7 @@ class OneDriveDataSource(BaseDataSource):
 
                 async for entity, download_url in self.client.get_owned_files(user_id):
                     entity = self.prepare_doc(entity)
-                    if entity["type"] == FILE:
+                    if entity["type"] == FILE and download_url:
                         yield entity, partial(
                             self.get_content, entity.copy(), download_url
                         )
