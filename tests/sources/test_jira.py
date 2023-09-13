@@ -422,11 +422,9 @@ async def test_validate_configuration_for_empty_fields(field, data_source):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_negative(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_api_call_negative():
     """Tests the api_call function while getting an exception."""
-
-    mock_apply_retry_strategy.return_value = mock.Mock()
 
     async with create_jira_source() as source:
         source.jira_client.retry_count = 0
@@ -446,11 +444,9 @@ async def test_api_call_negative(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_when_server_is_down(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_api_call_when_server_is_down():
     """Tests the api_call function while server gets disconnected."""
-
-    mock_apply_retry_strategy.return_value = mock.Mock()
 
     async with create_jira_source() as source:
         source.jira_client.retry_count = 0
@@ -465,7 +461,7 @@ async def test_api_call_when_server_is_down(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -490,7 +486,7 @@ async def test_get_with_429_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_429_status_without_retry_after_header():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
@@ -532,7 +528,7 @@ async def test_get_with_404_status():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_500_status():
     error = ClientResponseError(None, None)
     error.status = 500

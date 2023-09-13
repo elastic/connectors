@@ -412,8 +412,44 @@ async def test_exponential_backoff_retry_async_generator():
 
 
 @pytest.mark.fail_slow(1)
+def test_exponential_backoff_retry_sync_function():
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    def raises_function():
+        for _ in range(3):
+            mock_func()
+            raise CustomException()
+
+    with pytest.raises(CustomException):
+        for _ in raises_function():
+            pass
+
+    # retried 10 times
+    assert mock_func.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    def does_not_raise_function():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    for item in does_not_raise_function():
+        items.append(item)
+
+    assert items == [1, 1, 1]
+
+
+@pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
-async def test_exponential_backoff_retry():
+async def test_exponential_backoff_retry_async_function():
     mock_func = Mock()
     num_retries = 10
 
@@ -471,7 +507,7 @@ async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
     "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
 )
 @pytest.mark.asyncio
-async def test_skipped_exceptions_retry(skipped_exceptions):
+async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
     mock_func = Mock()
     num_retries = 10
 
@@ -486,8 +522,37 @@ async def test_skipped_exceptions_retry(skipped_exceptions):
     with pytest.raises(CustomException):
         await raises()
 
-        # retried 10 times
         assert mock_func.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        assert mock_func.call_count == 1
+
+
+def test_retryable_not_implemented_error():
+    with pytest.raises(NotImplementedError):
+
+        @retryable()
+        class NotSupported:
+            pass
 
 
 class MockSSL:

@@ -95,6 +95,15 @@ class NotFound(Exception):
     pass
 
 
+class BadRequestError(Exception):
+    """Internal exception class to handle 400's from the API.
+
+    Similar to the NotFound exception, this allows us to catch edge-case responses that should
+    be translated as empty resutls, and let us return []."""
+
+    pass
+
+
 class InternalServerError(Exception):
     """Exception class to indicate that something went wrong on the server side."""
 
@@ -289,7 +298,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs):
                         yield item
                     break
-                except NotFound:
+                except (NotFound, BadRequestError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -432,6 +441,9 @@ class MicrosoftAPISession:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
         elif e.status == 500:
             raise InternalServerError from e
+        elif e.status == 400:
+            self._logger.warning(f"Received 400 response from {absolute_url}")
+            raise BadRequestError from e
         else:
             raise
 
@@ -703,6 +715,11 @@ class SharepointOnlineClient:
             response = await self._rest_api_client.fetch(url)
             return response.get("value", False)
         except NotFound:
+            return False
+        except BadRequestError:
+            self._logger.warning(
+                f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
             return False
 
     async def site_list_item_role_assignments(
@@ -1161,6 +1178,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
+        if WILDCARD in configured_root_sites:
+            return
 
         remote_sites = []
 
@@ -1169,9 +1188,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_collection["siteCollection"]["hostname"], [WILDCARD]
             ):
                 remote_sites.append(site["name"])
-
-        if WILDCARD in configured_root_sites:
-            return
 
         missing = [x for x in configured_root_sites if x not in remote_sites]
 
