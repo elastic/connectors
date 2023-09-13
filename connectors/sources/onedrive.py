@@ -275,7 +275,13 @@ class OneDriveClient:
             else:
                 raise
 
-    async def paginated_api_call(self, url):
+    async def paginated_api_call(self, url, params=None, fetch_size=FETCH_SIZE):
+        if params is None:
+            params = {}
+        params["$top"] = fetch_size
+        params = "&".join(f"{key}={val}" for key, val in params.items())
+
+        url = f"{url}?{params}"
         while True:
             try:
                 async for response in self.get(
@@ -299,18 +305,18 @@ class OneDriveClient:
                 break
 
     async def list_users(self):
-        url = f"{parse.urljoin(BASE_URL, ENDPOINTS[USERS])}?$top={FETCH_SIZE}"
+        url = parse.urljoin(BASE_URL, ENDPOINTS[USERS])
 
         async for response in self.paginated_api_call(url):
             for user_detail in response:
                 yield user_detail
 
     async def get_owned_files(self, user_id, skipped_extensions=None, pattern=""):
-        params = f"?$select={ITEM_FIELDS}&$top={FETCH_SIZE}"
+        params = {"$select": ITEM_FIELDS}
         delta_endpoint = ENDPOINTS[DELTA].format(user_id=user_id)
 
-        url = f"{parse.urljoin(BASE_URL, delta_endpoint)}{params}"
-        async for response in self.paginated_api_call(url):
+        url = parse.urljoin(BASE_URL, delta_endpoint)
+        async for response in self.paginated_api_call(url, params):
             for file in response:
                 if file.get("name", "") != "root":
                     parent_path = file.get("parentReference", {}).get("path")
