@@ -103,6 +103,7 @@ def _default_config():
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",
             "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
+            "zoom": "connectors.sources.zoom:ZoomDataSource",
         },
     }
 

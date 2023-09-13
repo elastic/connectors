@@ -13,6 +13,7 @@ from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
     GoogleServiceAccountClient,
+    load_service_account_json,
     remove_universe_domain,
     validate_service_account_json,
 )
@@ -66,6 +67,35 @@ def test_validate_service_account_json_when_invalid():
     with pytest.raises(ConfigurableFieldValueError):
         validate_service_account_json(
             invalid_service_account_credentials, "some google service"
+        )
+
+
+def test_load_service_account_json_valid_unescaped():
+    valid_unescaped_service_account_credentials = '{"project_id": "dummy123"}'
+
+    json_credentials = load_service_account_json(
+        valid_unescaped_service_account_credentials, "some google service"
+    )
+
+    assert isinstance(json_credentials, dict)
+
+
+def test_load_service_account_json_valid_escaped():
+    valid_unescaped_service_account_credentials = '"{\\"project_id\\": \\"dummy123\\"}"'
+
+    json_credentials = load_service_account_json(
+        valid_unescaped_service_account_credentials, "some google service"
+    )
+
+    assert isinstance(json_credentials, dict)
+
+
+def test_load_service_account_json_not_valid():
+    valid_unescaped_service_account_credentials = "xd"
+
+    with pytest.raises(ConfigurableFieldValueError):
+        load_service_account_json(
+            valid_unescaped_service_account_credentials, "some google service"
         )
 
 

@@ -5,6 +5,7 @@
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
 import asyncio
+import os
 from functools import cached_property
 from itertools import groupby
 
@@ -22,6 +23,11 @@ from connectors.utils import (
     convert_to_b64,
     retryable,
 )
+
+SALESFORCE_EMULATOR_HOST = os.environ.get("SALESFORCE_EMULATOR_HOST")
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
 
 RETRIES = 3
 RETRY_INTERVAL = 1
@@ -267,10 +273,12 @@ class SalesforceClient:
                 case_feeds = await self.get_case_feeds(case_ids)
 
                 # groupby requires pre-sorting apparently
-                case_feeds.sort(key=lambda x: x["ParentId"])
+                case_feeds.sort(key=lambda x: x.get("ParentId", ""))
                 case_feeds_by_case_id = {
                     k: list(feeds)
-                    for k, feeds in groupby(case_feeds, key=lambda x: x["ParentId"])
+                    for k, feeds in groupby(
+                        case_feeds, key=lambda x: x.get("ParentId", "")
+                    )
                 }
 
             for record in records:
@@ -1329,11 +1337,16 @@ class SalesforceDataSource(BaseDataSource):
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
-        self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
-        self.salesforce_client = SalesforceClient(
-            configuration=configuration, base_url=self.base_url
+
+        base_url = (
+            SALESFORCE_EMULATOR_HOST
+            if (RUNNING_FTEST and SALESFORCE_EMULATOR_HOST)
+            else BASE_URL.replace("<domain>", configuration["domain"])
         )
-        self.doc_mapper = SalesforceDocMapper(self.base_url)
+        self.salesforce_client = SalesforceClient(
+            configuration=configuration, base_url=base_url
+        )
+        self.doc_mapper = SalesforceDocMapper(base_url)
 
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)

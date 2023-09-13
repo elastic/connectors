@@ -9,6 +9,7 @@ import asyncio
 import re
 from contextlib import asynccontextmanager
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 from aiogoogle import Aiogoogle, HTTPError
@@ -82,7 +83,7 @@ async def test_ping_for_successful_connection():
             await source.ping()
 
 
-@mock.patch("connectors.utils.apply_retry_strategy", mock.AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
 @pytest.mark.asyncio
 async def test_ping_for_failed_connection():
     """Tests the ping functionality when connection can not be established to Google Drive."""
@@ -886,8 +887,8 @@ async def test_get_content_when_type_not_supported():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_for_attribute_error(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", 0)
+async def test_api_call_for_attribute_error():
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     async with create_gdrive_source() as source:
@@ -898,8 +899,8 @@ async def test_api_call_for_attribute_error(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_http_error(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", 0)
+async def test_api_call_http_error():
     """Test handling retries for HTTPError exception in api_call() method."""
     async with create_gdrive_source() as source:
         with mock.patch.object(
@@ -912,8 +913,8 @@ async def test_api_call_http_error(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_other_exception(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", 0)
+async def test_api_call_other_exception():
     """Test handling retries for generic Exception in api_call() method."""
     async with create_gdrive_source() as source:
         with mock.patch.object(
@@ -924,9 +925,13 @@ async def test_api_call_other_exception(mock_apply_retry_strategy):
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_ping_retries(mock_apply_retry_strategy, mock_responses):
+@patch("connectors.utils.time_to_sleep_between_retries")
+async def test_api_call_ping_retries(
+    mock_time_to_sleep_between_retries, mock_responses
+):
     """Test handling retries for generic Exception in api_call() method."""
+    mock_time_to_sleep_between_retries.return_value = 0
+
     async with create_gdrive_source() as source:
         mock_responses.get(url=re.compile(".*"), status=401)
 
@@ -935,14 +940,18 @@ async def test_api_call_ping_retries(mock_apply_retry_strategy, mock_responses):
                 await source.ping()
 
         # Expect retry function to be triggered the expected number of retries,
-        # substract the first call
-        assert mock_apply_retry_strategy.call_count == RETRIES - 1
+        # subtract the first call
+        assert mock_time_to_sleep_between_retries.call_count == RETRIES - 1
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_list_drives_retries(mock_apply_retry_strategy, mock_responses):
+@mock.patch("connectors.utils.time_to_sleep_between_retries")
+async def test_api_call_list_drives_retries(
+    mock_time_to_sleep_between_retries, mock_responses
+):
     """Test handling retries for generic Exception in api_call() method."""
+    mock_time_to_sleep_between_retries.return_value = 0
+
     async with create_gdrive_source() as source:
         mock_responses.get(url=re.compile(".*"), status=401)
 
@@ -952,8 +961,8 @@ async def test_api_call_list_drives_retries(mock_apply_retry_strategy, mock_resp
                     continue
 
         # Expect retry function to be triggered the expected number of retries,
-        # substract the first call
-        assert mock_apply_retry_strategy.call_count == RETRIES - 1
+        # subtract the first call
+        assert mock_time_to_sleep_between_retries.call_count == RETRIES - 1
 
 
 @pytest.mark.parametrize(
