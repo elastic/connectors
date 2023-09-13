@@ -342,7 +342,7 @@ class OneDriveClient:
                 yield user_detail
 
     async def list_groups(self, user_id):
-        url = {parse.urljoin(BASE_URL, ENDPOINTS[GROUPS].format(user_id=user_id))}
+        url = parse.urljoin(BASE_URL, ENDPOINTS[GROUPS].format(user_id=user_id))
         async for response in self.paginated_api_call(url):
             for group_detail in response:
                 yield group_detail
