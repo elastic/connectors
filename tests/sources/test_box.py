@@ -220,16 +220,16 @@ async def test_set_access_token_when_tokenerror():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
+@patch("connectors.utils.time_to_sleep_between_retries")
 @pytest.mark.parametrize(
     "status_code, exception",
     [(409, ClientResponseError), (401, ClientResponseError), (404, NotFound)],
 )
 async def test_get_clientresponseerror(
-    mock_apply_retry_strategy, status_code, exception
+    mock_time_to_sleep_between_retries, status_code, exception
 ):
     async with create_source(BoxDataSource) as source:
-        mock_apply_retry_strategy.return_value = Mock()
+        mock_time_to_sleep_between_retries.return_value = 0
         source.client.token.get = AsyncMock()
         source.client.token._set_access_token = AsyncMock()
         source.client._http_session.get = AsyncMock(
@@ -259,10 +259,10 @@ async def test_ping_with_successful_connection():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_ping_with_unsuccessful_connection(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries")
+async def test_ping_with_unsuccessful_connection(mock_time_to_sleep_between_retries):
     async with create_source(BoxDataSource) as source:
-        mock_apply_retry_strategy.return_value = Mock()
+        mock_time_to_sleep_between_retries.return_value = Mock()
         source.client.token.get = AsyncMock(side_effect=Exception())
         with pytest.raises(Exception):
             await source.ping()
@@ -365,10 +365,10 @@ async def test_fetch_files_folders():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_fetch_files_folders_negative(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries")
+async def test_fetch_files_folders_negative(mock_time_to_sleep_between_retries):
     async with create_source(BoxDataSource) as source:
-        mock_apply_retry_strategy.return_value = Mock()
+        mock_time_to_sleep_between_retries.return_value = Mock()
         source.client.token.get = AsyncMock(side_effect=Exception())
         response = await source._fetch_files_folders("0")
     assert response is None
