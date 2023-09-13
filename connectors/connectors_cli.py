@@ -13,10 +13,11 @@ executes the `main` function of this module, which starts the service.
 import asyncio
 import click
 import yaml
-from connectors.cli.auth import Auth
+from connectors.cli.auth import Auth, CONFIG_FILE_PATH
 from connectors import __version__  # NOQA
 from connectors.cli.connector import Connector
 from tabulate import tabulate
+import os
 
 
 __all__ = ["main"]
@@ -34,10 +35,15 @@ def print_version(ctx, param, value):
 @click.option('-c', '--config', type=click.File('rb'))
 @click.pass_context
 def cli(ctx, config):
+    ctx.ensure_object(dict)
     if config:
-        ctx.ensure_object(dict)
         ctx.obj['config'] = yaml.safe_load(config)
-    pass
+    elif os.path.isfile(CONFIG_FILE_PATH):
+        with open(CONFIG_FILE_PATH, "r") as f:
+            ctx.obj['config'] = yaml.safe_load(f.read())
+    else:
+        # todo raise an exception
+        pass
 
     # ctx = click.get_current_context()
     # click.echo(ctx.get_help())
