@@ -590,18 +590,21 @@ class SharepointOnlineClient:
     async def sites(self, parent_site_id, allowed_root_sites):
         select = ""
 
-        async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
-        ):
-            for site in page:
-                # Filter out site collections that are not needed
-                if (
-                    WILDCARD not in allowed_root_sites
-                    and site["name"] not in allowed_root_sites
-                ):
-                    continue
-
-                yield site
+        if allowed_root_sites == [WILDCARD]:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}" # TODO: why search?
+            ):
+                for site in page:
+                    yield site
+        else:
+            self._logger.debug(f"Looking up sites: {allowed_root_sites}")
+            for allowed_site in allowed_root_sites:
+                try:
+                    self._logger.debug(f"Requesting site '{allowed_site}' by relative path in parent site: {parent_site_id}")
+                    site = await self._graph_api_client.fetch(f"{GRAPH_API_URL}/sites/{parent_site_id}:/sites/{allowed_site}")
+                    yield site
+                except NotFound as e:
+                    self._logger.warning(f"Could not look up site '{allowed_site}' by relative path in parent site: {parent_site_id}")
 
     async def site_drives(self, site_id):
         select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
@@ -1194,7 +1197,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         async for site_collection in self.client.site_collections():
             async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"], [WILDCARD]
+                site_collection["siteCollection"]["hostname"], configured_root_sites
             ):
                 remote_sites.append(site["name"])
 
