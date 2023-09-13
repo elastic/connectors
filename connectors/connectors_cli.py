@@ -14,6 +14,7 @@ import asyncio
 import click
 import yaml
 from connectors.cli.auth import Auth, CONFIG_FILE_PATH
+from connectors.cli.index import Index
 from connectors import __version__  # NOQA
 from connectors.cli.connector import Connector
 from tabulate import tabulate
@@ -114,7 +115,59 @@ cli.add_command(connector)
 @click.group(invoke_without_command=True)
 @click.pass_obj
 def index(obj):
-    click.echo('testing index')
+    pass
+
+@click.command(help="Show all indices")
+@click.pass_obj
+def list(obj):
+    click.echo("")
+    index = Index(config=obj['config']['elasticsearch'])
+    indices = index.list_indices()
+
+    if len(indices) == 0:
+        click.echo("No indices found")
+
+    click.echo(f"Showing {len(indices)} indices \n")
+    table_rows = []
+    for index in indices:
+        formatted_index = [
+            click.style(index, blink=True, fg="white"),
+            click.style(indices[index]['primaries']['docs']['count'])
+        ]
+        table_rows.append(formatted_index)
+
+    click.echo(tabulate(table_rows, headers=["Index name", "Number of documents"]))
+
+
+index.add_command(list)
+
+@click.command(help="Remove all documents from the index")
+@click.pass_obj
+@click.argument('index', nargs=1)
+def clean(obj, index):
+    index_cli = Index(config=obj['config']['elasticsearch'])
+    click.confirm(click.style('Are you sure you want to clean ' + index + '?😱', fg='yellow'), abort=True)
+    if index_cli.clean(index):
+        click.echo(click.style("The index has been cleaned. You're breathtaking.", fg='green'))
+    else:
+        click.echo('')
+        click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
+
+index.add_command(clean)
+
+@click.command(help="Delete an index")
+@click.pass_obj
+@click.argument('index', nargs=1)
+def delete(obj, index):
+    index_cli = Index(config=obj['config']['elasticsearch']) 
+    click.confirm(click.style('Are you sure you want to delete ' + index + '?😱', fg='yellow'), abort=True)
+    if index_cli.delete(index):
+        click.echo(click.style("The index has been deleted. You're breathtaking.", fg='green'))
+    else:
+        click.echo('')
+        click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
+
+index.add_command(delete)
 
 cli.add_command(index)
 

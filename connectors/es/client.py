@@ -180,6 +180,12 @@ class ESClient:
     async def delete_indices(self, indices):
         await self.client.indices.delete(index=indices, ignore_unavailable=True)
 
+    async def clean_index(self, index_name):
+        return await self.client.delete_by_query(index=index_name, body={ 'query': { 'match_all': {} } }, ignore_unavailable=True)
+
+    async def list_indices(self):
+        return await self.client.indices.stats(index='search-*')
+
 
 def with_concurrency_control(retries=3):
     def wrapper(func):
