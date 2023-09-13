@@ -46,15 +46,14 @@ FILE = "file"
 FOLDER = "folder"
 
 USERS = "users"
-CONTENT = "content"
 DELTA = "delta"
 PING = "ping"
+ITEM_FIELDS = "id,name,lastModifiedDateTime,content.downloadUrl,createdDateTime,size,webUrl,parentReference,file,folder"
 
 ENDPOINTS = {
     PING: "drives",
     USERS: "users",
     DELTA: "users/{user_id}/drive/root/delta",
-    CONTENT: "users/{user_id}/drive/items/{item_id}/content",
 }
 
 if "OVERRIDE_URL" in os.environ:
@@ -276,10 +275,13 @@ class OneDriveClient:
             else:
                 raise
 
-    async def paginated_api_call(self, url_name, **url_kwargs):
-        url = parse.urljoin(BASE_URL, ENDPOINTS[url_name].format(**url_kwargs))
-        url = f"{url}?$top={FETCH_SIZE}"
+    async def paginated_api_call(self, url, params=None, fetch_size=FETCH_SIZE):
+        if params is None:
+            params = {}
+        params["$top"] = fetch_size
+        params = "&".join(f"{key}={val}" for key, val in params.items())
 
+        url = f"{url}?{params}"
         while True:
             try:
                 async for response in self.get(
@@ -298,17 +300,23 @@ class OneDriveClient:
                         return
             except Exception as exception:
                 self._logger.warning(
-                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
+                    f"Skipping data for {url}. Exception: {exception}."
                 )
                 break
 
     async def list_users(self):
-        async for response in self.paginated_api_call(url_name=USERS):
+        url = parse.urljoin(BASE_URL, ENDPOINTS[USERS])
+
+        async for response in self.paginated_api_call(url):
             for user_detail in response:
                 yield user_detail
 
     async def get_owned_files(self, user_id, skipped_extensions=None, pattern=""):
-        async for response in self.paginated_api_call(url_name=DELTA, user_id=user_id):
+        params = {"$select": ITEM_FIELDS}
+        delta_endpoint = ENDPOINTS[DELTA].format(user_id=user_id)
+
+        url = parse.urljoin(BASE_URL, delta_endpoint)
+        async for response in self.paginated_api_call(url, params):
             for file in response:
                 if file.get("name", "") != "root":
                     parent_path = file.get("parentReference", {}).get("path")
@@ -319,7 +327,7 @@ class OneDriveClient:
                     if has_skipped_extension or (pattern and not is_match):
                         continue
                     else:
-                        yield file
+                        yield file, file.get("@microsoft.graph.downloadUrl")
 
 
 class OneDriveDataSource(BaseDataSource):
@@ -337,6 +345,7 @@ class OneDriveDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.configuration = configuration
+        self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
     @cached_property
     def client(self):
@@ -378,7 +387,25 @@ class OneDriveDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
             },
+            "concurrent_downloads": {
+                "default_value": DEFAULT_PARALLEL_CONNECTION_COUNT,
+                "display": "numeric",
+                "label": "Maximum concurrent downloads",
+                "order": 5,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+            },
         }
+
+    def tweak_bulk_options(self, options):
+        """Tweak bulk options as per concurrent downloads support by ServiceNow
+
+        Args:
+            options (dict): Config bulker options.
+        """
+
+        options["concurrent_downloads"] = self.concurrent_downloads
 
     def advanced_rules_validators(self):
         return [OneDriveAdvancedRulesValidator(self)]
@@ -419,16 +446,10 @@ class OneDriveDataSource(BaseDataSource):
             return
         return True
 
-    async def _get_document_with_content(
-        self, file, attachment_name, document, user_id
-    ):
+    async def _get_document_with_content(self, attachment_name, document, url):
         temp_filename = ""
 
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            url = parse.urljoin(
-                BASE_URL,
-                ENDPOINTS[CONTENT].format(user_id=user_id, item_id=file["_id"]),
-            )
             async for response in self.client.get(url=url):
                 async for data in response.content.iter_chunked(n=CHUNK_SIZE):
                     await async_buffer.write(data)
@@ -452,18 +473,19 @@ class OneDriveDataSource(BaseDataSource):
             )
         return document
 
-    async def get_content(self, file, user_id, timestamp=None, doit=False):
+    async def get_content(self, file, download_url, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
 
         Args:
             file (dict): File metadata
-            user_id (str): User ID of OneDrive user
+            download_url (str): Download URL for the file
             timestamp (timestamp, optional): Timestamp of file last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
             dictionary: Content document with _id, _timestamp and file content
         """
+
         attachment_size = int(file["size"])
         if not (doit and attachment_size > 0):
             return
@@ -491,10 +513,9 @@ class OneDriveDataSource(BaseDataSource):
         }
 
         return await self._get_document_with_content(
-            file=file,
             attachment_name=attachment_name,
             document=document,
-            user_id=user_id,
+            url=download_url,
         )
 
     def prepare_doc(self, file):
@@ -535,13 +556,13 @@ class OneDriveDataSource(BaseDataSource):
 
                 for mail in user_mails:
                     user_id = user_mail_id_map.get(mail)
-                    async for entity in self.client.get_owned_files(
+                    async for entity, download_url in self.client.get_owned_files(
                         user_id, skipped_extensions, pattern
                     ):
                         entity = self.prepare_doc(entity)
-                        if entity["type"] == FILE:
+                        if entity["type"] == FILE and download_url:
                             yield entity, partial(
-                                self.get_content, entity.copy(), user_id
+                                self.get_content, entity.copy(), download_url
                             )
                         else:
                             yield entity, None
@@ -549,9 +570,11 @@ class OneDriveDataSource(BaseDataSource):
             async for user in self.client.list_users():
                 user_id = user.get("id")
 
-                async for entity in self.client.get_owned_files(user_id):
+                async for entity, download_url in self.client.get_owned_files(user_id):
                     entity = self.prepare_doc(entity)
-                    if entity["type"] == FILE:
-                        yield entity, partial(self.get_content, entity.copy(), user_id)
+                    if entity["type"] == FILE and download_url:
+                        yield entity, partial(
+                            self.get_content, entity.copy(), download_url
+                        )
                     else:
                         yield entity, None
