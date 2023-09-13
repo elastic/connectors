@@ -93,6 +93,7 @@ def _default_config():
             "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
             "mssql": "connectors.sources.mssql:MSSQLDataSource",
             "jira": "connectors.sources.jira:JiraDataSource",
+            "kafka": "connectors.sources.kafka:KafkaDataSource",
             "confluence": "connectors.sources.confluence:ConfluenceDataSource",
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
             "salesforce": "connectors.sources.salesforce:SalesforceDataSource",
