@@ -409,6 +409,7 @@ async def create_zoom_source(fetch_past_meeting_details=False):
         account_id="123",
         client_id="id@123",
         client_secret="secret#123",
+        recording_age=4,
         fetch_past_meeting_details=fetch_past_meeting_details,
     ) as source:
         yield source
