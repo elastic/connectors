@@ -62,6 +62,9 @@ INBOX_MAIL_OBJECT = "Inbox Mails"
 SENT_MAIL_OBJECT = "Sent Mails"
 JUNK_MAIL_OBJECT = "Junk Mails"
 ARCHIVE_MAIL_OBJECT = "Archive Mails"
+MAIL_ATTACHMENT = "Mail Attachment"
+TASK_ATTACHMENT = "Task Attachment"
+CALENDAR_ATTACHMENT = "Calendar Attachment"
 
 SEARCH_FILTER_FOR_NORMAL_USERS = (
     "(&(objectCategory=person)(objectClass=user)(givenName=*))"
@@ -352,11 +355,11 @@ class Office365Users:
     def _check_errors(self, response):
         match response.status:
             case 400:
-                raise UnauthorizedException("Found invalid tenant id value")
-            case 401:
                 raise UnauthorizedException(
-                    "Found invalid client id or client secret value"
+                    "Found invalid tenant id or client id value"
                 )
+            case 401:
+                raise UnauthorizedException("Found invalid client secret value")
             case 403:
                 raise Forbidden(
                     f"Missing permission or something went wrong. Error: {response}"
@@ -556,11 +559,11 @@ class OutlookDocFormatter:
             ),
         }
 
-    def attachment_doc_formatter(self, attachment, timezone):
+    def attachment_doc_formatter(self, attachment, attachment_type, timezone):
         return {
             "_id": attachment.attachment_id.id,
             "title": attachment.name,
-            "type": "attachment",
+            "type": attachment_type,
             "_timestamp": ews_format_to_datetime(
                 source_datetime=attachment.last_modified_time, timezone=timezone
             ),
@@ -762,7 +765,10 @@ class OutlookDataSource(BaseDataSource):
                 "value": False,
             },
             "ssl_ca": {
-                "depends_on": [{"field": "ssl_enabled", "value": True}],
+                "depends_on": [
+                    {"field": "data_source", "value": OUTLOOK_SERVER},
+                    {"field": "ssl_enabled", "value": True},
+                ],
                 "label": "SSL certificate",
                 "order": 11,
                 "type": "str",
@@ -837,12 +843,14 @@ class OutlookDataSource(BaseDataSource):
 
         return document
 
-    async def _fetch_attachments(self, outlook_object, timezone):
+    async def _fetch_attachments(self, attachment_type, outlook_object, timezone):
         for attachment in outlook_object.attachments:
             await self.queue.put(
                 (
                     self.doc_formatter.attachment_doc_formatter(
-                        attachment=attachment, timezone=timezone
+                        attachment=attachment,
+                        attachment_type=attachment_type,
+                        timezone=timezone,
                     ),
                     partial(
                         self.get_content, attachment=copy(attachment), timezone=timezone
@@ -868,7 +876,10 @@ class OutlookDataSource(BaseDataSource):
             if mail.has_attachments:
                 await self.fetchers.put(
                     partial(
-                        self._fetch_attachments, outlook_object=mail, timezone=timezone
+                        self._fetch_attachments,
+                        attachment_type=MAIL_ATTACHMENT,
+                        outlook_object=mail,
+                        timezone=timezone,
                     )
                 )
                 self.tasks += 1
@@ -900,7 +911,10 @@ class OutlookDataSource(BaseDataSource):
             if task.has_attachments:
                 await self.fetchers.put(
                     partial(
-                        self._fetch_attachments, outlook_object=task, timezone=timezone
+                        self._fetch_attachments,
+                        attachment_type=TASK_ATTACHMENT,
+                        outlook_object=task,
+                        timezone=timezone,
                     )
                 )
                 self.tasks += 1
@@ -940,7 +954,10 @@ class OutlookDataSource(BaseDataSource):
         if calendar.has_attachments:
             await self.fetchers.put(
                 partial(
-                    self._fetch_attachments, outlook_object=calendar, timezone=timezone
+                    self._fetch_attachments,
+                    attachment_type=CALENDAR_ATTACHMENT,
+                    outlook_object=calendar,
+                    timezone=timezone,
                 )
             )
             self.tasks += 1

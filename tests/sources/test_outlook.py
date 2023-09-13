@@ -119,7 +119,21 @@ EXPECTED_RESPONSE = [
     {
         "_id": "attachment_id_1",
         "title": "sync.txt",
-        "type": "attachment",
+        "type": "Mail Attachment",
+        "_timestamp": "2023-12-12T01:01:01Z",
+        "size": 1221,
+    },
+    {
+        "_id": "attachment_id_1",
+        "title": "sync.txt",
+        "type": "Task Attachment",
+        "_timestamp": "2023-12-12T01:01:01Z",
+        "size": 1221,
+    },
+    {
+        "_id": "attachment_id_1",
+        "title": "sync.txt",
+        "type": "Calendar Attachment",
         "_timestamp": "2023-12-12T01:01:01Z",
         "size": 1221,
     },
@@ -501,11 +515,11 @@ async def test_ping_for_cloud():
         (MockException(status=404), NotFound),
     ],
 )
-@mock.patch("connectors.utils.apply_retry_strategy")
+@mock.patch("connectors.utils.time_to_sleep_between_retries")
 async def test_ping_for_cloud_for_failed_connection(
-    mock_apply_retry_strategy, raised_exception, side_effect_exception
+    mock_time_to_sleep_between_retries, raised_exception, side_effect_exception
 ):
-    mock_apply_retry_strategy.return_value = mock.Mock()
+    mock_time_to_sleep_between_retries.return_value = 0
     async with create_source(OutlookDataSource) as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
