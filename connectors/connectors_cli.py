@@ -33,6 +33,7 @@ import os
 
 import click
 import yaml
+from connectors.cli.auth import Auth
 from connectors import __version__  # NOQA
 
 
@@ -189,7 +190,7 @@ def print_version(ctx, param, value):
 @click.group(invoke_without_command=True)
 @click.option('-v', '--version', is_flag=True, callback=print_version,
               expose_value=False, is_eager=True)
-@click.option('-c', '--config', type=click.File('rb'), default='bin/config.yml')
+@click.option('-c', '--config', type=click.File('rb'))
 @click.pass_context
 def cli(ctx, config):
     if config:
@@ -202,9 +203,22 @@ def cli(ctx, config):
     # ctx.exit()
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
-@click.pass_obj
-def login(obj):
-    click.echo('login command')
+@click.option('--host', prompt="Elastic host")
+@click.option('--username', prompt="Username")
+@click.option('--password', prompt="Password", hide_input=True)
+
+def login(host, username, password):
+    auth = Auth(host, username, password)
+    if auth.is_config_present():
+        click.confirm(click.style('Config is already present. Are you sure you want to override it?😱', fg='yellow'), abort=True)
+    if auth.authenticate():
+        click.echo(click.style("Authentication successful. You're breathtaking.", fg='green'))
+    else:
+        click.echo('')
+        click.echo(click.style("Authentication failed. Please check your credentials.", fg='red'), err=True)
+    return
+   
+
 
 cli.add_command(login)
 
