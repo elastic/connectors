@@ -544,7 +544,7 @@ async def test_get_owned_files():
                     "list_users",
                     return_value=AsyncIterator([EXPECTED_USERS]),
                 ) as user:
-                    async for file in source.client.get_owned_files(user["id"]):
+                    async for file, _ in source.client.get_owned_files(user["id"]):
                         response.append(file)
 
         assert response == EXPECTED_FILES
@@ -568,16 +568,16 @@ async def test_list_users():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "file, user_id, expected_content",
+    "file, download_url, expected_content",
     [
-        (MOCK_ATTACHMENT, "123", EXPECTED_CONTENT),
-        (MOCK_ATTACHMENT_WITHOUT_EXTENSION, "123", None),
-        (MOCK_ATTACHMENT_WITH_LARGE_DATA, "235", None),
-        (MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION, "444", None),
+        (MOCK_ATTACHMENT, "https://content1", EXPECTED_CONTENT),
+        (MOCK_ATTACHMENT_WITHOUT_EXTENSION, "https://content2", None),
+        (MOCK_ATTACHMENT_WITH_LARGE_DATA, "https://content3", None),
+        (MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION, "https://content4", None),
     ],
 )
 async def test_get_content_when_is_downloadable_is_true(
-    file, user_id, expected_content
+    file, download_url, expected_content
 ):
     async with create_source(OneDriveDataSource) as source:
         with patch.object(AccessToken, "get", return_value="abc"):
@@ -588,7 +588,7 @@ async def test_get_content_when_is_downloadable_is_true(
                 ):
                     response = await source.get_content(
                         file=file,
-                        user_id=user_id,
+                        download_url=download_url,
                         doit=True,
                     )
                     assert response == expected_content
@@ -599,8 +599,22 @@ async def test_get_content_when_is_downloadable_is_true(
     OneDriveClient,
     "get_owned_files",
     side_effect=[
-        (AsyncIterator(RESPONSE_USER1_FILES)),
-        (AsyncIterator(RESPONSE_USER2_FILES)),
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER1_FILES[0], None),
+                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
+                ]
+            )
+        ),
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER2_FILES[0], None),
+                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                ]
+            )
+        ),
     ],
 )
 @pytest.mark.asyncio
