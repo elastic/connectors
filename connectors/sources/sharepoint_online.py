@@ -591,7 +591,7 @@ class SharepointOnlineClient:
         select = ""
 
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/getAllSites?$select={select}"
         ):
             for site in page:
                 # Filter out site collections that are not needed
@@ -1196,7 +1196,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             async for site in self.client.sites(
                 site_collection["siteCollection"]["hostname"], [WILDCARD]
             ):
-                remote_sites.append(site["name"])
+                name = site.get('name')
+                if name:
+                    print(f"found site: {name} : {site.get('id')}")
+                    remote_sites.append(name)
 
         missing = [x for x in configured_root_sites if x not in remote_sites]
 
