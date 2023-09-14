@@ -97,7 +97,7 @@ setup(
     install_requires=install_requires,
     entry_points="""
       [console_scripts]
-      elastic-ingest = connectors.cli:main
+      elastic-ingest = connectors.old_cli:main
       fake-kibana = connectors.kibana:main
       connectors = connectors.connectors_cli:main
       """,
