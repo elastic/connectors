@@ -11,6 +11,9 @@ steps:
   - label: ":pytest: Test"
     command: "make test"
 
+  - label: ":statue_of_liberty: Check licenses"
+    command: "make check-licenses"
+
   - label: ":shipit: Smoke test"
     command: "make ftest NAME=dir DATA_SIZE=small"
     agents:

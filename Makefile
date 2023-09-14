@@ -31,6 +31,10 @@ bin/pytest: bin/python
 clean:
 	rm -rf bin lib include
 
+check-licenses: bin/pip-licenses
+	bin/pip-licenses --format=markdown > /tmp/deps-licenses.md
+	diff deps-licenses.md /tmp/deps-licenses.md
+
 update-licenses: bin/pip-licenses
 	bin/pip-licenses --format=markdown > deps-licenses.md
 
