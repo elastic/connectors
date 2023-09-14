@@ -182,6 +182,9 @@ class ESClient:
     async def list_indices(self):
         return await self.client.indices.stats(index='search-*')
 
+    def client(self):
+        return self.client
+
 
 def with_concurrency_control(retries=3):
     def wrapper(func):
