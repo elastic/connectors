@@ -21,6 +21,25 @@ from connectors.cli.connector import Connector
 from tabulate import tabulate
 import os
 
+SERVICE_TYPES = {
+    'mongodb': 'connectors.sources.mongo:MongoDataSource',
+    's3': 'connectors.sources.s3:S3DataSource',
+    'dir': 'connectors.sources.directory:DirectoryDataSource',
+    'mysql': 'connectors.sources.mysql:MySqlDataSource',
+    'network_drive': 'connectors.sources.network_drive:NASDataSource',
+    'google_cloud_storage': 'connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource',
+    'azure_blob_storage': 'connectors.sources.azure_blob_storage:AzureBlobStorageDataSource',
+    'postgresql': 'connectors.sources.postgresql:PostgreSQLDataSource',
+    'oracle': 'connectors.sources.oracle:OracleDataSource',
+    'sharepoint_server': 'connectors.sources.sharepoint_server:SharepointServerDataSource',
+    'mssql': 'connectors.sources.mssql:MSSQLDataSource',
+    'jira': 'connectors.sources.jira:JiraDataSource',
+    'confluence': 'connectors.sources.confluence:ConfluenceDataSource',
+    'dropbox': 'connectors.sources.dropbox:DropboxDataSource',
+    'servicenow': 'connectors.sources.servicenow:ServiceNowDataSource',
+    'sharepoint_online': 'connectors.sources.sharepoint_online:SharepointOnlineDataSource',
+    'github': 'connectors.sources.github:GitHubDataSource'
+}
 
 __all__ = ["main"]
 
@@ -77,7 +96,7 @@ cli.add_command(login)
 def connector(obj):
     pass
 
-@click.command()
+@click.command(help="List all existing connectors")
 @click.pass_obj
 def list(obj):
     click.echo("")
@@ -107,7 +126,36 @@ def list(obj):
     except asyncio.CancelledError as e:
         click.echo(e)
 
+# TODO add language prompt
+@click.command(help="Creates a new connector and a search index")
+@click.option('--index_name', prompt=f"{click.style('?', blink=True, fg='green')} Search index name (search-)")
+@click.option('--service_type', prompt=f"{click.style('?', blink=True, fg='green')} Service type", type=click.Choice(SERVICE_TYPES.keys(), case_sensitive=False))
+@click.pass_obj
+def create(obj, index_name, service_type):
+    index_name = f"search-{index_name}"
+    connector = Connector(obj['config']['elasticsearch'])
+    configuration = connector.service_type_configuration(source_class=SERVICE_TYPES[service_type])
 
+    prompt  = lambda : click.prompt(f"{click.style('?', blink=True, fg='green')} {item['label']}", default=item.get('value', None), hide_input=(True if item.get('sensitive') == True else False))
+
+    # first fill in the fields that do not depend on other fields
+    for key, item in configuration.items():
+        if 'depends_on' in item:
+            continue
+
+        configuration[key]['value'] = prompt()
+
+    for key, item in configuration.items():
+        if not 'depends_on' in item:
+            continue
+
+        if all(configuration[field_item['field']]['value'] == field_item['value'] for field_item in item['depends_on']):
+            configuration[key]['value'] = prompt()
+
+    result = connector.create(index_name, service_type, configuration)
+    click.echo("Connector (ID: " + click.style(result[1], fg="green") +  ", service_type: " + click.style(service_type, fg='green') + ") has been created!")
+
+connector.add_command(create)
 connector.add_command(list)
 
 cli.add_command(connector)
@@ -160,7 +208,7 @@ index.add_command(clean)
 @click.pass_obj
 @click.argument('index', nargs=1)
 def delete(obj, index):
-    index_cli = Index(config=obj['config']['elasticsearch']) 
+    index_cli = Index(config=obj['config']['elasticsearch'])
     click.confirm(click.style('Are you sure you want to delete ' + index + '?😱', fg='yellow'), abort=True)
     if index_cli.delete(index):
         click.echo(click.style("The index has been deleted. You're amazing.", fg='green'))
