@@ -53,7 +53,7 @@ FOLDER = "folder"
 
 USERS = "users"
 GROUPS = "groups"
-PERMISSION = "permission"
+PERMISSIONS = "permissions"
 DELTA = "delta"
 PING = "ping"
 ITEM_FIELDS = "id,name,lastModifiedDateTime,content.downloadUrl,createdDateTime,size,webUrl,parentReference,file,folder"
@@ -62,7 +62,7 @@ ENDPOINTS = {
     PING: "drives",
     USERS: "users",
     GROUPS: "users/{user_id}/transitiveMemberOf",
-    PERMISSION: "users/{user_id}/drive/items/{item_id}/permissions",
+    PERMISSIONS: "users/{user_id}/drive/items/{item_id}/permissions",
     DELTA: "users/{user_id}/drive/root/delta",
 }
 
@@ -330,11 +330,13 @@ class OneDriveClient:
                 )
                 break
 
-    async def list_users(self):
-        expand = "transitiveMemberOf($select=id)"
-        filter_ = "accountEnabled eq true"
-        select = "userPrincipalName,mail,transitiveMemberOf,id,createdDateTime"
-        params = {"$expand": expand, "$filter": filter_, "$select": select}
+    async def list_users(self, include_groups=False):
+        params = {
+            "$filter": "accountEnabled eq true",
+            "$select": "userPrincipalName,mail,transitiveMemberOf,id,createdDateTime",
+        }
+        if include_groups:
+            params["$expand"] = "transitiveMemberOf($select=id)"
         url = parse.urljoin(BASE_URL, ENDPOINTS[USERS])
 
         async for response in self.paginated_api_call(url, params):
@@ -349,7 +351,7 @@ class OneDriveClient:
 
     async def list_file_permission(self, user_id, file_id):
         url = parse.urljoin(
-            BASE_URL, ENDPOINTS[PERMISSION].format(user_id=user_id, item_id=file_id)
+            BASE_URL, ENDPOINTS[PERMISSIONS].format(user_id=user_id, item_id=file_id)
         )
         async for response in self.paginated_api_call(url):
             for permission_detail in response:
@@ -591,10 +593,13 @@ class OneDriveDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document, access_control):
+    async def _decorate_with_access_control(self, document, user_id, file_id):
         if self._dls_enabled():
+            entity_permissions = await self.get_entity_permission(
+                user_id=user_id, file_id=file_id
+            )
             document[ACCESS_CONTROL] = list(
-                set(document.get(ACCESS_CONTROL, []) + access_control)
+                set(document.get(ACCESS_CONTROL, []) + entity_permissions)
             )
         return document
 
@@ -634,7 +639,7 @@ class OneDriveDataSource(BaseDataSource):
             return
 
         self._logger.info("Fetching all users")
-        async for user in self.client.list_users():
+        async for user in self.client.list_users(include_groups=True):
             yield await self._user_access_control_doc(user=user)
 
     async def get_entity_permission(self, user_id, file_id):
@@ -644,7 +649,7 @@ class OneDriveDataSource(BaseDataSource):
         def _get_id(permission, identity):
             if identity not in permission:
                 return
-            return permission.get(identity).get("id")
+            return permission.get(identity, {}).get("id")
 
         permissions = []
         async for permission in self.client.list_file_permission(
@@ -709,14 +714,11 @@ class OneDriveDataSource(BaseDataSource):
 
                 async for entity, download_url in self.client.get_owned_files(user_id):
                     entity = self.prepare_doc(entity)
-                    entity_permissions = await self.get_entity_permission(
-                        user_id=user_id, file_id=entity.get("_id")
-                    )
                     if entity["type"] == FILE and download_url:
-                        yield self._decorate_with_access_control(
-                            entity, entity_permissions
+                        yield await self._decorate_with_access_control(
+                            entity, user_id, entity.get("_id")
                         ), partial(self.get_content, entity.copy(), download_url)
                     else:
-                        yield self._decorate_with_access_control(
-                            entity, entity_permissions
+                        yield await self._decorate_with_access_control(
+                            entity, user_id, entity.get("_id")
                         ), None

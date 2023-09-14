@@ -1,4 +1,4 @@
-### Setting up the Confluence connector
+### Setting up the OneDrive connector
 
 See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
