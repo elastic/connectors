@@ -646,11 +646,6 @@ class OneDriveDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
-        def _get_id(permission, identity):
-            if identity not in permission:
-                return
-            return permission.get(identity, {}).get("id")
-
         permissions = []
         async for permission in self.client.list_file_permission(
             user_id=user_id, file_id=file_id
@@ -660,8 +655,8 @@ class OneDriveDataSource(BaseDataSource):
 
             if identities := permission.get("grantedToIdentitiesV2"):
                 for identity in identities:
-                    user_permission = _get_id(identity, "user")
-                    group_permission = _get_id(identity, "group")
+                    user_permission = identity.get("user", {}).get("id")
+                    group_permission = identity.get("group", {}).get("id")
 
                     if user_permission:
                         permissions.append(_prefix_user_id(user_permission))
