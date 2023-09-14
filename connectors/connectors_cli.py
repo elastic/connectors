@@ -15,6 +15,7 @@ import click
 import yaml
 from connectors.cli.auth import Auth, CONFIG_FILE_PATH
 from connectors.cli.index import Index
+from connectors.cli.job import Job
 from connectors import __version__  # NOQA
 from connectors.cli.connector import Connector
 from tabulate import tabulate
@@ -148,7 +149,7 @@ def clean(obj, index):
     index_cli = Index(config=obj['config']['elasticsearch'])
     click.confirm(click.style('Are you sure you want to clean ' + index + '?😱', fg='yellow'), abort=True)
     if index_cli.clean(index):
-        click.echo(click.style("The index has been cleaned. You're breathtaking.", fg='green'))
+        click.echo(click.style("The index has been cleaned. You're awesome.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
@@ -162,7 +163,7 @@ def delete(obj, index):
     index_cli = Index(config=obj['config']['elasticsearch']) 
     click.confirm(click.style('Are you sure you want to delete ' + index + '?😱', fg='yellow'), abort=True)
     if index_cli.delete(index):
-        click.echo(click.style("The index has been deleted. You're breathtaking.", fg='green'))
+        click.echo(click.style("The index has been deleted. You're amazing.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
@@ -175,7 +176,71 @@ cli.add_command(index)
 @click.group(invoke_without_command=True)
 @click.pass_obj
 def job(obj):
-    click.echo('testing job')
+    pass
+
+
+@click.command(help="Start a job. -i to pass connector id, -t to pass job type")
+@click.pass_obj
+@click.option('-i')
+@click.option('-t')
+def start(obj, i, t):
+    job_cli = Job(config=obj['config']['elasticsearch']) 
+    click.echo('Starting a job...')
+    if job_cli.start(connector_id=i, job_type=t):
+        click.echo(click.style("The job has been started. You're phenomenous!", fg='green'))
+    else:
+        click.echo('')
+        click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
+
+job.add_command(start)
+
+@click.command(help="List of jobs sorted by date. -i to pass connector name, -n to pass index name, -j to pass job id")
+@click.pass_obj
+@click.option('-i')
+@click.option('-n')
+@click.option('-j')
+def list(obj, i, n, j):
+    job_cli = Job(config=obj['config']['elasticsearch']) 
+    jobs = job_cli.list_jobs(connector_id=i, index_name=n, job_id=j)
+
+    if len(jobs) == 0:
+        click.echo("No jobs found")
+
+    click.echo(f"Showing {len(jobs)} jobs \n")
+    table_rows = []
+    for job in jobs:
+        formatted_job = [
+            click.style(job.id, blink=True, fg="green"),
+            click.style(job.connector_id, blink=True, fg="white"),
+            click.style(job.index_name, blink=True, fg="white"),
+            click.style(job.status.value, blink=True, fg="white"),
+            click.style(job.job_type.value, blink=True, fg="white"),
+            click.style(job.indexed_document_count, blink=True, fg="white"),
+            click.style(job.indexed_document_volume, blink=True, fg="white"),
+            click.style(job.deleted_document_count, blink=True, fg="white"),
+        ]
+        table_rows.append(formatted_job)
+
+    click.echo(tabulate(table_rows, headers=["Job id", "Connector id", "Index name", "Job status", "Job type", "Documents indexed", "Volume documents indexed (MiB)", "Documents deleted"]))
+
+job.add_command(list)
+
+@click.command(help="Cancel jobs. -i to pass connector name, -n to pass index name, -j to pass job id")
+@click.pass_obj
+@click.option('-i')
+@click.option('-n')
+@click.option('-j')
+def cancel(obj, i, n, j):
+    job_cli = Job(config=obj['config']['elasticsearch']) 
+    click.confirm(click.style('Are you sure you want to cancel jobs?😱', fg='yellow'), abort=True)
+    click.echo('Deleting jobs...')
+    if job_cli.cancel(connector_id=i, index_name=n, job_id=j):
+        click.echo(click.style("All jobs have been cancelled. You're incredible!", fg='green'))
+    else:
+        click.echo('')
+        click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
+
+job.add_command(cancel)
 
 cli.add_command(job)
 
