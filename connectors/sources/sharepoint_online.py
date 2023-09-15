@@ -66,7 +66,7 @@ else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
 
-DEFAULT_RETRY_COUNT = 3
+DEFAULT_RETRY_COUNT = 10
 DEFAULT_RETRY_SECONDS = 30
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
 FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
@@ -424,6 +424,8 @@ class MicrosoftAPISession:
                 self._logger.warning(
                     f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
+                retry_seconds = DEFAULT_RETRY_SECONDS
+            if retry_seconds < DEFAULT_RETRY_SECONDS:
                 retry_seconds = DEFAULT_RETRY_SECONDS
             self._logger.debug(
                 f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
