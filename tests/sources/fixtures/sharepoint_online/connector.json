@@ -76,6 +76,21 @@
         "order": 5,
         "ui_restrictions": []
       },
+      "enumerate_all_sites": {
+        "depends_on": [],
+        "display": "toggle",
+        "tooltip": "Enumerate all sites?",
+        "default_value": null,
+        "label": "Enumerate all sites?",
+        "sensitive": false,
+        "type": "bool",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": trie,
+        "order": 6,
+        "ui_restrictions": []
+      },
       "use_text_extraction_service": {
         "depends_on": [],
         "display": "toggle",
@@ -88,7 +103,7 @@
         "options": [],
         "validations": [],
         "value": false,
-        "order": 6,
+        "order": 7,
         "ui_restrictions": []
       },
       "use_document_level_security": {
@@ -103,7 +118,7 @@
         "options": [],
         "validations": [],
         "value": false,
-        "order": 7,
+        "order": 8,
         "ui_restrictions": []
       },
       "fetch_drive_item_permissions": {
@@ -123,7 +138,7 @@
         "options": [],
         "validations": [],
         "value": false,
-        "order": 8,
+        "order": 9,
         "ui_restrictions": []
       },
       "fetch_unique_page_permissions": {
@@ -143,7 +158,7 @@
         "options": [],
         "validations": [],
         "value": false,
-        "order": 9,
+        "order": 10,
         "ui_restrictions": []
       },
       "fetch_unique_list_permissions": {
@@ -163,7 +178,7 @@
         "options": [],
         "validations": [],
         "value": false,
-        "order": 10,
+        "order": 11,
         "ui_restrictions": []
       },
       "fetch_unique_list_item_permissions": {
@@ -183,7 +198,7 @@
         "options": [],
         "validations": [],
         "value": true,
-        "order": 11,
+        "order": 12,
         "ui_restrictions": []
       }
     },

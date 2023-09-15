@@ -832,7 +832,26 @@ class TestSharepointOnlineClient:
         assert returned_items == actual_items
 
     @pytest.mark.asyncio
-    async def test_sites_filter(self, client, patch_fetch):
+    async def test_sites_filter(self, client, patch_scroll):
+        root_site = "root"
+        actual_items = [
+            {"name": "First"},
+            {"name": "Second"},
+            {"name": "Third"},
+            {"name": "Fourth"},
+        ]
+        filter_ = ["First", "Third"]
+
+        returned_items = await self._execute_scrolling_method(
+            partial(client.sites, root_site, filter_), patch_scroll, actual_items
+        )
+
+        assert len(returned_items) == len(filter_)
+        assert actual_items[0] in returned_items
+        assert actual_items[2] in returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually(self, client, patch_fetch):
         root_site = "root"
         actual_items = [
             {"name": "First"},
@@ -843,7 +862,7 @@ class TestSharepointOnlineClient:
 
 
         returned_items = []
-        async for site in client.sites(root_site, filter_):
+        async for site in client.sites(root_site, filter_, enumerate_all_sites=False):
             returned_items.append(site)
 
         assert len(returned_items) == len(filter_)

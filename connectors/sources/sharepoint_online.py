@@ -590,17 +590,23 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def sites(self, parent_site_id, allowed_root_sites):
+    async def sites(self, parent_site_id, allowed_root_sites, enumerate_all_sites=True):
         select = ""
 
-        if allowed_root_sites == [WILDCARD]:
+        if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
             async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}" # TODO: why search?
+                f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
             ):
                 for site in page:
+                    # Filter out site collections that are not needed
+                    if (
+                            WILDCARD not in allowed_root_sites
+                            and site["name"] not in allowed_root_sites
+                    ):
+                        continue
                     yield site
         else:
-            self._logger.debug(f"Looking up sites: {allowed_root_sites}")
+            self._logger.debug(f"Looking up sites: {allowed_root_sites} individually")
             for allowed_site in allowed_root_sites:
                 try:
                     self._logger.debug(f"Requesting site '{allowed_site}' by relative path in parent site: {parent_site_id}")
@@ -1103,10 +1109,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 5,
                 "type": "list",
             },
+            "enumerate_all_sites": {
+                "display": "toggle",
+                "lavel": "Enumerate all sites?",
+                "tooltip": "Whether sites should be fetched by name from \"all sites\". If disabled, each configured site will be fetched with an individual request.",
+                "order": 6,
+                "type": "bool",
+                "value": True
+            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 6,
+                "order": 7,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "value": False,
@@ -1114,7 +1128,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 7,
+                "order": 8,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1123,7 +1137,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
-                "order": 8,
+                "order": 9,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
                 "value": True,
@@ -1132,7 +1146,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 9,
+                "order": 10,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1141,7 +1155,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list permissions",
-                "order": 10,
+                "order": 11,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1150,7 +1164,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
-                "order": 11,
+                "order": 12,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1634,6 +1648,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site in self.client.sites(
             hostname,
             collections,
+            enumerate_all_sites=self.configuration['enumerate_all_sites']
         ):  # TODO: simplify and eliminate root call
             site["_id"] = site["id"]
             site["object_type"] = "site"
