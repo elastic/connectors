@@ -1184,20 +1184,25 @@ class SharepointOnlineDataSource(BaseDataSource):
         if WILDCARD in configured_root_sites:
             return
 
-        remote_sites = []
+        retrieved_sites = []
 
         async for site_collection in self.client.site_collections():
             async for site in self.client.sites(
                 site_collection["siteCollection"]["hostname"], configured_root_sites
             ):
-                remote_sites.append(site["name"])
+                retrieved_sites.append(self._site_path_from_web_url(site['webUrl']))
 
-        missing = [x for x in configured_root_sites if x not in remote_sites]
+        missing = [x for x in configured_root_sites if x not in retrieved_sites]
 
         if missing:
             raise Exception(
-                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
+                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
             )
+
+    def _site_path_from_web_url(self, web_url):
+        url_parts = web_url.split('/sites/')
+        site_path_parts = url_parts[1:]
+        return '/sites/'.join(site_path_parts) # just in case there was a /sites/ in the site path
 
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
