@@ -108,6 +108,7 @@ async def create_spo_source(
     use_text_extraction_service=False,
     fetch_drive_item_permissions=True,
     fetch_unique_list_permissions=True,
+    enumerate_all_sites=False,
 ):
     async with create_source(
         SharepointOnlineDataSource,
@@ -120,6 +121,7 @@ async def create_spo_source(
         use_text_extraction_service=use_text_extraction_service,
         fetch_drive_item_permissions=fetch_drive_item_permissions,
         fetch_unique_list_permissions=fetch_unique_list_permissions,
+        enumerate_all_sites=enumerate_all_sites,
     ) as source:
         source.set_features(
             Features(
@@ -1610,7 +1612,7 @@ class TestSharepointOnlineDataSource:
         return [
             {
                 "id": "1",
-                "webUrl": "https://test.sharepoint.com/site-1",
+                "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
             }
@@ -2457,6 +2459,17 @@ class TestSharepointOnlineDataSource:
             # Says which site does not exist
             assert e.match(non_existing_site)
             assert e.match(another_non_existing_site)
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_individual_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site_1"
+
+        async with create_spo_source(
+            site_collections=[existing_site], enumerate_all_sites=True
+        ) as source:
+            await source.validate_config()
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):

@@ -1208,7 +1208,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         async for site_collection in self.client.site_collections():
             async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"], configured_root_sites
+                site_collection["siteCollection"]["hostname"],
+                configured_root_sites,
+                self.configuration["enumerate_all_sites"],
             ):
                 retrieved_sites.append(self._site_path_from_web_url(site["webUrl"]))
 
