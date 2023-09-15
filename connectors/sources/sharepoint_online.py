@@ -600,8 +600,8 @@ class SharepointOnlineClient:
                 for site in page:
                     # Filter out site collections that are not needed
                     if (
-                            WILDCARD not in allowed_root_sites
-                            and site["name"] not in allowed_root_sites
+                        WILDCARD not in allowed_root_sites
+                        and site["name"] not in allowed_root_sites
                     ):
                         continue
                     yield site
@@ -609,11 +609,17 @@ class SharepointOnlineClient:
             self._logger.debug(f"Looking up sites: {allowed_root_sites} individually")
             for allowed_site in allowed_root_sites:
                 try:
-                    self._logger.debug(f"Requesting site '{allowed_site}' by relative path in parent site: {parent_site_id}")
-                    site = await self._graph_api_client.fetch(f"{GRAPH_API_URL}/sites/{parent_site_id}:/sites/{allowed_site}")
+                    self._logger.debug(
+                        f"Requesting site '{allowed_site}' by relative path in parent site: {parent_site_id}"
+                    )
+                    site = await self._graph_api_client.fetch(
+                        f"{GRAPH_API_URL}/sites/{parent_site_id}:/sites/{allowed_site}"
+                    )
                     yield site
-                except NotFound as e:
-                    self._logger.warning(f"Could not look up site '{allowed_site}' by relative path in parent site: {parent_site_id}")
+                except NotFound:
+                    self._logger.warning(
+                        f"Could not look up site '{allowed_site}' by relative path in parent site: {parent_site_id}"
+                    )
 
     async def site_drives(self, site_id):
         select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
@@ -1112,10 +1118,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             "enumerate_all_sites": {
                 "display": "toggle",
                 "lavel": "Enumerate all sites?",
-                "tooltip": "Whether sites should be fetched by name from \"all sites\". If disabled, each configured site will be fetched with an individual request.",
+                "tooltip": 'Whether sites should be fetched by name from "all sites". If disabled, each configured site will be fetched with an individual request.',
                 "order": 6,
                 "type": "bool",
-                "value": True
+                "value": True,
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -1204,7 +1210,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             async for site in self.client.sites(
                 site_collection["siteCollection"]["hostname"], configured_root_sites
             ):
-                retrieved_sites.append(self._site_path_from_web_url(site['webUrl']))
+                retrieved_sites.append(self._site_path_from_web_url(site["webUrl"]))
 
         missing = [x for x in configured_root_sites if x not in retrieved_sites]
 
@@ -1214,9 +1220,11 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
 
     def _site_path_from_web_url(self, web_url):
-        url_parts = web_url.split('/sites/')
+        url_parts = web_url.split("/sites/")
         site_path_parts = url_parts[1:]
-        return '/sites/'.join(site_path_parts) # just in case there was a /sites/ in the site path
+        return "/sites/".join(
+            site_path_parts
+        )  # just in case there was a /sites/ in the site path
 
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
@@ -1648,7 +1656,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site in self.client.sites(
             hostname,
             collections,
-            enumerate_all_sites=self.configuration['enumerate_all_sites']
+            enumerate_all_sites=self.configuration["enumerate_all_sites"],
         ):  # TODO: simplify and eliminate root call
             site["_id"] = site["id"]
             site["object_type"] = "site"

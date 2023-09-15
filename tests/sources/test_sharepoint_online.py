@@ -860,7 +860,6 @@ class TestSharepointOnlineClient:
         filter_ = ["First", "Third"]
         patch_fetch.side_effect = actual_items
 
-
         returned_items = []
         async for site in client.sites(root_site, filter_, enumerate_all_sites=False):
             returned_items.append(site)
