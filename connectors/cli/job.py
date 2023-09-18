@@ -65,7 +65,7 @@ class Job:
             jobs = await self.__async_list_jobs(connector_id, index_name, job_id)
 
             for job in jobs:
-                await job._terminate(JobStatus.CANCELED)
+                await job._terminate(JobStatus.CANCELING)
 
             return True
         except:
