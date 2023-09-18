@@ -87,7 +87,7 @@
         "required": true,
         "options": [],
         "validations": [],
-        "value": trie,
+        "value": true,
         "order": 6,
         "ui_restrictions": []
       },
