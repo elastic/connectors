@@ -308,14 +308,20 @@ class BoxDataSource(BaseDataSource):
                         (
                             doc,
                             partial(
-                                self.get_content, attachment=folder_entry, user_id=user_id
+                                self.get_content,
+                                attachment=folder_entry,
+                                user_id=user_id,
                             ),
                         )
                     )
                 else:
                     await self.queue.put((doc, None))
                     await self.fetchers.put(
-                        partial(self._fetch_files_folders, doc_id=folder_entry.get("id"), user_id=user_id)
+                        partial(
+                            self._fetch_files_folders,
+                            doc_id=folder_entry.get("id"),
+                            user_id=user_id,
+                        )
                     )
                     self.tasks += 1
             await self.queue.put("FINISHED")
