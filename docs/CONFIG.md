@@ -51,13 +51,16 @@ elasticsearch:
   # Any connectors without a specific `api_key` value will default to using this key
 connectors:
   - connector_id: 1234
+    service_type: <service_type>
     api_key: <key2>
     # Used to write data to the `search-*` index associated with connector 1234
     # You may have multiple connectors in your config file!
   - connector_id: 5678
-  api_key: <key3>
+    service_type: <service_type>
+    api_key: <key3>
   # Used to write data to the `search-*` index associated with connector 5678
   - connector_id: abcd
+    service_type: <service_type>
   # No explicit api key specified, so this connector will used <key1>
 ```
 
