@@ -32,6 +32,7 @@ ENDPOINTS = {
     "PING": "/2.0/users/me",
     "FOLDER": "/2.0/folders/{folder_id}/items",
     "CONTENT": "/2.0/files/{file_id}/content",
+    "USERS": "/2.0/users",
 }
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -41,8 +42,10 @@ FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # ~ 5 MB
 MAX_CONCURRENCY = 2000
 CONCURRENT_DOWNLOADS = 15
-FIELDS = "name,modified_at,download_url,size,type,sequence_id,etag,created_at,modified_at,content_created_at,content_modified_at,description,created_by,modified_by,owned_by,parent,item_status"
+FIELDS = "name,modified_at,size,type,sequence_id,etag,created_at,modified_at,content_created_at,content_modified_at,description,created_by,modified_by,owned_by,parent,item_status"
 FILE = "file"
+BOX_FREE = "box_free"
+BOX_ENTERPRISE = "box_enterprise"
 
 refresh_token = None
 
@@ -64,6 +67,8 @@ class AccessToken:
         if refresh_token is None:
             refresh_token = configuration["refresh_token"]
         self._token_cache = CacheWithTimeout()
+        self.is_enterprise = configuration["is_enterprise"]
+        self.enterprise_id = configuration["enterprise_id"]
 
     async def get(self):
         if cached_value := self._token_cache.get_value():
@@ -72,27 +77,48 @@ class AccessToken:
         return self.access_token
 
     async def _set_access_token(self):
-        global refresh_token
-        data = {
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-        }
         try:
-            async with self._http_session.post(
-                url=ENDPOINTS["TOKEN"],
-                data=data,
-            ) as response:
-                tokens = await response.json()
-                self.access_token = tokens.get("access_token")
-                refresh_token = tokens.get("refresh_token")
-                self.expired_at = datetime.utcnow() + timedelta(
-                    seconds=int(tokens.get("expires_in", 3599))
-                )
-                self._token_cache.set_value(
-                    value=self.access_token, expiration_date=self.expired_at
-                )
+            if self.is_enterprise == BOX_FREE:
+                global refresh_token
+                data = {
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                }
+                async with self._http_session.post(
+                    url=ENDPOINTS["TOKEN"],
+                    data=data,
+                ) as response:
+                    tokens = await response.json()
+                    self.access_token = tokens.get("access_token")
+                    refresh_token = tokens.get("refresh_token")
+                    self.expired_at = datetime.utcnow() + timedelta(
+                        seconds=int(tokens.get("expires_in", 3599))
+                    )
+                    self._token_cache.set_value(
+                        value=self.access_token, expiration_date=self.expired_at
+                    )
+            else:
+                data = {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "grant_type": "client_credentials",
+                    "box_subject_type": "enterprise",
+                    "box_subject_id": self.enterprise_id,
+                }
+                async with self._http_session.post(
+                    url=ENDPOINTS["TOKEN"],
+                    data=data,
+                ) as response:
+                    tokens = await response.json()
+                    self.access_token = tokens.get("access_token")
+                    self.expired_at = datetime.utcnow() + timedelta(
+                        seconds=int(tokens.get("expires_in", 3599))
+                    )
+                    self._token_cache.set_value(
+                        value=self.access_token, expiration_date=self.expired_at
+                    )
         except Exception as exception:
             raise TokenError(
                 f"Error while generating access token. Please verify that provided configurations are correct. Exception {exception}."
@@ -104,6 +130,7 @@ class BoxClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
+        self.is_enterprise = configuration["is_enterprise"]
         self._http_session = aiohttp.ClientSession(
             base_url="https://api.box.com", raise_for_status=True
         )
@@ -129,7 +156,6 @@ class BoxClient:
                 raise
             case 429:
                 await self._put_to_sleep(exception=exception)
-                raise
             case 404:
                 raise NotFound(f"Resource Not Found. Error: {exception}")
             case _:
@@ -141,24 +167,22 @@ class BoxClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def get(self, url, params=None):
+    async def get(self, url, headers, params=None):
         try:
             access_token = await self.token.get()
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-            }
+            headers.update({"Authorization": f"Bearer {access_token}"})
             return await self._http_session.get(url=url, headers=headers, params=params)
         except ClientResponseError as exception:
             await self._handle_client_errors(exception=exception)
         except Exception:
             raise
 
-    async def paginated_call(self, url, params):
+    async def paginated_call(self, url, params, headers):
         try:
             offset = 0
             while True:
                 params.update({"offset": offset, "limit": FETCH_LIMIT})
-                response = await self.get(url=url, params=params)
+                response = await self.get(url=url, headers=headers, params=params)
                 json_response = await response.json()
                 total_count = json_response.get("total_count")
                 for doc in json_response.get("entries"):
@@ -170,7 +194,7 @@ class BoxClient:
             raise
 
     async def ping(self):
-        await self.get(url=ENDPOINTS["PING"])
+        await self.get(url=ENDPOINTS["PING"], headers={})
 
     async def close(self):
         self._sleeps.cancel()
@@ -185,6 +209,7 @@ class BoxDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.configuration = configuration
         self.tasks = 0
+        self.is_enterprise = configuration["is_enterprise"]
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
 
@@ -211,22 +236,40 @@ class BoxDataSource(BaseDataSource):
             dict: Default configuration.
         """
         return {
+            "is_enterprise": {
+                "display": "dropdown",
+                "label": "Box Account",
+                "options": [
+                    {"label": "Box Free Account", "value": BOX_FREE},
+                    {"label": "Box Enterprise Account", "value": BOX_ENTERPRISE},
+                ],
+                "order": 1,
+                "type": "str",
+                "value": BOX_FREE,
+            },
             "client_id": {
                 "label": "Client ID",
-                "order": 1,
+                "order": 2,
                 "type": "str",
             },
             "client_secret": {
                 "label": "Client Secret",
-                "order": 2,
+                "order": 3,
                 "sensitive": True,
                 "type": "str",
             },
             "refresh_token": {
+                "depends_on": [{"field": "is_enterprise", "value": BOX_FREE}],
                 "label": "Refresh Token",
-                "order": 3,
+                "order": 4,
                 "sensitive": True,
                 "type": "str",
+            },
+            "enterprise_id": {
+                "depends_on": [{"field": "is_enterprise", "value": BOX_ENTERPRISE}],
+                "label": "Enterprise ID",
+                "order": 5,
+                "type": "int",
             },
         }
 
@@ -241,26 +284,38 @@ class BoxDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Box.")
             raise
 
-    async def _fetch_files_folders(self, doc_id):
+    async def get_users_id(self):
+        async for user in self.client.paginated_call(
+            url=ENDPOINTS["USERS"], params={}, headers={}
+        ):
+            yield user.get("id")
+
+    async def _fetch_files_folders(self, doc_id, user_id=None):
         try:
             params = {
                 "fields": FIELDS,
             }
             async for folder_entry in self.client.paginated_call(
-                url=ENDPOINTS["FOLDER"].format(folder_id=doc_id), params=params
+                url=ENDPOINTS["FOLDER"].format(folder_id=doc_id),
+                params=params,
+                headers={"as-user": user_id} if user_id else {},
             ):
                 doc = folder_entry.copy()
                 doc["_id"] = doc.pop("id")
                 doc["_timestamp"] = doc.pop("modified_at")
                 if folder_entry.get("type") == FILE:
-                    doc.pop("download_url")
                     await self.queue.put(
-                        (doc, partial(self.get_content, attachment=folder_entry))
+                        (
+                            doc,
+                            partial(
+                                self.get_content, attachment=folder_entry, user_id=user_id
+                            ),
+                        )
                     )
                 else:
                     await self.queue.put((doc, None))
                     await self.fetchers.put(
-                        partial(self._fetch_files_folders, folder_entry.get("id"))
+                        partial(self._fetch_files_folders, doc_id=folder_entry.get("id"), user_id=user_id)
                     )
                     self.tasks += 1
             await self.queue.put("FINISHED")
@@ -269,8 +324,10 @@ class BoxDataSource(BaseDataSource):
                 f"Something went wrong while fetching data from the folder ID: {doc_id}. Error: {exception}"
             )
 
-    async def _get_document_with_content(self, url, attachment_name, document):
-        file_data = await self.client.get(url=url)
+    async def _get_document_with_content(self, url, attachment_name, document, user_id):
+        file_data = await self.client.get(
+            url=url, headers={"as-user": user_id} if user_id else {}
+        )
         temp_filename = ""
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
             async for data in file_data.content.iter_chunked(CHUNK_SIZE):
@@ -313,7 +370,7 @@ class BoxDataSource(BaseDataSource):
             return False
         return True
 
-    async def get_content(self, attachment, timestamp=None, doit=False):
+    async def get_content(self, attachment, user_id=None, timestamp=None, doit=False):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
@@ -351,6 +408,7 @@ class BoxDataSource(BaseDataSource):
             url=ENDPOINTS["CONTENT"].format(file_id=attachment["id"]),
             attachment_name=attachment_name,
             document=document,
+            user_id=user_id,
         )
 
     async def _consumer(self):
@@ -367,10 +425,14 @@ class BoxDataSource(BaseDataSource):
                 yield item
 
     async def get_docs(self, filtering=None):
-        # "0" refers to the root folder
-        await self.fetchers.put(partial(self._fetch_files_folders, "0"))
-        self.tasks += 1
+        if self.is_enterprise == BOX_ENTERPRISE:
+            async for user_id in self.get_users_id():
+                # "0" refers to the root folder
+                await self._fetch_files_folders(doc_id="0", user_id=user_id)
+        else:
+            await self._fetch_files_folders(doc_id="0")
 
+        self.tasks += 1
         async for item in self._consumer():
             yield item
 

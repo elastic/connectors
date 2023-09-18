@@ -25,7 +25,6 @@ MOCK_RESPONSE = {
             "etag": "0",
             "name": "dummy.pdf",
             "modified_at": "2023-08-04T03:17:55-07:00",
-            "download_url": "https://public.boxcloud.com/d/1/#abcd",
             "size": 1875887,
         },
         {
@@ -57,7 +56,6 @@ FOLDER_ITEMS = {
             "etag": "0",
             "name": "dummy.txt",
             "modified_at": "2023-08-04T03:17:55-07:00",
-            "download_url": "https://public.boxcloud.com/d/1/#abcd",
             "size": 1875887,
         },
     ],
@@ -71,7 +69,6 @@ MOCK_ATTACHMENT = {
     "etag": "0",
     "name": "dummy.pdf",
     "modified_at": "2023-08-04T03:17:55-07:00",
-    "download_url": "https://public.boxcloud.com/d/1/#abcd",
     "size": 1875887,
 }
 MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION = {
@@ -80,7 +77,6 @@ MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION = {
     "etag": "0",
     "name": "Get Started with Box.jpg",
     "modified_at": "2023-08-04T03:17:55-07:00",
-    "download_url": "https://public.boxcloud.com/d/1/#abcd",
     "size": 1875887,
 }
 MOCK_ATTACHMENT_WITH_LARGE_DATA = {
@@ -89,7 +85,6 @@ MOCK_ATTACHMENT_WITH_LARGE_DATA = {
     "etag": "0",
     "name": "dummy.pdf",
     "modified_at": "2023-08-04T03:17:55-07:00",
-    "download_url": "https://public.boxcloud.com/d/1/#abcd",
     "size": 10485762,
 }
 MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
@@ -98,7 +93,6 @@ MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
     "etag": "0",
     "name": "Get Started with Box",
     "modified_at": "2023-08-04T03:17:55-07:00",
-    "download_url": "https://public.boxcloud.com/d/1/#abcd",
     "size": 1875887,
 }
 MOCK_RESPONSE_FETCH_FILES_FOLDERS = [
@@ -118,7 +112,6 @@ MOCK_RESPONSE_FETCH_FILES_FOLDERS = [
             "size": 1875887,
             "id": "1273609717220",
             "modified_at": "2023-08-04T03:17:55-07:00",
-            "download_url": "https://public.boxcloud.com/d/1/#abcd",
         },
     ),
     (
@@ -195,8 +188,10 @@ async def test_get():
 
 
 @pytest.mark.asyncio
-async def test_set_access_token():
+@pytest.mark.parametrize("box_account", ["box_free", "box_enterprise"])
+async def test_set_access_token(box_account):
     async with create_source(BoxDataSource) as source:
+        source.client.token.is_enterprise = box_account
         mock_token = {
             "access_token": "abc#123",
             "expires_in": "1234555",
@@ -223,7 +218,12 @@ async def test_set_access_token_when_tokenerror():
 @patch("connectors.utils.time_to_sleep_between_retries")
 @pytest.mark.parametrize(
     "status_code, exception",
-    [(409, ClientResponseError), (401, ClientResponseError), (404, NotFound)],
+    [
+        (409, ClientResponseError),
+        (401, ClientResponseError),
+        (404, NotFound),
+        (429, Exception),
+    ],
 )
 async def test_get_clientresponseerror(
     mock_time_to_sleep_between_retries, status_code, exception
@@ -239,10 +239,11 @@ async def test_get_clientresponseerror(
                     real_url="", method=None, headers=None, url=""
                 ),
                 history=None,
+                headers={"retry-after": 0},
             )
         )
         with pytest.raises(exception):
-            await source.client.get("/me")
+            await source.client.get("/me", {})
 
 
 @pytest.mark.asyncio
@@ -262,7 +263,7 @@ async def test_ping_with_successful_connection():
 @patch("connectors.utils.time_to_sleep_between_retries")
 async def test_ping_with_unsuccessful_connection(mock_time_to_sleep_between_retries):
     async with create_source(BoxDataSource) as source:
-        mock_time_to_sleep_between_retries.return_value = Mock()
+        mock_time_to_sleep_between_retries.return_value = 0
         source.client.token.get = AsyncMock(side_effect=Exception())
         with pytest.raises(Exception):
             await source.ping()
