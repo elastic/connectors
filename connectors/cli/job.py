@@ -5,6 +5,8 @@ from connectors.protocol import ConnectorIndex
 from connectors.protocol import Sort, JobTriggerMethod, JobType
 import asyncio
 
+from connectors.protocol import JobStatus
+
 class Job:
     def __init__(self, config):
         self.config = config
@@ -29,7 +31,7 @@ class Job:
                 trigger_method=JobTriggerMethod.ON_DEMAND,
                 job_type=JobType(job_type),
             )
-            
+
             return True
         except Exception as e:
             raise e
@@ -50,21 +52,21 @@ class Job:
             formatted_jobs = []
             async for job in jobs:
                 formatted_jobs.append(job)
-            
+
             return formatted_jobs
 
         # TODO catch exceptions
         finally:
             await self.sync_job_index.close()
             await self.es_client.close()
-    
+
     async def __async_cancel_jobs(self, connector_id, index_name, job_id):
         try:
             jobs = await self.__async_list_jobs(connector_id, index_name, job_id)
 
             for job in jobs:
-                await job.cancel()
-            
+                await job._terminate(JobStatus.CANCELED)
+
             return True
         except:
             return False
@@ -78,10 +80,10 @@ class Job:
 
         if index_name:
             return { "bool": { "filter": [{ "term": { "connector.index_name": index_name } }] } }
-        
+
         if connector_id:
             return { "bool": { "must": [{ "term": { "connector.id": connector_id } }] } }
-        
+
         return None
 
     def __job_list_sort(self):

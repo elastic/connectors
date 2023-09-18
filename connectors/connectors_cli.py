@@ -91,7 +91,7 @@ def login(host, username, password):
 cli.add_command(login)
 
 # Connector group
-@click.group(invoke_without_command=True)
+@click.group(invoke_without_command=True, help="Connectors mangement")
 @click.pass_obj
 def connector(obj):
     pass
@@ -99,14 +99,15 @@ def connector(obj):
 @click.command(help="List all existing connectors")
 @click.pass_obj
 def list(obj):
-    click.echo("")
     connector = Connector(config=obj['config']['elasticsearch'])
     coro = connector.list_connectors()
 
     try:
         connectors = asyncio.get_event_loop().run_until_complete(coro)
+        click.echo("")
         if len(connectors) == 0:
             click.echo("No connectors found")
+            return
 
         click.echo(f"Showing {len(connectors)} connectors \n")
 
@@ -169,12 +170,14 @@ def index(obj):
 @click.command(help="Show all indices")
 @click.pass_obj
 def list(obj):
-    click.echo("")
     index = Index(config=obj['config']['elasticsearch'])
     indices = index.list_indices()
 
+    click.echo("")
+
     if len(indices) == 0:
         click.echo("No indices found")
+        return
 
     click.echo(f"Showing {len(indices)} indices \n")
     table_rows = []
@@ -227,12 +230,12 @@ def job(obj):
     pass
 
 
-@click.command(help="Start a job. -i to pass connector id, -t to pass job type")
+@click.command(help="Start a sync job.")
 @click.pass_obj
-@click.option('-i')
-@click.option('-t')
+@click.option('-i', help='Connector ID', required=True)
+@click.option('-t', help='Job type', type=click.Choice(['full', 'incremental', 'access_control'], case_sensitive=False), required=True)
 def start(obj, i, t):
-    job_cli = Job(config=obj['config']['elasticsearch']) 
+    job_cli = Job(config=obj['config']['elasticsearch'])
     click.echo('Starting a job...')
     if job_cli.start(connector_id=i, job_type=t):
         click.echo(click.style("The job has been started. You're phenomenous!", fg='green'))
@@ -242,13 +245,13 @@ def start(obj, i, t):
 
 job.add_command(start)
 
-@click.command(help="List of jobs sorted by date. -i to pass connector name, -n to pass index name, -j to pass job id")
+@click.command(help="List of jobs sorted by date.")
 @click.pass_obj
-@click.option('-i')
-@click.option('-n')
-@click.option('-j')
+@click.option('-i', help='Connector ID')
+@click.option('-n', help='Index name')
+@click.option('-j', help='Job id')
 def list(obj, i, n, j):
-    job_cli = Job(config=obj['config']['elasticsearch']) 
+    job_cli = Job(config=obj['config']['elasticsearch'])
     jobs = job_cli.list_jobs(connector_id=i, index_name=n, job_id=j)
 
     if len(jobs) == 0:
@@ -273,15 +276,15 @@ def list(obj, i, n, j):
 
 job.add_command(list)
 
-@click.command(help="Cancel jobs. -i to pass connector name, -n to pass index name, -j to pass job id")
+@click.command(help="Cancel a job")
 @click.pass_obj
-@click.option('-i')
-@click.option('-n')
-@click.option('-j')
+@click.option('-i', help='Connector ID')
+@click.option('-n', help='Index name')
+@click.option('-j', help='Job id', required=True)
 def cancel(obj, i, n, j):
-    job_cli = Job(config=obj['config']['elasticsearch']) 
+    job_cli = Job(config=obj['config']['elasticsearch'])
     click.confirm(click.style('Are you sure you want to cancel jobs?😱', fg='yellow'), abort=True)
-    click.echo('Deleting jobs...')
+    click.echo('Canceling jobs...')
     if job_cli.cancel(connector_id=i, index_name=n, job_id=j):
         click.echo(click.style("All jobs have been cancelled. You're incredible!", fg='green'))
     else:

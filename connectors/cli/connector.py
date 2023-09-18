@@ -98,7 +98,7 @@ class Connector:
                 "index_name": index_name,
                 "service_type": service_type,
                 "status": "configured", # TODO use a predefined constant
-                "is_native": False, # figure out how to check if it's native or not
+                "is_native": True, # figure out how to check if it's native or not
                 "language": language,
                 "last_access_control_sync_error": None,
                 "last_access_control_sync_scheduled_at": None,
