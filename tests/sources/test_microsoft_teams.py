@@ -1011,7 +1011,7 @@ class JSONAsyncMock(AsyncMock):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_call_api_with_429(
     microsoft_client,
     mock_responses,
@@ -1039,7 +1039,7 @@ async def test_call_api_with_429(
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy", AsyncMock())
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_call_api_with_429_with_retry_after(
     microsoft_client,
     mock_responses,
@@ -1133,3 +1133,13 @@ async def test_fetch(microsoft_client, mock_responses):
 
         fetch_response = await microsoft_client.fetch(url)
         assert response == fetch_response
+
+
+@pytest.mark.asyncio
+async def test_get_user_drive_root_children():
+    async with create_source(
+        MicrosoftTeamsDataSource,
+    ) as source:
+        source.client.scroll = AsyncIterator([[{"name": "microsoft teams chat files"}]])
+        child = await source.client.get_user_drive_root_children(drive_id=1)
+        assert child["name"] == "microsoft teams chat files"
