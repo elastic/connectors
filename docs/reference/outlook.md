@@ -16,20 +16,27 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ## Connecting to Outlook
 
+Outlook connector supports both cloud and server platforms. Connector uses different ways to connect with them and following are the Authentication process to connect to Outlook:
+
 ### Connect to Exchange Server
 
-To order to connect to Outlook, the connector fetches Active Directory users with the help of `ldap3` python library.
+In order to connect to Exchange server, the connector fetches Active Directory users with the help of `ldap3` python library.
 
-### Connect to Office365 Outlook
+### Connect to Office365 Outlook (Outlook Cloud)
 
-To order to connect to Outlook, user needs to create an Azure application as follows:
+To integrate with the Outlook connector using Azure, follow these steps to create and configure an Azure application:
 
-1. Log into Microsoft [Azure Portal](https://portal.azure.com) and click on App registrations and register an application.
-2. From Overview tab, keep `Client ID` and `Tenant ID` handy.
-3. Go to **Certificates & secrets** and create a new client secret.
-4. Before configuring `Client ID`, `Tenant ID` and `Client Secret` in elastic, from API permissions tab - add below permission to fetch the Outlook content,
-    - Add permissions -> APIs my organization uses -> Office 365 Exchange Online -> full_access_as_app (Application permission)
-5. Now, user can configure `Client ID`, `Tenant ID` and `Client Secret` values to Outlook connector.
+1. Navigate to the [Azure Portal](https://portal.azure.com/) and log in using your credentials.
+2. Click on **App registrations** to register a new application.
+3. Navigate to the **Overview** tab. Make a note of the `Client ID` and `Tenant ID`.
+4. Click on the **Certificates & secrets** tab and create a new client secret. Keep this secret handy.
+5. Go to the **API permissions** tab.
+   - Click on "Add permissions."
+   - Choose "APIs my organization uses."
+   - Search for and select "Office 365 Exchange Online."
+   - Add the `full_access_as_app` application permission.
+
+You can now use the Client ID, Tenant ID, and Client Secret you've noted to configure the Outlook connector.
 
 
 ## Configuration
@@ -70,7 +77,7 @@ Password to authenticate with Exchange server.
 
 #### `Exchange server domain name` (required if data source is outlook_server)
 
-Domain name for Exchange server users such as gmail.com, exchange.local.
+Domain name for Exchange server users such as `gmail.com` or `exchange.local`.
 
 #### `Enable SSL`
 
@@ -82,11 +89,13 @@ Whether SSL verification will be enabled. Default value is `False`.
 
 Content of SSL certificate. Example certificate:
 
+```
 -----BEGIN CERTIFICATE-----
 MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
 ...
 7RhLQyWn2u00L7/9Omw=
 -----END CERTIFICATE-----
+```
 
 **Note:** This configuration is applicable for `Outlook Server` only.
 
