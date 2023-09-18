@@ -37,6 +37,26 @@ class KafkaClient:
         async with self._get_consumer() as consumer:
             await consumer.topics()
 
+
+    def _get_pkeys_from_schema(self, schema):
+        # Extract the fields from the schema
+        fields = schema.get('fields', [])
+
+        # Retrieve all primary key fields
+        primary_keys = [field['field'] for field in fields if not field.get('optional')]
+
+        return primary_keys
+
+
+    def _build_unique_primary_key(self, primary_keys, payload):
+
+        pkey_values = []
+
+        for pkey in primary_keys:
+            pkey_values.append(str(payload.get(pkey)))
+
+        return '_'.join(pkey_values)
+
     async def consume_all_messages(self):
         async with self._get_consumer() as consumer:
             msgs = True
@@ -45,8 +65,12 @@ class KafkaClient:
                 msg_list = msgs.values()
                 # same pkey in same parition, so no need to worry about global ordering here
                 for msg in list(chain.from_iterable(msg_list)):
-                    # todo: check schema for pkey
-                    yield msg.key, msg.value, msg.timestamp
+                    primary_keys = self._get_pkeys_from_schema(schema=msg.key.get("schema", {}))
+                    message_id = self._build_unique_primary_key(
+                        primary_keys=primary_keys,
+                        payload=msg.key.get("payload", {})
+                    )
+                    yield message_id, msg.value, msg.timestamp
 
 
 class KafkaDataSource(BaseDataSource):
@@ -115,9 +139,9 @@ class KafkaDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Kafka.")
             raise
 
-    def _process_message(self, message_key, message_value, message_timestamp):
+    def _process_message(self, message_id, message_value, message_timestamp):
         return {
-            "_id": message_key.get("payload").get("id"),
+            "_id": message_id,
             "_timestamp": message_timestamp,
             **message_value.get("payload").get("after", {}),
         }
@@ -127,5 +151,4 @@ class KafkaDataSource(BaseDataSource):
             processed_message = self._process_message(
                 message_key, message_value, message_timestamp
             )
-            self._logger.info([processed_message])
             yield processed_message, None
