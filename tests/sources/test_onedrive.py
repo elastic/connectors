@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the OneDrive source class methods"""
-from unittest.mock import ANY, AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from aiohttp import StreamReader
@@ -28,43 +28,55 @@ from tests.sources.support import create_source
 ADVANCED_SNIPPET = "advanced_snippet"
 EXPECTED_USERS = [
     {
-        "displayName": "Adele Vance",
-        "givenName": "Adele",
-        "jobTitle": "Retail Manager",
         "mail": "AdeleV@w076v.onmicrosoft.com",
-        "officeLocation": "18/2111",
-        "preferredLanguage": "en-US",
         "id": "3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+        "createdDateTime": "2022-06-11T14:47:53Z",
+        "userPrincipalName": "AdeleV@w076v.onmicrosoft.com",
+        "transitiveMemberOf": [
+            {
+                "@odata.type": "#microsoft.graph.group",
+                "id": "e35d6159-f6c1-462c-a60c-11f29880e9c0",
+            }
+        ],
     },
     {
-        "displayName": "Alex Wilber",
-        "givenName": "Alex",
-        "jobTitle": "Marketing Assistant",
         "mail": "AlexW@w076v.onmicrosoft.com",
-        "officeLocation": "131/1104",
-        "preferredLanguage": "en-US",
         "id": "8e083933-1720-4d2f-80d0-3976669b40ee",
+        "createdDateTime": "2022-06-11T14:47:53Z",
+        "userPrincipalName": "AlexW@w076v.onmicrosoft.com",
+        "transitiveMemberOf": [
+            {
+                "@odata.type": "#microsoft.graph.group",
+                "id": "5010ad09-7ad0-48e7-8047-1ae0f6117a17",
+            }
+        ],
     },
 ]
 RESPONSE_USERS = {
     "value": [
         {
-            "displayName": "Adele Vance",
-            "givenName": "Adele",
-            "jobTitle": "Retail Manager",
             "mail": "AdeleV@w076v.onmicrosoft.com",
-            "officeLocation": "18/2111",
-            "preferredLanguage": "en-US",
             "id": "3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+            "createdDateTime": "2022-06-11T14:47:53Z",
+            "userPrincipalName": "AdeleV@w076v.onmicrosoft.com",
+            "transitiveMemberOf": [
+                {
+                    "@odata.type": "#microsoft.graph.group",
+                    "id": "e35d6159-f6c1-462c-a60c-11f29880e9c0",
+                }
+            ],
         },
         {
-            "displayName": "Alex Wilber",
-            "givenName": "Alex",
-            "jobTitle": "Marketing Assistant",
             "mail": "AlexW@w076v.onmicrosoft.com",
-            "officeLocation": "131/1104",
-            "preferredLanguage": "en-US",
             "id": "8e083933-1720-4d2f-80d0-3976669b40ee",
+            "createdDateTime": "2022-06-11T14:47:53Z",
+            "userPrincipalName": "AlexW@w076v.onmicrosoft.com",
+            "transitiveMemberOf": [
+                {
+                    "@odata.type": "#microsoft.graph.group",
+                    "id": "5010ad09-7ad0-48e7-8047-1ae0f6117a17",
+                }
+            ],
         },
     ]
 }
@@ -278,6 +290,101 @@ EXPECTED_CONTENT = {
 }
 
 EXPECTED_FILES_FOLDERS = {}
+
+RESPONSE_PERMISSION1 = {
+    "grantedToV2": {
+        "user": {
+            "id": "user_id_1",
+        }
+    },
+    "grantedToIdentitiesV2": [
+        {
+            "user": {
+                "id": "user_id_2",
+            },
+            "group": {
+                "id": "group_id_1",
+            },
+        },
+    ],
+}
+RESPONSE_PERMISSION2 = {
+    "grantedToV2": {
+        "user": {
+            "id": "user_id_3",
+        }
+    },
+    "grantedToIdentitiesV2": [
+        {
+            "user": {
+                "id": "user_id_4",
+            },
+            "group": {
+                "id": "group_id_2",
+            },
+        }
+    ],
+}
+EXPECTED_USER1_FILES_PERMISSION = [
+    {
+        "type": "folder",
+        "title": "folder3",
+        "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "_timestamp": "2023-05-01T09:09:19Z",
+        "created_at": "2023-05-01T09:09:19Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "_allow_access_control": [
+            "group:group_id_1",
+            "user_id:user_id_1",
+            "user_id:user_id_2",
+        ],
+    },
+    {
+        "type": "file",
+        "title": "doit.py",
+        "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "_timestamp": "2023-05-01T09:10:21Z",
+        "created_at": "2023-05-01T09:09:31Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
+        "_allow_access_control": [
+            "group:group_id_1",
+            "user_id:user_id_1",
+            "user_id:user_id_2",
+        ],
+    },
+]
+EXPECTED_USER2_FILES_PERMISSION = [
+    {
+        "type": "folder",
+        "title": "folder4",
+        "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "_timestamp": "2023-05-01T09:09:19Z",
+        "created_at": "2023-05-01T09:09:19Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
+        "_allow_access_control": [
+            "group:group_id_2",
+            "user_id:user_id_3",
+            "user_id:user_id_4",
+        ],
+    },
+    {
+        "type": "file",
+        "title": "mac.txt",
+        "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "_timestamp": "2023-05-01T09:10:21Z",
+        "created_at": "2023-05-01T09:09:31Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
+        "_allow_access_control": [
+            "group:group_id_2",
+            "user_id:user_id_3",
+            "user_id:user_id_4",
+        ],
+    },
+]
 
 
 def token_retrieval_errors(message, error_code):
@@ -787,3 +894,149 @@ async def test_get_docs_with_advanced_rules(filtering):
                         documents.append(item)
 
         assert documents == expected_responses
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_source(OneDriveDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+
+        assert len(acl) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_enabled():
+    expected_user_access_control = [
+        [
+            "email:AdeleV@w076v.onmicrosoft.com",
+            "group:e35d6159-f6c1-462c-a60c-11f29880e9c0",
+            "user:AdeleV@w076v.onmicrosoft.com",
+            "user_id:3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+        ],
+        [
+            "email:AlexW@w076v.onmicrosoft.com",
+            "group:5010ad09-7ad0-48e7-8047-1ae0f6117a17",
+            "user:AlexW@w076v.onmicrosoft.com",
+            "user_id:8e083933-1720-4d2f-80d0-3976669b40ee",
+        ],
+    ]
+
+    async with create_source(OneDriveDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch.object(
+                OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
+            ):
+                user_access_control = []
+                async for user_doc in source.get_access_control():
+                    user_doc["query"]["template"]["params"]["access_control"].sort()
+                    user_access_control.append(
+                        user_doc["query"]["template"]["params"]["access_control"]
+                    )
+
+                assert expected_user_access_control == user_access_control
+
+
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
+@patch.object(
+    OneDriveClient,
+    "get_owned_files",
+    side_effect=[
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER1_FILES[0], None),
+                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
+                ]
+            )
+        ),
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER2_FILES[0], None),
+                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                ]
+            )
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_without_dls_enabled(users_patch, files_patch):
+    async with create_source(OneDriveDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        expected_responses = [*EXPECTED_USER1_FILES, *EXPECTED_USER2_FILES]
+        source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
+
+        documents, downloads = [], []
+        async for item, content in source.get_docs():
+            documents.append(item)
+
+            if content:
+                downloads.append(content)
+
+        assert documents == expected_responses
+
+        assert len(downloads) == 2
+
+
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
+@patch.object(
+    OneDriveClient,
+    "get_owned_files",
+    side_effect=[
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER1_FILES[0], None),
+                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
+                ]
+            )
+        ),
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER2_FILES[0], None),
+                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                ]
+            )
+        ),
+    ],
+)
+@patch.object(
+    OneDriveClient,
+    "list_file_permission",
+    side_effect=[
+        (AsyncIterator([RESPONSE_PERMISSION1])),
+        (AsyncIterator([RESPONSE_PERMISSION1])),
+        (AsyncIterator([RESPONSE_PERMISSION2])),
+        (AsyncIterator([RESPONSE_PERMISSION2])),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_dls_enabled(users_patch, files_patch, permissions_patch):
+    async with create_source(OneDriveDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        expected_responses = [
+            *EXPECTED_USER1_FILES_PERMISSION,
+            *EXPECTED_USER2_FILES_PERMISSION,
+        ]
+        source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
+
+        documents, downloads = [], []
+        async for item, content in source.get_docs():
+            item.get("_allow_access_control", []).sort()
+            documents.append(item)
+
+            if content:
+                downloads.append(content)
+
+        assert documents == expected_responses
+
+        assert len(downloads) == 2
