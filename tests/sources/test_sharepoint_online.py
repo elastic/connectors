@@ -662,13 +662,10 @@ class TestMicrosoftAPISession:
         not_found_error.message = "Something went wrong"
 
         mock_responses.get(url, exception=not_found_error)
-<<<<<<< HEAD
-=======
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
->>>>>>> 37d0f863 (Fix tests and add more)
 
         with pytest.raises(NotFound) as e:
             async with microsoft_api_session._get(url) as _:
