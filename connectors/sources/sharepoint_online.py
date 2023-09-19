@@ -1765,7 +1765,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_email(site_user_email))
 
             if site_group_id:
-                self._logger.info(_prefix_site_group(site_web_url, site_group_id))
+                access_control.append(_prefix_site_group(site_web_url, site_group_id))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
