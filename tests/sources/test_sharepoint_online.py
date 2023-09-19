@@ -15,7 +15,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 import pytest_asyncio
-from aiohttp.client_exceptions import (ClientResponseError, ClientPayloadError)
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 
 from connectors.logger import logger
 from connectors.protocol import Features
@@ -25,7 +25,6 @@ from connectors.sources.sharepoint_online import (
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
-    DEFAULT_RETRY_SECONDS,
     BadRequestError,
     DriveItemsPage,
     GraphAPIToken,
@@ -561,7 +560,6 @@ class TestMicrosoftAPISession:
             assert actual_payload == payload
 
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
-
 
     @pytest.mark.asyncio
     async def test_call_api_with_404_with_retry_after_header(
