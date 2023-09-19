@@ -1955,9 +1955,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         is_group = identity_type == "SP.Group"
         is_user = identity_type == "SP.User"
 
-        if not is_group and not is_user:
-            self._logger.info(identity_type)
-
         if is_group:
             users = role_assignment.get("Member", {}).get("Users", [])
 
