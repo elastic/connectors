@@ -4,13 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+import collections
 import os
 import re
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import partial, wraps
-import collections
 
 import aiofiles
 import aiohttp
@@ -537,7 +537,6 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-
     async def sitegroups_list(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
 
@@ -947,7 +946,7 @@ def _prefix_group(group):
 
 
 def _prefix_site_group(site_web_url, site_group):
-    return prefix_identity("site_group", f'{site_web_url}-{site_group}')
+    return prefix_identity("site_group", f"{site_web_url}-{site_group}")
 
 
 def _prefix_user(user):
@@ -1345,7 +1344,11 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
-        access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups).union(person_site_groups))
+        access_control = list(
+            {prefixed_mail, prefixed_username}
+            .union(prefixed_groups)
+            .union(person_site_groups)
+        )
 
         if "createdDateTime" in user:
             created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
@@ -1375,22 +1378,22 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-
         # build sitegroups lookup
         user_sitegroup_lookup = collections.defaultdict(set)
-
 
         async for site_collection in self.site_collections():
             async for site in self.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
             ):
-                async for site_group in self.client.sitegroups_list(site['webUrl']):
-                    site_group_id = site_group['Id']
-                    for user in site_group.get('Users', []):
-                        user_email = user.get('Email')
+                async for site_group in self.client.sitegroups_list(site["webUrl"]):
+                    site_group_id = site_group["Id"]
+                    for user in site_group.get("Users", []):
+                        user_email = user.get("Email")
                         if user_email:
-                            user_sitegroup_lookup[user_email].add(_prefix_site_group(site['webUrl'], site_group_id))
+                            user_sitegroup_lookup[user_email].add(
+                                _prefix_site_group(site["webUrl"], site_group_id)
+                            )
 
         already_seen_ids = set()
 
@@ -1419,7 +1422,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             update_already_seen(email, username)
 
             person_sitegroups = user_sitegroup_lookup.get(email, set())
-            person_access_control_doc = await self._user_access_control_doc(user, person_sitegroups)
+            person_access_control_doc = await self._user_access_control_doc(
+                user, person_sitegroups
+            )
             if person_access_control_doc:
                 return person_access_control_doc
 
@@ -1429,7 +1434,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
-    async def _drive_items_batch_with_permissions(self, drive_id, drive_items_batch, site_web_url):
+    async def _drive_items_batch_with_permissions(
+        self, drive_id, drive_items_batch, site_web_url
+    ):
         """Decorate a batch of drive items with their permissions using one API request.
 
         Args:
@@ -1459,7 +1466,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
-                yield self._with_drive_item_permissions(drive_item, permissions, site_web_url)
+                yield self._with_drive_item_permissions(
+                    drive_item, permissions, site_web_url
+                )
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1670,7 +1679,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_drive
 
-    def _with_drive_item_permissions(self, drive_item, drive_item_permissions, site_web_url):
+    def _with_drive_item_permissions(
+        self, drive_item, drive_item_permissions, site_web_url
+    ):
         """Decorates a drive item with its permissions.
 
         Args:
@@ -2018,7 +2029,6 @@ class SharepointOnlineDataSource(BaseDataSource):
                                 role_assignment
                             )
                         )
-
 
                     site_page = self._decorate_with_access_control(
                         site_page, page_access_control
