@@ -1041,7 +1041,7 @@ def test_bulk_populate_stats(res, expected_result):
     assert sink.deleted_document_count == expected_result["deleted_document_count"]
 
 
-async def test_batch_bulk():
+async def test_batch_bulk_with_retry():
     client = Mock()
     sink = Sink(
         client=client,
@@ -1054,6 +1054,7 @@ async def test_batch_bulk():
     )
 
     with mock.patch.object(asyncio, "sleep"):
+        # first call raises exception, and the second call succeeds
         client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
         await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
 
