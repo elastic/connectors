@@ -15,7 +15,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 import pytest_asyncio
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import (ClientResponseError, ClientPayloadError)
 
 from connectors.logger import logger
 from connectors.protocol import Features
@@ -25,6 +25,7 @@ from connectors.sources.sharepoint_online import (
     DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
+    DEFAULT_RETRY_SECONDS,
     BadRequestError,
     DriveItemsPage,
     GraphAPIToken,
@@ -536,6 +537,58 @@ class TestMicrosoftAPISession:
             assert actual_payload == payload
 
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_client_payload_error(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = DEFAULT_RETRY_SECONDS
+
+        # First throttle, then do not throttle
+        first_request_error = ClientPayloadError(None, None)
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_404_with_retry_after_header(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = 25
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 404
+        first_request_error.message = "Something went wrong"
+        first_request_error.headers = {"Retry-After": str(retry_after)}
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._get(url) as _:
+                pass
+
+        assert e is not None
 
     @pytest.mark.asyncio
     async def test_call_api_with_429_without_retry_after(
