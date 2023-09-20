@@ -299,7 +299,7 @@ def retryable_aiohttp_call(retries):
                     async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except (NotFound, BadRequestError):
+                except (NotFound, BadRequestError, PermissionsMissing):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -618,21 +618,23 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def sites(self, parent_site_id, allowed_root_sites):
-        select = ""
-
+    async def sites(self, parent_site_id):
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*"
         ):
             for site in page:
-                # Filter out site collections that are not needed
-                if (
-                    WILDCARD not in allowed_root_sites
-                    and site["name"] not in allowed_root_sites
-                ):
-                    continue
-
                 yield site
+
+    async def site_by_site_name(self, parent_site_id, site_name):
+        try:
+            return await self._graph_api_client.fetch(
+                f"{GRAPH_API_URL}/sites/{parent_site_id}:/sites/{site_name}"
+            )
+        except Exception as e:
+            self._logger.error(
+                f"Couldn't find site by site name '{site_name}' under site collection '{parent_site_id}'. Error: {e}"
+            )
+            return None
 
     async def site_drives(self, site_id):
         select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
@@ -1209,19 +1211,18 @@ class SharepointOnlineDataSource(BaseDataSource):
         if WILDCARD in configured_root_sites:
             return
 
-        remote_sites = []
+        missing = []
 
-        async for site_collection in self.client.site_collections():
-            async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"], [WILDCARD]
-            ):
-                remote_sites.append(site["name"])
-
-        missing = [x for x in configured_root_sites if x not in remote_sites]
+        async for site_collection in self.site_collections():
+            for site_name in configured_root_sites:
+                if not await self.client.site_by_site_name(
+                    site_collection["siteCollection"]["hostname"], site_name
+                ):
+                    missing.append(site_name)
 
         if missing:
             raise Exception(
-                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
+                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync."
             )
 
     def _decorate_with_access_control(self, document, access_control):
@@ -1470,10 +1471,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_collection in self.site_collections():
             yield site_collection, None
 
-            async for site in self.sites(
-                site_collection["siteCollection"]["hostname"],
-                self.configuration["site_collections"],
-            ):
+            async for site in self.sites(site_collection["siteCollection"]["hostname"]):
                 (
                     site_access_control,
                     site_admin_access_control,
@@ -1563,10 +1561,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_collection in self.site_collections():
             yield site_collection, None, OP_INDEX
 
-            async for site in self.sites(
-                site_collection["siteCollection"]["hostname"],
-                self.configuration["site_collections"],
-            ):
+            async for site in self.sites(site_collection["siteCollection"]["hostname"]):
                 (
                     site_access_control,
                     site_admin_access_control,
@@ -1650,15 +1645,21 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_collection
 
-    async def sites(self, hostname, collections):
-        async for site in self.client.sites(
-            hostname,
-            collections,
-        ):  # TODO: simplify and eliminate root call
+    async def sites(self, hostname):
+        def _decorate_site(site):
             site["_id"] = site["id"]
             site["object_type"] = "site"
+            return site
 
-            yield site
+        if WILDCARD in self.configuration["site_collections"]:
+            async for site in self.client.sites(
+                hostname
+            ):  # TODO: simplify and eliminate root call
+                yield _decorate_site(site)
+        else:
+            for site_name in self.configuration["site_collections"]:
+                site = await self.client.site_by_site_name(hostname, site_name)
+                yield _decorate_site(site)
 
     async def site_drives(self, site):
         async for site_drive in self.client.site_drives(site["id"]):

@@ -878,40 +878,52 @@ class TestSharepointOnlineClient:
         assert returned_items == actual_items
 
     @pytest.mark.asyncio
-    async def test_sites_wildcard(self, client, patch_scroll):
-        root_site = "root"
+    async def test_sites(self, client, patch_scroll):
         actual_items = [
-            {"name": "First"},
-            {"name": "Second"},
-            {"name": "Third"},
-            {"name": "Fourth"},
+            {
+                "id": "1",
+                "webUrl": "https://test.sharepoint.com/sites/site-1",
+                "name": "site-1",
+                "siteCollection": {
+                    "hostname": "test.sharepoint.com",
+                },
+            },
+            {
+                "id": "2",
+                "webUrl": "https://test.sharepoint.com/sites/site-2",
+                "name": "site-2",
+                "siteCollection": {
+                    "hostname": "test.sharepoint.com",
+                },
+            },
         ]
 
         returned_items = await self._execute_scrolling_method(
-            partial(client.sites, root_site, WILDCARD), patch_scroll, actual_items
+            partial(client.sites, "test.sharepoint.com"), patch_scroll, actual_items
         )
-
         assert len(returned_items) == len(actual_items)
         assert returned_items == actual_items
 
     @pytest.mark.asyncio
-    async def test_sites_filter(self, client, patch_scroll):
-        root_site = "root"
-        actual_items = [
-            {"name": "First"},
-            {"name": "Second"},
-            {"name": "Third"},
-            {"name": "Fourth"},
-        ]
-        filter_ = ["First", "Third"]
+    async def test_site_by_site_name(self, client, patch_fetch):
+        actual_item = {
+            "id": "1",
+            "webUrl": "https://test.sharepoint.com/sites/site-1",
+            "name": "site-1",
+            "siteCollection": {
+                "hostname": "test.sharepoint.com",
+            },
+        }
 
-        returned_items = await self._execute_scrolling_method(
-            partial(client.sites, root_site, filter_), patch_scroll, actual_items
-        )
+        patch_fetch.return_value = actual_item
+        returned_item = await client.site_by_site_name("test.sharepoint.com", "site-1")
+        assert returned_item == actual_item
 
-        assert len(returned_items) == len(filter_)
-        assert actual_items[0] in returned_items
-        assert actual_items[2] in returned_items
+    @pytest.mark.asyncio
+    async def test_site_by_site_name_not_found(self, client, patch_fetch):
+        patch_fetch.side_effect = NotFound()
+        returned_site = await client.site_by_site_name("test.sharepoint.com", "site-1")
+        assert returned_site is None
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
@@ -2497,6 +2509,7 @@ class TestSharepointOnlineDataSource:
         async with create_spo_source(
             site_collections=[non_existing_site, another_non_existing_site],
         ) as source:
+            patch_sharepoint_client.site_by_site_name = AsyncMock(return_value=None)
             with pytest.raises(Exception) as e:
                 await source.validate_config()
 
