@@ -1111,8 +1111,8 @@ class TestSharepointOnlineClient:
         users = [
             {
                 "odata.type": "SP.User",
-                "UserPrincipalName": MEMBER_TWO_USER_PRINCIPAL_NAME,
-                "Email": USER_ONE_EMAIL,
+                "UserPrincipalName": SITEGROUP_USER_ONE_ID,
+                "Email": SITEGROUP_USER_ONE_EMAIL,
             }
         ]
 
