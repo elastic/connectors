@@ -547,6 +547,9 @@ class SharepointOnlineClient:
                 for site_group_user in page:
                     yield site_group_user
         except NotFound:
+            self._logger.warning(
+                f"NotFound error when fetching users for sitegroup '{site_group_id}' at '{site_web_url}'."
+            )
             return
 
     async def active_users_with_groups(self):
@@ -1061,6 +1064,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             self.extraction_service = None
             self.download_dir = None
 
+        self.site_group_cache = {}
+
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
 
@@ -1263,16 +1268,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             if is_sharepoint_group(user):
                 site_group_id = user.get("id")
-                async for site_group_user in self.client.site_groups_users(
-                    site["webUrl"], site_group_id
-                ):
-                    site_group_user_name = site_group_user.get(
-                        "UserPrincipalName", None
-                    )
+                users = await self.site_group_users(site["webUrl"], site_group_id)
+                for site_group_user in users:
+                    site_group_user_name = site_group_user.get("UserPrincipalName")
                     if site_group_user_name:
                         user_access_control.add(_prefix_user(site_group_user_name))
 
-                    site_group_user_email = site_group_user.get("Email", None)
+                    site_group_user_email = site_group_user.get("Email")
                     if site_group_user_email:
                         user_access_control.add(_prefix_email(site_group_user_email))
 
@@ -1422,6 +1424,42 @@ class SharepointOnlineDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
+    async def site_group_users(self, site_web_url, site_group_id):
+        """
+        Fetches the users of a given site group. Checks in-memory cache before making an API call.
+
+        Parameters:
+        - site_web_url (str): The URL of the site collection.
+        - site_group_id (int): The ID of the site group.
+
+        Returns:
+        - list: List of users for the given site group.
+        """
+
+        # Check cache first
+        if site_group_id in self.site_group_cache:
+            return self.site_group_cache[site_group_id]
+
+        # If not in cache, fetch the users
+        users = []
+        async for site_group_user in self.client.site_groups_users(
+            site_web_url, site_group_id
+        ):
+            users.append(site_group_user)
+
+        # Cache the result
+        self.site_group_cache[site_group_id] = users
+        return users
+
+    def _purge_site_group_cache(self):
+        """
+        Clears the in-memory cache for site group users.
+
+        Returns:
+        - None
+        """
+        self.site_group_cache.clear()
+
     async def _drive_items_batch_with_permissions(
         self, drive_id, drive_items_batch, site_web_url
     ):
@@ -1460,6 +1498,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
+        self._purge_site_group_cache()
 
         self.init_sync_cursor()
 
@@ -1548,6 +1587,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
+        self._purge_site_group_cache()
 
         if not self._sync_cursor:
             raise SyncCursorEmpty(
@@ -1753,18 +1793,15 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_email(site_user_email))
 
             if site_group_id:
-                async for site_group_user in self.client.site_groups_users(
-                    site_web_url, site_group_id
-                ):
-                    site_group_user_email = site_group_user.get("Email", None)
-                    if site_group_user_email:
-                        access_control.append(_prefix_email(site_group_user_email))
-
-                    site_group_user_name = site_group_user.get(
-                        "UserPrincipalName", None
-                    )
+                users = await self.site_group_users(site_web_url, site_group_id)
+                for site_group_user in users:
+                    site_group_user_name = site_group_user.get("UserPrincipalName")
                     if site_group_user_name:
                         access_control.append(_prefix_user(site_group_user_name))
+
+                    site_group_user_email = site_group_user.get("Email")
+                    if site_group_user_email:
+                        access_control.append(_prefix_email(site_group_user_email))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
