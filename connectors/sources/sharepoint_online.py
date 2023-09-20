@@ -539,7 +539,7 @@ class SharepointOnlineClient:
     async def site_groups_users(self, site_web_url, site_group_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        select_ = "Users/Email,Id"
+        select_ = "Email,Id,UserPrincipalName"
         url = f"{site_web_url}/_api/web/sitegroups/getbyid({site_group_id})/users?$select={select_}"
 
         try:
@@ -1266,6 +1266,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                 async for site_group_user in self.client.site_groups_users(
                     site["webUrl"], site_group_id
                 ):
+                    site_group_user_name = site_group_user.get(
+                        "UserPrincipalName", None
+                    )
+                    if site_group_user_name:
+                        user_access_control.add(_prefix_user(site_group_user_name))
+
                     site_group_user_email = site_group_user.get("Email", None)
                     if site_group_user_email:
                         user_access_control.add(_prefix_email(site_group_user_email))
@@ -1753,6 +1759,12 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_group_user_email = site_group_user.get("Email", None)
                     if site_group_user_email:
                         access_control.append(_prefix_email(site_group_user_email))
+
+                    site_group_user_name = site_group_user.get(
+                        "UserPrincipalName", None
+                    )
+                    if site_group_user_name:
+                        access_control.append(_prefix_user(site_group_user_name))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
