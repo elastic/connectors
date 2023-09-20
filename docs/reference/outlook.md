@@ -16,7 +16,7 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 ## Connecting to Outlook
 
-Outlook connector supports both cloud and server platforms. Connector uses different ways to connect with them and following are the Authentication process to connect to Outlook:
+Outlook connector supports both cloud (Office365 Outlook) and on-premises (Exchange Server) platforms.
 
 ### Connect to Exchange Server
 
