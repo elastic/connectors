@@ -15,13 +15,14 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 import pytest_asyncio
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 
 from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
+    DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
     BadRequestError,
@@ -541,6 +542,30 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_client_payload_error(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = DEFAULT_RETRY_SECONDS
+
+        # First throttle, then do not throttle
+        first_request_error = ClientPayloadError(None, None)
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+    @pytest.mark.asyncio
     async def test_call_api_with_429_without_retry_after(
         self,
         microsoft_api_session,
@@ -566,6 +591,36 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(DEFAULT_RETRY_SECONDS)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_429_with_retry_after_and_backoff(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+
+        retry_count = 3
+        for _i in range(retry_count):
+            mock_responses.get(url, exception=first_request_error)
+
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(
+            DEFAULT_RETRY_SECONDS * DEFAULT_BACKOFF_MULTIPLIER * retry_count
+        )
+
+    @pytest.mark.asyncio
     async def test_call_api_with_403(
         self,
         microsoft_api_session,
@@ -580,6 +635,8 @@ class TestMicrosoftAPISession:
         unauthorized_error.status = 403
         unauthorized_error.message = "Something went wrong"
 
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
@@ -633,6 +690,10 @@ class TestMicrosoftAPISession:
         not_found_error.message = "Something went wrong"
 
         mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
 
         with pytest.raises(NotFound) as e:
             async with microsoft_api_session._get(url) as _:
@@ -680,6 +741,8 @@ class TestMicrosoftAPISession:
         not_found_error.status = 420
         not_found_error.message = error_message
 
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
