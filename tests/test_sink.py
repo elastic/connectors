@@ -7,12 +7,15 @@ import asyncio
 import datetime
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 
 from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.es.sink import (
+    OP_DELETE,
+    OP_INDEX,
+    OP_UPSERT,
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
     Extractor,
@@ -1029,12 +1032,33 @@ def test_bulk_populate_stats(res, expected_result):
         pipeline=None,
         chunk_mem_size=0,
         max_concurrency=0,
+        max_retries=3,
     )
     sink._populate_stats(deepcopy(STATS), res)
 
     assert sink.indexed_document_count == expected_result["indexed_document_count"]
     assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
     assert sink.deleted_document_count == expected_result["deleted_document_count"]
+
+
+async def test_batch_bulk_with_retry():
+    client = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+    )
+
+    with mock.patch.object(asyncio, "sleep"):
+        # first call raises exception, and the second call succeeds
+        client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
+
+        assert client.bulk.await_count == 2
 
 
 @pytest.mark.parametrize(
