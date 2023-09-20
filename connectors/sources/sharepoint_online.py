@@ -42,6 +42,7 @@ from connectors.utils import (
     iterable_batches_generator,
     retryable,
     url_encode,
+    validate_email_address,
 )
 
 SPO_API_MAX_BATCH_SIZE = 20
@@ -1336,8 +1337,15 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             return
 
-        email = user.get("EMail", user.get("mail", None))
         username = user[username_field]
+        email = user.get("EMail", user.get("mail", None))
+
+        # email can be sometimes used as username
+        if not email and validate_email_address(username):
+            email = username
+        else:
+            self._logger.warning(f"No email found for user: {username}.")
+
         prefixed_groups = set()
 
         expanded_member_groups = user.get("transitiveMemberOf", [])
