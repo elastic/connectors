@@ -14,7 +14,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 import pytest_asyncio
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 
 from connectors.logger import logger
 from connectors.protocol import Features
@@ -668,6 +668,30 @@ class TestMicrosoftAPISession:
         first_request_error.status = 429
         first_request_error.message = "Something went wrong"
         first_request_error.headers = {"Retry-After": str(retry_after)}
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_client_payload_error(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = DEFAULT_RETRY_SECONDS
+
+        # First throttle, then do not throttle
+        first_request_error = ClientPayloadError(None, None)
 
         mock_responses.get(url, exception=first_request_error)
         mock_responses.get(url, payload=payload)
