@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import collections
 import os
 import re
 from collections.abc import Iterable, Sized
@@ -550,7 +549,6 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-
     async def active_users_with_groups(self):
         expand = "transitiveMemberOf($select=id)"
         top = 999  # this is accepted, but does not get taken literally. Response size seems to max out at 100
@@ -972,7 +970,8 @@ def is_domain_group(user_fields):
 
 
 def is_sharepoint_group(user_fields):
-    return user_fields['ContentType'] == "SharePointGroup"
+    return user_fields["ContentType"] == "SharePointGroup"
+
 
 def is_person(user_fields):
     return user_fields["ContentType"] == "Person"
@@ -1264,8 +1263,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             if is_sharepoint_group(user):
                 site_group_id = user.get("id")
-                async for site_group_user in self.client.site_groups_users(site['webUrl'], site_group_id):
-                    site_group_user_email = site_group_user.get('Email', None)
+                async for site_group_user in self.client.site_groups_users(
+                    site["webUrl"], site_group_id
+                ):
+                    site_group_user_email = site_group_user.get("Email", None)
                     if site_group_user_email:
                         user_access_control.add(_prefix_email(site_group_user_email))
 
@@ -1349,10 +1350,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
-        access_control = list(
-            {prefixed_mail, prefixed_username}
-            .union(prefixed_groups)
-        )
+        access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
 
         if "createdDateTime" in user:
             created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
@@ -1409,9 +1407,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             update_already_seen(email, username)
 
             # person_sitegroups = user_sitegroup_lookup.get(email, set())
-            person_access_control_doc = await self._user_access_control_doc(
-                user
-            )
+            person_access_control_doc = await self._user_access_control_doc(user)
             if person_access_control_doc:
                 return person_access_control_doc
 
@@ -1752,8 +1748,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_email(site_user_email))
 
             if site_group_id:
-                async for site_group_user in self.client.site_groups_users(site_web_url, site_group_id):
-                    site_group_user_email = site_group_user.get('Email', None)
+                async for site_group_user in self.client.site_groups_users(
+                    site_web_url, site_group_id
+                ):
+                    site_group_user_email = site_group_user.get("Email", None)
                     if site_group_user_email:
                         access_control.add(_prefix_email(site_group_user_email))
 
