@@ -537,20 +537,19 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def sitegroups_list(self, site_web_url):
+    async def site_groups_users(self, site_web_url, site_group_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        expand_ = "Users"
         select_ = "Users/Email,Id"
-
-        url = f"{site_web_url}/_api/web/sitegroups?$expand={expand_}&$select={select_}"
+        url = f"{site_web_url}/_api/web/sitegroups/getbyid({site_group_id})/users?$select={select_}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
-                for role_assignment in page:
-                    yield role_assignment
+                for site_group_user in page:
+                    yield site_group_user
         except NotFound:
             return
+
 
     async def active_users_with_groups(self):
         expand = "transitiveMemberOf($select=id)"
@@ -945,10 +944,6 @@ def _prefix_group(group):
     return prefix_identity("group", group)
 
 
-def _prefix_site_group(site_web_url, site_group):
-    return prefix_identity("site_group", f"{site_web_url}-{site_group}")
-
-
 def _prefix_user(user):
     return prefix_identity("user", user)
 
@@ -975,6 +970,9 @@ def is_domain_group(user_fields):
         "Name", ""
     )
 
+
+def is_sharepoint_group(user_fields):
+    return user_fields['ContentType'] == "SharePointGroup"
 
 def is_person(user_fields):
     return user_fields["ContentType"] == "Person"
@@ -1264,6 +1262,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                 if email:
                     user_access_control.add(_prefix_email(email))
 
+            if is_sharepoint_group(user):
+                site_group_id = user.get("id")
+                async for site_group_user in self.client.site_groups_users(site['webUrl'], site_group_id):
+                    site_group_user_email = site_group_user.get('Email', None)
+                    if site_group_user_email:
+                        user_access_control.add(_prefix_email(site_group_user_email))
+
             if _is_site_admin(user):
                 site_admins_access_control |= user_access_control
 
@@ -1283,7 +1288,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
 
-    async def _user_access_control_doc(self, user, person_site_groups):
+    async def _user_access_control_doc(self, user):
         """Constructs a user access control document, which will be synced to the corresponding access control index.
         The `_id` of the user access control document will either be the username (can also be the email sometimes) or the email itself.
         Note: the `_id` field won't be prefixed with the corresponding identity prefix ("user" or "email").
@@ -1347,7 +1352,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = list(
             {prefixed_mail, prefixed_username}
             .union(prefixed_groups)
-            .union(person_site_groups)
         )
 
         if "createdDateTime" in user:
@@ -1378,23 +1382,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        # build sitegroups lookup
-        user_sitegroup_lookup = collections.defaultdict(set)
-
-        async for site_collection in self.site_collections():
-            async for site in self.sites(
-                site_collection["siteCollection"]["hostname"],
-                self.configuration["site_collections"],
-            ):
-                async for site_group in self.client.sitegroups_list(site["webUrl"]):
-                    site_group_id = site_group["Id"]
-                    for user in site_group.get("Users", []):
-                        user_email = user.get("Email")
-                        if user_email:
-                            user_sitegroup_lookup[user_email].add(
-                                _prefix_site_group(site["webUrl"], site_group_id)
-                            )
-
         already_seen_ids = set()
 
         def _already_seen(*ids):
@@ -1421,9 +1408,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             update_already_seen(email, username)
 
-            person_sitegroups = user_sitegroup_lookup.get(email, set())
+            # person_sitegroups = user_sitegroup_lookup.get(email, set())
             person_access_control_doc = await self._user_access_control_doc(
-                user, person_sitegroups
+                user
             )
             if person_access_control_doc:
                 return person_access_control_doc
@@ -1466,7 +1453,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
-                yield self._with_drive_item_permissions(
+                yield await self._with_drive_item_permissions(
                     drive_item, permissions, site_web_url
                 )
 
@@ -1679,7 +1666,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_drive
 
-    def _with_drive_item_permissions(
+    async def _with_drive_item_permissions(
         self, drive_item, drive_item_permissions, site_web_url
     ):
         """Decorates a drive item with its permissions.
@@ -1765,7 +1752,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 access_control.append(_prefix_email(site_user_email))
 
             if site_group_id:
-                access_control.append(_prefix_site_group(site_web_url, site_group_id))
+                async for site_group_user in self.client.site_groups_users(site_web_url, site_group_id):
+                    site_group_user_email = site_group_user.get('Email', None)
+                    if site_group_user_email:
+                        access_control.add(_prefix_email(site_group_user_email))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
