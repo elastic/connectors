@@ -252,3 +252,13 @@ steps:
                 - ".buildkite/run_nigthly.sh zoom small"
               artifact_paths:
                 - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/box.py"
+            - "tests/sources/fixtures/box/**"
+            config:
+              label: "🔨 Box"
+              command:
+                - ".buildkite/run_nigthly.sh box small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
