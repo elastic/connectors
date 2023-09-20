@@ -1406,7 +1406,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             update_already_seen(email, username)
 
-            # person_sitegroups = user_sitegroup_lookup.get(email, set())
             person_access_control_doc = await self._user_access_control_doc(user)
             if person_access_control_doc:
                 return person_access_control_doc

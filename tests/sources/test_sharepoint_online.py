@@ -2185,8 +2185,8 @@ class TestSharepointOnlineDataSource:
                 self.drive_item_permissions
             )
 
-            drive_item_with_access_control = source._with_drive_item_permissions(
-                drive_item, self.drive_item_permissions
+            drive_item_with_access_control = await source._with_drive_item_permissions(
+                drive_item, self.drive_item_permissions, "dummy_site_web_url"
             )
             drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
@@ -2222,7 +2222,7 @@ class TestSharepointOnlineDataSource:
             drive_items_with_permissions = []
 
             async for drive_item_with_permission in source._drive_items_batch_with_permissions(
-                drive_id, drive_items_batch
+                drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_with_permissions.append(drive_item_with_permission)
 
@@ -2243,7 +2243,7 @@ class TestSharepointOnlineDataSource:
             drive_items_without_permissions = []
 
             async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
-                drive_id, drive_items_batch
+                drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
 
