@@ -355,6 +355,7 @@ class ZoomDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "How far back in time to request recordings from zoom. Recordings older than this will not be indexed.",
                 "type": "int",
+                "validations": [{"type": "greater_than", "constraint": -1}],
             },
         }
 
