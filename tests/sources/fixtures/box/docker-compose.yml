@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: Dockerfile.ftest
-    command: python tests/sources/fixtures/dropbox/fixture.py
+    command: python tests/sources/fixtures/box/fixture.py
     ports:
       - "9092:9092"
     volumes:

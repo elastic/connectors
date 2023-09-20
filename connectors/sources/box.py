@@ -50,8 +50,8 @@ BOX_ENTERPRISE = "box_enterprise"
 
 refresh_token = None
 
-if "RUNNING_FTEST" in os.environ:
-    BASE_URL = "http://127.0.0.1:9092"
+if "BOX_BASE_URL" in os.environ:
+    BASE_URL = os.environ.get("BOX_BASE_URL")
 else:
     BASE_URL = "https://api.box.com"
 
