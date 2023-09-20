@@ -1200,7 +1200,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "value": 3,
                 "order": 8,
                 "validations": [{"type": "greater_than", "constraint": 0}],
-                "depends_on": [{"field": "fetch_subsites", "value": True}],
+                "depends_on": [{"field": "fetch_subsites", "value": True}, {"field": "enumerate_all_sites", "value": False}],
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -1291,7 +1291,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 configured_root_sites,
                 self.configuration["enumerate_all_sites"],
             ):
-                retrieved_sites.append(self._site_path_from_web_url(site["webUrl"]))
+                if self.configuration["enumerate_all_sites"]:
+                    retrieved_sites.append(site["name"])
+                else:
+                    retrieved_sites.append(self._site_path_from_web_url(site["webUrl"]))
 
         missing = [x for x in configured_root_sites if x not in retrieved_sites]
 

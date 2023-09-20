@@ -784,11 +784,17 @@ class Connector(ESDocument):
             doc["service_type"] = configured_service_type
             self.log_debug(f"Populated service type {configured_service_type}")
 
+        simple_config = source_klass.get_simple_configuration()
         if self.configuration.is_empty():
             # sets the defaults and the flag to NEEDS_CONFIGURATION
-            doc["configuration"] = source_klass.get_simple_configuration()
+            doc["configuration"] = simple_config
             doc["status"] = Status.NEEDS_CONFIGURATION.value
             self.log_debug("Populated configuration")
+        elif simple_config.keys() - self.configuration.to_dict().keys():
+            missing_keys = simple_config.keys() - self.configuration.to_dict().keys()
+            self.log_warning(f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade.")
+            doc["configuration"] = {k:simple_config[k] for k in missing_keys}
+            # doc["status"] = Status.NEEDS_CONFIGURATION.value # not setting status, because it may be that default values are sufficient
 
         if self.features.features != source_klass.features():
             doc["features"] = source_klass.features()
