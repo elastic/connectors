@@ -1752,7 +1752,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 ):
                     site_group_user_email = site_group_user.get("Email", None)
                     if site_group_user_email:
-                        access_control.add(_prefix_email(site_group_user_email))
+                        access_control.append(_prefix_email(site_group_user_email))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
