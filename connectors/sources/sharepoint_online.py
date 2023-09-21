@@ -1464,9 +1464,14 @@ class SharepointOnlineDataSource(BaseDataSource):
         - list: List of users for the given site group.
         """
 
+        cache_key = (site_web_url, site_group_id)
+
         # Check cache first
-        if site_group_id in self.site_group_cache:
-            return self.site_group_cache[site_group_id]
+        if cache_key in self.site_group_cache:
+            self._logger.debug(
+                f"Cache hit for site_web_url: {site_web_url}, site_group_id: {site_group_id}. Returning cached sitegroup members."
+            )
+            return self.site_group_cache[cache_key]
 
         # If not in cache, fetch the users
         users = []
@@ -1476,7 +1481,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             users.append(site_group_user)
 
         # Cache the result
-        self.site_group_cache[site_group_id] = users
+        self.site_group_cache[cache_key] = users
         return users
 
     async def _drive_items_batch_with_permissions(
