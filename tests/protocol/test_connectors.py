@@ -1157,7 +1157,7 @@ async def test_connector_prepare():
         "_id": doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
-        "_source": {},
+        "_source": {"configuration": {}},
     }
     config = {
         "connector_id": doc_id,
@@ -1191,7 +1191,7 @@ async def test_connector_prepare_with_race_condition():
         "_id": doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
-        "_source": {},
+        "_source": {"configuration": {}},
     }
     config = {
         "connector_id": doc_id,

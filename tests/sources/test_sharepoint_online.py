@@ -2615,13 +2615,24 @@ class TestSharepointOnlineDataSource:
             assert e.match(another_non_existing_site)
 
     @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_all_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site-1"
+
+        async with create_spo_source(
+            site_collections=[existing_site], enumerate_all_sites=True
+        ) as source:
+            await source.validate_config()
+
+    @pytest.mark.asyncio
     async def test_validate_config_with_existing_collection_fetching_individual_sites(
         self, patch_sharepoint_client
     ):
         existing_site = "site_1"
 
         async with create_spo_source(
-            site_collections=[existing_site], enumerate_all_sites=True
+            site_collections=[existing_site], enumerate_all_sites=False
         ) as source:
             await source.validate_config()
 
