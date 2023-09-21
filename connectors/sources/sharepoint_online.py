@@ -685,13 +685,13 @@ class SharepointOnlineClient:
             f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}"
         )
 
-    async def _fetch_subsites_by_parent_id(self, parent_site_id):
+    async def _scroll_subsites_by_parent_id(self, parent_site_id):
         self._logger.debug(f"Scrolling subsites of {parent_site_id}")
         async for page in self._graph_api_client.scroll(
             f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?expand=sites"
         ):
             for site in page:
-                async for subsite in self._recurse_sites(site):
+                async for subsite in self._recurse_sites(site):  # pyright: ignore
                     yield subsite
 
     async def _recurse_sites(self, site_with_subsites):
@@ -699,7 +699,7 @@ class SharepointOnlineClient:
         site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
         yield site_with_subsites
         if subsites:
-            async for site in self._fetch_subsites_by_parent_id(
+            async for site in self._scroll_subsites_by_parent_id(
                 site_with_subsites["id"]
             ):
                 yield site

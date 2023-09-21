@@ -939,24 +939,29 @@ class TestSharepointOnlineClient:
         assert actual_items == returned_items
 
     @pytest.mark.asyncio
-    async def test_sites_filter_individually_plus_subsites(self, client, patch_fetch):
+    async def test_sites_filter_individually_plus_subsites(
+        self, client, patch_fetch, patch_scroll
+    ):
         root_site = "root"
-        actual_items = [
-            {
-                "name": "First",
-                "sites": [{"name": "Second", "sites": [{"name": "Third"}]}],
-            },
-            {"name": "Fourth", "sites": [{"name": "Fifth", "sites": []}]},
+        root_item = {
+            "name": "First",
+            "id": "first",
+            "sites": [{"name": "Second"}],
+        }
+        sub_items = [
+            AsyncIterator(
+                [[{"name": "Second", "id": "second", "sites": [{"name": "Third"}]}]]
+            ),
+            AsyncIterator([[{"name": "Third", "id": "third"}]]),
         ]
         expected_items = [
-            {"name": "First"},
-            {"name": "Second"},
-            {"name": "Third"},
-            {"name": "Fourth"},
-            {"name": "Fifth"},
+            {"name": "First", "id": "first"},
+            {"name": "Second", "id": "second"},
+            {"name": "Third", "id": "third"},
         ]
-        filter_ = ["First", "Fourth"]
-        patch_fetch.side_effect = actual_items
+        filter_ = ["First"]
+        patch_fetch.side_effect = [root_item]
+        patch_scroll.side_effect = sub_items
 
         returned_items = []
         async for site in client.sites(
@@ -964,7 +969,7 @@ class TestSharepointOnlineClient:
         ):
             returned_items.append(site)
 
-        assert len(returned_items) == 5
+        assert len(returned_items) == 3
         assert returned_items == expected_items
 
     @pytest.mark.asyncio
