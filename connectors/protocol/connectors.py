@@ -785,15 +785,17 @@ class Connector(ESDocument):
             self.log_debug(f"Populated service type {configured_service_type}")
 
         simple_config = source_klass.get_simple_configuration()
+        current_config = self.configuration.to_dict()
+        missing_keys = simple_config.keys() - current_config.keys()
         if self.configuration.is_empty():
             # sets the defaults and the flag to NEEDS_CONFIGURATION
             doc["configuration"] = simple_config
             doc["status"] = Status.NEEDS_CONFIGURATION.value
             self.log_debug("Populated configuration")
-        elif simple_config.keys() - self.configuration.to_dict().keys():
-            missing_keys = simple_config.keys() - self.configuration.to_dict().keys()
-            self.log_warning(f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade.")
-            doc["configuration"] = {k:simple_config[k] for k in missing_keys}
+        elif missing_keys:
+            doc["configuration"] = self._updated_configuration(
+                missing_keys, current_config, simple_config
+            )
             # doc["status"] = Status.NEEDS_CONFIGURATION.value # not setting status, because it may be that default values are sufficient
 
         if self.features.features != source_klass.features():
@@ -810,6 +812,30 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
         await self.reload()
+
+    def updated_configuration(
+        self, missing_keys, current_config, simple_default_config
+    ):
+        self.log_warning(
+            f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade."
+        )
+        draft_config = {
+            k: simple_default_config[k] for k in missing_keys
+        }  # add missing configs as they exist in the simple default
+
+        # copy any differences (excluding differences in "value") to the draft
+        # the contents of simple_default_config are used unless they are missing
+        for config_name, config_obj in current_config.items():
+            for k, v in config_obj.items():
+                simple_default_value = simple_default_config.get(config_name, {}).get(k)
+                if k != "value" and simple_default_value != v:
+                    draft_config_obj = draft_config.get(config_name, {})
+                    if simple_default_value is None:
+                        draft_config_obj[k] = v
+                    else:
+                        draft_config_obj[k] = simple_default_value
+                    draft_config[config_name] = draft_config_obj
+        return draft_config
 
     @with_concurrency_control()
     async def validate_filtering(self, validator):

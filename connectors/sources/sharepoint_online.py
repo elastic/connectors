@@ -1200,7 +1200,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "value": 3,
                 "order": 8,
                 "validations": [{"type": "greater_than", "constraint": 0}],
-                "depends_on": [{"field": "fetch_subsites", "value": True}, {"field": "enumerate_all_sites", "value": False}],
+                "depends_on": [
+                    {"field": "fetch_subsites", "value": True},
+                    {"field": "enumerate_all_sites", "value": False},
+                ],
             },
             "use_text_extraction_service": {
                 "display": "toggle",
