@@ -694,7 +694,7 @@ class SharepointOnlineClient:
         site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
         yield site_with_subsites
         for site in subsites:
-            async for item in self._recurse_sites(site):
+            async for item in self._recurse_sites(site):  # pyright: ignore
                 yield item
 
     def _subsite_expansion_str(self, depth):

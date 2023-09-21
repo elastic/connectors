@@ -793,7 +793,7 @@ class Connector(ESDocument):
             doc["status"] = Status.NEEDS_CONFIGURATION.value
             self.log_debug("Populated configuration")
         elif missing_keys:
-            doc["configuration"] = self._updated_configuration(
+            doc["configuration"] = self.updated_configuration(
                 missing_keys, current_config, simple_config
             )
             # doc["status"] = Status.NEEDS_CONFIGURATION.value # not setting status, because it may be that default values are sufficient
