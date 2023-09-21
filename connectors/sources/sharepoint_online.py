@@ -16,7 +16,7 @@ import aiohttp
 import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import (
@@ -394,6 +394,8 @@ class MicrosoftAPISession:
             raise
         except ClientResponseError as e:
             await self._handle_client_response_error(absolute_url, e, retry_count)
+        except ClientPayloadError as e:
+            await self._handle_client_payload_error(e, retry_count)
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
@@ -415,6 +417,17 @@ class MicrosoftAPISession:
             raise
         except ClientResponseError as e:
             await self._handle_client_response_error(absolute_url, e, retry_count)
+        except ClientPayloadError as e:
+            await self._handle_client_payload_error(e, retry_count)
+
+    async def _handle_client_payload_error(self, e, retry_count):
+        await self._sleeps.sleep(
+            self._compute_retry_after(
+                DEFAULT_RETRY_SECONDS, retry_count, DEFAULT_BACKOFF_MULTIPLIER
+            )
+        )
+
+        raise e
 
     async def _handle_client_response_error(self, absolute_url, e, retry_count):
         if e.status == 429 or e.status == 503:
@@ -551,13 +564,21 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def user(self, user_principal_name):
-        url = f"{GRAPH_API_URL}/users/{user_principal_name}"
+    async def site_groups_users(self, site_web_url, site_group_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        select_ = "Email,Id,UserPrincipalName"
+        url = f"{site_web_url}/_api/web/sitegroups/getbyid({site_group_id})/users?$select={select_}"
 
         try:
-            return await self._graph_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for site_group_user in page:
+                    yield site_group_user
         except NotFound:
-            return {}
+            self._logger.warning(
+                f"NotFound error when fetching users for sitegroup '{site_group_id}' at '{site_web_url}'."
+            )
+            return
 
     async def active_users_with_groups(self):
         expand = "transitiveMemberOf($select=id)"
@@ -1040,6 +1061,10 @@ def is_domain_group(user_fields):
     )
 
 
+def is_sharepoint_group(user_fields):
+    return user_fields["ContentType"] == "SharePointGroup"
+
+
 def is_person(user_fields):
     return user_fields["ContentType"] == "Person"
 
@@ -1127,6 +1152,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             self.extraction_service = None
             self.download_dir = None
+
+        self.site_group_cache = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -1369,6 +1396,18 @@ class SharepointOnlineDataSource(BaseDataSource):
                 if email:
                     user_access_control.add(_prefix_email(email))
 
+            if is_sharepoint_group(user):
+                site_group_id = user.get("id")
+                users = await self.site_group_users(site["webUrl"], site_group_id)
+                for site_group_user in users:
+                    site_group_user_name = site_group_user.get("UserPrincipalName")
+                    if site_group_user_name:
+                        user_access_control.add(_prefix_user(site_group_user_name))
+
+                    site_group_user_email = site_group_user.get("Email")
+                    if site_group_user_email:
+                        user_access_control.add(_prefix_email(site_group_user_email))
+
             if _is_site_admin(user):
                 site_admins_access_control |= user_access_control
 
@@ -1515,7 +1554,41 @@ class SharepointOnlineDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
-    async def _drive_items_batch_with_permissions(self, drive_id, drive_items_batch):
+    async def site_group_users(self, site_web_url, site_group_id):
+        """
+        Fetches the users of a given site group. Checks in-memory cache before making an API call.
+
+        Parameters:
+        - site_web_url (str): The URL of the site collection.
+        - site_group_id (int): The ID of the site group.
+
+        Returns:
+        - list: List of users for the given site group.
+        """
+
+        cache_key = (site_web_url, site_group_id)
+
+        # Check cache first
+        if cache_key in self.site_group_cache:
+            self._logger.debug(
+                f"Cache hit for site_web_url: {site_web_url}, site_group_id: {site_group_id}. Returning cached sitegroup members."
+            )
+            return self.site_group_cache[cache_key]
+
+        # If not in cache, fetch the users
+        users = []
+        async for site_group_user in self.client.site_groups_users(
+            site_web_url, site_group_id
+        ):
+            users.append(site_group_user)
+
+        # Cache the result
+        self.site_group_cache[cache_key] = users
+        return users
+
+    async def _drive_items_batch_with_permissions(
+        self, drive_id, drive_items_batch, site_web_url
+    ):
         """Decorate a batch of drive items with their permissions using one API request.
 
         Args:
@@ -1545,7 +1618,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
-                yield self._with_drive_item_permissions(drive_item, permissions)
+                yield await self._with_drive_item_permissions(
+                    drive_item, permissions, site_web_url
+                )
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1582,7 +1657,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
                             async for drive_item in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch
+                                site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -1679,7 +1754,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
                             async for drive_item in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch
+                                site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -1759,7 +1834,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_drive
 
-    def _with_drive_item_permissions(self, drive_item, drive_item_permissions):
+    async def _with_drive_item_permissions(
+        self, drive_item, drive_item_permissions, site_web_url
+    ):
         """Decorates a drive item with its permissions.
 
         Args:
@@ -1810,6 +1887,12 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             return permissions.get(identity).get("id")
 
+        def _get_email(permissions, identity):
+            if identity not in permissions:
+                return None
+
+            return permissions.get(identity).get("email", None)
+
         drive_item_id = drive_item.get("id")
         access_control = []
 
@@ -1824,12 +1907,28 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             user_id = _get_id(granted_to_v2, "user")
             group_id = _get_id(granted_to_v2, "group")
+            site_group_id = _get_id(granted_to_v2, "siteGroup")
+            site_user_email = _get_email(granted_to_v2, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
 
             if group_id:
                 access_control.append(_prefix_group(group_id))
+
+            if site_user_email:
+                access_control.append(_prefix_email(site_user_email))
+
+            if site_group_id:
+                users = await self.site_group_users(site_web_url, site_group_id)
+                for site_group_user in users:
+                    site_group_user_name = site_group_user.get("UserPrincipalName")
+                    if site_group_user_name:
+                        access_control.append(_prefix_user(site_group_user_name))
+
+                    site_group_user_email = site_group_user.get("Email")
+                    if site_group_user_email:
+                        access_control.append(_prefix_email(site_group_user_email))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
