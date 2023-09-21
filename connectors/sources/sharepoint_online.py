@@ -628,38 +628,36 @@ class SharepointOnlineClient:
 
     async def sites(
         self,
-        parent_site_id,
+        sharepoint_host,
         allowed_root_sites,
         enumerate_all_sites=True,
         fetch_subsites=False,
-        subsite_depth=3,
     ):
         if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
             self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
-            async for site in self._all_sites(parent_site_id, allowed_root_sites):
+            async for site in self._all_sites(sharepoint_host, allowed_root_sites):
                 yield site
         else:
             self._logger.debug(f"Looking up individual sites: {allowed_root_sites}")
-            expand_clause = self._subsite_expansion_str(subsite_depth)
             for allowed_site in allowed_root_sites:
                 try:
                     if fetch_subsites:
-                        async for site in self._fetch_site_and_subsites(
-                            parent_site_id, allowed_site, expand_clause
+                        async for site in self._fetch_site_and_subsites_by_path(
+                            sharepoint_host, allowed_site
                         ):
                             yield site
                     else:
-                        yield await self._fetch_site(parent_site_id, allowed_site)
+                        yield await self._fetch_site(sharepoint_host, allowed_site)
 
                 except NotFound:
                     self._logger.warning(
-                        f"Could not look up site '{allowed_site}' by relative path in parent site: {parent_site_id}"
+                        f"Could not look up site '{allowed_site}' by relative path in parent site: {sharepoint_host}"
                     )
 
-    async def _all_sites(self, parent_site_id, allowed_root_sites):
+    async def _all_sites(self, sharepoint_host, allowed_root_sites):
         select = ""
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
         ):
             for site in page:
                 # Filter out site collections that are not needed
@@ -669,39 +667,42 @@ class SharepointOnlineClient:
                     continue
                 yield site
 
-    async def _fetch_site_and_subsites(
-        self, parent_site_id, allowed_site, expand_clause
-    ):
+    async def _fetch_site_and_subsites_by_path(self, sharepoint_host, allowed_site):
         self._logger.debug(
-            f"Requesting site '{allowed_site}' and subsites by relative path in parent site: {parent_site_id}"
+            f"Requesting site '{allowed_site}' and subsites by relative path in host: {sharepoint_host}"
         )
         site_with_subsites = await self._graph_api_client.fetch(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}:/sites/{allowed_site}?{expand_clause}"
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}?expand=sites"
         )
         async for site in self._recurse_sites(site_with_subsites):
             yield site
 
-    async def _fetch_site(self, parent_site_id, allowed_site):
+    async def _fetch_site(self, sharepoint_host, allowed_site):
         self._logger.debug(
-            f"Requesting site '{allowed_site}' by relative path in parent site: {parent_site_id}"
+            f"Requesting site '{allowed_site}' by relative path in parent site: {sharepoint_host}"
         )
         return await self._graph_api_client.fetch(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}:/sites/{allowed_site}"
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}"
         )
+
+    async def _fetch_subsites_by_parent_id(self, parent_site_id):
+        self._logger.debug(f"Scrolling subsites of {parent_site_id}")
+        async for page in self._graph_api_client.scroll(
+            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?expand=sites"
+        ):
+            for site in page:
+                async for subsite in self._recurse_sites(site):
+                    yield subsite
 
     async def _recurse_sites(self, site_with_subsites):
         subsites = site_with_subsites.pop("sites", [])
         site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
         yield site_with_subsites
-        for site in subsites:
-            async for item in self._recurse_sites(site):  # pyright: ignore
-                yield item
-
-    def _subsite_expansion_str(self, depth):
-        if depth == 1:
-            return "expand=sites"
-        else:
-            return f"expand=sites({self._subsite_expansion_str(depth-1)})"
+        if subsites:
+            async for site in self._fetch_subsites_by_parent_id(
+                site_with_subsites["id"]
+            ):
+                yield site
 
     async def site_drives(self, site_id):
         select = "createdDateTime,description,id,lastModifiedDateTime,name,webUrl,driveType,createdBy,lastModifiedBy,owner"
@@ -1220,22 +1221,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "value": True,
                 "depends_on": [{"field": "enumerate_all_sites", "value": False}],
             },
-            "subsite_depth": {
-                "label": "Depth of nested sub-sites to fetch",
-                "tooltop": "The number of layers deep for which subsites will automatically be retrieved. Increasing this number may have negative performance impacts.",
-                "type": "int",
-                "value": 3,
-                "order": 8,
-                "validations": [{"type": "greater_than", "constraint": 0}],
-                "depends_on": [
-                    {"field": "fetch_subsites", "value": True},
-                    {"field": "enumerate_all_sites", "value": False},
-                ],
-            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 9,
+                "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "value": False,
@@ -1243,7 +1232,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 10,
+                "order": 9,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1252,7 +1241,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
-                "order": 11,
+                "order": 10,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
                 "value": True,
@@ -1261,7 +1250,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 12,
+                "order": 11,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1270,7 +1259,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list permissions",
-                "order": 13,
+                "order": 12,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1279,7 +1268,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
-                "order": 14,
+                "order": 13,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1820,7 +1809,6 @@ class SharepointOnlineDataSource(BaseDataSource):
             collections,
             enumerate_all_sites=self.configuration["enumerate_all_sites"],
             fetch_subsites=self.configuration["fetch_subsites"],
-            subsite_depth=self.configuration["subsite_depth"],
         ):  # TODO: simplify and eliminate root call
             site["_id"] = site["id"]
             site["object_type"] = "site"
