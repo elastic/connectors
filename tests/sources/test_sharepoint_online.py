@@ -2546,7 +2546,10 @@ class TestSharepointOnlineDataSource:
             )
 
     @pytest.mark.asyncio
-    @patch("connectors.content_extraction.ContentExtraction._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
@@ -2554,7 +2557,8 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
             "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
@@ -2574,7 +2578,10 @@ class TestSharepointOnlineDataSource:
                 assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    @patch("connectors.content_extraction.ContentExtraction._check_configured", lambda *_: False)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: False,
+    )
     async def test_get_attachment_with_text_extraction_enabled_but_not_configured_adds_empty_string(
         self, patch_sharepoint_client
     ):
@@ -2582,7 +2589,8 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
             "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
@@ -2605,7 +2613,10 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.parametrize(
         "filesize, expect_download", [(15, True), (10485761, False)]
     )
-    @patch("connectors.content_extraction.ContentExtraction._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_drive_item_content(
         self, patch_sharepoint_client, filesize, expect_download
     ):
@@ -2635,7 +2646,10 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
-    @patch("connectors.content_extraction.ContentExtraction._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_content_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client, filesize
     ):
@@ -2649,7 +2663,8 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
             "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
@@ -2670,7 +2685,10 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
-    @patch("connectors.content_extraction.ContentExtraction._check_configured", lambda *_: False)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: False,
+    )
     async def test_get_content_with_text_extraction_enabled_but_not_configured_adds_empty_string(
         self, patch_sharepoint_client, filesize
     ):
@@ -2684,7 +2702,8 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
             "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
