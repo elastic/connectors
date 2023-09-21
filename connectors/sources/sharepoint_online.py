@@ -1479,15 +1479,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         self.site_group_cache[site_group_id] = users
         return users
 
-    def _purge_site_group_cache(self):
-        """
-        Clears the in-memory cache for site group users.
-
-        Returns:
-        - None
-        """
-        self.site_group_cache.clear()
-
     async def _drive_items_batch_with_permissions(
         self, drive_id, drive_items_batch, site_web_url
     ):
@@ -1526,7 +1517,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
-        self._purge_site_group_cache()
 
         self.init_sync_cursor()
 
@@ -1615,7 +1605,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
-        self._purge_site_group_cache()
 
         if not self._sync_cursor:
             raise SyncCursorEmpty(
