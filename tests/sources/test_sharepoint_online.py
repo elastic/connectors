@@ -95,6 +95,10 @@ USER_TWO_EMAIL = "user2@spo.com"
 
 USER_TWO_NAME = "user2"
 
+SITEGROUP_USER_ONE_EMAIL = "sitegroup.user1@spo.com"
+
+SITEGROUP_USER_ONE_ID = "sitegroup.user1"
+
 NUMBER_OF_DEFAULT_GROUPS = 3
 
 ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
@@ -1148,6 +1152,43 @@ class TestSharepointOnlineClient:
         assert http_call_result == actual_result
 
     @pytest.mark.asyncio
+    async def test_site_group_users(self, client, patch_scroll):
+        site_group_id = 42
+        site_groups_url = f"https://{self.tenant_name}.sharepoint.com/_api/web/sitegroups/getbyid({site_group_id})/users"
+        users = [
+            {
+                "odata.type": "SP.User",
+                "UserPrincipalName": SITEGROUP_USER_ONE_ID,
+                "Email": SITEGROUP_USER_ONE_EMAIL,
+            }
+        ]
+
+        patch_scroll.return_value = users
+
+        actual_group = await self._execute_scrolling_method(
+            client.site_groups_users,
+            patch_scroll,
+            users,
+            site_groups_url,
+            site_group_id,
+        )
+
+        assert actual_group == users
+
+    @pytest.mark.asyncio
+    async def test_site_group_not_found(self, client, patch_scroll):
+        site_group_id = 42
+        site_groups_url = f"https://{self.tenant_name}.sharepoint.com/_api/web/sitegroups/getbyid({site_group_id})/users"
+
+        patch_scroll.side_effect = NotFound()
+
+        returned_items = []
+        async for item in client.site_groups_users(site_groups_url, site_group_id):
+            returned_items.append(item)
+
+        assert len(returned_items) == 0
+
+    @pytest.mark.asyncio
     async def test_site_users(self, client, patch_scroll):
         site_users_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/siteusers"
         users = ["user1", "user2"]
@@ -1768,6 +1809,15 @@ class TestSharepointOnlineDataSource:
         return {"value": ["role"]}
 
     @property
+    def site_group_users(self):
+        return [
+            {
+                "UserPrincipalName": SITEGROUP_USER_ONE_ID,
+                "Email": SITEGROUP_USER_ONE_EMAIL,
+            }
+        ]
+
+    @property
     def users_and_groups_for_role_assignments(self):
         return [USER_ONE_EMAIL, GROUP_ONE]
 
@@ -1862,6 +1912,7 @@ class TestSharepointOnlineDataSource:
                     "group": {
                         "id": GROUP_ONE_ID,
                     },
+                    "siteGroup": {"id": "2", "displayName": "Some site group"},
                 },
             },
         ]
@@ -1887,6 +1938,7 @@ class TestSharepointOnlineDataSource:
             client = new_mock.return_value
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
+            client.site_group_users = AsyncIterator(self.site_group_users)
             client.user_information_list = AsyncIterator(self.user_information_list)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
@@ -2118,6 +2170,9 @@ class TestSharepointOnlineDataSource:
         source = create_source(SharepointOnlineDataSource)
         source._site_access_control = AsyncMock(return_value=([], []))
 
+        # mock cache lookup
+        source.site_group_users = AsyncMock(return_value=self.site_group_users)
+
         sync_cursor = {"site_drives": {}}
         for site_drive in self.site_drives:
             sync_cursor["site_drives"][
@@ -2225,7 +2280,8 @@ class TestSharepointOnlineDataSource:
 
         assert download_result is None
 
-    def test_with_drive_item_permissions(self, patch_sharepoint_client):
+    @pytest.mark.asyncio
+    async def test_with_drive_item_permissions(self, patch_sharepoint_client):
         source = create_source(SharepointOnlineDataSource)
         set_dls_enabled(source, True)
         drive_item = {"id": 2}
@@ -2233,14 +2289,20 @@ class TestSharepointOnlineDataSource:
             self.drive_item_permissions
         )
 
-        drive_item_with_access_control = source._with_drive_item_permissions(
-            drive_item, self.drive_item_permissions
+        # mock cache lookup
+        source.site_group_users = AsyncMock(return_value=self.site_group_users)
+
+        drive_item_with_access_control = await source._with_drive_item_permissions(
+            drive_item, self.drive_item_permissions, "dummy_site_web_url"
         )
         drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
-        assert len(drive_item_access_control) == 2
+        assert len(drive_item_access_control) == 4
         assert _prefix_user_id(USER_ONE_ID) in drive_item_access_control
         assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
+        # This comes from the sitegroup permission
+        assert _prefix_user(SITEGROUP_USER_ONE_ID) in drive_item_access_control
+        assert _prefix_email(SITEGROUP_USER_ONE_EMAIL) in drive_item_access_control
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
@@ -2268,7 +2330,7 @@ class TestSharepointOnlineDataSource:
         drive_items_with_permissions = []
 
         async for drive_item_with_permission in source._drive_items_batch_with_permissions(
-            drive_id, drive_items_batch
+            drive_id, drive_items_batch, "dummy_site_web_url"
         ):
             drive_items_with_permissions.append(drive_item_with_permission)
 
@@ -2290,7 +2352,7 @@ class TestSharepointOnlineDataSource:
         drive_items_without_permissions = []
 
         async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
-            drive_id, drive_items_batch
+            drive_id, drive_items_batch, "dummy_site_web_url"
         ):
             drive_items_without_permissions.append(drive_item_without_permissions)
 
