@@ -599,11 +599,10 @@ class GoogleDriveDataSource(BaseDataSource):
             service_account_credentials, GOOGLE_DRIVE_SERVICE_NAME
         )
 
-        user_account_impersonation = {}
-
         # handle domain-wide delegation
-        if impersonate_email:
-            user_account_impersonation["subject"] = impersonate_email
+        user_account_impersonation = (
+            {"subject": impersonate_email} if impersonate_email else {}
+        )
 
         drive_client = GoogleDriveClient(
             json_credentials=json_credentials, **user_account_impersonation
