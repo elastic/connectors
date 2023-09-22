@@ -16,6 +16,86 @@
       "order": 1,
       "ui_restrictions": []
     },
+    "use_domain_wide_delegation_for_sync": {
+      "depends_on": [],
+      "display": "toggle",
+      "tooltip": "Enable domain-wide delegation to automatically sync content from all shared and personal drives in the Google workspace. This eliminates the need to manually share Google Drive data with your service account, though it may increase sync time. If disabled, only items and folders manually shared with the service account will be synced. Please refer to the connector documentation to ensure domain-wide delegation is correctly configured and has the appropriate scopes.",
+      "default_value": null,
+      "label": "Use domain-wide delegation for data sync",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 2,
+      "ui_restrictions": []
+    },
+    "google_workspace_admin_email_for_data_sync": {
+      "depends_on": [
+        {
+          "field": "use_domain_wide_delegation_for_sync",
+          "value": true
+        }
+      ],
+      "display": "text",
+      "tooltip": "Provide the admin email to be used with domain-wide delegation for data sync. This email enables the connector to utilize the Admin Directory API for listing organization users. Please refer to the connector documentation to ensure domain-wide delegation is correctly configured and has the appropriate scopes.",
+      "default_value": null,
+      "label": "Google Workspace admin email",
+      "sensitive": false,
+      "type": "str",
+      "required": true,
+      "options": [],
+      "validations": [
+        {
+          "constraint": "^\\S+@\\S+\\.\\S+$",
+          "type": "regex"
+        }
+      ],
+      "value": "admin@your-organization.com",
+      "order": 3,
+      "ui_restrictions": []
+    },
+    "google_workspace_email_for_shared_drives_sync": {
+      "depends_on": [
+        {
+          "field": "use_domain_wide_delegation_for_sync",
+          "value": true
+        }
+      ],
+      "display": "text",
+      "tooltip": "Provide the Google Workspace user email for discovery and syncing of shared drives. Only the shared drives this user has access to will be synced.",
+      "default_value": null,
+      "label": "Google Workspace email for syncing shared drives",
+      "sensitive": false,
+      "type": "str",
+      "required": true,
+      "options": [],
+      "validations": [
+        {
+          "constraint": "^\\S+@\\S+\\.\\S+$",
+          "type": "regex"
+        }
+      ],
+      "value": "email@your-organization.com",
+      "order": 4,
+      "ui_restrictions": []
+    },
+    "use_document_level_security": {
+      "depends_on": [],
+      "display": "toggle",
+      "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+      "default_value": null,
+      "label": "Enable document level security",
+      "sensitive": false,
+      "type": "bool",
+      "required": true,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 5,
+      "ui_restrictions": []
+    },
     "google_workspace_admin_email": {
       "depends_on": [
         {
@@ -38,22 +118,7 @@
         }
       ],
       "value": "admin@your-organization.com",
-      "order": 3,
-      "ui_restrictions": []
-    },
-    "use_document_level_security": {
-      "depends_on": [],
-      "display": "toggle",
-      "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
-      "default_value": null,
-      "label": "Enable document level security",
-      "sensitive": false,
-      "type": "bool",
-      "required": true,
-      "options": [],
-      "validations": [],
-      "value": false,
-      "order": 2,
+      "order": 6,
       "ui_restrictions": []
     },
     "max_concurrency": {
@@ -73,7 +138,7 @@
         }
       ],
       "value": 25,
-      "order": 4,
+      "order": 7,
       "ui_restrictions": [
         "advanced"
       ]

@@ -33,6 +33,7 @@ async def create_gdrive_source():
         use_document_level_security=False,
         google_workspace_admin_email="admin@your-organization.com",
     ) as source:
+        # source.google_drive_client = mock.MagicMock()
         yield source
 
 
@@ -141,7 +142,12 @@ async def test_prepare_files(files, expected_files):
     async with create_gdrive_source() as source:
         processed_files = []
 
-        async for file in source.prepare_files(files_page=files[0], paths=dict()):
+        async for file in source.prepare_files(
+            client=source.google_drive_client(),
+            files_page=files[0],
+            paths=dict(),
+            seen_ids=set(),
+        ):
             processed_files.append(file)
 
         assert processed_files == expected_files
@@ -289,7 +295,9 @@ async def test_prepare_file(file, expected_file):
             }
         }
 
-        assert expected_file == await source.prepare_file(file=file, paths=dummy_paths)
+        assert expected_file == await source.prepare_file(
+            client=source.google_drive_client(), file=file, paths=dummy_paths
+        )
 
 
 @pytest.mark.asyncio
@@ -333,7 +341,7 @@ async def test_list_drives():
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 drives_list = []
-                async for drive in source.google_drive_client.list_drives():
+                async for drive in source.google_drive_client().list_drives():
                     drives_list.append(drive)
 
         assert drives_list == expected_drives_list
@@ -382,7 +390,7 @@ async def test_list_folders():
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 folders_list = []
-                async for folder in source.google_drive_client.list_folders():
+                async for folder in source.google_drive_client().list_folders():
                     folders_list.append(folder)
 
         assert folders_list == expected_folders_list
@@ -435,14 +443,17 @@ async def test_resolve_paths():
     folders_future = asyncio.Future()
     folders_future.set_result(folders)
 
-    async with create_gdrive_source() as source:
-        source.google_drive_client.get_all_drives = mock.MagicMock(
-            return_value=drives_future
-        )
-        source.google_drive_client.get_all_folders = mock.MagicMock(
-            return_value=folders_future
-        )
+    # Create a mock for the google drive client
+    mock_google_drive_client = mock.MagicMock()
 
+    # Setup return values for the client's methods
+    mock_google_drive_client.get_all_drives.return_value = drives_future
+    mock_google_drive_client.get_all_folders.return_value = folders_future
+
+    async with create_gdrive_source() as source:
+        source.google_drive_client = mock.MagicMock(
+            return_value=mock_google_drive_client
+        )
         paths = await source.resolve_paths()
 
         assert paths == expected_paths
@@ -491,7 +502,7 @@ async def test_fetch_files():
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 files_list = []
-                async for file in source.google_drive_client.list_folders():
+                async for file in source.google_drive_client().list_folders():
                     files_list.append(file)
 
         assert files_list == expected_files_list
@@ -573,13 +584,14 @@ async def test_get_content():
             Aiogoogle, "as_service_account", return_value=file_content_response
         ):
             async with Aiogoogle(
-                service_account_creds=source.google_drive_client.service_account_credentials
+                service_account_creds=source.google_drive_client().service_account_credentials
             ) as google_client:
                 drive_client = await google_client.discover(
                     api_name="drive", api_version="v3"
                 )
                 drive_client.files = mock.MagicMock()
                 content = await source.get_content(
+                    client=source.google_drive_client(),
                     file=file_document,
                     doit=True,
                 )
@@ -605,6 +617,7 @@ async def test_get_content_doit_false():
         }
 
         content = await source.get_content(
+            client=source.google_drive_client(),
             file=file_document,
             doit=False,
         )
@@ -643,13 +656,16 @@ async def test_get_content_google_workspace_called():
         )
         source.get_generic_file_content = mock.MagicMock()
 
+        drive_client = source.google_drive_client()
+
         await source.get_content(
+            client=drive_client,
             file=file_document,
             timestamp=timestamp,
             doit=True,
         )
         source.get_google_workspace_content.assert_called_once_with(
-            file_document, timestamp=timestamp
+            drive_client, file_document, timestamp=timestamp
         )
         source.get_generic_file_content.assert_not_called()
 
@@ -686,14 +702,17 @@ async def test_get_content_generic_files_called():
             return_value=expected_content_future
         )
 
+        drive_client = source.google_drive_client()
+
         await source.get_content(
+            client=drive_client,
             file=file_document,
             timestamp=timestamp,
             doit=True,
         )
         source.get_google_workspace_content.assert_not_called()
         source.get_generic_file_content.assert_called_once_with(
-            file_document, timestamp=timestamp
+            drive_client, file_document, timestamp=timestamp
         )
 
 
@@ -727,6 +746,7 @@ async def test_get_google_workspace_content():
             return_value=future_file_content_response
         )
         content = await source.get_content(
+            client=source.google_drive_client(),
             file=file_document,
             doit=True,
         )
@@ -760,6 +780,7 @@ async def test_get_google_workspace_content_size_limit():
             return_value=future_file_content_response
         )
         content = await source.get_content(
+            client=source.google_drive_client(),
             file=file_document,
             doit=True,
         )
@@ -796,6 +817,7 @@ async def test_get_generic_file_content():
             return_value=future_file_content_response
         )
         content = await source.get_content(
+            client=source.google_drive_client(),
             file=file_document,
             doit=True,
         )
@@ -822,6 +844,7 @@ async def test_get_generic_file_content_size_limit():
 
         source._download_content = mock.MagicMock()
         content = await source.get_content(
+            client=source.google_drive_client(),
             file=file_document,
             doit=True,
         )
@@ -848,6 +871,7 @@ async def test_get_generic_file_content_empty_file():
 
         source._download_content = mock.MagicMock()
         content = await source.get_content(
+            client=source.google_drive_client(),
             file=file_document,
             doit=True,
         )
@@ -873,13 +897,14 @@ async def test_get_content_when_type_not_supported():
         }
 
         async with Aiogoogle(
-            service_account_creds=source.google_drive_client.service_account_credentials
+            service_account_creds=source.google_drive_client().service_account_credentials
         ) as google_client:
             drive_client = await google_client.discover(
                 api_name="drive", api_version="v3"
             )
             drive_client.files = mock.MagicMock()
             content = await source.get_content(
+                client=source.google_drive_client(),
                 file=file_document,
                 doit=True,
             )
@@ -893,7 +918,7 @@ async def test_api_call_for_attribute_error():
 
     async with create_gdrive_source() as source:
         with pytest.raises(AttributeError):
-            await source._google_drive_client.api_call(
+            await source._google_drive_client().api_call(
                 resource="buckets_dummy", method="list"
             )
 
@@ -957,7 +982,7 @@ async def test_api_call_list_drives_retries(
 
         with pytest.raises(Exception):
             with mock.patch.object(ServiceAccountManager, "refresh"):
-                async for _ in source.google_drive_client.list_drives():
+                async for _ in source.google_drive_client().list_drives():
                     continue
 
         # Expect retry function to be triggered the expected number of retries,
@@ -1074,7 +1099,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 assert expected_file == await source.prepare_file(
-                    file=file, paths=dummy_paths
+                    client=source.google_drive_client(), file=file, paths=dummy_paths
                 )
 
 
@@ -1168,7 +1193,9 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
             }
         }
 
-        assert expected_file == await source.prepare_file(file=file, paths=dummy_paths)
+        assert expected_file == await source.prepare_file(
+            client=source.google_drive_client(), file=file, paths=dummy_paths
+        )
 
 
 @pytest.mark.parametrize(
