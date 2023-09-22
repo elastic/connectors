@@ -18,6 +18,7 @@ from aiogoogle.models import Request, Response
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_drive import RETRIES, GoogleDriveDataSource
+from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
@@ -26,12 +27,12 @@ MORE_THAN_DEFAULT_FILE_SIZE_LIMIT = 10485760 + 1
 
 
 @asynccontextmanager
-async def create_gdrive_source():
+async def create_gdrive_source(**kwargs):
     async with create_source(
         GoogleDriveDataSource,
         service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
         use_document_level_security=False,
-        google_workspace_admin_email="admin@your-organization.com",
+        **kwargs
     ) as source:
         # source.google_drive_client = mock.MagicMock()
         yield source
@@ -506,6 +507,64 @@ async def test_fetch_files():
                     files_list.append(file)
 
         assert files_list == expected_files_list
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_domain_wide_delegation():
+    """Tests the method responsible to yield files from Google Drive."""
+
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync="admin@email.com"
+    ) as source:
+        source._get_google_workspace_admin_email = mock.MagicMock(
+            return_value="admin@email.com"
+        )
+        source.google_admin_directory_client.users = mock.MagicMock(
+            return_value=AsyncIterator([{"primaryEmail": "some@email.com"}])
+        )
+
+        source._domain_wide_delegation_sync_enabled = mock.MagicMock(return_value=True)
+        expected_response = {
+            "kind": "drive#fileList",
+            "files": [
+                {
+                    "kind": "drive#file",
+                    "mimeType": "text/plain",
+                    "id": "id1",
+                    "name": "test.txt",
+                    "parents": ["0APU6durKUAiqUk9PVA"],
+                    "size": "28",
+                    "modifiedTime": "2023-06-28T07:46:28.000Z",
+                }
+            ],
+        }
+        expected_file_document = {
+            "_id": "id1",
+            "created_at": None,
+            "last_updated": "2023-06-28T07:46:28.000Z",
+            "name": "test.txt",
+            "size": "28",
+            "_timestamp": "2023-06-28T07:46:28.000Z",
+            "mime_type": "text/plain",
+            "file_extension": None,
+            "url": None,
+            "type": "file",
+        }
+        dummy_url = "https://www.googleapis.com/drive/v3/files"
+
+        expected_response_object = Response(
+            status_code=200,
+            url=dummy_url,
+            json=expected_response,
+            req=Request(method="GET", url=dummy_url),
+        )
+
+        with mock.patch.object(
+            Aiogoogle, "as_service_account", return_value=expected_response_object
+        ):
+            with mock.patch.object(ServiceAccountManager, "refresh"):
+                async for file_document in source.get_docs():
+                    assert file_document[0] == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -1257,7 +1316,9 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
 async def test_prepare_access_control_doc(user, groups, access_control_doc):
     """Test the method that formats the users data from Google Drive API"""
 
-    async with create_gdrive_source() as source:
+    async with create_gdrive_source(
+        google_workspace_admin_email="admin@your-organization.com"
+    ) as source:
         source._dls_enabled = mock.MagicMock(return_value=True)
 
         expected_response_object = Response(
@@ -1344,7 +1405,9 @@ async def test_prepare_access_control_documents(
 ):
     """Test the method that formats the users data from Google Drive API"""
 
-    async with create_gdrive_source() as source:
+    async with create_gdrive_source(
+        google_workspace_admin_email="admin@your-organization.com"
+    ) as source:
         source._dls_enabled = mock.MagicMock(return_value=True)
 
         expected_response_object = Response(
@@ -1379,7 +1442,9 @@ async def test_get_access_control_dls_disabled():
 async def test_get_access_control_dls_enabled():
     """Tests the module responsible to fetch users data from Google Drive."""
 
-    async with create_gdrive_source() as source:
+    async with create_gdrive_source(
+        google_workspace_admin_email="admin@your-organization.com"
+    ) as source:
         source._dls_enabled = mock.MagicMock(return_value=True)
 
         mock_access_control = {
@@ -1413,3 +1478,49 @@ async def test_get_access_control_dls_enabled():
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 async for access_control in source.get_access_control():
                     assert access_control == mock_access_control
+
+
+@pytest.mark.asyncio
+async def test_get_google_workspace_admin_email_no_dls_no_delegation():
+    async with create_gdrive_source() as source:
+        email = source._get_google_workspace_admin_email()
+        assert email is None
+
+
+@pytest.mark.asyncio
+async def test_get_google_workspace_admin_email_with_delegation_no_dls():
+    test_email = "email@test.com"
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync=test_email
+    ) as source:
+        source._domain_wide_delegation_sync_enabled = mock.MagicMock(return_value=True)
+        email = source._get_google_workspace_admin_email()
+        assert email == test_email
+
+
+@pytest.mark.asyncio
+async def test_get_google_workspace_admin_email_with_dls_no_delegation():
+    test_email = "email@test.com"
+    dls_admin_email = "email1@test.com"
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync=test_email,
+        google_workspace_admin_email=dls_admin_email,
+    ) as source:
+        source._domain_wide_delegation_sync_enabled = mock.MagicMock(return_value=False)
+        source._dls_enabled = mock.MagicMock(return_value=True)
+        email = source._get_google_workspace_admin_email()
+        assert email == dls_admin_email
+
+
+@pytest.mark.asyncio
+async def test_get_google_workspace_admin_email_with_dls_delegation():
+    test_email = "email@test.com"
+    dls_admin_email = "email1@test.com"
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync=test_email,
+        google_workspace_admin_email=dls_admin_email,
+    ) as source:
+        source._domain_wide_delegation_sync_enabled = mock.MagicMock(return_value=True)
+        source._dls_enabled = mock.MagicMock(return_value=True)
+        email = source._get_google_workspace_admin_email()
+        assert email == test_email
