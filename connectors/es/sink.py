@@ -24,10 +24,13 @@ import logging
 import time
 from collections import defaultdict
 
-from elasticsearch import NotFoundError as ElasticNotFoundError
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 from elasticsearch.helpers import async_scan
 
-from connectors.es import ESClient
+from connectors.es import ESClient, Mappings
+from connectors.es.settings import Settings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
@@ -647,7 +650,7 @@ class SyncOrchestrator(ESClient):
         self._sink = None
         self._sink_task = None
 
-    async def prepare_content_index(self, index, *, mappings=None):
+    async def prepare_content_index(self, index, language_code=None):
         """Creates the index, given a mapping if it does not exists."""
         if not index.startswith("search-"):
             raise ContentIndexNameInvalid(
@@ -660,29 +663,50 @@ class SyncOrchestrator(ESClient):
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
+
+        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+
         if exists:
+            # Update the index mappings if needed
             self._logger.debug(f"{index} exists")
-            response = await self.client.indices.get_mapping(
-                index=index, expand_wildcards=expand_wildcards
-            )
-            existing_mappings = response[index].get("mappings", {})
-            if len(existing_mappings) == 0 and mappings:
-                self._logger.debug(
-                    "Index %s has no mappings or it's empty. Adding mappings...", index
-                )
-                await self.client.indices.put_mapping(
-                    index=index,
-                    dynamic=mappings.get("dynamic", False),
-                    dynamic_templates=mappings.get("dynamic_templates", []),
-                    properties=mappings.get("properties", {}),
-                    expand_wildcards=expand_wildcards,
-                )
-                self._logger.debug("Index %s mappings added", index)
-            else:
-                self._logger.debug("Index %s already has mappings. Skipping...", index)
-            return
+            await self._ensure_content_index_mappings(index, mappings, expand_wildcards)
         else:
-            raise IndexMissing(f"Index {index} does not exist!")
+            # Create a new index
+            self._logger.info("Attempt to create a new index")
+            await self._create_content_index(
+                index=index, language_code=language_code, mappings=mappings
+            )
+            self._logger.info(f"Index {index} has been successfully created.")
+
+        return
+
+    async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
+        response = await self.client.indices.get_mapping(
+            index=index, expand_wildcards=expand_wildcards
+        )
+
+        existing_mappings = response[index].get("mappings", {})
+        if len(existing_mappings) == 0 and mappings:
+            self._logger.debug(
+                "Index %s has no mappings or it's empty. Adding mappings...", index
+            )
+            await self.client.indices.put_mapping(
+                index=index,
+                dynamic=mappings.get("dynamic", False),
+                dynamic_templates=mappings.get("dynamic_templates", []),
+                properties=mappings.get("properties", {}),
+                expand_wildcards=expand_wildcards,
+            )
+            self._logger.debug("Index %s mappings added", index)
+        else:
+            self._logger.debug("Index %s already has mappings. Skipping...", index)
+
+    async def _create_content_index(self, index, mappings, language_code=None):
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        return await self.client.indices.create(
+            index=index, mappings=mappings, settings=settings
+        )
 
     def done(self):
         if self._extractor_task is not None and not self._extractor_task.done():
