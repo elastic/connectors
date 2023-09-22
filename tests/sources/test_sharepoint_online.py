@@ -876,7 +876,7 @@ class TestSharepointOnlineClient:
         ]
 
         returned_items = await self._execute_scrolling_method(
-            partial(client.sites, root_site, WILDCARD), patch_scroll, actual_items
+            partial(client.sites, root_site, [WILDCARD]), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
@@ -900,6 +900,59 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == len(filter_)
         assert actual_items[0] in returned_items
         assert actual_items[2] in returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually(self, client, patch_fetch):
+        root_site = "root"
+        actual_items = [
+            {"name": "First"},
+            {"name": "Third"},
+        ]
+        filter_ = ["First", "Third"]
+        patch_fetch.side_effect = actual_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=False
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == len(filter_)
+        assert actual_items == returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually_plus_subsites(
+        self, client, patch_fetch, patch_scroll
+    ):
+        root_site = "root"
+        root_item = {
+            "name": "First",
+            "id": "first",
+            "sites": [{"name": "Second"}],
+        }
+        sub_items = [
+            AsyncIterator(
+                [[{"name": "Second", "id": "second", "sites": [{"name": "Third"}]}]]
+            ),
+            AsyncIterator([[{"name": "Third", "id": "third"}]]),
+        ]
+        expected_items = [
+            {"name": "First", "id": "first"},
+            {"name": "Second", "id": "second"},
+            {"name": "Third", "id": "third"},
+        ]
+        filter_ = ["First"]
+        patch_fetch.side_effect = [root_item]
+        patch_scroll.side_effect = sub_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=True
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == 3
+        assert returned_items == expected_items
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
@@ -1681,7 +1734,7 @@ class TestSharepointOnlineDataSource:
         return [
             {
                 "id": "1",
-                "webUrl": "https://test.sharepoint.com/site-1",
+                "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
             }
@@ -2575,6 +2628,40 @@ class TestSharepointOnlineDataSource:
         # Says which site does not exist
         assert e.match(non_existing_site)
         assert e.match(another_non_existing_site)
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_all_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site-1"
+
+        source = create_source(
+            SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
+            site_collections=[existing_site],
+            enumerate_all_sites=True,
+        )
+        await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_individual_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site_1"
+
+        source = create_source(
+            SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
+            site_collections=[existing_site],
+            enumerate_all_sites=False,
+        )
+        await source.validate_config()
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
