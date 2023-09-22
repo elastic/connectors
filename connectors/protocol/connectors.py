@@ -830,10 +830,7 @@ class Connector(ESDocument):
                 simple_default_value = simple_default_config.get(config_name, {}).get(k)
                 if k != "value" and simple_default_value != v:
                     draft_config_obj = draft_config.get(config_name, {})
-                    if simple_default_value is None:
-                        draft_config_obj[k] = v
-                    else:
-                        draft_config_obj[k] = simple_default_value
+                    draft_config_obj[k] = simple_default_value or v
                     draft_config[config_name] = draft_config_obj
         return draft_config
 
