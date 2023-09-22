@@ -32,6 +32,7 @@ from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
+    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -44,6 +45,7 @@ from connectors.utils import (
     aenumerate,
     get_size,
     iso_utc,
+    retryable,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -87,6 +89,7 @@ class Sink:
         pipeline,
         chunk_mem_size,
         max_concurrency,
+        max_retries,
         logger_=None,
     ):
         self.client = client
@@ -99,6 +102,7 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.max_retires = max_retries
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
@@ -122,6 +126,12 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
+        @retryable(retries=self.max_retires)
+        async def _bulk_api_call():
+            return await self.client.bulk(
+                operations=operations, pipeline=self.pipeline["name"]
+            )
+
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
@@ -131,10 +141,7 @@ class Sink:
             )
         start = time.time()
         try:
-            res = await self.client.bulk(
-                operations=operations, pipeline=self.pipeline["name"]
-            )
-
+            res = await _bulk_api_call()
             if res.get("errors"):
                 for item in res["items"]:
                     for op, data in item.items():
@@ -764,6 +771,7 @@ class SyncOrchestrator(ESClient):
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
+        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
 
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
 
@@ -791,6 +799,7 @@ class SyncOrchestrator(ESClient):
             pipeline,
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
+            max_retries=max_bulk_retries,
             logger_=self._logger,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

@@ -60,6 +60,21 @@
         "value": false,
         "order": 4,
         "ui_restrictions": []
+      },
+      "recording_age": {
+        "depends_on": [],
+        "display": "numeric",
+        "tooltip": "How far back in time to request recordings from zoom. Recordings older than this will not be indexed.",
+        "default_value": null,
+        "label": "Recording Age Limit (Months)",
+        "sensitive": false,
+        "type": "int",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": 4,
+        "order": 5,
+        "ui_restrictions": []
       }
     },
     "custom_scheduling": {},
