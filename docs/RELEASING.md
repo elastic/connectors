@@ -27,6 +27,20 @@ After the Elastic unified release is complete
 
 - Update the **BUILD** version ([example PR](https://github.com/elastic/connectors-python/pull/122)). Note that the Connectors project does not immediately bump to the next **PATCH** version. That won't happen until that patch release's FF date.
 
+## Releasing docker images
+
+To release the docker image, follow these steps:
+
+1. Make sure you're on the right tagged release commit, e.g. `v8.10.2.0`
+   - If no release tag exists yet, use the release branch, e.g. `8.10`
+2. Make sure the version in [VERSION](../connectors/VERSION) is correct
+3. Run `docker login -u <username> -p <password> docker.elastic.co` with credentials that allow for release
+4. Edit the [Makefile](../Makefile) to remove `-SNAPSHOT` from the `docker-build`, `docker-run` and `docker-push` steps
+5. Run `make docker-build`
+6. Run `make docker-run` to check that the docker image runs correctly
+    - If the image runs and complains about not finding elasticsearch on port 9200, that's okay -- this is enough to confirm the image works
+7. Run `make docker-push` to complete the release
+
 ## In-Between releases
 
 Sometimes, we need to release Connectors independently from Enterprise Search. For instance, if someone wants to use the project as an HTTP Service, and we have a bug fix we want them to have as soon as possible.
