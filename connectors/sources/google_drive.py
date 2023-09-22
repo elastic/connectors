@@ -108,9 +108,6 @@ class GoogleAPIClient:
         self.api_version = api_version
         self._logger = logger
 
-        self._logger.info('GoogleAPIClient')
-        self._logger.info(subject)
-
     def set_logger(self, logger_):
         self._logger = logger_
 
@@ -251,7 +248,7 @@ class GoogleDriveClient(GoogleAPIClient):
                 "https://www.googleapis.com/auth/drive.readonly",
                 "https://www.googleapis.com/auth/drive.metadata.readonly",
             ],
-            subject=subject
+            subject=subject,
         )
 
     async def ping(self):
@@ -503,11 +500,9 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
 
-    # def _set_internal_logger(self):
-    #     self.google_drive_client.set_logger(self._logger)
-    #     # google_admin_directory_client is only used for dls
-    #     if self._dls_enabled():
-    #         self.google_admin_directory_client.set_logger(self._logger)
+    def _set_internal_logger(self):
+        if self._domain_wide_delegation_sync_enabled() or self._dls_enabled():
+            self.google_admin_directory_client.set_logger(self._logger)
 
     @classmethod
     def get_default_configuration(cls):
@@ -525,37 +520,53 @@ class GoogleDriveDataSource(BaseDataSource):
                 "tooltip": "This connectors authenticates as a service account to synchronize content from Google Drive.",
                 "type": "str",
             },
-            "use_domain_wide_delegation": {
+            "use_domain_wide_delegation_for_sync": {
                 "display": "toggle",
-                "label": "Enable domain-wide delegation to sync organization data",
+                "label": "Use domain-wide delegation for data sync",
                 "order": 2,
-                "tooltip": "Enabling domain-wide delegation will sync content from all shared and personal drives within the Google workspace. With this setting enabled, the Google Drive data doesn't need to be manually shared with your service account. Enabling this setting can increase the sync time.",
+                "tooltip": "Enable domain-wide delegation to automatically sync content from all shared and personal drives in the Google workspace. This eliminates the need to manually share Google Drive data with your service account, though it may increase sync time. If disabled, only items and folders manually shared with the service account will be synced. Please refer to the connector documentation to ensure domain-wide delegation is correctly configured and has the appropriate scopes.",
                 "type": "bool",
                 "value": False,
             },
-            "google_workspace_admin_email_sync": {
-                "depends_on": [{"field": "use_domain_wide_delegation", "value": True}],
+            "google_workspace_admin_email_for_data_sync": {
+                "depends_on": [
+                    {"field": "use_domain_wide_delegation_for_sync", "value": True}
+                ],
                 "display": "text",
                 "label": "Google Workspace admin email",
                 "order": 3,
-                "tooltip": "Google Workspace admin email. Required to discover organizational users for domain-wide delegation.",
+                "tooltip": "Provide the admin email to be used with domain-wide delegation for data sync. This email enables the connector to utilize the Admin Directory API for listing organization users. Please refer to the connector documentation to ensure domain-wide delegation is correctly configured and has the appropriate scopes.",
+                "type": "str",
+                "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
+            },
+            "google_workspace_email_for_shared_drives_sync": {
+                "depends_on": [
+                    {"field": "use_domain_wide_delegation_for_sync", "value": True}
+                ],
+                "display": "text",
+                "label": "Google Workspace email for syncing shared drives",
+                "order": 4,
+                "tooltip": "Provide the Google Workspace user email for discovery and syncing of shared drives. Only the shared drives this user has access to will be synced.",
                 "type": "str",
                 "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
             },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 4,
+                "order": 5,
                 "tooltip": "Document level security ensures identities and permissions set in Google Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
             },
             "google_workspace_admin_email": {
-                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "depends_on": [
+                    {"field": "use_document_level_security", "value": True},
+                    {"field": "use_domain_wide_delegation_for_sync", "value": False},
+                ],
                 "display": "text",
                 "label": "Google Workspace admin email",
-                "order": 5,
-                "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions.",
+                "order": 6,
+                "tooltip": "In order to use Document Level Security you need to enable Google Workspace domain-wide delegation of authority for your service account. A service account with delegated authority can impersonate admin user with sufficient permissions to fetch all users and their corresponding permissions. Please refer to the connector documentation to ensure domain-wide delegation is correctly configured and has the appropriate scopes.",
                 "type": "str",
                 "validations": [{"type": "regex", "constraint": EMAIL_REGEX_PATTERN}],
             },
@@ -563,7 +574,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 "default_value": GOOGLE_API_MAX_CONCURRENCY,
                 "display": "numeric",
                 "label": "Maximum concurrent HTTP requests",
-                "order": 6,
+                "order": 7,
                 "required": False,
                 "tooltip": "This setting determines the maximum number of concurrent HTTP requests sent to the Google API to fetch data. Increasing this value can improve data retrieval speed, but it may also place higher demands on system resources and network bandwidth.",
                 "type": "int",
@@ -588,14 +599,15 @@ class GoogleDriveDataSource(BaseDataSource):
             service_account_credentials, GOOGLE_DRIVE_SERVICE_NAME
         )
 
-
-        user_impersonation = {}
+        user_account_impersonation = {}
 
         # handle domain-wide delegation
         if impersonate_email:
-            user_impersonation["subject"] = impersonate_email
+            user_account_impersonation["subject"] = impersonate_email
 
-        drive_client = GoogleDriveClient(json_credentials=json_credentials, **user_impersonation)
+        drive_client = GoogleDriveClient(
+            json_credentials=json_credentials, **user_account_impersonation
+        )
 
         drive_client.set_logger(self._logger)
 
@@ -622,36 +634,12 @@ class GoogleDriveDataSource(BaseDataSource):
 
         directory_client = GoogleAdminDirectoryClient(
             json_credentials=json_credentials,
-            subject=self.configuration["google_workspace_admin_email"],
+            subject=self._get_google_workspace_admin_email(),
         )
 
         directory_client.set_logger(self._logger)
 
         return directory_client
-
-    @cached_property
-    def google_admin_directory_client_for_sync(self):
-        """Initialize and return the GoogleAdminDirectoryClient
-
-        Returns:
-            GoogleAdminDirectoryClient: An instance of the GoogleAdminDirectoryClient.
-        """
-        service_account_credentials = self.configuration["service_account_credentials"]
-
-        validate_service_account_json(
-            service_account_credentials, GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME
-        )
-
-        self._validate_google_workspace_admin_email()
-
-        json_credentials = load_service_account_json(
-            service_account_credentials, GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME
-        )
-
-        return GoogleAdminDirectoryClient(
-            json_credentials=json_credentials,
-            subject=self.configuration["google_workspace_admin_email_sync"],
-        )
 
     async def validate_config(self):
         """Validates whether user inputs are valid or not for configuration field.
@@ -665,6 +653,7 @@ class GoogleDriveDataSource(BaseDataSource):
             self.configuration["service_account_credentials"], GOOGLE_DRIVE_SERVICE_NAME
         )
         self._validate_google_workspace_admin_email()
+        self._validate_google_workspace_email_for_shared_drives_sync()
 
     def _validate_google_workspace_admin_email(self):
         """
@@ -684,13 +673,11 @@ class GoogleDriveDataSource(BaseDataSource):
 
         """
         if self._dls_enabled():
-            google_workspace_admin_email = self.configuration[
-                "google_workspace_admin_email"
-            ]
+            google_workspace_admin_email = self._get_google_workspace_admin_email()
 
             if google_workspace_admin_email is None:
                 raise ConfigurableFieldValueError(
-                    "Google Workspace admin email cannot be empty when Document Level Security is enabled."
+                    "Google Workspace admin email cannot be empty."
                 )
 
             if not validate_email_address(google_workspace_admin_email):
@@ -698,18 +685,72 @@ class GoogleDriveDataSource(BaseDataSource):
                     "Google Workspace admin email is malformed or contains whitespace characters."
                 )
 
+    def _validate_google_workspace_email_for_shared_drives_sync(self):
+        """
+        Validates the Google Workspace email address specified for shared drives synchronization.
+
+        When 'Use domain-wide delegation for data sync' is enabled, this method ensures that the
+        email address provided for syncing shared drives is neither empty nor malformed.
+
+        Raises:
+            ConfigurableFieldValueError:
+                - If the Google Workspace email for shared drives sync is empty when the domain-wide delegation sync is enabled.
+                - If the provided email address is malformed or contains whitespace characters.
+        """
+        if self._domain_wide_delegation_sync_enabled():
+            google_workspace_email = self.configuration[
+                "google_workspace_email_for_shared_drives_sync"
+            ]
+
+            if google_workspace_email is None:
+                raise ConfigurableFieldValueError(
+                    "Google Workspace admin email for shared drives sync cannot be empty when 'Use domain-wide delegation for data sync' is enabled."
+                )
+
+            if not validate_email_address(google_workspace_email):
+                raise ConfigurableFieldValueError(
+                    "Google Workspace email for shared drives sync is malformed or contains whitespace characters."
+                )
+
     async def ping(self):
         """Verify the connection with Google Drive"""
         try:
-            if self._domain_wide_delegation_sync_enabled:
-                self._logger.info(f'Pinging with: {self._google_workspace_admin_email()}')
-                await self.google_drive_client(impersonate_email=self._google_workspace_admin_email()).ping()
+            if self._domain_wide_delegation_sync_enabled():
+                admin_email = self._get_google_workspace_admin_email()
+                await self.google_drive_client(impersonate_email=admin_email).ping()
             else:
                 await self.google_drive_client().ping()
             self._logger.info("Successfully connected to the Google Drive.")
         except Exception:
             self._logger.exception("Error while connecting to the Google Drive.")
             raise
+
+    def _get_google_workspace_admin_email(self):
+        """
+        Retrieves the Google Workspace admin email based on the current configuration.
+
+        If domain-wide delegation for data sync is enabled, this method will return the admin email
+        provided for shared drives sync. If Document Level Security (DLS) is enabled but not domain-wide
+        delegation, it will return the the admin email specified for DLS.
+
+        This ensures that if the admin email for domain-wide delegation is provided, it is utilized
+        for both sync and DLS without requiring the same email to be provided again for DLS.
+
+        Returns:
+            str or None: The Google Workspace admin email based on the current configuration or None if
+            neither domain-wide delegation nor DLS is enabled.
+        """
+
+        if self._domain_wide_delegation_sync_enabled():
+            return self.configuration["google_workspace_admin_email_for_data_sync"]
+        elif self._dls_enabled():
+            return self.configuration["google_workspace_admin_email"]
+        else:
+            return None
+
+    def _google_google_workspace_email_for_shared_drives_sync(self):
+        """Get Google Workspace email for syncing shared drives"""
+        return self.configuration.get("google_workspace_email_for_shared_drives_sync")
 
     def _dls_enabled(self):
         """Check if Document Level Security is enabled"""
@@ -724,10 +765,9 @@ class GoogleDriveDataSource(BaseDataSource):
     def _domain_wide_delegation_sync_enabled(self):
         """Check if Domain Wide delegation sync is enabled"""
 
-        return bool(self.configuration.get("use_domain_wide_delegation", False))
-
-    def _google_workspace_admin_email(self):
-        return self.configuration.get("google_workspace_admin_email_sync")
+        return bool(
+            self.configuration.get("use_domain_wide_delegation_for_sync", False)
+        )
 
     def _max_concurrency(self):
         """Get maximum concurrent open connections from the user config"""
@@ -1044,10 +1084,14 @@ class GoogleDriveDataSource(BaseDataSource):
 
         if file_mime_type in GOOGLE_MIME_TYPES_MAPPING:
             # Get content from native google workspace files (docs, slides, sheets)
-            return await self.get_google_workspace_content(client, file, timestamp=timestamp)
+            return await self.get_google_workspace_content(
+                client, file, timestamp=timestamp
+            )
         else:
             # Get content from all other file types
-            return await self.get_generic_file_content(client, file, timestamp=timestamp)
+            return await self.get_generic_file_content(
+                client, file, timestamp=timestamp
+            )
 
     async def _get_permissions_on_shared_drive(self, client, file_id):
         """Retrieves the permissions on a shared drive for the given file ID.
@@ -1061,9 +1105,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         permissions = []
 
-        async for permissions_page in client.list_permissions(
-            file_id
-        ):
+        async for permissions_page in client.list_permissions(file_id):
             permissions.extend(permissions_page.get("permissions", []))
 
         return permissions
@@ -1170,8 +1212,7 @@ class GoogleDriveDataSource(BaseDataSource):
             if not permissions:
                 try:
                     permissions = await self._get_permissions_on_shared_drive(
-                        client=client,
-                        file_id=file_id
+                        client=client, file_id=file_id
                     )
                 except HTTPError as exception:
                     # Gracefully handle scenario when the service account does not
@@ -1218,44 +1259,55 @@ class GoogleDriveDataSource(BaseDataSource):
                                 partial download content function
         """
 
-
         # Keep track of seen file ids. If a file is shared directly
         # with google workspace users it can be discovered multiple times.
         # This is an optimization to process unique files only once.
         seen_ids = set()
 
         if self._domain_wide_delegation_sync_enabled():
-            admin_email = self._google_workspace_admin_email()
-
-            admin_google_drive_client = self.google_drive_client(
-                impersonate_email=self._google_workspace_admin_email()
+            email_for_shared_drives_sync = (
+                self._google_google_workspace_email_for_shared_drives_sync()
             )
 
-            # Build a path lookup, parentId -> parent path
-            resolved_paths = await self.resolve_paths(google_drive_client=admin_google_drive_client)
+            shared_drives_client = self.google_drive_client(
+                impersonate_email=email_for_shared_drives_sync
+            )
 
             # sync personal drives first
-            async for user in self.google_admin_directory_client_for_sync.users():
+            async for user in self.google_admin_directory_client.users():
                 email = user.get(UserFields.EMAIL.value)
-                self._logger.debug(f'Syncing personal drive content for: {email}')
+                self._logger.debug(f"Syncing personal drive content for: {email}")
                 google_drive_client = self.google_drive_client(impersonate_email=email)
                 async for files_page in google_drive_client.list_files_from_my_drive(
                     fetch_permissions=self._dls_enabled()
                 ):
                     async for file in self.prepare_files(
-                        client=google_drive_client ,files_page=files_page, paths=resolved_paths, seen_ids=seen_ids
+                        client=google_drive_client,
+                        files_page=files_page,
+                        paths={},
+                        seen_ids=seen_ids,
                     ):
                         yield file, partial(self.get_content, google_drive_client, file)
 
+            # Build a path lookup, parentId -> parent path
+            resolved_paths = await self.resolve_paths(
+                google_drive_client=shared_drives_client
+            )
+
             # sync shared drives impersonating the admin account
-            self._logger.debug(f'Syncing shared drives using admin account: {admin_email}')
-            async for files_page in admin_google_drive_client.list_files(
+            self._logger.debug(
+                f"Syncing shared drives using admin account: {email_for_shared_drives_sync}"
+            )
+            async for files_page in shared_drives_client.list_files(
                 fetch_permissions=self._dls_enabled()
             ):
                 async for file in self.prepare_files(
-                    client=admin_google_drive_client, files_page=files_page, paths=resolved_paths, seen_ids=seen_ids
+                    client=shared_drives_client,
+                    files_page=files_page,
+                    paths=resolved_paths,
+                    seen_ids=seen_ids,
                 ):
-                    yield file, partial(self.get_content, admin_google_drive_client, file)
+                    yield file, partial(self.get_content, shared_drives_client, file)
 
         else:
             # Build a path lookup, parentId -> parent path
@@ -1268,6 +1320,9 @@ class GoogleDriveDataSource(BaseDataSource):
                 fetch_permissions=self._dls_enabled()
             ):
                 async for file in self.prepare_files(
-                    client=google_drive_client, files_page=files_page, paths=resolved_paths, seen_ids=seen_ids
+                    client=google_drive_client,
+                    files_page=files_page,
+                    paths=resolved_paths,
+                    seen_ids=seen_ids,
                 ):
                     yield file, partial(self.get_content, google_drive_client, file)
