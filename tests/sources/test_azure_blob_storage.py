@@ -6,6 +6,7 @@
 """Tests the Azure Blob Storage source class methods"""
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest.mock import Mock, patch
 
@@ -16,6 +17,20 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+
+@asynccontextmanager
+async def create_abs_source(
+    use_text_extraction_service=False,
+):
+    async with create_source(
+        AzureBlobStorageDataSource,
+        account_name="foo",
+        account_key="bar",
+        blob_endpoint="https://foo.endpoint.com",
+        use_text_extraction_service=use_text_extraction_service,
+    ) as source:
+        yield source
 
 
 @pytest.mark.asyncio
@@ -283,12 +298,10 @@ async def test_get_content():
                 "_timestamp": "2022-04-21T12:12:30",
                 "_attachment": "TW9jay4uLi4=",
             }
-
-            # Execute
             actual_response = await source.get_content(mock_response, doit=True)
 
-            # Assert
             assert actual_response == expected_output
+            assert "body" not in actual_response
 
 
 @pytest.mark.asyncio
@@ -511,3 +524,57 @@ async def test_get_content_when_blob_tier_archive():
 
         # Assert
         assert actual_response is None
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.content_extraction.ContentExtraction._check_configured",
+    lambda *_: True,
+)
+async def test_get_content_with_with_text_extraction_enabled_adds_body():
+    mock_response = {
+        "type": "blob",
+        "id": "container1/blob1",
+        "_timestamp": "2022-04-21T12:12:30",
+        "created at": "2022-04-21T12:12:30",
+        "content type": "plain/text",
+        "container metadata": "{'key1': 'value1'}",
+        "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+        "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+        "title": "blob1.txt",
+        "tier": "private",
+        "size": 1000,
+        "container": "container1",
+    }
+    mock_download = b"Mock...."
+
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=str(mock_download),
+    ) as extraction_service_mock, patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_abs_source(use_text_extraction_service=True) as source:
+            source.connection_string = source._configure_connection_string()
+
+            class DownloadBlobMock:
+                """This class is used Mock object of download_blob"""
+
+                async def chunks(self):
+                    """This Method is used to read content"""
+                    yield mock_download
+
+            with patch.object(
+                BlobClient, "download_blob", return_value=DownloadBlobMock()
+            ):
+                expected_output = {
+                    "_id": "container1/blob1",
+                    "_timestamp": "2022-04-21T12:12:30",
+                    "body": str(mock_download),
+                }
+                actual_response = await source.get_content(mock_response, doit=True)
+
+                extraction_service_mock.assert_called_once()
+                assert actual_response == expected_output
+                assert "_attachment" not in actual_response
