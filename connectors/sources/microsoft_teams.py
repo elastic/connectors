@@ -42,9 +42,27 @@ TOKEN_EXPIRES = 3599
 RETRY_COUNT = 3
 RETRY_SECONDS = 30
 RETRY_INTERVAL = 2
-GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
-GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"
-BASE_URL = "https://graph.microsoft.com/v1.0"
+
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
+
+if "OVERRIDE_URL" in os.environ:
+    logger.warning("x" * 50)
+    logger.warning(
+        f"MICROSOFT TEAMS CONNECTOR CALLS ARE REDIRECTED TO {os.environ['OVERRIDE_URL']}"
+    )
+    logger.warning("IT'S SUPPOSED TO BE USED ONLY FOR TESTING")
+    logger.warning("x" * 50)
+    override_url = os.environ["OVERRIDE_URL"]
+    BASE_URL = override_url
+    GRAPH_API_AUTH_URL = override_url
+    GRAPH_ACQUIRE_TOKEN_URL = override_url
+else:
+    GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
+    GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"
+    BASE_URL = "https://graph.microsoft.com/v1.0"
+
 SCOPE = [
     "User.Read.All",
     "TeamMember.Read.All",
@@ -261,6 +279,9 @@ class GraphAPIToken:
 
         Returns:
             str: bearer token for one of Microsoft services"""
+        if RUNNING_FTEST:
+            return
+
         cached_value = self._token_cache_with_client.get_value()
 
         if cached_value:
@@ -285,6 +306,9 @@ class GraphAPIToken:
 
         Returns:
             str: bearer token for one of Microsoft services"""
+        if RUNNING_FTEST:
+            return
+
         cached_value = self._token_cache_with_username.get_value()
         if cached_value:
             return cached_value
@@ -1244,32 +1268,27 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "label": "Client ID",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "secret_value": {
                 "label": "Secret value",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "username": {
                 "label": "Username",
                 "order": 4,
                 "type": "str",
-                "value": "",
             },
             "password": {
                 "label": "Password",
                 "order": 5,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
         }
