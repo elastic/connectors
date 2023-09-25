@@ -678,8 +678,6 @@ class SyncOrchestrator(ESClient):
             )
             self._logger.info(f"Index {index} has been successfully created.")
 
-        return
-
     async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
         response = await self.client.indices.get_mapping(
             index=index, expand_wildcards=expand_wildcards
