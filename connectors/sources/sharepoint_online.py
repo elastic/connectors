@@ -24,6 +24,7 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
+from connectors.content_extraction import ContentExtraction
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -35,7 +36,6 @@ from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
-    ExtractionService,
     convert_to_b64,
     html_to_text,
     iso_utc,
@@ -1148,7 +1148,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         self._client = None
 
         if self.configuration["use_text_extraction_service"]:
-            self.extraction_service = ExtractionService()
+            self.extraction_service = ContentExtraction()
             self.download_dir = self.extraction_service.get_volume_dir()
         else:
             self.extraction_service = None
