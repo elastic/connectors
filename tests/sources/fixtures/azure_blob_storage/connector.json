@@ -70,7 +70,7 @@
                         "type": "bool",
                         "ui_restrictions": [],
                         "validations": [],
-                        "value": false,
+                        "value": false
                 }
         },
         "filtering": [
