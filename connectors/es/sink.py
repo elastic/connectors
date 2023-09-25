@@ -672,7 +672,7 @@ class SyncOrchestrator(ESClient):
             await self._ensure_content_index_mappings(index, mappings, expand_wildcards)
         else:
             # Create a new index
-            self._logger.info("Attempt to create a new index")
+            self._logger.info(f"Attempt to create {index} index")
             await self._create_content_index(
                 index=index, language_code=language_code, mappings=mappings
             )
