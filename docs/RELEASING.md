@@ -32,7 +32,7 @@ After the Elastic unified release is complete
 To release the docker image, follow these steps:
 
 1. Make sure you're on the right tagged release commit, e.g. `v8.10.2.0`
-   - If no release tag exists yet, use the release branch, e.g. `8.10`
+   - If no release tag exists yet, create it with `git tag <tagid> && git push origin <tagid>`
 2. Make sure the version in [VERSION](../connectors/VERSION) is correct
 3. Run `docker login -u <username> -p <password> docker.elastic.co` with credentials that allow for release
 4. Edit the [Makefile](../Makefile) to remove `-SNAPSHOT` from the `docker-build`, `docker-run` and `docker-push` steps
