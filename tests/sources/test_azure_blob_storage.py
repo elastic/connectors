@@ -53,7 +53,7 @@ async def test_ping_for_successful_connection():
     with patch.object(
         BlobServiceClient, "get_account_information", return_value=mock_response
     ):
-        async with create_source(AzureBlobStorageDataSource) as source:
+        async with create_abs_source() as source:
             # Execute
             await source.ping()
 
@@ -63,7 +63,7 @@ async def test_ping_for_failed_connection():
     """Test ping method of AzureBlobStorageDataSource class with negative case"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         with patch.object(
             BlobServiceClient,
             "get_account_information",
@@ -79,7 +79,7 @@ async def test_prepare_blob_doc():
     """Test prepare_blob_doc method of AzureBlobStorageDataSource Class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         document = {
             "container": "container1",
             "name": "blob1",
@@ -119,7 +119,7 @@ async def test_get_container():
     """Test get_container method of AzureBlobStorageDataSource Class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         source.connection_string = source._configure_connection_string()
         mock_repsonse = AsyncIterator(
             [
@@ -152,7 +152,7 @@ async def test_get_blob():
     """Test get_blob method of AzureBlobStorageDataSource Class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         source.connection_string = source._configure_connection_string()
         mock_response = AsyncIterator(
             [
@@ -201,7 +201,7 @@ async def test_get_doc():
     """Test get_doc method of AzureBlobStorageDataSource Class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         source.get_container = Mock(
             return_value=AsyncIterator(
                 [
@@ -268,7 +268,7 @@ async def test_get_content():
     """Test get_content method of AzureBlobStorageDataSource Class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         source.connection_string = source._configure_connection_string()
 
         class DownloadBlobMock:
@@ -309,7 +309,7 @@ async def test_get_content_with_upper_extension():
     """Test get_content method of AzureBlobStorageDataSource Class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         source.connection_string = source._configure_connection_string()
 
         class DownloadBlobMock:
@@ -352,7 +352,7 @@ async def test_get_content_when_doit_false():
     """Test get_content method when doit is false."""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         mock_response = {
             "type": "blob",
             "id": "container1/blob1",
@@ -380,7 +380,7 @@ async def test_get_content_when_file_size_0b():
     """Test get_content method when the file size is 0b"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         mock_response = {
             "type": "blob",
             "id": "container1/blob1",
@@ -408,7 +408,7 @@ async def test_get_content_when_size_limit_exceeded():
     """Test get_content method when the file size is 10MB"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         mock_response = {
             "type": "blob",
             "id": "container1/blob1",
@@ -436,7 +436,7 @@ async def test_get_content_when_type_not_supported():
     """Test get_content method when the file type is not supported"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         mock_response = {
             "type": "blob",
             "id": "container1/blob1",
@@ -464,7 +464,7 @@ async def test_validate_config_no_account_name():
     """Test configure connection string method of AzureBlobStorageDataSource class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         source.configuration.get_field("account_name").value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
@@ -477,7 +477,7 @@ async def test_tweak_bulk_options():
     """Test tweak_bulk_options method of BaseDataSource class"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         options = {}
         options["concurrent_downloads"] = 10
 
@@ -503,7 +503,7 @@ async def test_get_content_when_blob_tier_archive():
     """Test get_content method when the blob tier is archive"""
 
     # Setup
-    async with create_source(AzureBlobStorageDataSource) as source:
+    async with create_abs_source() as source:
         mock_response = {
             "type": "blob",
             "id": "container1/blob1",
