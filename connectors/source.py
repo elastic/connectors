@@ -16,6 +16,7 @@ from pydoc import locate
 
 from bson import Decimal128
 
+from connectors.content_extraction import ContentExtraction
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
@@ -385,6 +386,13 @@ class BaseDataSource:
         self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
+
+        if self.configuration.get("use_text_extraction_service"):
+            self.extraction_service = ContentExtraction()
+            self.download_dir = self.extraction_service.get_volume_dir()
+        else:
+            self.extraction_service = None
+            self.download_dir = None
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"

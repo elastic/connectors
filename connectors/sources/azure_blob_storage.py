@@ -101,6 +101,14 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 6,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     def _configure_connection_string(self):
@@ -165,7 +173,8 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         blob_name = blob["title"]
-        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
+        file_extension = (os.path.splitext(blob_name)[-1]).lower()
+        if file_extension not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(f"{blob_name} can't be extracted")
             return
 
@@ -191,16 +200,34 @@ class AzureBlobStorageDataSource(BaseDataSource):
         ) as blob_client:
             data = await blob_client.download_blob()
             temp_filename = ""
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                temp_filename = async_buffer.name
-                async for content in data.chunks():
-                    await async_buffer.write(content)
-            self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
-            await asyncio.to_thread(convert_to_b64, source=temp_filename)
-            async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-                # base64 on macOS will add a EOL, so we strip() here
-                document["_attachment"] = (await async_buffer.read()).strip()
-            await remove(str(temp_filename))
+
+            try:
+                async with NamedTemporaryFile(
+                    mode="wb",
+                    suffix=file_extension,
+                    delete=False,
+                    dir=self.download_dir,
+                ) as async_buffer:
+                    temp_filename = async_buffer.name
+                    async for content in data.chunks():
+                        await async_buffer.write(content)
+
+                if self.configuration["use_text_extraction_service"]:
+                    if self.extraction_service._check_configured():
+                        document["body"] = await self.extraction_service.extract_text(
+                            temp_filename, blob_name
+                        )
+                else:
+                    self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
+                    await asyncio.to_thread(convert_to_b64, source=temp_filename)
+                    async with aiofiles.open(
+                        file=temp_filename, mode="r"
+                    ) as async_buffer:
+                        # base64 on macOS will add a EOL, so we strip() here
+                        document["_attachment"] = (await async_buffer.read()).strip()
+            finally:
+                await remove(str(temp_filename))
+
         return document
 
     async def get_container(self):
