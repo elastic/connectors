@@ -676,7 +676,7 @@ class SyncOrchestrator(ESClient):
             await self._create_content_index(
                 index=index, language_code=language_code, mappings=mappings
             )
-            self._logger.info(f"Index {index} has been successfully created.")
+            self._logger.info(f"Content index successfully created:  {index}")
 
     async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
         response = await self.client.indices.get_mapping(
@@ -697,7 +697,9 @@ class SyncOrchestrator(ESClient):
             )
             self._logger.debug("Successfully added mappings for index %s", index)
         else:
-            self._logger.debug("Index %s already has mappings, skipping mappings creation", index)
+            self._logger.debug(
+                "Index %s already has mappings, skipping mappings creation", index
+            )
 
     async def _create_content_index(self, index, mappings, language_code=None):
         settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
