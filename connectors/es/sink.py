@@ -695,7 +695,7 @@ class SyncOrchestrator(ESClient):
                 properties=mappings.get("properties", {}),
                 expand_wildcards=expand_wildcards,
             )
-            self._logger.debug("Index %s mappings added", index)
+            self._logger.debug("Successfully added mappings for index %s", index)
         else:
             self._logger.debug("Index %s already has mappings. Skipping...", index)
 
