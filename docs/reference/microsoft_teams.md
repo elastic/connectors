@@ -51,7 +51,7 @@ To connect to Microsoft Teams you need to [create an Azure Active Directory appl
 
 11. Click on the "Add permissions" button to add the selected permissions to your app.
 
-Then click on the "Grant admin consent" button to grant the required permissions to the app. This step requires administrative privileges. ℹ️ **NOTE**: If you are not an admin, you need to request the admin to grant consent via their Azure Portal.
+Click on the "Grant admin consent" button to grant the required permissions to the app. This step requires administrative privileges. ℹ️ **NOTE**: If you are not an admin, you need to request the admin to grant consent via their Azure Portal.
 
 12. Click on "Certificates & Secrets" tab. Go to Client Secrets. Generate a new client secret and keep a note of the string present under `Value` column.
 
