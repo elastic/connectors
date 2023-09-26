@@ -552,21 +552,23 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def user_information_list(self, site_id):
-        expand = "fields"
-        url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
+    async def site_role_assignments(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/web/roleassignments?$expand={expand}"
 
         try:
-            async for page in self._graph_api_client.scroll(url):
-                for user_information in page:
-                    yield user_information
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
         except NotFound:
             return
 
     async def site_groups_users(self, site_web_url, site_group_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
-        select_ = "Email,Id,UserPrincipalName"
+        select_ = "Email,Id,UserPrincipalName,LoginName,Title"
         url = f"{site_web_url}/_api/web/sitegroups/getbyid({site_group_id})/users?$select={select_}"
 
         try:
@@ -1342,7 +1344,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             ]
         """
 
-        self._logger.debug(f"Looking at site: {site['id']}")
+        self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
         if not self._dls_enabled():
             return [], []
 
@@ -1352,43 +1354,12 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for user_information in self.client.user_information_list(site["id"]):
-            user = user_information["fields"]
-
+        async for role_assignment in self.client.site_role_assignments(site['webUrl']):
             user_access_control = set()
+            user_access_control.update(await self._get_access_control_from_role_assignment(role_assignment))
+            member = role_assignment["Member"]
 
-            if is_domain_group(user):
-                self._logger.debug(f"It is a domain group with name: {user['Name']}")
-                domain_group_id = _domain_group_id(user["Name"])
-                self._logger.debug(f"Detected domain groupId as: {domain_group_id}")
-
-                if domain_group_id:
-                    user_access_control.add(_prefix_group(domain_group_id))
-
-            if is_person(user):
-                login_name = _get_login_name(user.get("Name"))
-
-                if login_name:
-                    user_access_control.add(_prefix_user(login_name))
-
-                email = user.get("EMail")
-
-                if email:
-                    user_access_control.add(_prefix_email(email))
-
-            if is_sharepoint_group(user):
-                site_group_id = user.get("id")
-                users = await self.site_group_users(site["webUrl"], site_group_id)
-                for site_group_user in users:
-                    site_group_user_name = site_group_user.get("UserPrincipalName")
-                    if site_group_user_name:
-                        user_access_control.add(_prefix_user(site_group_user_name))
-
-                    site_group_user_email = site_group_user.get("Email")
-                    if site_group_user_email:
-                        user_access_control.add(_prefix_email(site_group_user_email))
-
-            if _is_site_admin(user):
+            if _is_site_admin(member):
                 site_admins_access_control |= user_access_control
 
             access_control |= user_access_control
@@ -1872,22 +1843,35 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             return permissions.get(identity).get("email", None)
 
+        def _get_login_name(permissions, label):
+            identity = permissions.get(label, {})
+            login_name = identity.get('loginName','')
+            if login_name.startswith("i:0#.f|membership|"):
+                return  login_name.split('|')[-1]
+
         drive_item_id = drive_item.get("id")
         access_control = []
 
+        identities = []
         for permission in drive_item_permissions:
             granted_to_v2 = permission.get("grantedToV2")
+            if granted_to_v2:
+                identities.append(granted_to_v2)
+            granted_to_identity_v2 = permission.get("grantedToIdentitiesV2", [])
+            identities.extend(granted_to_identity_v2)
 
-            if not granted_to_v2:
-                self._logger.debug(
-                    f"'grantedToV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
-                )
-                continue
+        if not identities:
+            self._logger.debug(
+                f"'grantedToV2' and 'grantedToIdentitiesV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
+            )
+            return []
 
-            user_id = _get_id(granted_to_v2, "user")
-            group_id = _get_id(granted_to_v2, "group")
-            site_group_id = _get_id(granted_to_v2, "siteGroup")
-            site_user_email = _get_email(granted_to_v2, "siteUser")
+        for identity in identities:
+            user_id = _get_id(identity, "user")
+            group_id = _get_id(identity, "group")
+            site_group_id = _get_id(identity, "siteGroup")
+            site_user_email = _get_email(identity, "siteUser")
+            site_user_username = _get_login_name(identity, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
@@ -1898,16 +1882,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             if site_user_email:
                 access_control.append(_prefix_email(site_user_email))
 
+            if site_user_username:
+                access_control.append(_prefix_user(site_user_username))
+
             if site_group_id:
                 users = await self.site_group_users(site_web_url, site_group_id)
                 for site_group_user in users:
-                    site_group_user_name = site_group_user.get("UserPrincipalName")
-                    if site_group_user_name:
-                        access_control.append(_prefix_user(site_group_user_name))
-
-                    site_group_user_email = site_group_user.get("Email")
-                    if site_group_user_email:
-                        access_control.append(_prefix_email(site_group_user_email))
+                    access_control.extend(self._access_control_for_member(site_group_user))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -2077,22 +2058,30 @@ class SharepointOnlineDataSource(BaseDataSource):
         If any role is assigned to a user this means at least "read" access.
         """
 
-        def _access_control_for_user(user_):
-            user_access_control = []
+        def _has_limited_access(role_assignment):
+            VIEW_ITEM_MASK = 0x1 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+            VIEW_PAGE_MASK = 0x20000 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+            VIEW_ROLE_TYPES = [2, 3, 4, 5, 6, 7, 0xFF] # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 
-            user_principal_name = user_.get("UserPrincipalName")
-            login_name = _get_login_name(user_.get("LoginName"))
+            bindings = role_assignment.get("RoleDefinitionBindings", [])
 
-            if user_principal_name:
-                user_access_control.append(_prefix_user(user_principal_name))
+            # If there is no permission information, default to restrict access
+            if not bindings:
+                return True
 
-            if login_name:
-                user_access_control.append(_prefix_user(login_name))
+            # if any binding grants view access, this role assignment's member has view access
+            for binding in bindings:
+                base_permission_low = int(binding.get("BasePermissions", {}).get("Low", "0"))
+                role_type_kind = binding.get("RoleTypeKind", 0)
+                if (base_permission_low & VIEW_ITEM_MASK) or (base_permission_low & VIEW_PAGE_MASK) or (role_type_kind in VIEW_ROLE_TYPES):
+                    return False
 
-            return user_access_control
+            return True # no evidence of view access was found, so assuming limited access
+
+        if _has_limited_access(role_assignment):
+            return []
 
         access_control = []
-
         identity_type = role_assignment.get("Member", {}).get("odata.type", "")
         is_group = identity_type == "SP.Group"
         is_user = identity_type == "SP.User"
@@ -2101,24 +2090,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             users = role_assignment.get("Member", {}).get("Users", [])
 
             for user in users:
-                access_control.extend(_access_control_for_user(user))
+                access_control.extend(self._access_control_for_member(user))
         elif is_user:
-            user = role_assignment.get("Member", {})
-            login_name = user.get("LoginName")
-
-            # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a dynamic group
-            is_dynamic_group = (
-                login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
-                if login_name
-                else False
-            )
-
-            if is_dynamic_group:
-                self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
-                dynamic_group_id = _get_login_name(login_name)
-                access_control.append(_prefix_group(dynamic_group_id))
-            else:
-                access_control = _access_control_for_user(user)
+            member = role_assignment.get("Member", {})
+            access_control.extend(self._access_control_for_member(member))
         else:
             self._logger.debug(
                 f"Skipping unique page permissions for identity type '{identity_type}'."
@@ -2398,3 +2373,38 @@ class SharepointOnlineDataSource(BaseDataSource):
             return True
 
         return False
+
+    def _access_control_for_member(self, member):
+        login_name = member.get("LoginName")
+
+        # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a group
+        is_group = (
+            login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+            if login_name
+            else False
+        )
+
+        if is_group:
+            self._logger.debug(f"Detected group '{member.get('Title')}'.")
+            dynamic_group_id = _get_login_name(login_name)
+            return [_prefix_group(dynamic_group_id)]
+        else:
+            return self._access_control_for_user(member)
+
+    def _access_control_for_user(self, user_):
+        user_access_control = []
+
+        user_principal_name = user_.get("UserPrincipalName")
+        login_name = _get_login_name(user_.get("LoginName"))
+        email = user_.get("Email")
+
+        if user_principal_name:
+            user_access_control.append(_prefix_user(user_principal_name))
+
+        if login_name:
+            user_access_control.append(_prefix_user(login_name))
+
+        if email:
+            user_access_control.append(_prefix_email(email))
+
+        return user_access_control
