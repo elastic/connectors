@@ -15,12 +15,12 @@ import elasticsearch
 from connectors.config import load_config
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.es.sink import SyncOrchestrator
-from connectors.logger import logger, set_logger
+from connectors.logger import set_extra_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
-CONNECTORS_INDEX = ".elastic-connectors"
-JOBS_INDEX = ".elastic-connectors-sync-jobs"
+CONNECTORS_INDEX = ".elastic-connectors-v1"
+JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 DEFAULT_FILTERING = [
     {
@@ -89,76 +89,8 @@ DEFAULT_PIPELINE = {
     ],
 }
 
-# This should be updated when ftest starts to hate on it for any reason
-# Later we won't need it at all
-JOB_INDEX_MAPPINGS = {
-    "dynamic": "false",
-    "_meta": {"version": 1},
-    "properties": {
-        "cancelation_requested_at": {"type": "date"},
-        "canceled_at": {"type": "date"},
-        "completed_at": {"type": "date"},
-        "connector": {
-            "properties": {
-                "configuration": {"type": "object"},
-                "filtering": {
-                    "properties": {
-                        "advanced_snippet": {
-                            "properties": {
-                                "created_at": {"type": "date"},
-                                "updated_at": {"type": "date"},
-                                "value": {"type": "object"},
-                            }
-                        },
-                        "domain": {"type": "keyword"},
-                        "rules": {
-                            "properties": {
-                                "created_at": {"type": "date"},
-                                "field": {"type": "keyword"},
-                                "id": {"type": "keyword"},
-                                "order": {"type": "short"},
-                                "policy": {"type": "keyword"},
-                                "rule": {"type": "keyword"},
-                                "updated_at": {"type": "date"},
-                                "value": {"type": "keyword"},
-                            }
-                        },
-                        "warnings": {
-                            "properties": {
-                                "ids": {"type": "keyword"},
-                                "messages": {"type": "text"},
-                            }
-                        },
-                    }
-                },
-                "id": {"type": "keyword"},
-                "index_name": {"type": "keyword"},
-                "language": {"type": "keyword"},
-                "pipeline": {
-                    "properties": {
-                        "extract_binary_content": {"type": "boolean"},
-                        "name": {"type": "keyword"},
-                        "reduce_whitespace": {"type": "boolean"},
-                        "run_ml_inference": {"type": "boolean"},
-                    }
-                },
-                "service_type": {"type": "keyword"},
-            }
-        },
-        "created_at": {"type": "date"},
-        "deleted_document_count": {"type": "integer"},
-        "error": {"type": "keyword"},
-        "indexed_document_count": {"type": "integer"},
-        "indexed_document_volume": {"type": "integer"},
-        "last_seen": {"type": "date"},
-        "metadata": {"type": "object"},
-        "started_at": {"type": "date"},
-        "status": {"type": "keyword"},
-        "total_document_count": {"type": "integer"},
-        "trigger_method": {"type": "keyword"},
-        "worker_hostname": {"type": "keyword"},
-    },
-}
+logger = logging.getLogger("kibana-fake")
+set_extra_logger(logger, log_level=logging.DEBUG, prefix="KBN-FAKE")
 
 
 async def prepare(service_type, index_name, config, connector_definition=None):
@@ -295,16 +227,12 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             "is_native": False,
         }
 
-        logger.info(f"Prepare {CONNECTORS_INDEX}")
-        await upsert_index(
-            es,
-            CONNECTORS_INDEX,
-            docs=[doc],
-            doc_ids=[config["connectors"][0]["connector_id"]],
+        logger.info(f"Prepare {CONNECTORS_INDEX} document")
+        await es.client.index(
+            index=CONNECTORS_INDEX,
+            id=config["connectors"][0]["connector_id"],
+            document=doc,
         )
-
-        logger.info(f"Prepare {JOBS_INDEX}")
-        await upsert_index(es, JOBS_INDEX, docs=[], mappings=JOB_INDEX_MAPPINGS)
 
         logger.info(f"Prepare {index_name}")
         mappings = Mappings.default_text_fields_mappings(
@@ -405,7 +333,6 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"config file at '{config_file}' does not exist")
 
-    set_logger(args.debug and logging.DEBUG or logging.INFO)
     config = load_config(config_file)
     connector_definition = None
     if (

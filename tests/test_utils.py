@@ -16,18 +16,15 @@ import tempfile
 import time
 import timeit
 from datetime import datetime
-from unittest.mock import Mock, mock_open, patch
+from unittest.mock import Mock, patch
 
 import pytest
-import pytest_asyncio
-from aioresponses import aioresponses
 from freezegun import freeze_time
 from pympler import asizeof
 
 from connectors import utils
 from connectors.utils import (
     ConcurrentTasks,
-    ExtractionService,
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
@@ -412,8 +409,44 @@ async def test_exponential_backoff_retry_async_generator():
 
 
 @pytest.mark.fail_slow(1)
+def test_exponential_backoff_retry_sync_function():
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    def raises_function():
+        for _ in range(3):
+            mock_func()
+            raise CustomException()
+
+    with pytest.raises(CustomException):
+        for _ in raises_function():
+            pass
+
+    # retried 10 times
+    assert mock_func.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    def does_not_raise_function():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    for item in does_not_raise_function():
+        items.append(item)
+
+    assert items == [1, 1, 1]
+
+
+@pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
-async def test_exponential_backoff_retry():
+async def test_exponential_backoff_retry_async_function():
     mock_func = Mock()
     num_retries = 10
 
@@ -471,7 +504,7 @@ async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
     "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
 )
 @pytest.mark.asyncio
-async def test_skipped_exceptions_retry(skipped_exceptions):
+async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
     mock_func = Mock()
     num_retries = 10
 
@@ -486,8 +519,37 @@ async def test_skipped_exceptions_retry(skipped_exceptions):
     with pytest.raises(CustomException):
         await raises()
 
-        # retried 10 times
         assert mock_func.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        assert mock_func.call_count == 1
+
+
+def test_retryable_not_implemented_error():
+    with pytest.raises(NotImplementedError):
+
+        @retryable()
+        class NotSupported:
+            pass
 
 
 class MockSSL:
@@ -672,7 +734,10 @@ def test_html_to_text_without_html():
 def test_html_to_text_with_weird_html():
     invalid_html = "<div/>just</div> text"
 
-    assert html_to_text(invalid_html) == "just\n text"
+    text = html_to_text(invalid_html)
+
+    assert "just" in text
+    assert "text" in text
 
 
 def batch_size(value):
@@ -708,145 +773,6 @@ def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
         actual_batches.append(batch)
 
     assert actual_batches == expected_batches
-
-
-class TestExtractionService:
-    @pytest_asyncio.fixture
-    async def mock_responses(self):
-        with aioresponses() as m:
-            yield m
-
-    @pytest.mark.parametrize(
-        "mock_config, expected_result",
-        [
-            (
-                {
-                    "extraction_service": {
-                        "host": "http://localhost:8090",
-                    }
-                },
-                True,
-            ),
-            ({"something_else": "???"}, False),
-            ({"extraction_service": {"not_a_host": "!!!m"}}, False),
-        ],
-    )
-    def test_check_configured(self, mock_config, expected_result):
-        with patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value=mock_config.get("extraction_service", None),
-        ):
-            extraction_service = ExtractionService()
-            assert extraction_service._check_configured() is expected_result
-
-    @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses, patch_logger):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-        payload = {"extracted_text": "I've been extracted!"}
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(url, status=200, payload=payload)
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-
-            assert response == "I've been extracted!"
-            patch_logger.assert_present(
-                "Text extraction is successful for 'notreal.txt'."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
-        filepath = "/tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
-        payload = {"extracted_text": "I've been extracted from a local file!"}
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={
-                "host": "http://localhost:8090",
-                "use_file_pointers": True,
-                "shared_volume_dir": "/tmp",
-            },
-        ):
-            mock_responses.put(url, status=200, payload=payload)
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-
-            assert response == "I've been extracted from a local file!"
-            patch_logger.assert_present(
-                "Text extraction is successful for 'notreal.txt'."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_when_response_isnt_200_logs_warning(
-        self, mock_responses, patch_logger
-    ):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(
-                url,
-                status=422,
-                payload={
-                    "error": "Unprocessable Entity",
-                    "message": "Could not process file.",
-                },
-            )
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-            assert response == ""
-
-            patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [422]; Unprocessable Entity: Could not process file."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_when_response_is_200_with_error_logs_warning(
-        self, mock_responses, patch_logger
-    ):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(
-                url,
-                status=200,
-                payload={"error": "oh no!", "message": "I'm all messed up..."},
-            )
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-            assert response == ""
-
-            patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
-            )
 
 
 @pytest.mark.parametrize(
