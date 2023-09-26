@@ -115,6 +115,7 @@ class Sink:
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
         self._logger = logger_ or logger
+        self._canceled = False
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -184,14 +185,13 @@ class Sink:
         )
 
     def force_cancel(self):
-        # reset self.queue so that no document will flow to Elasticsearch index
-        self.queue = None
+        self._canceled = True
 
     async def fetch_doc(self):
-        if self.queue:
-            return await self.queue.get()
+        if self._canceled:
+            raise ForceCanceledError
 
-        raise ForceCanceledError
+        return await self.queue.get()
 
     async def run(self):
         try:
@@ -313,6 +313,7 @@ class Extractor:
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
+        self._canceled = False
 
     async def _get_existing_ids(self):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
@@ -361,14 +362,13 @@ class Extractor:
         )
 
     def force_cancel(self):
-        # reset self.queue so that no document will flow to Elasticsearch index
-        self.queue = None
+        self._canceled = True
 
     async def put_doc(self, doc):
-        if self.queue:
-            await self.queue.put(doc)
-        else:
+        if self._canceled:
             raise ForceCanceledError
+
+        await self.queue.put(doc)
 
     async def run(self, generator, job_type):
         try:
