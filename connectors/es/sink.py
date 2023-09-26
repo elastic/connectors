@@ -201,7 +201,7 @@ class Sink:
             raise
         except ForceCanceledError:
             self._logger.error(
-                "Sink cannot be stopped after certain period of time, force cancel the task."
+                f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
             )
 
     async def _run(self):
@@ -386,10 +386,10 @@ class Extractor:
             raise
         except ForceCanceledError:
             self._logger.error(
-                "Extractor cannot be stopped after certain period of time, force cancel the extractor."
+                f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
             )
         except Exception as e:
-            self._logger.critical("Document fetcher failed", exc_info=True)
+            self._logger.critical("Document extractor failed", exc_info=True)
             await self.put_doc("FETCH_ERROR")
             self.fetch_error = e
 
@@ -758,7 +758,7 @@ class SyncOrchestrator(ESClient):
                 return
 
         self._logger.error(
-            f"Couldn't stop the sync job after {CANCELATION_TIMEOUT} seconds, force canceling."
+            f"Sync job did not stop within {CANCELATION_TIMEOUT} seconds of canceling. Force-canceling."
         )
         self._sink.force_cancel()
         self._extractor.force_cancel()
