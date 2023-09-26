@@ -97,9 +97,7 @@ class CursorAsync:
 
             self.query = str(self.query)
             query_object = PostgreSQLQueries()
-            if self.query == query_object.all_schemas():
-                return [(SCHEMA,)]
-            elif self.query == query_object.all_tables(database="xe", schema=SCHEMA):
+            if self.query == query_object.all_tables(database="xe", schema=SCHEMA):
                 return [(TABLE,)]
             elif self.query == query_object.table_data_count(
                 schema=SCHEMA, table=TABLE
@@ -142,6 +140,7 @@ def test_get_connect_args():
         user="",
         password="",
         database="",
+        schema="",
         tables="*",
         ssl_enabled=True,
         ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
