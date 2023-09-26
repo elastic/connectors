@@ -27,6 +27,7 @@ from connectors.utils import get_pem_format, iso_utc
 
 DEFAULT_SSL_DISABLED = True
 
+
 class PostgreSQLQueries(Queries):
     """Class contains methods which return query"""
 
@@ -442,13 +443,11 @@ class PostgreSQLDataSource(BaseDataSource):
         table_count = 0
 
         async for table in self.postgresql_client.get_tables_to_fetch(self.schema):
-            self._logger.debug(
-                f"Found table: {table} in database: {self.database}."
-            )
+            self._logger.debug(f"Found table: {table} in database: {self.database}.")
             table_count += 1
             async for row in self.fetch_documents(
-                    table=table,
-                    schema=self.schema,
+                table=table,
+                schema=self.schema,
             ):
                 yield row, None
 

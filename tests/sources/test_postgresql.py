@@ -29,7 +29,12 @@ TABLE = "emp_table"
 @asynccontextmanager
 async def create_postgresql_source():
     async with create_source(
-        PostgreSQLDataSource, host="127.0.0.1", port="9090", database="xe", tables="*", schema=SCHEMA
+        PostgreSQLDataSource,
+        host="127.0.0.1",
+        port="9090",
+        database="xe",
+        tables="*",
+        schema=SCHEMA,
     ) as source:
         yield source
 
