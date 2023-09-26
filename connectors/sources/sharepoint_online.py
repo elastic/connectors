@@ -24,7 +24,6 @@ from connectors.access_control import (
     es_access_control_query,
     prefix_identity,
 )
-from connectors.content_extraction import ContentExtraction
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -1146,14 +1145,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
 
         self._client = None
-
-        if self.configuration["use_text_extraction_service"]:
-            self.extraction_service = ContentExtraction()
-            self.download_dir = self.extraction_service.get_volume_dir()
-        else:
-            self.extraction_service = None
-            self.download_dir = None
-
         self.site_group_cache = {}
 
     def _set_internal_logger(self):
@@ -2352,7 +2343,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         attachment = None
         body = None
         source_file_name = ""
-        file_extension = os.path.splitext(original_filename)[-1]
+        file_extension = os.path.splitext(original_filename)[-1].lower()
 
         try:
             async with NamedTemporaryFile(
