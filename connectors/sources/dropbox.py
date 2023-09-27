@@ -667,7 +667,6 @@ class DropboxDataSource(BaseDataSource):
             )
             return
 
-        self._logger.debug(f"Downloading {filename}")
         document = {
             "_id": attachment["id"],
             "_timestamp": attachment["server_modified"],
