@@ -761,7 +761,9 @@ class MicrosoftTeamsFormatter:
         document = {"type": TeamEndpointName.MESSAGE.value}
         document.update(
             {  # pyright: ignore
-                "sender": item.get("from", {}).get("user", {}).get("displayName", ""),
+                "sender": item["from"]["user"].get("displayName")
+                if item.get("from") and item["from"].get("user")
+                else "",
                 "channel": channel_name,
                 "message": message_content,
                 "attached_documents": self.format_attachment_names(
@@ -815,9 +817,9 @@ class MicrosoftTeamsFormatter:
             {
                 "webUrl": chat.get("webUrl"),
                 "chatType": chat.get("chatType"),
-                "sender": message.get("from", {})
-                .get("user", {})
-                .get("displayName", ""),
+                "sender": message["from"]["user"].get("displayName")
+                if message.get("from") and message["from"].get("user")
+                else "",
                 "message": message_content,
             }
         )

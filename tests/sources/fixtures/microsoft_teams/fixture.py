@@ -83,7 +83,7 @@ def adjust_document_id_size(doc_id):
     return f"{doc_id}-{addition}"
 
 
-MESSAGES = 100
+MESSAGES = 50
 EVENTS = 50
 CHANNEL = 3
 FILES = 50
@@ -163,7 +163,9 @@ class MicrosoftTeamsAPI:
         }
 
     def get_user_chat_messages(self, chat_id):
+        global MESSAGES
         message_data = []
+        top = int(request.args.get("$top"))
         for message in range(MESSAGES):
             message_data.append(
                 {
@@ -186,6 +188,9 @@ class MicrosoftTeamsAPI:
             "value": message_data,
         }
 
+        if len(message_data) == top:
+            response["@odata.nextLink"] = f"{ROOT}/chats/{chat_id}/messages?$top=50"
+            MESSAGES -= 10  # performs deletion and pagination
         return response
 
     def get_user_chat_tabs(self, chat_id):
@@ -263,7 +268,7 @@ class MicrosoftTeamsAPI:
 
         if len(event_data) == top:
             response["@odata.nextLink"] = f"{ROOT}/users/{user_id}/events?$top=50"
-            EVENTS -= 10
+            EVENTS -= 1
         return response
 
     def get_teams(self):
