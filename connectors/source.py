@@ -693,6 +693,11 @@ class BaseDataSource:
         return get_file_extension(filename)
 
     def can_file_be_downloaded(self, file_extension, filename, file_size):
+        return self.is_valid_file_type(
+            file_extension, filename
+        ) and self.is_file_size_within_limit(file_size, filename)
+
+    def is_valid_file_type(self, file_extension, filename):
         if file_extension == "":
             self._logger.debug(
                 f"Files without extension are not supported, skipping {filename}."
@@ -705,6 +710,9 @@ class BaseDataSource:
             )
             return False
 
+        return True
+
+    def is_file_size_within_limit(self, file_size, filename):
         if file_size > FILE_SIZE_LIMIT and not self.configuration.get(
             "use_text_extraction_service"
         ):

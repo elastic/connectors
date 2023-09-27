@@ -10,9 +10,6 @@ import os
 import urllib.parse
 from functools import cached_property, partial
 
-import aiofiles
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
@@ -22,7 +19,7 @@ from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,
 )
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
+from connectors.utils import get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"

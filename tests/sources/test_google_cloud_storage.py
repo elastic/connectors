@@ -422,6 +422,7 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
                     )
                     assert content == expected_blob_document
 
+
 @pytest.mark.asyncio
 async def test_get_content_with_upper_extension():
     """Test the module responsible for fetching the content of the file if it is extractable."""
