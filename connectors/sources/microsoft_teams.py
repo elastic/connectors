@@ -1254,7 +1254,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
     async def calendars_producer(self, user):
         async for event in self.client.get_calendars(user_id=user["id"]):
-            if not event.get("isCancelled"):
+            if event and not event.get("isCancelled"):
                 await self.queue.put(
                     (
                         self.formatter.format_user_calendars(
