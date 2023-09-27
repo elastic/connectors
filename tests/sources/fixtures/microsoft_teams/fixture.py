@@ -120,14 +120,12 @@ class MicrosoftTeamsAPI:
             "/teams/<string:team_id>/channels/<string:channel_id>/messages",
             methods=["GET"],
         )(self.get_channel_messages)
-        self.app.route("/groups/<string:team_id>/drives", methods=["GET"])(
-            self.get_teams_drive
-        )
         self.app.route(
-            "/groups/<string:team_id>/drives/<string:drive_id>/root", methods=["GET"]
-        )(self.get_teams_drive_root)
+            "/teams/<string:team_id>/channels/<string:channel_id>/filesFolder",
+            methods=["GET"],
+        )(self.get_teams_filefolder)
         self.app.route(
-            "/groups/<string:team_id>/drives/<string:drive_id>/items/<string:item_id>/children",
+            "/drives/<string:drive_id>/items/<string:item_id>/children",
             methods=["GET"],
         )(self.get_teams_file)
 
@@ -368,36 +366,29 @@ class MicrosoftTeamsAPI:
             ],
         }
 
-    def get_teams_drive(self, team_id):
+    def get_teams_filefolder(self, team_id, channel_id):
         return {
-            "value": [
-                {
-                    "createdDateTime": "2023-08-13T05:01:27Z",
-                    "id": adjust_document_id_size("drive-id-1"),
-                    "lastModifiedDateTime": "2023-08-16T04:47:07Z",
-                    "name": "Documents",
-                }
-            ]
-        }
-
-    def get_teams_drive_root(self, team_id, drive_id):
-        return {
-            "createdDateTime": "2023-08-13T05:01:27Z",
-            "id": adjust_document_id_size("root-1"),
-            "lastModifiedDateTime": "2023-08-23T07:18:51Z",
+            "id": "filfolder-1",
+            "createdDateTime": "0001-01-01T00:00:00Z",
+            "lastModifiedDateTime": "2023-09-21T10:23:48Z",
             "name": "root",
-            "size": 45441,
-            "folder": {"childCount": 1},
+            "size": 351660,
+            "parentReference": {
+                "driveId": "driveid-123",
+                "driveType": "documentLibrary",
+            },
         }
 
-    def get_teams_file(self, team_id, drive_id, item_id):
+    def get_teams_file(self, drive_id, item_id):
         files_list = []
         for file_data in range(FILES):
             files_list.append(
                 {
                     "@microsoft.graph.downloadUrl": f"{ROOT}/sites/list.txt",
                     "createdDateTime": "2023-08-16T04:47:26Z",
-                    "id": adjust_document_id_size(f"file-{file_data}-{team_id}"),
+                    "id": adjust_document_id_size(
+                        f"file-{file_data}-{drive_id}-{item_id}"
+                    ),
                     "lastModifiedDateTime": "2023-08-16T04:47:29Z",
                     "name": "list.txt",
                     "size": 45441,
