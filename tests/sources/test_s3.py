@@ -303,7 +303,9 @@ async def test_get_content_with_unsupported_file(mock_aws):
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
             response = await source.get_content(
-                {"id": 1, "filename": "a.png", "bucket": "dummy"}, "client", doit=1
+                {"id": 1, "filename": "a.png", "bucket": "dummy", "size_in_bytes": 1},
+                "client",
+                doit=1,
             )
             assert response is None
 
