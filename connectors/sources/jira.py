@@ -637,19 +637,6 @@ class JiraDataSource(BaseDataSource):
         ):
             return
 
-        # if (
-        #     os.path.splitext(attachment_name)[-1]
-        # ).lower() not in TIKA_SUPPORTED_FILETYPES:
-        #     self._logger.warning(
-        #         f"{attachment_name} is not supported by TIKA, skipping"
-        #     )
-        #     return
-        #
-        # if attachment_size > FILE_SIZE_LIMIT:
-        #     self._logger.warning(
-        #         f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-        #     )
-        #     return
         download_url = (
             ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
         )
@@ -672,29 +659,6 @@ class JiraDataSource(BaseDataSource):
                 ),
             ),
         )
-        # temp_filename = ""
-
-        # async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-        #     async for response in self.jira_client.api_call(
-        #         url_name=attachment_url,
-        #         attachment_id=attachment["id"],
-        #         attachment_name=attachment["filename"],
-        #     ):
-        #         async for data in response.content.iter_chunked(CHUNK_SIZE):
-        #             await async_buffer.write(data)
-        #         temp_filename = str(async_buffer.name)
-        #
-        # self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
-        # await asyncio.to_thread(convert_to_b64, source=temp_filename)
-        # async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-        #     # base64 on macOS will add a EOL, so we strip() here
-        #     document["_attachment"] = (await async_buffer.read()).strip()
-        # try:
-        #     await remove(temp_filename)
-        # except Exception as exception:
-        #     self._logger.warning(
-        #         f"Could not remove file from: {temp_filename}. Error: {exception}"
-        #     )
         return document
 
     async def ping(self):
