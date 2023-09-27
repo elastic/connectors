@@ -1315,16 +1315,16 @@ class SharepointOnlineDataSource(BaseDataSource):
         site_admins_access_control = set()
 
         async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
-            user_access_control = set()
-            user_access_control.update(
+            member = role_assignment["Member"]
+            member_access_control = set()
+            member_access_control.update(
                 await self._get_access_control_from_role_assignment(role_assignment)
             )
-            member = role_assignment["Member"]
 
             if _is_site_admin(member):
-                site_admins_access_control |= user_access_control
+                site_admins_access_control |= member_access_control
 
-            access_control |= user_access_control
+            access_control |= member_access_control
 
         return list(access_control), list(site_admins_access_control)
 
@@ -1401,7 +1401,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
-        access_control = list({prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups))
+        access_control = list(
+            {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
+        )
 
         if "createdDateTime" in user:
             created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
@@ -1793,17 +1795,11 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not self.configuration["fetch_drive_item_permissions"]:
             return drive_item
 
-        def _get_id(permissions, identity):
-            if identity not in permissions:
-                return None
+        def _get_id(permissions, label):
+            return permissions.get(label, {}).get("id")
 
-            return permissions.get(identity).get("id")
-
-        def _get_email(permissions, identity):
-            if identity not in permissions:
-                return None
-
-            return permissions.get(identity).get("email", None)
+        def _get_email(permissions, label):
+            return permissions.get(label, {}).get("email")
 
         def _get_login_name(permissions, label):
             identity = permissions.get(label, {})
@@ -1849,7 +1845,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             if site_group_id:
                 users = await self.site_group_users(site_web_url, site_group_id)
-                for site_group_user in users:
+                for site_group_user in users:  # note, 'users' might contain groups.
                     access_control.extend(
                         self._access_control_for_member(site_group_user)
                     )
@@ -2031,6 +2027,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             # if any binding grants view access, this role assignment's member has view access
             for binding in bindings:
+                # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
+                # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
                 base_permission_low = int(
                     binding.get("BasePermissions", {}).get("Low", "0")
                 )
@@ -2345,7 +2343,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     def _access_control_for_member(self, member):
         login_name = member.get("LoginName")
 
-        # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a group
+        # 'LoginName' looking like a group indicates a group
         is_group = (
             login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
             if login_name
@@ -2359,12 +2357,12 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             return self._access_control_for_user(member)
 
-    def _access_control_for_user(self, user_):
+    def _access_control_for_user(self, user):
         user_access_control = []
 
-        user_principal_name = user_.get("UserPrincipalName")
-        login_name = _get_login_name(user_.get("LoginName"))
-        email = user_.get("Email")
+        user_principal_name = user.get("UserPrincipalName")
+        login_name = _get_login_name(user.get("LoginName"))
+        email = user.get("Email")
 
         if user_principal_name:
             user_access_control.append(_prefix_user(user_principal_name))
