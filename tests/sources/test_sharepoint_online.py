@@ -84,6 +84,8 @@ GROUP_ONE = "Group 1"
 
 GROUP_TWO = "Group 2"
 
+GROUP_TWO_ID = "group-id-2"
+
 USER_ONE_ID = "user-id-1"
 
 USER_ONE_EMAIL = "user1@spo.com"
@@ -100,6 +102,18 @@ NUMBER_OF_DEFAULT_GROUPS = 3
 
 ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
 DEFAULT_GROUPS_PATCHED = ["some default group"]
+
+READ_BINDING = [
+    {
+        "BasePermissions": {"High": "176", "Low": "138612833"},
+        "Description": "Can view pages and list items and download documents.",
+        "Hidden": False,
+        "Id": 1073741826,
+        "Name": "Read",
+        "Order": 128,
+        "RoleTypeKind": 2,
+    }
+]
 
 
 @asynccontextmanager
@@ -1588,36 +1602,6 @@ class TestSharepointOnlineClient:
         assert len(actual_users_and_groups) == 0
 
     @pytest.mark.asyncio
-    async def test_user_information_lst(self, client, patch_scroll):
-        site_id = "12345"
-        user_info_one = {"name": "some user"}
-        user_info_two = {"name": "some other user"}
-
-        expected_user_infos = [user_info_one, user_info_two]
-
-        actual_user_infos = await self._execute_scrolling_method(
-            partial(client.user_information_list, site_id),
-            patch_scroll,
-            expected_user_infos,
-        )
-
-        assert len(actual_user_infos) == len(expected_user_infos)
-        assert actual_user_infos == expected_user_infos
-
-    @pytest.mark.asyncio
-    async def test_user_information_list_with_not_found_raised(
-        self, client, patch_scroll
-    ):
-        site_id = "12345"
-        patch_scroll.side_effect = NotFound()
-
-        returned_items = []
-        async for user_info in client.user_information_list(site_id):
-            returned_items.append(user_info)
-
-        assert len(returned_items) == 0
-
-    @pytest.mark.asyncio
     async def test_groups_user_transitive_member_of(self, client, patch_scroll):
         user_id = "12345"
         group_one = {"name": "some group"}
@@ -1820,27 +1804,38 @@ class TestSharepointOnlineDataSource:
         return [{"Id": "4", "odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
-    def user_information_list(self):
+    def site_role_assignments(self):
         return [
             {
-                "fields": {
-                    "ContentType": "DomainGroup",
-                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE}",
-                }
-            },
-            {
-                "fields": {
-                    "ContentType": "DomainGroup",
-                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_TWO}_o",
-                }
-            },
-            {
-                "fields": {
-                    "ContentType": "Person",
-                    "Name": f"i:0#.f|membership|{USER_ONE_EMAIL}",
-                }
-            },
-            {"fields": {"ContentType": "Person", "EMail": USER_TWO_EMAIL}},
+                "Member": {
+                    "odata.type": "SP.Group",
+                    "Users": [
+                        {
+                            "odata.type": "SP.User",
+                            "UserPrincipalName": USER_ONE_EMAIL,
+                        },
+                        {
+                            "odata.type": "SP.User",
+                            "Email": USER_TWO_EMAIL,
+                        },
+                        {
+                            "odata.type": "SP.User",
+                            "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}",
+                            "Title": GROUP_ONE,
+                            "Email": f"{GROUP_ONE}@foobar.onmicrosoft.com",
+                        },
+                        {
+                            "odata.type": "SP.User",
+                            "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_TWO_ID}",
+                            "Title": GROUP_TWO,
+                            "Email": f"{GROUP_TWO}@foobar.onmicrosoft.com",
+                        },
+                    ],
+                    "LoginName": "Site Members",
+                    "Title": "Site Members",
+                },
+                "RoleDefinitionBindings": READ_BINDING,
+            }
         ]
 
     @property
@@ -2007,7 +2002,7 @@ class TestSharepointOnlineDataSource:
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
             client.site_group_users = AsyncIterator(self.site_group_users)
-            client.user_information_list = AsyncIterator(self.user_information_list)
+            client.site_role_assignments = AsyncIterator(self.site_role_assignments)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
             client.group_owners = AsyncIterator(self.group_owners)
@@ -2865,13 +2860,13 @@ class TestSharepointOnlineDataSource:
 
             access_control, _ = await source._site_access_control(site)
 
-            two_other_users = 2
+            two_users = 2
             two_groups = 2
 
-            assert len(access_control) == two_groups + two_other_users
+            assert len(access_control) == two_groups + two_users
 
-            assert _prefix_group(GROUP_ONE) in access_control
-            assert _prefix_group(GROUP_TWO) in access_control
+            assert _prefix_group(GROUP_ONE_ID) in access_control
+            assert _prefix_group(GROUP_TWO_ID) in access_control
 
             assert _prefix_user(USER_ONE_EMAIL) in access_control
             assert _prefix_email(USER_TWO_EMAIL) in access_control
@@ -3168,6 +3163,7 @@ class TestSharepointOnlineDataSource:
                             },
                         ],
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_user(USER_ONE_EMAIL), _prefix_user(USER_TWO_EMAIL)],
             ),
@@ -3179,6 +3175,7 @@ class TestSharepointOnlineDataSource:
                         "LoginName": None,
                         "UserPrincipalName": USER_ONE_EMAIL,
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_user(USER_ONE_EMAIL)],
             ),
@@ -3190,6 +3187,7 @@ class TestSharepointOnlineDataSource:
                         "LoginName": f"i:0#.f|membership|{USER_TWO_EMAIL}",
                         "UserPrincipalName": USER_TWO_NAME,
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_user(USER_TWO_EMAIL), _prefix_user(USER_TWO_NAME)],
             ),
@@ -3200,6 +3198,7 @@ class TestSharepointOnlineDataSource:
                         "odata.type": "SP.User",
                         "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}",
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_group(GROUP_ONE_ID)],
             ),
@@ -3211,6 +3210,7 @@ class TestSharepointOnlineDataSource:
                         "LoginName": None,
                         "UserPrincipalName": USER_ONE_EMAIL,
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [],
             ),

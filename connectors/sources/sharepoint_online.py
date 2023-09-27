@@ -1296,12 +1296,18 @@ class SharepointOnlineDataSource(BaseDataSource):
         For the given site all groups and its corresponding members and owners (username and/or email) are fetched.
 
         Returns:
-            list: access control list for a given site
-            [
-                "user:spo-user",
-                "email:some.user@spo.com",
-                "group:1234-abcd-id"
-            ]
+            tuple:
+              - list: access control list for a given site
+                [
+                    "user:spo-admin",
+                    "user:spo-user",
+                    "email:some.user@spo.com",
+                    "group:1234-abcd-id"
+                ]
+            - list: subset of the former, applying only to site-admins for this site
+                [
+                  "user":spo-admin"
+                ]
         """
 
         self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
