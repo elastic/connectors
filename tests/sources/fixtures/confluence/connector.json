@@ -116,6 +116,21 @@
                         "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                         "type": "bool",
                         "value": false
+                },
+                "use_text_extraction_service": {
+                        "default_value": null,
+                        "depends_on": [],
+                        "display": "toggle",
+                        "label": "Use text extraction service",
+                        "options": [],
+                        "order": 13,
+                        "required": true,
+                        "sensitive": false,
+                        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                        "type": "bool",
+                        "ui_restrictions": [],
+                        "validations": [],
+                        "value": false
                 }
         },
         "filtering": [

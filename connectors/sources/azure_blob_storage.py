@@ -103,7 +103,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
-                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }
@@ -165,34 +164,28 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        blob_size = int(blob["size"])
-        if not (doit and blob_size > 0):
+        file_size = int(blob["size"])
+        if not (doit and file_size > 0):
             return
 
-        blob_name = blob["title"]
-        file_extension = (os.path.splitext(blob_name)[-1]).lower()
-        if file_extension not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(f"{blob_name} can't be extracted")
+        filename = blob["title"]
+        file_extension = self.get_file_extension(filename).lower()
+
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
         if blob["tier"] == "Archive":
             self._logger.warning(
-                f"{blob_name} can't be downloaded as blob tier is archive"
-            )
-            return
-
-        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+                f"{filename} can't be downloaded as blob tier is archive"
             )
             return
 
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
         document = await self.download_and_extract_file(
             document,
-            blob_name,
+            filename,
             file_extension,
-            partial(self.blob_download_func, blob_name, blob["container"]),
+            partial(self.blob_download_func, filename, blob["container"]),
         )
 
         return document
