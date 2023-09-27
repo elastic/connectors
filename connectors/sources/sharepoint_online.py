@@ -82,6 +82,15 @@ CURSOR_SITE_DRIVE_KEY = "site_drives"
 DELTA_NEXT_LINK_KEY = "@odata.nextLink"
 DELTA_LINK_KEY = "@odata.deltaLink"
 
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+VIEW_ITEM_MASK = 0x1
+
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+VIEW_PAGE_MASK = 0x20000
+
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
+VIEW_ROLE_TYPES = [2, 3, 4, 5, 6, 7, 0xFF]
+
 
 class NotFound(Exception):
     """Internal exception class to handle 404s from the API that has a meaning, that collection
@@ -2014,18 +2023,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
 
         def _has_limited_access(role_assignment):
-            VIEW_ITEM_MASK = 0x1  # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
-            VIEW_PAGE_MASK = 0x20000  # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
-            VIEW_ROLE_TYPES = [
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                0xFF,
-            ]  # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
-
             bindings = role_assignment.get("RoleDefinitionBindings", [])
 
             # If there is no permission information, default to restrict access
