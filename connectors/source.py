@@ -724,14 +724,24 @@ class BaseDataSource:
         return True
 
     async def download_and_extract_file(
-        self, doc, source_filename, file_extension, download_func
+        self, doc, source_filename, file_extension, download_func, return_doc_if_failed=False
     ):
-        # 1 create tempfile
+        """
+        Performs all the steps required for handling binary content:
+        1. Make temp file
+        2. Download content to temp file
+        3. Extract using local service or convert to b64
+
+        Will return the doc with either `_attachment` or `body` added.
+        Returns `None` if any step fails.
+
+        If the optional arg `return_doc_if_failed` is `True`,
+        will return the original doc upon failure
+        """
         try:
             async with self.create_temp_file(file_extension) as async_buffer:
                 temp_filename = async_buffer.name
 
-                # 2 download to tempfile
                 await self.download_to_temp_file(
                     temp_filename,
                     source_filename,
@@ -739,7 +749,6 @@ class BaseDataSource:
                     download_func,
                 )
 
-                # 3 extract or convert content
                 doc = await self.handle_file_content_extraction(
                     doc, source_filename, temp_filename
                 )
@@ -748,7 +757,10 @@ class BaseDataSource:
             self._logger.warning(
                 f"File download and extraction or conversion for file {source_filename} failed: {e}"
             )
-            return
+            if return_doc_if_failed:
+                return doc
+            else:
+                return
 
     @asynccontextmanager
     async def create_temp_file(self, file_extension):

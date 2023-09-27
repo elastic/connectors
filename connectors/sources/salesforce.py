@@ -6,7 +6,7 @@
 """Salesforce source module responsible to fetch documents from Salesforce."""
 import asyncio
 import os
-from functools import cached_property
+from functools import cached_property, partial
 from itertools import groupby
 
 import aiofiles
@@ -293,14 +293,14 @@ class SalesforceClient:
 
         return all_case_feeds
 
-    async def download_content_documents(self, content_documents):
-        for content_document in content_documents:
-            content_version = content_document.get("LatestPublishedVersion", {}) or {}
-            download_url = content_version.get("VersionDataUrl")
-            if download_url:
-                content_document["_attachment"] = await self._download(download_url)
-
-            yield content_document
+    # async def download_content_documents(self, content_documents):
+    #     for content_document in content_documents:
+    #         content_version = content_document.get("LatestPublishedVersion", {}) or {}
+    #         download_url = content_version.get("VersionDataUrl")
+    #         if download_url:
+    #             content_document["_attachment"] = await self._download(download_url)
+    #
+    #         yield content_document
 
     async def queryable_sobjects(self):
         """Cached async property"""
@@ -483,6 +483,10 @@ class SalesforceClient:
             headers=headers,
             params=params,
         )
+
+    async def _download(self, url):
+        response = await self._get(url)
+        yield response
 
     async def _handle_client_response_error(self, response_body, e):
         exception_details = f"status: {e.status}, message: {e.message}"
@@ -1201,7 +1205,6 @@ class SalesforceDocMapper:
 
         return {
             "_id": content_document.get("Id"),
-            "_attachment": content_document.get("_attachment"),
             "content_size": content_document.get("ContentSize"),
             "created_at": content_document.get("CreatedDate"),
             "created_by": created_by.get("Name"),
@@ -1374,6 +1377,14 @@ class SalesforceDataSource(BaseDataSource):
                 "tooltip": "The client secret for your OAuth2-enabled connected app. Also called 'consumer secret'",
                 "type": "str",
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 7,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def validate_config(self):
@@ -1420,10 +1431,37 @@ class SalesforceDataSource(BaseDataSource):
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
-        async for content_doc in self.salesforce_client.download_content_documents(
-            content_docs
-        ):
-            yield self.doc_mapper.map_content_document(content_doc), None
+        for content_doc in content_docs:
+            download_url = (content_doc.get("LatestPublishedVersion", {}) or {}).get("VersionDataUrl")
+            if not download_url:
+                self._logger.debug(f"No download URL found for {content_doc.get('title')}, skipping.")
+                continue
+
+            doc = self.doc_mapper.map_content_document(content_doc)
+            doc = await self.get_content(doc, download_url)
+
+            yield doc, None
+
+    async def get_content(self, doc, download_url):
+        file_size = doc["content_size"]
+        filename = doc["title"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        return await self.download_and_extract_file(
+            doc,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.salesforce_client._download,
+                    download_url,
+                ),
+            ),
+            return_doc_if_failed=True, # we still ingest on download failure for Salesforce
+        )
 
     def _parse_content_documents(self, record):
         content_docs = []
