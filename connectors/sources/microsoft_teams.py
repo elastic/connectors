@@ -102,6 +102,7 @@ class EndSignal(Enum):
     USER_CHAT_TASK_FINISHED = "USER_CHAT_TASK_FINISHED"
     TEAM_TASK_FINISHED = "TEAM_TASK_FINISHED"
     CHANNEL_TASK_FINISHED = "CHANNEL_TASK_FINISHED"
+    CALENDAR_TASK_FINISHED = "CALENDAR_TASK_FINISHED"
 
 
 URLS = {
@@ -1263,7 +1264,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                         None,
                     )
                 )
-        await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
+        await self.queue.put(EndSignal.CALENDAR_TASK_FINISHED)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Microsoft Teams objects in async manner
