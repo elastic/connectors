@@ -724,7 +724,12 @@ class BaseDataSource:
         return True
 
     async def download_and_extract_file(
-        self, doc, source_filename, file_extension, download_func, return_doc_if_failed=False
+        self,
+        doc,
+        source_filename,
+        file_extension,
+        download_func,
+        return_doc_if_failed=False,
     ):
         """
         Performs all the steps required for handling binary content:

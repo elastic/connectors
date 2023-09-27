@@ -422,7 +422,9 @@ CACHED_SOBJECTS = {
 
 
 @asynccontextmanager
-async def create_salesforce_source(use_text_extraction_service=False, mock_token=True, mock_queryables=True):
+async def create_salesforce_source(
+    use_text_extraction_service=False, mock_token=True, mock_queryables=True
+):
     async with create_source(
         SalesforceDataSource,
         domain=TEST_DOMAIN,

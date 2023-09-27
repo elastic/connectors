@@ -4,15 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
-import asyncio
 import os
 from functools import cached_property, partial
 from itertools import groupby
 
-import aiofiles
 import aiohttp
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
@@ -20,7 +16,6 @@ from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
-    convert_to_b64,
     retryable,
 )
 
@@ -293,15 +288,6 @@ class SalesforceClient:
 
         return all_case_feeds
 
-    # async def download_content_documents(self, content_documents):
-    #     for content_document in content_documents:
-    #         content_version = content_document.get("LatestPublishedVersion", {}) or {}
-    #         download_url = content_version.get("VersionDataUrl")
-    #         if download_url:
-    #             content_document["_attachment"] = await self._download(download_url)
-    #
-    #         yield content_document
-
     async def queryable_sobjects(self):
         """Cached async property"""
         if self._queryable_sobjects is not None:
@@ -424,34 +410,6 @@ class SalesforceClient:
             params=params,
         )
         return response.get("records")
-
-    async def _download(self, download_url):
-        attachment = None
-        source_file_name = ""
-
-        try:
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                resp = await self._get(download_url)
-                async for data in resp.content.iter_chunked(CHUNK_SIZE):
-                    await async_buffer.write(data)
-                source_file_name = async_buffer.name
-
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=source_file_name,
-            )
-
-            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-                attachment = (await target_file.read()).strip()
-        except Exception as e:
-            self._logger.error(
-                f"Exception encountered when processing file: {source_file_name}. Exception: {e}"
-            )
-        finally:
-            if source_file_name:
-                await remove(str(source_file_name))
-
-        return attachment
 
     async def _auth_headers(self):
         token = await self.api_token.token()
@@ -1432,9 +1390,13 @@ class SalesforceDataSource(BaseDataSource):
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
         for content_doc in content_docs:
-            download_url = (content_doc.get("LatestPublishedVersion", {}) or {}).get("VersionDataUrl")
+            download_url = (content_doc.get("LatestPublishedVersion", {}) or {}).get(
+                "VersionDataUrl"
+            )
             if not download_url:
-                self._logger.debug(f"No download URL found for {content_doc.get('title')}, skipping.")
+                self._logger.debug(
+                    f"No download URL found for {content_doc.get('title')}, skipping."
+                )
                 continue
 
             doc = self.doc_mapper.map_content_document(content_doc)
@@ -1460,7 +1422,7 @@ class SalesforceDataSource(BaseDataSource):
                     download_url,
                 ),
             ),
-            return_doc_if_failed=True, # we still ingest on download failure for Salesforce
+            return_doc_if_failed=True,  # we still ingest on download failure for Salesforce
         )
 
     def _parse_content_documents(self, record):
