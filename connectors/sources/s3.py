@@ -11,18 +11,12 @@ from functools import partial
 from hashlib import md5
 
 import aioboto3
-import aiofiles
 from aiobotocore.config import AioConfig
-from aiobotocore.response import AioReadTimeoutError
 from aiobotocore.utils import logger as aws_logger
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
-from connectors.utils import convert_to_b64
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
