@@ -697,13 +697,13 @@ class BaseDataSource:
             self._logger.debug(
                 f"Files without extension are not supported, skipping {filename}."
             )
-            return
+            return False
 
-        elif file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
+        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
             self._logger.debug(
                 f"Files with the extension {file_extension} are not supported, skipping {filename}."
             )
-            return
+            return False
 
         if file_size > FILE_SIZE_LIMIT and not self.configuration.get(
             "use_text_extraction_service"
@@ -711,7 +711,8 @@ class BaseDataSource:
             self._logger.warning(
                 f"File size {file_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
             )
-            return
+            return False
+
         return True
 
     async def download_and_extract_file(
