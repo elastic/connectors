@@ -645,7 +645,7 @@ class JiraDataSource(BaseDataSource):
             "_id": f"{issue_key}-{attachment['id']}",
             "_timestamp": attachment["created"],
         }
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
@@ -659,7 +659,6 @@ class JiraDataSource(BaseDataSource):
                 ),
             ),
         )
-        return document
 
     async def ping(self):
         """Verify the connection with Jira"""

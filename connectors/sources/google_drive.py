@@ -838,9 +838,9 @@ class GoogleDriveDataSource(BaseDataSource):
         if not self.is_file_size_within_limit(file_size, file_name):
             return
 
-        if attachment:
+        if attachment is not None:
             document["_attachment"] = attachment
-        elif body:
+        elif body is not None:
             document["body"] = body
 
         return document
@@ -886,9 +886,9 @@ class GoogleDriveDataSource(BaseDataSource):
             ),
         )
 
-        if attachment:
+        if attachment is not None:
             document["_attachment"] = attachment
-        elif body:
+        elif body is not None:
             document["body"] = body
 
         return document

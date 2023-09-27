@@ -727,23 +727,28 @@ class BaseDataSource:
         self, doc, source_filename, file_extension, download_func
     ):
         # 1 create tempfile
-        async with self.create_temp_file(file_extension) as async_buffer:
-            temp_filename = async_buffer.name
+        try:
+            async with self.create_temp_file(file_extension) as async_buffer:
+                temp_filename = async_buffer.name
 
-            # 2 download to tempfile
-            await self.download_to_temp_file(
-                temp_filename,
-                source_filename,
-                async_buffer,
-                download_func,
+                # 2 download to tempfile
+                await self.download_to_temp_file(
+                    temp_filename,
+                    source_filename,
+                    async_buffer,
+                    download_func,
+                )
+
+                # 3 extract or convert content
+                doc = await self.handle_file_content_extraction(
+                    doc, source_filename, temp_filename
+                )
+            return doc
+        except Exception as e:
+            self._logger.warning(
+                f"File download and extraction or conversion for file {source_filename} failed: {e}"
             )
-
-            # 3 extract or convert content
-            doc = await self.handle_file_content_extraction(
-                doc, source_filename, temp_filename
-            )
-
-        return doc
+            return
 
     @asynccontextmanager
     async def create_temp_file(self, file_extension):
