@@ -80,9 +80,9 @@ def iso_utc(when=None):
     return when.isoformat()
 
 
-def next_run(quartz_definition):
+def next_run(quartz_definition, now):
     """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
+    cron_obj = QuartzCron(quartz_definition, now)
     return cron_obj.next_trigger()
 
 

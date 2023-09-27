@@ -10,7 +10,7 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
@@ -39,6 +39,7 @@ class JobSchedulingService(BaseService):
         self.source_list = config["sources"]
         self.connector_index = None
         self.sync_job_index = None
+        self.next_wake_up_time = None
 
     async def _schedule(self, connector):
         if self.running is False:
@@ -125,6 +126,7 @@ class JobSchedulingService(BaseService):
         """Main event loop."""
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
+        self.next_wake_up_time = datetime.utcnow()
 
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
@@ -168,6 +170,9 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _try_schedule_sync(self, connector, job_type):
+        expected_wake_up_time = self.next_wake_up_time
+        actual_wake_up_time = datetime.utcnow()
+
         @with_concurrency_control()
         async def _should_schedule(job_type):
             try:
@@ -177,19 +182,25 @@ class JobSchedulingService(BaseService):
                 return False
 
             job_type_value = job_type.value
-            now = datetime.utcnow()
+            lag = actual_wake_up_time - expected_wake_up_time
+
+            if lag.total_seconds() < 0:
+                print("Why?")
+
+            print(f"Lag was {lag.total_seconds()} seconds")
+
             last_sync_scheduled_at = connector.last_sync_scheduled_at_by_job_type(
                 job_type
             )
 
-            if last_sync_scheduled_at is not None and last_sync_scheduled_at > now:
+            if last_sync_scheduled_at is not None and last_sync_scheduled_at > expected_wake_up_time:
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
                 return False
 
             try:
-                next_sync = connector.next_sync(job_type)
+                next_sync = connector.next_sync(job_type, expected_wake_up_time)
             except Exception as e:
                 connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))
@@ -199,8 +210,11 @@ class JobSchedulingService(BaseService):
                 connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
-            next_sync_due = (next_sync - now).total_seconds()
-            if next_sync_due - self.idling > 0:
+
+            self.next_wake_up_time = actual_wake_up_time + timedelta(seconds = self.idling)
+
+            if self.next_wake_up_time < next_sync:
+                next_sync_due = (next_sync - self.next_wake_up_time).total_seconds()
                 connector.log_debug(
                     f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
