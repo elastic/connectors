@@ -141,8 +141,7 @@ class BoxClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def _put_to_sleep(self, exception):
-        retry_after = int(exception.headers.get("retry-after", 5))
+    async def _put_to_sleep(self, retry_after):
         self._logger.debug(
             f"Connector will attempt to retry after {retry_after} seconds."
         )
@@ -155,7 +154,8 @@ class BoxClient:
                 await self.token._set_access_token()
                 raise
             case 429:
-                await self._put_to_sleep(exception=exception)
+                retry_after = int(exception.headers.get("retry-after", 5))
+                await self._put_to_sleep(retry_after=retry_after)
             case 404:
                 raise NotFound(f"Resource Not Found. Error: {exception}")
             case _:
