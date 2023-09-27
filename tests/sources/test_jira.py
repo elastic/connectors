@@ -190,7 +190,7 @@ EXPECTED_CONTENT = {
 EXPECTED_CONTENT_EXTRACTED = {
     "_id": "TP-1-10001",
     "_timestamp": "2023-02-01T01:02:20",
-    "body": RESPONSE_CONTENT
+    "body": RESPONSE_CONTENT,
 }
 
 MOCK_USER = (
@@ -772,14 +772,16 @@ async def test_get_content():
 async def test_get_content_with_text_extraction_enabled_adds_body():
     """Tests the get content method."""
     with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=RESPONSE_CONTENT,
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=RESPONSE_CONTENT,
     ), patch(
         "connectors.content_extraction.ContentExtraction.get_extraction_config",
         return_value={"host": "http://localhost:8090"},
     ):
         async with create_jira_source(use_text_extraction_service=True) as source:
-            with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
+            with mock.patch(
+                "aiohttp.ClientSession.get", return_value=get_stream_reader()
+            ):
                 with mock.patch(
                     "aiohttp.StreamReader.iter_chunked",
                     return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),

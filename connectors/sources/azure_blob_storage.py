@@ -4,13 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
-import os
 from functools import partial
 
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES
 
 BLOB_SCHEMA = {
     "title": "name",

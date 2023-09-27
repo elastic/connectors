@@ -22,7 +22,7 @@ from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
+from connectors.utils import convert_to_b64
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
@@ -175,15 +175,16 @@ class S3Client:
         # Reuse the same for all files
         if not (doit):
             return
+
         filename = doc["filename"]
-        if (os.path.splitext(filename)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(f"{filename} can't be extracted")
-            return
-        if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
-            self._logger.warning(
-                f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
-            )
-            return
+        # if (os.path.splitext(filename)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
+        #     self._logger.debug(f"{filename} can't be extracted")
+        #     return
+        # if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
+        #     self._logger.warning(
+        #         f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
+        #     )
+        #     return
 
         bucket = doc["bucket"]
         self._logger.debug(f"Downloading {filename}")
@@ -299,10 +300,38 @@ class S3DataSource(BaseDataSource):
                     bucket_name=bucket, bucket_object=obj_summary
                 )
                 yield document, partial(
-                    self.s3_client.get_content,
+                    self.get_content,
                     doc=document,
                     s3_client=s3_client,
                 )
+
+    async def get_content(self, doc, s3_client, timestamp=None, doit=None):
+        if not (doit):
+            return
+
+        filename = doc["filename"]
+        file_size = doc["size_in_bytes"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        bucket = doc["bucket"]
+        document = {
+            "_id": doc["id"],
+            "_timestamp": doc["_timestamp"],
+        }
+
+        # s3 has a unique download method so we can't utilize
+        # the generic download_and_extract_file func
+        async with self.create_temp_file(file_extension) as async_buffer:
+            await s3_client.download_fileobj(
+                Bucket=bucket, Key=filename, Fileobj=async_buffer
+            )
+            document = await self.handle_file_content_extraction(
+                document, filename, async_buffer.name
+            )
+
+        return document
 
     async def close(self):
         """Closes unclosed client session"""
@@ -368,5 +397,13 @@ class S3DataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 8,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
             },
         }

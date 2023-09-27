@@ -6,17 +6,13 @@
 """Jira source module responsible to fetch documents from Jira on-prem or cloud server.
 """
 import asyncio
-import os
 from copy import copy
 from datetime import datetime
 from functools import partial
 from urllib import parse
 
-import aiofiles
 import aiohttp
 import pytz
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 
 from connectors.access_control import ACCESS_CONTROL
@@ -30,12 +26,10 @@ from connectors.sources.atlassian import (
     prefix_group_id,
 )
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
-    convert_to_b64,
     iso_utc,
     retryable,
     ssl_context,

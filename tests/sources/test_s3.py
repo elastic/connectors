@@ -19,12 +19,13 @@ from tests.sources.support import create_source
 
 
 @asynccontextmanager
-async def create_s3_source():
+async def create_s3_source(use_text_extraction_service=False):
     async with create_source(
         S3DataSource,
         buckets="ent-search-ingest-dev",
         aws_access_key_id="A1B2C3D4",
         aws_secret_access_key="A1B2C3D4",
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -227,6 +228,41 @@ async def test_get_content(s3_client):
                         "_timestamp": "2022-01-01T00:00:00.000Z",
                         "_attachment": b"test content",
                     }
+
+
+@mock.patch("aiobotocore.client.AioBaseClient")
+@pytest.mark.asyncio
+async def test_get_content_with_text_extraction_enabled_adds_body(s3_client):
+    """Test get_content method of S3Client"""
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="test content",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_s3_source(use_text_extraction_service=True) as source:
+            document = {
+                "id": "123",
+                "filename": "test.pdf",
+                "bucket": "test-bucket",
+                "_timestamp": "2022-01-01T00:00:00.000Z",
+                "size_in_bytes": 1024,
+            }
+            s3_client = MagicMock()
+            s3_client.download_fileobj = AsyncMock()
+            async_response = AsyncMock()
+            async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
+
+            result = await source.get_content(
+                document, s3_client, timestamp=None, doit=True
+            )
+
+            assert result == {
+                "_id": "123",
+                "_timestamp": "2022-01-01T00:00:00.000Z",
+                "body": "test content",
+            }
 
 
 @mock.patch("aiobotocore.client.AioBaseClient")
