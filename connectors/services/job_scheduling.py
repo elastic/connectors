@@ -107,7 +107,7 @@ class JobSchedulingService(BaseService):
             )  # pyright: ignore
 
             if is_platinum_license_enabled:
-                await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+                await self._try_schedule_sync(connector, JobType.ACCESS_CONTROL)
             else:
                 connector.log_error(
                     f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
@@ -117,9 +117,9 @@ class JobSchedulingService(BaseService):
             connector.features.incremental_sync_enabled()
             and source_klass.incremental_sync_enabled
         ):
-            await self._scheduled_sync(connector, JobType.INCREMENTAL)
+            await self._try_schedule_sync(connector, JobType.INCREMENTAL)
 
-        await self._scheduled_sync(connector, JobType.FULL)
+        await self._try_schedule_sync(connector, JobType.FULL)
 
     async def _run(self):
         """Main event loop."""
@@ -167,9 +167,9 @@ class JobSchedulingService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _scheduled_sync(self, connector, job_type):
+    async def _try_schedule_sync(self, connector, job_type):
         @with_concurrency_control()
-        async def _should_schedule_scheduled_sync(job_type):
+        async def _should_schedule(job_type):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
@@ -212,7 +212,7 @@ class JobSchedulingService(BaseService):
 
             return True
 
-        if await _should_schedule_scheduled_sync(job_type):
+        if await _should_schedule(job_type):
             connector.log_info(f"Creating a scheduled '{job_type.value}' sync...")
             await self.sync_job_index.create(
                 connector=connector,
