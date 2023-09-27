@@ -40,15 +40,12 @@ from connectors.sources.sharepoint_online import (
     SharepointRestAPIToken,
     SyncCursorEmpty,
     TokenFetchFailed,
-    _domain_group_id,
     _emails_and_usernames_of_domain_group,
     _get_login_name,
     _prefix_email,
     _prefix_group,
     _prefix_user,
     _prefix_user_id,
-    is_domain_group,
-    is_person,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -3095,23 +3092,6 @@ class TestSharepointOnlineDataSource:
             assert len(user_access_control_docs) == 2
 
     @pytest.mark.parametrize(
-        "user_info_name, expected_domain_group_id",
-        [
-            (None, None),
-            ("", None),
-            ("abc|", None),
-            ("abc|def|", None),
-            ("abc|def|_o", None),
-            (f"abc|def|{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
-            (f"abc|def|{DOMAIN_GROUP_ID}_o", DOMAIN_GROUP_ID),
-            (f"abc|def|ghi/{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
-            (f"abc|def|ghi/{DOMAIN_GROUP_ID}_o", DOMAIN_GROUP_ID),
-        ],
-    )
-    def test_domain_group_id(self, user_info_name, expected_domain_group_id):
-        assert _domain_group_id(user_info_name) == expected_domain_group_id
-
-    @pytest.mark.parametrize(
         "group_identities_generator, expected_emails_and_usernames",
         [
             (AsyncIterator([]), []),
@@ -3166,30 +3146,6 @@ class TestSharepointOnlineDataSource:
         user_id = "user id"
 
         assert _prefix_user_id(user_id) == "user_id:user id"
-
-    def test_is_domain_group(self):
-        assert is_domain_group(
-            {
-                "ContentType": "DomainGroup",
-                "Name": "c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d",
-            }
-        )
-
-    def test_is_not_domain_group(self):
-        assert not is_domain_group({"ContentType": "Person"})
-        assert not is_domain_group({"ContentType": "DomainGroup"})
-        assert not is_domain_group(
-            {
-                "ContentType": "DomainGroup",
-                "Name": "c:0u.c|tenant|67f8dab3bb7a912bc3da51b94b6bc5d23edef0e83056056f1a3929b4e04b8624",
-            }
-        )
-
-    def test_is_person(self):
-        assert is_person({"ContentType": "Person"})
-
-    def test_is_not_person(self):
-        assert not is_person({"ContentType": "DomainGroup"})
 
     @pytest.mark.parametrize(
         "role_assignment, expected_access_control",

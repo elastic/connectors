@@ -1055,55 +1055,6 @@ def _postfix_group(group):
     return f"{group} Members"
 
 
-def is_domain_group(user_fields):
-    return user_fields.get(
-        "ContentType"
-    ) == "DomainGroup" and "federateddirectoryclaimprovider" in user_fields.get(
-        "Name", ""
-    )
-
-
-def is_sharepoint_group(user_fields):
-    return user_fields["ContentType"] == "SharePointGroup"
-
-
-def is_person(user_fields):
-    return user_fields["ContentType"] == "Person"
-
-
-def _domain_group_id(user_info_name):
-    """Extracts the domain group id.
-
-    The domain group id can have the following formats:
-    - abc|def|domain-group-id
-    - abc|def|some-prefix/domain-group-id
-
-    Returns:
-        str: domain group id
-
-    """
-    if user_info_name is None or len(user_info_name) == 0:
-        return None
-
-    name_parts = user_info_name.split("|")
-
-    if len(name_parts) <= 2:
-        return None
-
-    domain_group_id = name_parts[2]
-
-    if "/" in domain_group_id:
-        domain_group_id = domain_group_id.split("/")[1]
-
-    if "_" in domain_group_id:
-        domain_group_id = domain_group_id.split("_")[0]
-
-    if len(domain_group_id) == 0:
-        return None
-
-    return domain_group_id
-
-
 async def _emails_and_usernames_of_domain_group(
     domain_group_id, group_identities_generator
 ):
@@ -1354,9 +1305,11 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for role_assignment in self.client.site_role_assignments(site['webUrl']):
+        async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
             user_access_control = set()
-            user_access_control.update(await self._get_access_control_from_role_assignment(role_assignment))
+            user_access_control.update(
+                await self._get_access_control_from_role_assignment(role_assignment)
+            )
             member = role_assignment["Member"]
 
             if _is_site_admin(member):
@@ -1845,9 +1798,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         def _get_login_name(permissions, label):
             identity = permissions.get(label, {})
-            login_name = identity.get('loginName','')
+            login_name = identity.get("loginName", "")
             if login_name.startswith("i:0#.f|membership|"):
-                return  login_name.split('|')[-1]
+                return login_name.split("|")[-1]
 
         drive_item_id = drive_item.get("id")
         access_control = []
@@ -1864,7 +1817,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._logger.debug(
                 f"'grantedToV2' and 'grantedToIdentitiesV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
             )
-            return []
+            return drive_item
 
         for identity in identities:
             user_id = _get_id(identity, "user")
@@ -1888,7 +1841,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             if site_group_id:
                 users = await self.site_group_users(site_web_url, site_group_id)
                 for site_group_user in users:
-                    access_control.extend(self._access_control_for_member(site_group_user))
+                    access_control.extend(
+                        self._access_control_for_member(site_group_user)
+                    )
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -2059,9 +2014,17 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
 
         def _has_limited_access(role_assignment):
-            VIEW_ITEM_MASK = 0x1 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
-            VIEW_PAGE_MASK = 0x20000 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
-            VIEW_ROLE_TYPES = [2, 3, 4, 5, 6, 7, 0xFF] # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
+            VIEW_ITEM_MASK = 0x1  # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+            VIEW_PAGE_MASK = 0x20000  # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+            VIEW_ROLE_TYPES = [
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                0xFF,
+            ]  # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 
             bindings = role_assignment.get("RoleDefinitionBindings", [])
 
@@ -2071,12 +2034,20 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             # if any binding grants view access, this role assignment's member has view access
             for binding in bindings:
-                base_permission_low = int(binding.get("BasePermissions", {}).get("Low", "0"))
+                base_permission_low = int(
+                    binding.get("BasePermissions", {}).get("Low", "0")
+                )
                 role_type_kind = binding.get("RoleTypeKind", 0)
-                if (base_permission_low & VIEW_ITEM_MASK) or (base_permission_low & VIEW_PAGE_MASK) or (role_type_kind in VIEW_ROLE_TYPES):
+                if (
+                    (base_permission_low & VIEW_ITEM_MASK)
+                    or (base_permission_low & VIEW_PAGE_MASK)
+                    or (role_type_kind in VIEW_ROLE_TYPES)
+                ):
                     return False
 
-            return True # no evidence of view access was found, so assuming limited access
+            return (
+                True  # no evidence of view access was found, so assuming limited access
+            )
 
         if _has_limited_access(role_assignment):
             return []
