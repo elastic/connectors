@@ -730,7 +730,9 @@ async def test_get_content_with_extraction_service():
     ):
         async with create_onedrive_source(use_text_extraction_service=True) as source:
             with patch.object(AccessToken, "get", return_value="abc"):
-                with patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
+                with patch(
+                    "aiohttp.ClientSession.get", return_value=get_stream_reader()
+                ):
                     with patch(
                         "aiohttp.StreamReader.iter_chunked",
                         return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
@@ -741,6 +743,7 @@ async def test_get_content_with_extraction_service():
                             doit=True,
                         )
                         assert response == EXPECTED_CONTENT_EXTRACTED
+
 
 @patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
