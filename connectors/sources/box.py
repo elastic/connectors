@@ -274,6 +274,8 @@ class BoxDataSource(BaseDataSource):
         }
 
     async def close(self):
+        while not self.queue.empty():
+            await self.queue.get()
         await self.client.close()
 
     async def ping(self):
@@ -290,7 +292,7 @@ class BoxDataSource(BaseDataSource):
         ):
             yield user.get("id")
 
-    async def _fetch_files_folders(self, doc_id, user_id=None):
+    async def _fetch(self, doc_id, user_id=None):
         try:
             params = {
                 "fields": FIELDS,
@@ -318,7 +320,7 @@ class BoxDataSource(BaseDataSource):
                     await self.queue.put((doc, None))
                     await self.fetchers.put(
                         partial(
-                            self._fetch_files_folders,
+                            self._fetch,
                             doc_id=folder_entry.get("id"),
                             user_id=user_id,
                         )
@@ -434,9 +436,9 @@ class BoxDataSource(BaseDataSource):
         if self.is_enterprise == BOX_ENTERPRISE:
             async for user_id in self.get_users_id():
                 # "0" refers to the root folder
-                await self._fetch_files_folders(doc_id="0", user_id=user_id)
+                await self._fetch(doc_id="0", user_id=user_id)
         else:
-            await self._fetch_files_folders(doc_id="0")
+            await self._fetch(doc_id="0")
 
         self.tasks += 1
         async for item in self._consumer():

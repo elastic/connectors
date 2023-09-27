@@ -95,7 +95,7 @@ MOCK_ATTACHMENT_WITHOUT_EXTENSION = {
     "modified_at": "2023-08-04T03:17:55-07:00",
     "size": 1875887,
 }
-MOCK_RESPONSE_FETCH_FILES_FOLDERS = [
+MOCK_RESPONSE_FETCH = [
     (
         {
             "type": "file",
@@ -331,7 +331,7 @@ async def test_get_consumer():
 
 
 @pytest.mark.asyncio
-async def test_fetch_files_folders():
+async def test_fetch():
     actual_response = []
     expected_response = [
         {
@@ -355,7 +355,7 @@ async def test_fetch_files_folders():
     async with create_source(BoxDataSource) as source:
         source.client.token.get = AsyncMock()
         source.client._http_session.get = AsyncMock(side_effect=side_effect_function)
-        await source._fetch_files_folders("0")
+        await source._fetch("0")
         while not source.queue.empty():
             _, doc = await source.queue.get()
             if isinstance(doc, tuple):
@@ -367,11 +367,11 @@ async def test_fetch_files_folders():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries")
-async def test_fetch_files_folders_negative(mock_time_to_sleep_between_retries):
+async def test_fetch_negative(mock_time_to_sleep_between_retries):
     async with create_source(BoxDataSource) as source:
         mock_time_to_sleep_between_retries.return_value = Mock()
         source.client.token.get = AsyncMock(side_effect=Exception())
-        response = await source._fetch_files_folders("0")
+        response = await source._fetch("0")
     assert response is None
 
 
@@ -397,7 +397,7 @@ async def test_get_docs():
         },
     ]
     async with create_source(BoxDataSource) as source:
-        source._fetch_files_folders = AsyncMock()
+        source._fetch = AsyncMock()
         await source.queue.put((expected_response[0], None))
         await source.queue.put((expected_response[1], None))
         await source.queue.put(("FINISHED"))
