@@ -1401,7 +1401,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
-        access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
+        access_control = list({prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups))
 
         if "createdDateTime" in user:
             created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
