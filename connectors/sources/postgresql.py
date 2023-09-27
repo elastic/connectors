@@ -398,6 +398,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 "label": "Comma-separated list of tables",
                 "options": [],
                 "order": 7,
+                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "fetch_size": {
