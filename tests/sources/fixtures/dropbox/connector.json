@@ -64,7 +64,7 @@
             "ui_restrictions": ["advanced"],
             "value": 100
         },
-         "use_text_extraction_service": {
+        "use_text_extraction_service": {
             "default_value": null,
             "depends_on": [],
             "display": "toggle",
