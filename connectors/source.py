@@ -31,7 +31,7 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.utils import convert_to_b64, hash_id
 
-CHUNK_SIZE = 1024 * 64 # 64KB default SSD page size
+CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
 
 DEFAULT_CONFIGURATION = {
