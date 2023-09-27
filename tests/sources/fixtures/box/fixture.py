@@ -30,7 +30,14 @@ class BoxAPI:
     def __init__(self):
         self.app = Flask(__name__)
         self.first_sync = True
-        self.file_count = 5000
+        match DATA_SIZE:
+            case "small":
+                self.folder_count = 30
+            case "medium":
+                self.folder_count = 50
+            case "large":
+                self.folder_count = 80
+        self.file_count = 50
         self.app.route("/oauth2/token", methods=["POST"])(self.get_token)
         self.app.route("/2.0/users/me", methods=["GET"])(self.get_user)
         self.app.route(
@@ -55,16 +62,31 @@ class BoxAPI:
         if self.first_sync:
             self.first_sync = False
         else:
-            self.file_count = 3500
+            self.folder_count -= 5
         return {"username": "demo_user"}
 
-    def get_entries(self, offset, limit):
+    def get_folders_entries(self, offset, limit):
+        if offset >= self.folder_count:
+            return []
+        folders_entries = [
+            {
+                "type": "folder",
+                "id": f"folder_number_{folder_count}",
+                "etag": "0",
+                "name": fake.name(),
+                "modified_at": "2023-08-04T03:17:55-07:00",
+            }
+            for folder_count in range(offset, min(offset + limit, self.folder_count))
+        ]
+        return folders_entries
+
+    def get_files_entries(self, offset, limit, folder_id):
         if offset >= self.file_count:
             return []
-        entries = [
+        files_entries = [
             {
                 "type": "file",
-                "id": f"file_number_{file_count}",
+                "id": f"{folder_id}_file_number_{file_count}",
                 "etag": "0",
                 "name": f"{fake.name()}.txt",
                 "modified_at": "2023-08-04T03:17:55-07:00",
@@ -72,23 +94,37 @@ class BoxAPI:
             }
             for file_count in range(offset, min(offset + limit, self.file_count))
         ]
-        return entries
+        return files_entries
 
     def get_folder_items(self, folder_id):
         offset = int(request.args.get("offset"))
         limit = int(request.args.get("limit"))
-        entries = self.get_entries(offset, limit)
-        response = {
-            "total_count": self.file_count,
-            "entries": entries,
-            "offset": offset,
-            "limit": limit,
-            "order": [
-                {"by": "type", "direction": "ASC"},
-                {"by": "name", "direction": "ASC"},
-            ],
-        }
-        return response
+        if folder_id == "0":
+            entries = self.get_folders_entries(offset, limit)
+            response = {
+                "total_count": 100,
+                "entries": entries,
+                "offset": offset,
+                "limit": limit,
+                "order": [
+                    {"by": "type", "direction": "ASC"},
+                    {"by": "name", "direction": "ASC"},
+                ],
+            }
+            return response
+        else:
+            entries = self.get_files_entries(offset, limit, folder_id)
+            response = {
+                "total_count": self.file_count,
+                "entries": entries,
+                "offset": offset,
+                "limit": limit,
+                "order": [
+                    {"by": "type", "direction": "ASC"},
+                    {"by": "name", "direction": "ASC"},
+                ],
+            }
+            return response
 
     def get_content(self, file_id):
         return io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
