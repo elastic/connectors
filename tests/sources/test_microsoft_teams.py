@@ -1,5 +1,4 @@
 import base64
-from functools import partial
 from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -397,21 +396,6 @@ CHANNELS = [
         "membershipType": "standard",
     }
 ]
-
-DRIVES = [
-    {
-        "id": "b!3Dz9Bu",
-        "lastModifiedDateTime": "2023-08-09T09:55:10Z",
-        "name": "Documents",
-    }
-]
-
-ROOT = {
-    "id": "01BUDE7",
-    "lastModifiedDateTime": "2023-08-09T09:55:10Z",
-    "name": "root",
-}
-
 MOCK_ATTACHMENT = {
     "created_at": "2023-05-01T09:09:31Z",
     "id": "123",
@@ -455,6 +439,67 @@ MOCK_ATTACHMENT_WITH_ZERO_SIZE = {
     "size_in_bytes": 0,
 }
 DOWNLOAD_URL = "https://attachment.com"
+CHANNEL_MESSAGE = {
+    "id": "1691588610121",
+    "messageType": "message",
+    "createdDateTime": "2023-08-09T12:03:30.121Z",
+    "lastModifiedDateTime": "2023-08-09T12:03:30.121Z",
+    "deletedDateTime": None,
+    "subject": None,
+    "summary": None,
+    "eventDetail": None,
+    "webUrl": "https://3hm-my.sharepoint.com/11_dummy",
+    "from": {
+        "user": {
+            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+            "id": "82e32462",
+            "displayName": "Dummy",
+            "userIdentityType": "aadUser",
+            "tenantId": "a57a7700",
+        }
+    },
+    "body": {
+        "contentType": "html",
+        "content": "<div>hello</div>",
+    },
+    "attachments": [],
+    "replies": [
+        {
+            "id": "1691588680121",
+            "messageType": "message",
+            "createdDateTime": "2023-08-09T12:03:30.121Z",
+            "lastModifiedDateTime": "2023-08-09T12:03:30.121Z",
+            "deletedDateTime": None,
+            "subject": None,
+            "summary": None,
+            "eventDetail": None,
+            "webUrl": "https://3hm-my.sharepoint.com/11_dummy",
+            "from": {
+                "user": {
+                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                    "id": "82e32462",
+                    "displayName": "Dummy",
+                    "userIdentityType": "aadUser",
+                    "tenantId": "a57a7700",
+                }
+            },
+            "body": {
+                "contentType": "html",
+                "content": "<div>hello</div>",
+            },
+            "attachments": [],
+        }
+    ],
+}
+FILESFOLDER = {
+    "id": "123",
+    "name": "root",
+    "size": 351660,
+    "parentReference": {
+        "driveId": "b!NJX42spQh0CsSMeITDaWt",
+        "driveType": "documentLibrary",
+    },
+}
 
 
 class StubAPIToken:
@@ -469,20 +514,6 @@ async def microsoft_client():
 
 class ClientErrorException:
     real_url = ""
-
-
-async def scroll_response(method, patch_scroll, setup_items, *args):
-    half = len(setup_items) // 2
-    patch_scroll.return_value = AsyncIterator(
-        [setup_items[:half], setup_items[half:]]
-    )  # simulate 2 pages
-
-    returned_items = []
-    async for item in method(*args):
-        if item:
-            returned_items.append(item)
-
-    return returned_items
 
 
 @pytest_asyncio.fixture
@@ -598,7 +629,7 @@ async def test_get_docs_for_events():
         source.client.get_user_chats = Mock(return_value=AsyncIterator([]))
         source.client.get_teams = Mock(return_value=AsyncIterator([]))
         source.client.users = Mock(return_value=AsyncIterator([USERS]))
-        source.client.get_calendars = Mock(return_value=AsyncIterator([EVENTS]))
+        source.client.get_calendars = Mock(return_value=AsyncIterator(EVENTS))
 
         async for item, _ in source.get_docs():
             assert item["_id"] in [
@@ -620,10 +651,12 @@ async def test_get_docs_for_teams():
         source.client.get_channel_messages = Mock(
             return_value=AsyncIterator([MESSAGES])
         )
-        source.client.get_channel_drive = Mock(return_value=AsyncIterator([DRIVES]))
-        return_value = create_fake_coroutine(ROOT)
-        source.client.get_drive_root = Mock(return_value=return_value)
-
+        source.client.get_channel_file = Mock(
+            return_value=create_fake_coroutine(item=FILESFOLDER)
+        )
+        source.client.get_channel_drive_parent_children = Mock(
+            return_value=AsyncIterator(ATTACHMENTS)
+        )
         source.client.get_channel_drive_childrens = Mock(
             return_value=AsyncIterator(ATTACHMENTS)
         )
@@ -639,6 +672,8 @@ async def test_get_docs_for_teams():
                 "1691565463404",
                 "01EL4RL6L43X64K4ATD5H34UUQPOMMTRQX",
             ]
+            if item.get("type") == "Channel Message":
+                assert item["attached_documents"] == "~`!@$^8()_+-=[]{};',k.txt"
 
 
 @pytest.mark.asyncio
@@ -679,45 +714,16 @@ async def test_get_content_negative(attachment, download_url):
 
 
 @pytest.mark.asyncio
-async def test_get_channel_drive_childrens(patch_scroll, client):
-    actual_items = [
-        {
-            "@microsoft.graph.downloadUrl": "https://3hmn-my.sharepoint.com/",
-            "id": "01E27JES4MOE",
-            "lastModifiedDateTime": "2023-08-05T11:46:55Z",
-            "name": "&",
-            "size": 9,
-            "file": {
-                "mimeType": "application/octet-stream",
-            },
-        }
-    ]
+async def test_get_channel_file():
+    async with create_source(
+        MicrosoftTeamsDataSource,
+    ) as source:
+        source.client.fetch = Mock(return_value=create_fake_coroutine(item=FILESFOLDER))
+        returned_items = await source.client.get_channel_file(
+            team_id="team_id", channel_id="channel_id"
+        )
 
-    returned_items = await scroll_response(
-        partial(client.get_channel_drive_childrens, "teamid", "driveid", "itemid"),
-        patch_scroll,
-        actual_items,
-    )
-
-    assert len(returned_items) == len(actual_items)
-    assert returned_items == actual_items
-
-
-@pytest.mark.asyncio
-async def test_get_channel_drive(patch_scroll, client):
-    actual_items = [
-        {
-            "id": "01E27JES4MOE",
-            "lastModifiedDateTime": "2023-08-05T11:46:55Z",
-            "name": "&",
-        }
-    ]
-
-    returned_items = await scroll_response(
-        partial(client.get_channel_drive, "teamid"), patch_scroll, actual_items
-    )
-
-    assert len(returned_items) == len(actual_items)
+        assert returned_items["id"] == "123"
 
 
 @pytest.mark.asyncio
@@ -734,13 +740,74 @@ async def test_get_channel_messages(patch_scroll, client):
 
 
 @pytest.mark.asyncio
-async def test_get_drive_root():
+async def test_format_user_chat_messages(patch_scroll, client):
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
-        source.client.fetch = Mock(return_value=create_fake_coroutine(item=DRIVES))
-        drive = await source.client.get_drive_root("team_id", "channel_id")
-        assert len(drive) == len(DRIVES)
+        message = await source.formatter.format_user_chat_messages(
+            chat=USER_CHATS[0], message={}, message_content="hello", members="dummy"
+        )
+        assert message["title"] == "topic1"
+
+
+@pytest.mark.asyncio
+async def test_format_user_chat_messages_for_members(patch_scroll, client):
+    user_chat_request = {
+        "id": "19:2ea91886",
+        "topic": None,
+        "createdDateTime": "2023-08-03T12:19:27.57Z",
+        "lastUpdatedDateTime": "2023-08-09T07:17:26.482Z",
+        "chatType": "oneOnOne",
+        "webUrl": "https://teams.microsoft.com/l/chat/19:2ea91886",
+        "tenantId": "a57a7700",
+        "members": [
+            {
+                "id": "123-3=",
+                "displayName": "Duumy3",
+                "userId": "82e32463",
+                "email": "dummy3@3hm.onmicrosoft.com",
+            },
+            {
+                "id": "123-2=",
+                "displayName": "Dummy2",
+                "userId": "2ea91886",
+                "email": "dummy2@3hm.onmicrosoft.com",
+            },
+        ],
+    }
+    async with create_source(
+        MicrosoftTeamsDataSource,
+    ) as source:
+        message = await source.formatter.format_user_chat_messages(
+            chat=user_chat_request,
+            message={},
+            message_content="hello",
+            members="Duumy3,Dummy2",
+        )
+        assert message["title"] == "Duumy3,Dummy2"
+
+
+@pytest.mark.asyncio
+async def test_get_channel_messages_for_base_class(patch_scroll, client):
+    async with create_source(
+        MicrosoftTeamsDataSource,
+    ) as source:
+        await source.get_channel_messages(
+            message=CHANNEL_MESSAGE, channel_name="channel_name"
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_messages(patch_scroll, client):
+    async with create_source(
+        MicrosoftTeamsDataSource,
+    ) as source:
+        await source.get_messages(
+            message=CHANNEL_MESSAGE,
+            document_type="User Chat Messages",
+            chat=USER_CHATS[0],
+            channel_name="channel_name",
+        )
 
 
 @pytest.mark.asyncio
@@ -781,7 +848,7 @@ async def test_get_calendars():
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
-        source.client.scroll = AsyncIterator([EVENTS])
+        source.client.scroll = AsyncIterator([[EVENTS]])
         async for events in source.client.get_calendars("user_id"):
             for event in events:
                 assert event["id"] in [

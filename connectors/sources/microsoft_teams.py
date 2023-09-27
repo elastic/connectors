@@ -94,8 +94,7 @@ class TeamEndpointName(Enum):
     MESSAGE = "Channel Message"
     MEETING = "Channel Meeting"
     ATTACHMENT = "Channel Attachment"
-    DRIVE = "Channel Drive"
-    ROOT_DRIVE = "Root Drive"
+    FILE = "File"
     ROOT_DRIVE_CHILDREN = "Root Drive Children"
 
 
@@ -119,9 +118,8 @@ URLS = {
     TeamEndpointName.CHANNEL.value: "{base_url}/teams/{team_id}/channels",
     TeamEndpointName.TAB.value: "{base_url}/teams/{team_id}/channels/{channel_id}/tabs",
     TeamEndpointName.MESSAGE.value: "{base_url}/teams/{team_id}/channels/{channel_id}/messages?$expand=replies",
-    TeamEndpointName.DRIVE.value: "{base_url}/groups/{team_id}/drives?$top=5000",
-    TeamEndpointName.ROOT_DRIVE.value: "{base_url}/groups/{team_id}/drives/{drive_id}/root?$top=5000",
-    TeamEndpointName.ROOT_DRIVE_CHILDREN.value: "{base_url}/groups/{team_id}/drives/{drive_id}/items/{item_id}/children?$top=5000",
+    TeamEndpointName.FILE.value: "{base_url}/teams/{team_id}/channels/{channel_id}/filesFolder",
+    TeamEndpointName.ROOT_DRIVE_CHILDREN.value: "{base_url}/drives/{drive_id}/items/{item_id}/children?$top=5000",
 }
 
 
@@ -174,7 +172,6 @@ class Schema:
             "_id": "id",
             "title": "displayName",
             "description": "description",
-            "creation_time": "createdDateTime",
         }
 
     def channel(self):
@@ -404,13 +401,15 @@ class MicrosoftTeamsClient:
         scroll_url = url
 
         while True:
-            graph_data = await self._get_json(scroll_url)
-            # We're yielding the whole page here, not one item
-            yield graph_data.get("value", [])
+            if graph_data := await self._get_json(scroll_url):
+                # We're yielding the whole page here, not one item
+                yield graph_data.get("value", [])
 
-            if not graph_data.get("@odata.nextLink"):
+                if not graph_data.get("@odata.nextLink"):
+                    break
+                scroll_url = graph_data.get("@odata.nextLink")
+            else:
                 break
-            scroll_url = graph_data.get("@odata.nextLink")
 
     async def _get_json(self, absolute_url):
         try:
@@ -559,7 +558,8 @@ class MicrosoftTeamsClient:
                 base_url=BASE_URL, user_id=user_id
             ),
         ):
-            yield events
+            for event in events:
+                yield event
 
     async def download_item(self, url, async_buffer):
         await self.pipe(url=url, stream=async_buffer)
@@ -594,31 +594,24 @@ class MicrosoftTeamsClient:
         ):
             yield channel_messages
 
-    async def get_channel_drive(self, team_id):
-        async for drives in self.scroll(
-            url=URLS[TeamEndpointName.DRIVE.value].format(
-                base_url=BASE_URL, team_id=team_id
+    async def get_channel_file(self, team_id, channel_id):
+        file = await self.fetch(
+            url=URLS[TeamEndpointName.FILE.value].format(
+                base_url=BASE_URL, team_id=team_id, channel_id=channel_id
             )
-        ):
-            yield drives
-
-    async def get_drive_root(self, team_id, drive_id):
-        return await self.fetch(
-            url=URLS[TeamEndpointName.ROOT_DRIVE.value].format(
-                base_url=BASE_URL, team_id=team_id, drive_id=drive_id
-            ),
         )
+        return file
 
-    async def get_channel_drive_childrens(self, team_id, drive_id, item_id):
+    async def get_channel_drive_childrens(self, drive_id, item_id):
         async for root_childrens in self.scroll(
             url=URLS[TeamEndpointName.ROOT_DRIVE_CHILDREN.value].format(
-                base_url=BASE_URL, team_id=team_id, drive_id=drive_id, item_id=item_id
+                base_url=BASE_URL, drive_id=drive_id, item_id=item_id
             )
         ):
             for child in root_childrens:
                 if child.get("folder"):
                     async for documents in self.get_channel_drive_childrens(  # pyright: ignore
-                        team_id=team_id, drive_id=drive_id, item_id=child["id"]
+                        drive_id=drive_id, item_id=child["id"]
                     ):
                         yield documents
                 yield child
@@ -628,92 +621,11 @@ class MicrosoftTeamsClient:
         await self._http_session.close()
 
 
-class MicrosoftTeamsDataSource(BaseDataSource):
-    """Microsoft Teams"""
+class MicrosoftTeamsFormatter:
+    """Format documents"""
 
-    name = "Microsoft Teams"
-    service_type = "microsoft_teams"
-
-    def __init__(self, configuration):
-        """Set up the connection to the Microsoft Teams.
-
-        Args:
-            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
-        """
-        super().__init__(configuration=configuration)
-        self.tasks = 0
-        self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
-        self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
-        self.schema = Schema()
-
-    def _set_internal_logger(self):
-        self.client.set_logger(self._logger)
-
-    @cached_property
-    def client(self):
-        tenant_id = self.configuration["tenant_id"]
-        client_id = self.configuration["client_id"]
-        client_secret = self.configuration["secret_value"]
-        username = self.configuration["username"]
-        password = self.configuration["password"]
-
-        return MicrosoftTeamsClient(
-            tenant_id, client_id, client_secret, username, password
-        )
-
-    async def _consumer(self):
-        """Async generator to process entries of the queue
-
-        Yields:
-            dictionary: Documents from Microsoft Teams.
-        """
-        while self.tasks > 0:
-            _, item = await self.queue.get()
-
-            if isinstance(item, EndSignal):
-                self.tasks -= 1
-            else:
-                yield item
-
-    def verify_filename_for_extraction(self, filename):
-        attachment_extension = list(os.path.splitext(filename))
-        if "" in attachment_extension:
-            self._logger.debug(
-                f"Files without extension are not supported, skipping {filename}."
-            )
-            return
-        if attachment_extension[-1].lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(
-                f"Files with the extension {attachment_extension[-1]} are not supported, skipping {filename}."
-            )
-            return
-        return True
-
-    async def _download_content_for_attachment(self, download_func, original_filename):
-        attachment = None
-        source_file_name = ""
-
-        try:
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                source_file_name = async_buffer.name
-                await download_func(async_buffer)
-
-            self._logger.debug(
-                f"Download completed for file: {original_filename}. Calling convert_to_b64"
-            )
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=source_file_name,
-            )
-            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-                # base64 on macOS will add a EOL, so we strip() here
-                attachment = (await target_file.read()).strip()
-
-        finally:
-            if source_file_name:
-                await remove(str(source_file_name))
-
-        return attachment
+    def __init__(self, schema):
+        self.schema = schema
 
     def map_document_with_schema(
         self,
@@ -733,21 +645,6 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         """
         for elasticsearch_field, sharepoint_field in document_type().items():
             document[elasticsearch_field] = item.get(sharepoint_field)
-
-    async def validate_config(self):
-        await super().validate_config()
-
-        # Check that we can log in into Graph API
-        await self.client._api_token.get_with_username_password()
-
-    async def ping(self):
-        """Verify the connection with Microsoft Teams"""
-        try:
-            await self.client.ping()
-            self._logger.info("Successfully connected to Microsoft Teams")
-        except Exception:
-            self._logger.exception("Error while connecting to Microsoft Teams")
-            raise
 
     def format_doc(self, item, document_type, **kwargs):
         document = {}
@@ -859,20 +756,16 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         )
         return document
 
-    def format_channel_message(self, item, channel_name):
+    def format_channel_message(self, item, channel_name, message_content):
         document = {"type": TeamEndpointName.MESSAGE.value}
         document.update(
             {  # pyright: ignore
-                "sender": item["from"]["user"].get("displayName")
-                if item.get("from") and item["from"].get("user")
-                else "",
+                "sender": item.get("from", {}).get("user", {}).get("displayName", ""),
                 "channel": channel_name,
-                "message": html_to_text(html=item.get("body", {}).get("content")),
+                "message": message_content,
                 "attached_documents": self.format_attachment_names(
-                    attachments=item["attachments"]
-                )
-                if item.get("attachments")
-                else "",
+                    attachments=item.get("attachments")
+                ),
             }
         )
         self.map_document_with_schema(
@@ -884,17 +777,17 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         document = {"type": TeamEndpointName.MEETING.value}
         event = reply["eventDetail"]
         if event.get("@odata.type") == "#microsoft.graph.callEndedEventMessageDetail":
-            particpant_list = []
-            for particpant in event.get("callParticipants", []):
-                user = particpant.get("participant", {}).get("user")
+            participant_list = []
+            for participant in event.get("callParticipants", []):
+                user = participant.get("participant", {}).get("user")
                 if user:
-                    particpant_list.append(user.get("displayName"))
-            particpant_names = ", ".join(particpant_list)
+                    participant_list.append(user.get("displayName"))
+            participant_names = ", ".join(participant_list)
             document.update(
                 {
                     "_id": event.get("callId"),
                     "_timestamp": reply.get("lastModifiedDateTime"),
-                    "particpants": particpant_names,
+                    "participants": participant_names,
                 }
             )
         elif (
@@ -912,38 +805,150 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
         return document
 
-    async def format_user_chat_messages(self, chat, message):
+    async def format_user_chat_messages(self, chat, message, message_content, members):
         if chat.get("topic"):
             message.update({"title": chat["topic"]})
         else:
-            member_title = []
-            for member in chat.get("members", []):
-                display_name = member.get("displayName")
-                if display_name:
-                    member_title.append(display_name)
-            message.update({"title": ",".join(member_title)})
+            message.update({"title": members})
         message.update(
             {
                 "webUrl": chat.get("webUrl"),
                 "chatType": chat.get("chatType"),
-                "sender": message["from"]["user"].get("displayName")
-                if message.get("from") and message["from"].get("user")
-                else "",
-                "message": html_to_text(html=message.get("body", {}).get("content")),
+                "sender": message.get("from", {})
+                .get("user", {})
+                .get("displayName", ""),
+                "message": message_content,
             }
         )
         return message
 
-    async def format_user_chat_attachments(self, **kwargs):
+    def format_attachment_names(self, attachments):
+        if not attachments:
+            return ""
+
+        return ",".join(
+            attachment.get("name")
+            for attachment in attachments
+            if attachment.get("name", "")
+        )
+
+
+class MicrosoftTeamsDataSource(BaseDataSource):
+    """Microsoft Teams"""
+
+    name = "Microsoft Teams"
+    service_type = "microsoft_teams"
+
+    def __init__(self, configuration):
+        """Set up the connection to the Microsoft Teams.
+
+        Args:
+            configuration (DataSourceConfiguration): Object of DataSourceConfiguration class.
+        """
+        super().__init__(configuration=configuration)
+        self.tasks = 0
+        self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
+        self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
+        self.schema = Schema()
+        self.formatter = MicrosoftTeamsFormatter(self.schema)
+
+    def _set_internal_logger(self):
+        self.client.set_logger(self._logger)
+
+    @cached_property
+    def client(self):
+        tenant_id = self.configuration["tenant_id"]
+        client_id = self.configuration["client_id"]
+        client_secret = self.configuration["secret_value"]
+        username = self.configuration["username"]
+        password = self.configuration["password"]
+
+        return MicrosoftTeamsClient(
+            tenant_id, client_id, client_secret, username, password
+        )
+
+    async def _consumer(self):
+        """Async generator to process entries of the queue
+
+        Yields:
+            dictionary: Documents from Microsoft Teams.
+        """
+        while self.tasks > 0:
+            _, item = await self.queue.get()
+
+            if isinstance(item, EndSignal):
+                self.tasks -= 1
+            else:
+                yield item
+
+    def verify_filename_for_extraction(self, filename):
+        attachment_extension = os.path.splitext(filename)[-1]
+        if attachment_extension == "":
+            self._logger.debug(
+                f"Files without extension are not supported, skipping {filename}."
+            )
+            return
+        if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
+            self._logger.debug(
+                f"Files with the extension {attachment_extension} are not supported, skipping {filename}."
+            )
+            return
+        return True
+
+    async def _download_content_for_attachment(self, download_func, original_filename):
+        attachment = None
+        source_file_name = ""
+
+        try:
+            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+                source_file_name = async_buffer.name
+                await download_func(async_buffer)
+
+            self._logger.debug(
+                f"Download completed for file: {original_filename}. Calling convert_to_b64"
+            )
+            await asyncio.to_thread(
+                convert_to_b64,
+                source=source_file_name,
+            )
+            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
+                # base64 on macOS will add a EOL, so we strip() here
+                attachment = (await target_file.read()).strip()
+
+        finally:
+            if source_file_name:
+                await remove(str(source_file_name))
+
+        return attachment
+
+    async def validate_config(self):
+        await super().validate_config()
+
+        # Check that we can log in into Graph API
+        await self.client._api_token.get_with_username_password()
+
+    async def ping(self):
+        """Verify the connection with Microsoft Teams"""
+        try:
+            await self.client.ping()
+            self._logger.info("Successfully connected to Microsoft Teams")
+        except Exception:
+            self._logger.exception("Error while connecting to Microsoft Teams")
+            raise
+
+    async def update_user_chat_attachments(self, **kwargs):
         async for attachments in self.client.get_user_chat_attachments(
             sender_id=kwargs["sender_id"],
             attachment_name=kwargs["attachment_name"],
         ):
             for attachment in attachments:
-                format_attachment = self.format_doc(
+                format_attachment = self.formatter.format_doc(
                     item=attachment,
                     document_type=self.schema.chat_attachments,
-                    document={"type": UserEndpointName.ATTACHMENT.value},
+                    document={
+                        "type": UserEndpointName.ATTACHMENT.value,
+                        "members": kwargs.get("members", ""),
+                    },
                 )
                 download_url = attachment.get("@microsoft.graph.downloadUrl")
                 await self.queue.put(
@@ -996,43 +1001,43 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         return document
 
-    def format_attachment_names(self, attachments):
-        attachment_list = []
-        for attachment in attachments:
-            if attachment.get("contentType") == "tabReference":
-                attachment_list.append(attachment.get("name"))
-        attachment_names = ", ".join(attachment_list)
-        return attachment_names
-
     async def get_messages(
-        self, message, document_type=None, chat=None, channel_name=None
+        self, message, document_type=None, chat=None, channel_name=None, members=None
     ):
         if not message.get("deletedDateTime") and (
             "unknownFutureValue" not in message.get("messageType")
         ):
-            if document_type == UserEndpointName.CHATS_MESSAGE.value:
-                message_document = await self.format_user_chat_messages(
-                    chat=chat, message=message
-                )
-                await self.queue.put(
-                    (
-                        self.format_doc(
-                            item=message_document,
-                            document_type=self.schema.chat_messages,
-                            document={"type": document_type},
-                        ),
-                        None,
+            if message_content := html_to_text(
+                html=message.get("body", {}).get("content")
+            ):
+                if document_type == UserEndpointName.CHATS_MESSAGE.value:
+                    message_document = await self.formatter.format_user_chat_messages(
+                        chat=chat,
+                        message=message,
+                        message_content=message_content,
+                        members=members,
                     )
-                )
-            else:
-                await self.queue.put(
-                    (
-                        self.format_channel_message(
-                            item=message, channel_name=channel_name
-                        ),
-                        None,
+                    await self.queue.put(
+                        (
+                            self.formatter.format_doc(
+                                item=message_document,
+                                document_type=self.schema.chat_messages,
+                                document={"type": document_type},
+                            ),
+                            None,
+                        )
                     )
-                )
+                else:
+                    await self.queue.put(
+                        (
+                            self.formatter.format_channel_message(
+                                item=message,
+                                channel_name=channel_name,
+                                message_content=message_content,
+                            ),
+                            None,
+                        )
+                    )
 
     async def user_chat_meeting_recording(self, message):
         if (
@@ -1045,18 +1050,29 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             if url and ".sharepoint.com" in url:
                 await self.queue.put(
                     (
-                        self.format_user_chat_meeting_recording(item=message, url=url),
+                        self.formatter.format_user_chat_meeting_recording(
+                            item=message, url=url
+                        ),
                         None,
                     )
                 )
 
+    def get_chat_members(self, members):
+        return ",".join(
+            member.get("displayName")
+            for member in members
+            if member.get("displayName", "")
+        )
+
     async def user_chat_producer(self, chat):
+        members = self.get_chat_members(chat.get("members", []))
         async for messages in self.client.get_user_chat_messages(chat_id=chat["id"]):
             for message in messages:
                 await self.get_messages(
                     message=message,
                     document_type=UserEndpointName.CHATS_MESSAGE.value,
                     chat=chat,
+                    members=members,
                 )
 
                 await self.user_chat_meeting_recording(message=message)
@@ -1067,22 +1083,24 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                             attachment.get("name")
                             and attachment.get("contentType") == "reference"
                         ):
-                            await self.format_user_chat_attachments(
+                            await self.update_user_chat_attachments(
                                 sender_id=message["from"]["user"]["id"],
                                 attachment_name=attachment["name"],
+                                members=members,
                             )
 
         async for tabs in self.client.get_user_chat_tabs(chat_id=chat["id"]):
             for tab in tabs:
                 await self.queue.put(
                     (
-                        self.format_doc(
+                        self.formatter.format_doc(
                             item=tab,
                             document_type=self.schema.chat_tabs,
                             document={
                                 "type": UserEndpointName.TABS.value,
                                 "url": tab.get("configuration", {}).get("websiteUrl"),
                                 "_timestamp": chat["lastUpdatedDateTime"],
+                                "members": members,
                             },
                         ),
                         None,
@@ -1094,28 +1112,37 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         await self.get_messages(message=message, channel_name=channel_name)
         meeting_document = {}
         for reply in message.get("replies", []):
-            if not reply.get("deletedDateTime") and (
-                "unknownFutureValue" not in reply.get("messageType")
+            message_content = html_to_text(html=reply.get("body", {}).get("content"))
+            if (
+                not reply.get("deletedDateTime")
+                and ("unknownFutureValue" not in reply.get("messageType"))
+                and message_content
             ):
                 await self.queue.put(
                     (
-                        self.format_channel_message(
-                            item=reply, channel_name=channel_name
+                        self.formatter.format_channel_message(
+                            item=reply,
+                            channel_name=channel_name,
+                            message_content=message_content,
                         ),
                         None,
                     )
                 )
 
             elif reply.get("eventDetail"):
-                meeting_document.update(self.format_channel_meeting(reply=reply))
-
-        if meeting_document:
-            await self.queue.put((meeting_document, None))
+                call_id = reply["eventDetail"].get("callId")
+                if call_id not in meeting_document:
+                    meeting_document[call_id] = {}
+                document = self.formatter.format_channel_meeting(reply=reply)
+                meeting_document[call_id].update(document)
+        for document in meeting_document.values():
+            await self.queue.put((document, None))
 
     async def team_channel_producer(self, channel, team_id, team_name):
+        channel_name = channel.get("displayName")
         await self.queue.put(
             (
-                self.format_doc(
+                self.formatter.format_doc(
                     item=channel,
                     document_type=self.schema.channel,
                     document={
@@ -1134,13 +1161,14 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             for tab in tabs:
                 await self.queue.put(
                     (
-                        self.format_doc(
+                        self.formatter.format_doc(
                             item=tab,
                             document_type=self.schema.channel_tab,
                             document={
                                 "type": TeamEndpointName.TAB.value,
                                 "_timestamp": datetime.utcnow(),
                                 "team_name": team_name,
+                                "channel_name": channel_name,
                             },
                         ),
                         None,
@@ -1152,27 +1180,37 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         ):
             for message in messages:
                 await self.get_channel_messages(
-                    message=message, channel_name=channel.get("displayName")
+                    message=message, channel_name=channel_name
                 )
+
+        file = await self.client.get_channel_file(
+            team_id=team_id, channel_id=channel.get("id")
+        )
+        drive_id = file.get("parentReference", {}).get("driveId")
+        await self.get_channel_drive_producer(
+            drive_id=drive_id,
+            item_id=file.get("id"),
+            team_name=team_name,
+            channel_name=channel_name,
+        )
 
         await self.queue.put(EndSignal.CHANNEL_TASK_FINISHED)
 
-    async def get_channel_drive_producer(self, drive, team_id, team_name):
-        root = await self.client.get_drive_root(
-            team_id=team_id, drive_id=drive.get("id")
-        )
+    async def get_channel_drive_producer(
+        self, drive_id, item_id, team_name, channel_name
+    ):
         async for drive_child in self.client.get_channel_drive_childrens(
-            team_id=team_id,
-            drive_id=drive.get("id"),
-            item_id=root.get("id"),
+            drive_id=drive_id,
+            item_id=item_id,
         ):
             if drive_child.get("file"):
-                format_attachment = self.format_doc(
+                format_attachment = self.formatter.format_doc(
                     item=drive_child,
                     document_type=self.schema.channel_attachment,
                     document={
                         "type": TeamEndpointName.ATTACHMENT.value,
                         "team_name": team_name,
+                        "channel_name": channel_name,
                     },
                 )
                 await self.queue.put(
@@ -1193,7 +1231,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         team_name = team.get("displayName")
         await self.queue.put(
             (
-                self.format_doc(
+                self.formatter.format_doc(
                     item=team,
                     document_type=self.schema.teams,
                     document={
@@ -1212,12 +1250,19 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
                 self.tasks += 1
 
-        async for drives in self.client.get_channel_drive(team_id=team_id):
-            for drive in drives:
-                await self.get_channel_drive_producer(
-                    drive=drive, team_id=team_id, team_name=team_name
-                )
+        await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
 
+    async def calendars_producer(self, user):
+        async for event in self.client.get_calendars(user_id=user["id"]):
+            if not event.get("isCancelled"):
+                await self.queue.put(
+                    (
+                        self.formatter.format_user_calendars(
+                            item=event,
+                        ),
+                        None,
+                    )
+                )
         await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
 
     async def get_docs(self, filtering=None):
@@ -1237,10 +1282,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         async for users in self.client.users():
             for user in users:
                 if user.get("mail"):
-                    async for events in self.client.get_calendars(user_id=user["id"]):
-                        for event in events:
-                            if not event.get("isCancelled"):
-                                yield self.format_user_calendars(item=event), None
+                    await self.fetchers.put(partial(self.calendars_producer, user))
+                    self.tasks += 1
 
         async for teams in self.client.get_teams():
             for team in teams:

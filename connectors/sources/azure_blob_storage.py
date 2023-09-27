@@ -4,17 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
-import asyncio
 import os
 from functools import partial
 
-import aiofiles
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
+from connectors.utils import TIKA_SUPPORTED_FILETYPES
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -101,6 +97,15 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 6,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["self-managed"],
+                "value": False,
+            },
         }
 
     def _configure_connection_string(self):
@@ -165,7 +170,8 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         blob_name = blob["title"]
-        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
+        file_extension = (os.path.splitext(blob_name)[-1]).lower()
+        if file_extension not in TIKA_SUPPORTED_FILETYPES:
             self._logger.warning(f"{blob_name} can't be extracted")
             return
 
@@ -182,26 +188,25 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
+        document = await self.download_and_extract_file(
+            document,
+            blob_name,
+            file_extension,
+            partial(self.blob_download_func, blob_name, blob["container"]),
+        )
 
+        return document
+
+    async def blob_download_func(self, blob_name, container_name):
         async with BlobClient.from_connection_string(
             conn_str=self.connection_string,
-            container_name=blob["container"],
+            container_name=container_name,
             blob_name=blob_name,
             retry_total=self.retry_count,
         ) as blob_client:
             data = await blob_client.download_blob()
-            temp_filename = ""
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                temp_filename = async_buffer.name
-                async for content in data.chunks():
-                    await async_buffer.write(content)
-            self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
-            await asyncio.to_thread(convert_to_b64, source=temp_filename)
-            async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-                # base64 on macOS will add a EOL, so we strip() here
-                document["_attachment"] = (await async_buffer.read()).strip()
-            await remove(str(temp_filename))
-        return document
+            async for content in data.chunks():
+                yield content
 
     async def get_container(self):
         """Get containers from Azure Blob Storage via azure base client
