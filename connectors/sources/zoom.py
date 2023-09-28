@@ -28,7 +28,6 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 CHAT_PAGE_SIZE = 50
 MEETING_PAGE_SIZE = 300
-FILE_SIZE_LIMIT = 10485760
 
 if "OVERRIDE_URL" in os.environ:
     override_url = os.environ["OVERRIDE_URL"]

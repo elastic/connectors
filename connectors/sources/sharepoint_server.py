@@ -30,8 +30,6 @@ from connectors.utils import (
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 RETRIES = 3
-FILE_SIZE_LIMIT = 10485760
-CHUNK_SIZE = 1024
 TOP = 5000
 PING = "ping"
 SITES = "sites"

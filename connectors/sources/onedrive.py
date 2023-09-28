@@ -42,7 +42,6 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
-CHUNK_SIZE = 1024
 FETCH_SIZE = 999
 DEFAULT_PARALLEL_CONNECTION_COUNT = 15
 REQUEST_TIMEOUT = 300
@@ -484,33 +483,6 @@ class OneDriveDataSource(BaseDataSource):
         except Exception:
             self._logger.exception("Error while connecting to OneDrive")
             raise
-
-    async def _get_document_with_content(self, attachment_name, document, url):
-        temp_filename = ""
-
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.client.get(url=url):
-                async for data in response.content.iter_chunked(n=CHUNK_SIZE):
-                    await async_buffer.write(data)
-            temp_filename = str(async_buffer.name)
-
-        self._logger.debug(
-            f"Download completed for file: {attachment_name}. Calling convert_to_b64"
-        )
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=temp_filename,
-        )
-        async with aiofiles.open(file=temp_filename, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file: {temp_filename}. Error: {exception}"
-            )
-        return document
 
     async def get_content(self, file, download_url, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
