@@ -823,7 +823,7 @@ class SharepointServerDataSource(BaseDataSource):
                                 )
 
     async def get_content(
-            self, document, file_relative_url, site_url, timestamp=None, doit=False
+        self, document, file_relative_url, site_url, timestamp=None, doit=False
     ):
         """Get content of list items and drive items
 
@@ -864,6 +864,6 @@ class SharepointServerDataSource(BaseDataSource):
                     host_url=self.sharepoint_client.host_url,
                     value=site_url,
                     file_relative_url=file_relative_url,
-                )
-            )
+                ),
+            ),
         )

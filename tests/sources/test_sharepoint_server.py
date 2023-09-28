@@ -25,7 +25,9 @@ HOST_URL = "http://127.0.0.1:8491"
 
 
 @asynccontextmanager
-async def create_sps_source(ssl_enabled=False, ssl_ca="", retry_count=3, use_text_extraction_service=False):
+async def create_sps_source(
+    ssl_enabled=False, ssl_ca="", retry_count=3, use_text_extraction_service=False
+):
     async with create_source(
         SharepointServerDataSource,
         username="admin",
@@ -35,7 +37,7 @@ async def create_sps_source(ssl_enabled=False, ssl_ca="", retry_count=3, use_tex
         ssl_enabled=ssl_enabled,
         ssl_ca=ssl_ca,
         retry_count=retry_count,
-        use_text_extraction_service=use_text_extraction_service
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
