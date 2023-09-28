@@ -48,11 +48,17 @@
                         "type": "str",
                         "value": "xe"
                 },
+                "schema": {
+                        "label": "Schema",
+                        "order": 6,
+                        "type": "str",
+                        "value": "public"
+                },
                 "tables": {
                         "display": "textarea",
                         "label": "Comma-separated list of tables",
                         "options": [],
-                        "order": 6,
+                        "order": 7,
                         "type": "list",
                         "value": "*"
                 },
@@ -60,7 +66,7 @@
                         "default_value": 50,
                         "display": "numeric",
                         "label": "Rows fetched per request",
-                        "order": 7,
+                        "order": 8,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -70,7 +76,7 @@
                         "default_value": 3,
                         "display": "numeric",
                         "label": "Retries per request",
-                        "order": 8,
+                        "order": 9,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -79,14 +85,14 @@
                 "ssl_enabled": {
                         "display": "toggle",
                         "label": "Enable SSL verification",
-                        "order": 9,
+                        "order": 10,
                         "type": "bool",
                         "value": false
                 },
                 "ssl_ca": {
                         "depends_on": [{"field": "ssl_enabled", "value": true}],
                         "label": "SSL certificate",
-                        "order": 10,
+                        "order": 11,
                         "type": "str",
                         "value": ""
                 }
