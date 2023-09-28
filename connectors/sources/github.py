@@ -1358,7 +1358,11 @@ class GitHubDataSource(BaseDataSource):
 
     async def download_func(self, url):
         file_data = await self.github_client.get_github_item(resource=url)
-        yield decode_base64_value(content=file_data["content"])
+        if file_data:
+            decoded_data = decode_base64_value(content=file_data["content"])
+            yield decoded_data
+        else:
+            yield
 
     def _filter_rule_query(self, repo, query, query_type):
         """
