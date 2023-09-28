@@ -115,6 +115,85 @@ READ_BINDING = [
     }
 ]
 
+LIMITED_ACCESS_BINDING = [
+    {
+        "BasePermissions": {"High": "16", "Low": "134283264"},
+        "Description": "Can view specific lists, document libraries, list items, folders, or documents when given permissions.",
+        "Hidden": True,
+        "Id": 1073741825,
+        "Name": "Limited Access",
+        "Order": 160,
+        "RoleTypeKind": 1,
+    }
+]
+
+WEB_ONLY_BINDING = [
+    {
+        "BasePermissions": {"High": "560", "Low": "134221824"},
+        "Description": "Can only view the web when given permissions.",
+        "Hidden": True,
+        "Id": 1073741833,
+        "Name": "Web-Only Limited Access",
+        "Order": 176,
+        "RoleTypeKind": 9,
+    }
+]
+
+SAMPLE_DRIVE_PERMISSIONS = [
+    {
+        "id": "3",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+        },
+    },
+    {
+        "id": "4",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+        },
+    },
+    {
+        "id": "5",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+        },
+    },
+    {
+        "id": "6",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+            "siteGroup": {"id": "2", "displayName": "Some site group"},
+        },
+    },
+]
+
+SAMPLE_SITE_GROUP_USERS = [
+    {
+        "UserPrincipalName": SITEGROUP_USER_ONE_ID,
+        "Email": SITEGROUP_USER_ONE_EMAIL,
+    }
+]
+
 
 @asynccontextmanager
 async def create_spo_source(
@@ -1364,6 +1443,25 @@ class TestSharepointOnlineClient:
         assert len(responses) == 0
 
     @pytest.mark.asyncio
+    async def test_site_role_assignments(self, client, patch_scroll):
+        site_role_assignments_url = (
+            f"https://{self.tenant_name}.sharepoint.com/sites/test"
+        )
+
+        role_assignments = [{"value": ["role"]}]
+
+        actual_role_assignments = await self._execute_scrolling_method(
+            partial(
+                client.site_role_assignments,
+                site_role_assignments_url,
+            ),
+            patch_scroll,
+            role_assignments,
+        )
+
+        assert actual_role_assignments == role_assignments
+
+    @pytest.mark.asyncio
     async def test_site_list_has_unique_role_assignments(self, client, patch_fetch):
         site_list_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
         site_list_name = "site_list"
@@ -1873,12 +1971,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_group_users(self):
-        return [
-            {
-                "UserPrincipalName": SITEGROUP_USER_ONE_ID,
-                "Email": SITEGROUP_USER_ONE_EMAIL,
-            }
-        ]
+        return SAMPLE_SITE_GROUP_USERS
 
     @property
     def users_and_groups_for_role_assignments(self):
@@ -1932,53 +2025,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def drive_item_permissions(self):
-        return [
-            {
-                "id": "3",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-            {
-                "id": "4",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-            {
-                "id": "5",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-            {
-                "id": "6",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                    "siteGroup": {"id": "2", "displayName": "Some site group"},
-                },
-            },
-        ]
+        return SAMPLE_DRIVE_PERMISSIONS
 
     @property
     def drive_items_permissions_batch(self):
@@ -2341,28 +2388,122 @@ class TestSharepointOnlineDataSource:
 
             assert download_result is None
 
+    @pytest.mark.parametrize(
+        "drive_item_permissions, site_group_users, expected_access_control",
+        [
+            (
+                SAMPLE_DRIVE_PERMISSIONS,
+                SAMPLE_SITE_GROUP_USERS,
+                [
+                    "user_id:user-id-1",
+                    "email:sitegroup.user1@spo.com",
+                    "group:group-id-1",
+                    "user:sitegroup.user1",
+                ],
+            ),
+            (
+                # grantedToIdentitiesV2 gets parsed
+                [
+                    {
+                        "grantedToIdentitiesV2": [
+                            {
+                                "user": {
+                                    "displayName": "Generic User",
+                                    "id": "75e1766a-f83d-48f8-aac3-8422f5cea411",
+                                },
+                                "siteUser": {
+                                    "displayName": "Generic User",
+                                    "loginName": "i:0#.f|membership|generic.user@enterprisesearch.onmicrosoft.com",
+                                },
+                            }
+                        ],
+                    }
+                ],
+                [],
+                [
+                    "user:generic.user@enterprisesearch.onmicrosoft.com",
+                    "user_id:75e1766a-f83d-48f8-aac3-8422f5cea411",
+                ],
+            ),
+            (
+                # grantedToIdentitiesV2 parsed alongside grantedToV2
+                [
+                    {
+                        "grantedToIdentitiesV2": [
+                            {
+                                "user": {
+                                    "displayName": "Generic User",
+                                    "id": "75e1766a-f83d-48f8-aac3-8422f5cea411",
+                                },
+                                "siteUser": {
+                                    "displayName": "Generic User",
+                                    "loginName": "i:0#.f|membership|generic.user@enterprisesearch.onmicrosoft.com",
+                                },
+                            }
+                        ],
+                        "grantedToV2": {
+                            "user": {
+                                "displayName": "Enterprise Search",
+                                "email": "demo@enterprisesearch.onmicrosoft.com",
+                                "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            },
+                            "siteUser": {
+                                "displayName": "Enterprise Search",
+                                "email": "demo@enterprisesearch.onmicrosoft.com",
+                                "id": "6",
+                                "loginName": "i:0#.f|membership|demo@enterprisesearch.onmicrosoft.com",
+                            },
+                        },
+                    }
+                ],
+                [],
+                [
+                    "user:generic.user@enterprisesearch.onmicrosoft.com",
+                    "user_id:75e1766a-f83d-48f8-aac3-8422f5cea411",
+                    "email:demo@enterprisesearch.onmicrosoft.com",
+                    "user_id:baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                    "user:demo@enterprisesearch.onmicrosoft.com",
+                ],
+            ),
+            (
+                # site groups get expanded
+                [
+                    {
+                        "grantedToV2": {"siteGroup": {"id": "3"}},
+                    }
+                ],
+                SAMPLE_SITE_GROUP_USERS,
+                [f"user:{SITEGROUP_USER_ONE_ID}", f"email:{SITEGROUP_USER_ONE_EMAIL}"],
+            ),
+            (
+                # groups of groups
+                [{"grantedToV2": {"siteGroup": {"id": "3"}}}],
+                [
+                    {
+                        "LoginName": "c:0o.c|federateddirectoryclaimprovider|abc123",
+                        "Title": "Nested group",
+                    }
+                ],
+                ["group:abc123"],
+            ),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_with_drive_item_permissions(self, patch_sharepoint_client):
+    async def test_with_drive_item_permissions(
+        self, drive_item_permissions, site_group_users, expected_access_control
+    ):
         async with create_spo_source(use_document_level_security=True) as source:
-            drive_item = {"id": 2}
-            patch_sharepoint_client.drive_item_permissions = AsyncIterator(
-                self.drive_item_permissions
-            )
+            drive_item = {"id": 1}
 
             # mock cache lookup
-            source.site_group_users = AsyncMock(return_value=self.site_group_users)
+            source.site_group_users = AsyncMock(return_value=site_group_users)
 
             drive_item_with_access_control = await source._with_drive_item_permissions(
-                drive_item, self.drive_item_permissions, "dummy_site_web_url"
+                drive_item, drive_item_permissions, "dummy_site_web_url"
             )
             drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
-            assert len(drive_item_access_control) == 4
-            assert _prefix_user_id(USER_ONE_ID) in drive_item_access_control
-            assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
-            # This comes from the sitegroup permission
-            assert _prefix_user(SITEGROUP_USER_ONE_ID) in drive_item_access_control
-            assert _prefix_email(SITEGROUP_USER_ONE_EMAIL) in drive_item_access_control
+            assert set(drive_item_access_control) == set(expected_access_control)
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
@@ -3160,12 +3301,34 @@ class TestSharepointOnlineDataSource:
                                 "odata.type": "SP.User",
                                 "LoginName": f"i:0#.f|membership|{USER_TWO_EMAIL}",
                                 "UserPrincipalName": None,
+                                "Email": USER_TWO_EMAIL,
                             },
                         ],
                     },
                     "RoleDefinitionBindings": READ_BINDING,
                 },
-                [_prefix_user(USER_ONE_EMAIL), _prefix_user(USER_TWO_EMAIL)],
+                [
+                    _prefix_user(USER_ONE_EMAIL),
+                    _prefix_user(USER_TWO_EMAIL),
+                    _prefix_email(USER_TWO_EMAIL),
+                ],
+            ),
+            (
+                # Group of groups (access control: group Id)
+                {
+                    "Member": {
+                        "odata.type": "SP.Group",
+                        "Users": [
+                            {
+                                "odata.type": "SP.User",
+                                "LoginName": "c:0o.c|federateddirectoryclaimprovider|abc123",
+                                "Title": "Nested Group",
+                            }
+                        ],
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                },
+                [_prefix_group("abc123")],
             ),
             (
                 # User (access control: only principal name)
@@ -3213,6 +3376,138 @@ class TestSharepointOnlineDataSource:
                     "RoleDefinitionBindings": READ_BINDING,
                 },
                 [],
+            ),
+            (
+                # User with limited access has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": LIMITED_ACCESS_BINDING,
+                },
+                [],
+            ),
+            (
+                # User with web-only limited access has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": WEB_ONLY_BINDING,
+                },
+                [],
+            ),
+            (
+                # User with mixed access
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": READ_BINDING + LIMITED_ACCESS_BINDING,
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with empty mask (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "0"}}],
+                },
+                [],
+            ),
+            (
+                # User with non-read mask (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "2"}}],
+                },
+                [],
+            ),
+            (
+                # User with view item mask (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "1"}}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with view page mask (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "131072"}}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with "None" role type (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 0}],
+                },
+                [],
+            ),
+            (
+                # User with "Guest" role type (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 1}],
+                },
+                [],
+            ),
+            (
+                # User with "Restricted Guest" role type (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 9}],
+                },
+                [],
+            ),
+            (
+                # User with "Reader" role type (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 2}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with "System" role type (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 255}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
             ),
         ],
     )
