@@ -748,7 +748,7 @@ class SharepointServerDataSource(BaseDataSource):
                         else:
                             if is_site_page:
                                 yield document, partial(
-                                    self.sharepoint_client.get_site_pages_content,
+                                    self.get_site_pages_content,
                                     document,
                                     item,
                                 )
