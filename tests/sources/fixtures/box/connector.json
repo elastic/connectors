@@ -54,6 +54,18 @@
         "order": 5,
         "type": "int",
         "value": 999999
+    },
+    "concurrent_downloads": {
+        "default_value": 15,
+        "display": "numeric",
+        "label": "Maximum concurrent downloads",
+        "order": 6,
+        "required": false,
+        "type": "int",
+        "ui_restrictions": ["advanced"],
+        "validations": [
+            {"type": "less_than", "constraint": 16}
+        ]
     }
   },
   "filtering": [
