@@ -167,15 +167,14 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         filename = blob["title"]
-        file_extension = self.get_file_extension(filename).lower()
-
-        if not self.can_file_be_downloaded(file_extension, filename, file_size):
-            return
-
         if blob["tier"] == "Archive":
             self._logger.warning(
                 f"{filename} can't be downloaded as blob tier is archive"
             )
+            return
+
+        file_extension = self.get_file_extension(filename).lower()
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
