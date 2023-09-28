@@ -7,7 +7,6 @@ import asyncio
 import os
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
-from freezegun import freeze_time
 
 import pytest
 from elasticsearch import ConflictError

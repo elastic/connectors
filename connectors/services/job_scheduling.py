@@ -175,7 +175,7 @@ class JobSchedulingService(BaseService):
         expected_wake_up_time = self.next_wake_up_time
         actual_wake_up_time = datetime.utcnow()
 
-        self.next_wake_up_time = actual_wake_up_time + timedelta(seconds = self.idling)
+        self.next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
 
         @with_concurrency_control()
         async def _should_schedule(job_type):
@@ -197,7 +197,10 @@ class JobSchedulingService(BaseService):
                 job_type
             )
 
-            if last_sync_scheduled_at is not None and last_sync_scheduled_at > expected_wake_up_time:
+            if (
+                last_sync_scheduled_at is not None
+                and last_sync_scheduled_at > expected_wake_up_time
+            ):
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
@@ -213,7 +216,6 @@ class JobSchedulingService(BaseService):
             if next_sync is None:
                 connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
-
 
             if self.next_wake_up_time < next_sync:
                 next_sync_due = (next_sync - self.next_wake_up_time).total_seconds()
