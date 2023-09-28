@@ -5,6 +5,7 @@
 #
 """Tests the Dropbox source class methods"""
 import json
+from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
@@ -248,6 +249,11 @@ EXPECTED_CONTENT = {
     "_timestamp": "2023-01-01T06:06:06Z",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
+EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "id:1",
+    "_timestamp": "2023-01-01T06:06:06Z",
+    "body": RESPONSE_CONTENT,
+}
 
 MOCK_SEARCH_FILE_1 = {
     "has_more": False,
@@ -347,6 +353,23 @@ def setup_dropbox(source):
     source.configuration.get_field("app_key").value = "abc#123"
     source.configuration.get_field("app_secret").value = "abc#123"
     source.configuration.get_field("refresh_token").value = "abc#123"
+
+
+@asynccontextmanager
+async def create_dropbox_source(
+    use_text_extraction_service=False,
+    mock_access_token=True,
+):
+    async with create_source(
+        DropboxDataSource,
+        app_key="abc#123",
+        app_secret="abc#123",
+        refresh_token="abc#123",
+        use_text_extraction_service=use_text_extraction_service,
+    ) as source:
+        if mock_access_token:
+            source.dropbox_client._set_access_token = AsyncMock()
+        yield source
 
 
 @pytest.mark.asyncio
@@ -726,6 +749,31 @@ async def test_get_content_when_is_downloadable_is_true(
                     doit=True,
                 )
                 assert response == expected_content
+
+
+@pytest.mark.asyncio
+async def test_get_content_when_is_downloadable_is_true_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=RESPONSE_CONTENT,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_dropbox_source(use_text_extraction_service=True) as source:
+            with mock.patch(
+                "aiohttp.ClientSession.post", return_value=get_stream_reader()
+            ):
+                with mock.patch(
+                    "aiohttp.StreamReader.iter_chunked",
+                    return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+                ):
+                    response = await source.get_content(
+                        attachment=MOCK_ATTACHMENT,
+                        is_shared=True,
+                        doit=True,
+                    )
+                    assert response == EXPECTED_CONTENT_EXTRACTED
 
 
 @pytest.mark.asyncio

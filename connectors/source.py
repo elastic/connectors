@@ -29,7 +29,12 @@ from connectors.filtering.validation import (
     FilteringValidator,
 )
 from connectors.logger import logger
-from connectors.utils import convert_to_b64, hash_id
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    convert_to_b64,
+    get_file_extension,
+    hash_id,
+)
 
 CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
@@ -683,6 +688,32 @@ class BaseDataSource:
         NOTE modifying license key logic violates the Elastic License 2.0 that this code is licensed under
         """
         return False
+
+    def get_file_extension(self, filename):
+        return get_file_extension(filename)
+
+    def can_file_be_downloaded(self, file_extension, filename, file_size):
+        if file_extension == "":
+            self._logger.debug(
+                f"Files without extension are not supported, skipping {filename}."
+            )
+            return False
+
+        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
+            self._logger.debug(
+                f"Files with the extension {file_extension} are not supported, skipping {filename}."
+            )
+            return False
+
+        if file_size > FILE_SIZE_LIMIT and not self.configuration.get(
+            "use_text_extraction_service"
+        ):
+            self._logger.warning(
+                f"File size {file_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
+            )
+            return False
+
+        return True
 
     async def download_and_extract_file(
         self, doc, source_filename, file_extension, download_func
