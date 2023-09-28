@@ -21,8 +21,10 @@ from connectors.protocol import Features
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
+    DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
+    BadRequestError,
     DriveItemsPage,
     GraphAPIToken,
     InternalServerError,
@@ -43,8 +45,6 @@ from connectors.sources.sharepoint_online import (
     _prefix_email,
     _prefix_group,
     _prefix_identity,
-    _prefix_site_group,
-    _prefix_site_user_id,
     _prefix_user,
     _prefix_user_id,
     is_domain_group,
@@ -87,13 +87,7 @@ GROUP_ONE = "Group 1"
 
 GROUP_TWO = "Group 2"
 
-SITE_GROUP_ONE_ID = "site-group-id-1"
-
-SITE_GROUP_ONE = "site-group-1"
-
 USER_ONE_ID = "user-id-1"
-
-SITE_USER_ONE_ID = "site-user-id-1"
 
 USER_ONE_EMAIL = "user1@spo.com"
 
@@ -553,6 +547,36 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(DEFAULT_RETRY_SECONDS)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_429_with_retry_after_and_backoff(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+
+        retry_count = 3
+        for _i in range(retry_count):
+            mock_responses.get(url, exception=first_request_error)
+
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(
+            DEFAULT_RETRY_SECONDS * DEFAULT_BACKOFF_MULTIPLIER * retry_count
+        )
+
+    @pytest.mark.asyncio
     async def test_call_api_with_403(
         self,
         microsoft_api_session,
@@ -567,6 +591,8 @@ class TestMicrosoftAPISession:
         unauthorized_error.status = 403
         unauthorized_error.message = "Something went wrong"
 
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
@@ -622,8 +648,33 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
 
         with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._get(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_400_without_retry_after_header(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        bad_request_error = ClientResponseError(None, None)
+        bad_request_error.status = 400
+        bad_request_error.message = "You did something wrong"
+
+        mock_responses.get(url, exception=bad_request_error)
+
+        with pytest.raises(BadRequestError) as e:
             async with microsoft_api_session._get(url) as _:
                 pass
 
@@ -646,6 +697,8 @@ class TestMicrosoftAPISession:
         not_found_error.status = 420
         not_found_error.message = error_message
 
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
@@ -795,7 +848,7 @@ class TestSharepointOnlineClient:
         ]
 
         returned_items = await self._execute_scrolling_method(
-            partial(client.sites, root_site, WILDCARD), patch_scroll, actual_items
+            partial(client.sites, root_site, [WILDCARD]), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
@@ -819,6 +872,59 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == len(filter_)
         assert actual_items[0] in returned_items
         assert actual_items[2] in returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually(self, client, patch_fetch):
+        root_site = "root"
+        actual_items = [
+            {"name": "First"},
+            {"name": "Third"},
+        ]
+        filter_ = ["First", "Third"]
+        patch_fetch.side_effect = actual_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=False
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == len(filter_)
+        assert actual_items == returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually_plus_subsites(
+        self, client, patch_fetch, patch_scroll
+    ):
+        root_site = "root"
+        root_item = {
+            "name": "First",
+            "id": "first",
+            "sites": [{"name": "Second"}],
+        }
+        sub_items = [
+            AsyncIterator(
+                [[{"name": "Second", "id": "second", "sites": [{"name": "Third"}]}]]
+            ),
+            AsyncIterator([[{"name": "Third", "id": "third"}]]),
+        ]
+        expected_items = [
+            {"name": "First", "id": "first"},
+            {"name": "Second", "id": "second"},
+            {"name": "Third", "id": "third"},
+        ]
+        filter_ = ["First"]
+        patch_fetch.side_effect = [root_item]
+        patch_scroll.side_effect = sub_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=True
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == 3
+        assert returned_items == expected_items
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
@@ -1071,29 +1177,6 @@ class TestSharepointOnlineClient:
         assert http_call_result == actual_result
 
     @pytest.mark.asyncio
-    async def test_site_group(self, client, patch_fetch):
-        site_groups_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/sitegroups"
-        group_principal_id = "1"
-        group = {"id": group_principal_id}
-
-        patch_fetch.return_value = group
-
-        actual_group = await client.site_group(site_groups_url, group_principal_id)
-
-        assert actual_group == group
-
-    @pytest.mark.asyncio
-    async def test_site_group_not_found(self, client, patch_fetch):
-        site_groups_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/sitegroups"
-        group_principal_id = "1"
-
-        patch_fetch.side_effect = NotFound()
-
-        site_group = await client.site_group(site_groups_url, group_principal_id)
-
-        assert len(site_group) == 0
-
-    @pytest.mark.asyncio
     async def test_site_users(self, client, patch_scroll):
         site_users_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/siteusers"
         users = ["user1", "user2"]
@@ -1267,6 +1350,20 @@ class TestSharepointOnlineClient:
         list_item_id = 1
 
         patch_fetch.side_effect = NotFound()
+
+        assert not await client.site_list_item_has_unique_role_assignments(
+            site_list_item_role_assignments_url, list_title, list_item_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_has_unique_role_assignments_bad_request(
+        self, client, patch_fetch
+    ):
+        site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        patch_fetch.side_effect = BadRequestError()
 
         assert not await client.site_list_item_has_unique_role_assignments(
             site_list_item_role_assignments_url, list_title, list_item_id
@@ -1572,7 +1669,7 @@ class TestSharepointOnlineDataSource:
         return [
             {
                 "id": "1",
-                "webUrl": "https://test.sharepoint.com/site-1",
+                "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
             }
@@ -1687,10 +1784,6 @@ class TestSharepointOnlineDataSource:
         return {"id": GROUP_ONE_ID}
 
     @property
-    def site_groups(self):
-        return [{"Title": GROUP_ONE}, {"Title": GROUP_TWO}, {}, {"Title": None}]
-
-    @property
     def site_users(self):
         return [
             {"UserPrincipalName": USER_ONE_EMAIL},
@@ -1762,13 +1855,9 @@ class TestSharepointOnlineDataSource:
                     "user": {
                         "id": USER_ONE_ID,
                     },
-                    "siteUser": {
-                        "id": SITE_USER_ONE_ID,
-                    },
                     "group": {
                         "id": GROUP_ONE_ID,
                     },
-                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
                 },
             },
             {
@@ -1777,13 +1866,9 @@ class TestSharepointOnlineDataSource:
                     "user": {
                         "id": USER_ONE_ID,
                     },
-                    "siteUser": {
-                        "id": SITE_USER_ONE_ID,
-                    },
                     "group": {
                         "id": GROUP_ONE_ID,
                     },
-                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
                 },
             },
             {
@@ -1792,13 +1877,9 @@ class TestSharepointOnlineDataSource:
                     "user": {
                         "id": USER_ONE_ID,
                     },
-                    "siteUser": {
-                        "id": SITE_USER_ONE_ID,
-                    },
                     "group": {
                         "id": GROUP_ONE_ID,
                     },
-                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
                 },
             },
             {
@@ -1807,13 +1888,9 @@ class TestSharepointOnlineDataSource:
                     "user": {
                         "id": USER_ONE_ID,
                     },
-                    "siteUser": {
-                        "id": SITE_USER_ONE_ID,
-                    },
                     "group": {
                         "id": GROUP_ONE_ID,
                     },
-                    "siteGroup": {"id": SITE_GROUP_ONE_ID},
                 },
             },
         ]
@@ -1839,7 +1916,6 @@ class TestSharepointOnlineDataSource:
             client = new_mock.return_value
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
-            client.site_group = AsyncIterator(self.site_groups)
             client.user_information_list = AsyncIterator(self.user_information_list)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
@@ -2000,8 +2076,6 @@ class TestSharepointOnlineDataSource:
 
             expected_drive_item_access_control = [
                 _prefix_user_id(USER_ONE_ID),
-                _prefix_site_group(SITE_GROUP_ONE_ID),
-                _prefix_site_user_id(SITE_USER_ONE_ID),
                 _prefix_group(GROUP_ONE_ID),
                 *expected_access_control,
             ]
@@ -2200,11 +2274,9 @@ class TestSharepointOnlineDataSource:
             )
             drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
-            assert len(drive_item_access_control) == 4
+            assert len(drive_item_access_control) == 2
             assert _prefix_user_id(USER_ONE_ID) in drive_item_access_control
             assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
-            assert _prefix_site_user_id(SITE_USER_ONE_ID) in drive_item_access_control
-            assert _prefix_site_group(SITE_GROUP_ONE_ID) in drive_item_access_control
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
@@ -2297,8 +2369,6 @@ class TestSharepointOnlineDataSource:
 
             expected_drive_item_access_control = [
                 _prefix_user_id(USER_ONE_ID),
-                _prefix_site_group(SITE_GROUP_ONE_ID),
-                _prefix_site_user_id(SITE_USER_ONE_ID),
                 _prefix_group(GROUP_ONE_ID),
             ]
 
@@ -2444,6 +2514,7 @@ class TestSharepointOnlineDataSource:
             # Therefore it's important
             patch_sharepoint_client.graph_api_token.get.assert_awaited()
             patch_sharepoint_client.rest_api_token.get.assert_awaited()
+            patch_sharepoint_client.site_collections.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_validate_config_when_invalid_tenant(self, patch_sharepoint_client):
@@ -2487,6 +2558,40 @@ class TestSharepointOnlineDataSource:
             # Says which site does not exist
             assert e.match(non_existing_site)
             assert e.match(another_non_existing_site)
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_all_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site-1"
+
+        async with create_source(
+            SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
+            site_collections=[existing_site],
+            enumerate_all_sites=True,
+        ) as source:
+            await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_individual_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site_1"
+
+        async with create_source(
+            SharepointOnlineDataSource,
+            tenant_id="1",
+            tenant_name="test",
+            client_id="2",
+            secret_value="3",
+            site_collections=[existing_site],
+            enumerate_all_sites=False,
+        ) as source:
+            await source.validate_config()
 
     @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
@@ -3055,16 +3160,6 @@ class TestSharepointOnlineDataSource:
         email = "email"
 
         assert _prefix_email(email) == "email:email"
-
-    def test_prefix_site_group(self):
-        site_group = "site group"
-
-        assert _prefix_site_group(site_group) == "site_group:site group"
-
-    def test_prefix_site_user_id(self):
-        site_user_id = "site user id"
-
-        assert _prefix_site_user_id(site_user_id) == "site_user_id:site user id"
 
     def test_prefix_user_id(self):
         user_id = "user id"

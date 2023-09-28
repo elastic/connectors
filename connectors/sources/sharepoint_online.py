@@ -63,9 +63,10 @@ else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
 
-DEFAULT_RETRY_COUNT = 3
+DEFAULT_RETRY_COUNT = 5
 DEFAULT_RETRY_SECONDS = 30
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
+DEFAULT_BACKOFF_MULTIPLIER = 5
 FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
@@ -88,6 +89,15 @@ class NotFound(Exception):
 
     It's not an exception for us, we just want to return [], and this exception class facilitates it.
     """
+
+    pass
+
+
+class BadRequestError(Exception):
+    """Internal exception class to handle 400's from the API.
+
+    Similar to the NotFound exception, this allows us to catch edge-case responses that should
+    be translated as empty resutls, and let us return []."""
 
     pass
 
@@ -283,10 +293,10 @@ def retryable_aiohttp_call(retries):
             retry = 1
             while retry <= retries:
                 try:
-                    async for item in func(*args, **kwargs):
+                    async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except NotFound:
+                except (NotFound, BadRequestError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -364,7 +374,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _post(self, absolute_url, payload=None):
+    async def _post(self, absolute_url, payload=None, retry_count=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -380,11 +390,11 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            await self._handle_client_response_error(absolute_url, e, retry_count)
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _get(self, absolute_url):
+    async def _get(self, absolute_url, retry_count=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -401,20 +411,26 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            await self._handle_client_response_error(absolute_url, e, retry_count)
 
-    async def _handle_client_response_error(self, absolute_url, e):
+    async def _handle_client_response_error(self, absolute_url, e, retry_count):
         if e.status == 429 or e.status == 503:
             response_headers = e.headers or {}
+
             if "Retry-After" in response_headers:
-                retry_seconds = int(response_headers["Retry-After"])
+                retry_after = int(response_headers["Retry-After"])
             else:
                 self._logger.warning(
                     f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
-                retry_seconds = DEFAULT_RETRY_SECONDS
-            self._logger.debug(
-                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                retry_after = DEFAULT_RETRY_SECONDS
+
+            retry_seconds = self._compute_retry_after(
+                retry_after, retry_count, DEFAULT_BACKOFF_MULTIPLIER
+            )
+
+            self._logger.warning(
+                f"Rate Limited by Sharepoint: a new attempt will be performed in {retry_seconds} seconds (retry-after header: {retry_after}, retry_count: {retry_count}, backoff: {DEFAULT_BACKOFF_MULTIPLIER})"
             )
 
             await self._sleeps.sleep(retry_seconds)
@@ -429,8 +445,19 @@ class MicrosoftAPISession:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
         elif e.status == 500:
             raise InternalServerError from e
+        elif e.status == 400:
+            self._logger.warning(f"Received 400 response from {absolute_url}")
+            raise BadRequestError from e
         else:
             raise
+
+    def _compute_retry_after(self, retry_after, retry_count, backoff):
+        # Wait for what Sharepoint API asks after the first failure.
+        # Apply backoff if API is still not available.
+        if retry_count <= 1:
+            return retry_after
+        else:
+            return retry_after * retry_count * backoff
 
 
 class SharepointOnlineClient:
@@ -510,16 +537,6 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def site_group(self, site_web_url, group_principal_id):
-        self._validate_sharepoint_rest_url(site_web_url)
-
-        url = f"{site_web_url}/_api/web/sitegroups/getbyid({group_principal_id})"
-
-        try:
-            return await self._rest_api_client.fetch(url)
-        except NotFound:
-            return {}
-
     async def user_information_list(self, site_id):
         expand = "fields"
         url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
@@ -585,20 +602,82 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def sites(self, parent_site_id, allowed_root_sites):
-        select = ""
+    async def sites(
+        self,
+        sharepoint_host,
+        allowed_root_sites,
+        enumerate_all_sites=True,
+        fetch_subsites=False,
+    ):
+        if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
+            self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
+            async for site in self._all_sites(sharepoint_host, allowed_root_sites):
+                yield site
+        else:
+            self._logger.debug(f"Looking up individual sites: {allowed_root_sites}")
+            for allowed_site in allowed_root_sites:
+                try:
+                    if fetch_subsites:
+                        async for site in self._fetch_site_and_subsites_by_path(
+                            sharepoint_host, allowed_site
+                        ):
+                            yield site
+                    else:
+                        yield await self._fetch_site(sharepoint_host, allowed_site)
 
+                except NotFound:
+                    self._logger.warning(
+                        f"Could not look up site '{allowed_site}' by relative path in parent site: {sharepoint_host}"
+                    )
+
+    async def _all_sites(self, sharepoint_host, allowed_root_sites):
+        select = ""
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
         ):
             for site in page:
                 # Filter out site collections that are not needed
-                if (
-                    WILDCARD not in allowed_root_sites
-                    and site["name"] not in allowed_root_sites
-                ):
+                if [WILDCARD] != allowed_root_sites and site[
+                    "name"
+                ] not in allowed_root_sites:
                     continue
+                yield site
 
+    async def _fetch_site_and_subsites_by_path(self, sharepoint_host, allowed_site):
+        self._logger.debug(
+            f"Requesting site '{allowed_site}' and subsites by relative path in host: {sharepoint_host}"
+        )
+        site_with_subsites = await self._graph_api_client.fetch(
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}?expand=sites"
+        )
+        async for site in self._recurse_sites(site_with_subsites):
+            yield site
+
+    async def _fetch_site(self, sharepoint_host, allowed_site):
+        self._logger.debug(
+            f"Requesting site '{allowed_site}' by relative path in parent site: {sharepoint_host}"
+        )
+        return await self._graph_api_client.fetch(
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}"
+        )
+
+    async def _scroll_subsites_by_parent_id(self, parent_site_id):
+        self._logger.debug(f"Scrolling subsites of {parent_site_id}")
+        async for page in self._graph_api_client.scroll(
+            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?expand=sites"
+        ):
+            for site in page:
+                async for subsite in self._recurse_sites(site):  # pyright: ignore
+                    yield subsite
+
+    async def _recurse_sites(self, site_with_subsites):
+        subsites = site_with_subsites.pop("sites", [])
+        site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
+        yield site_with_subsites
+        if subsites:
+            async for site in self._scroll_subsites_by_parent_id(
+                site_with_subsites["id"]
+            ):
                 yield site
 
     async def site_drives(self, site_id):
@@ -710,6 +789,11 @@ class SharepointOnlineClient:
             response = await self._rest_api_client.fetch(url)
             return response.get("value", False)
         except NotFound:
+            return False
+        except BadRequestError:
+            self._logger.warning(
+                f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
             return False
 
     async def site_list_item_role_assignments(
@@ -934,16 +1018,8 @@ def _prefix_group(group):
     return _prefix_identity("group", group)
 
 
-def _prefix_site_group(site_group):
-    return _prefix_identity("site_group", site_group)
-
-
 def _prefix_user(user):
     return _prefix_identity("user", user)
-
-
-def _prefix_site_user_id(site_user_id):
-    return _prefix_identity("site_user_id", site_user_id)
 
 
 def _prefix_user_id(user_id):
@@ -1110,10 +1186,27 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "type": "list",
                 "value": "",
             },
+            "enumerate_all_sites": {
+                "display": "toggle",
+                "label": "Enumerate all sites?",
+                "tooltip": 'Whether sites should be fetched by name from "all sites". If disabled, each configured site will be fetched with an individual request.',
+                "order": 6,
+                "type": "bool",
+                "value": True,
+            },
+            "fetch_subsites": {
+                "display": "toggle",
+                "label": "Fetch sub-sites of configured sites?",
+                "tooltip": "Whether subsites of the configured site(s) should be automatically fetched.",
+                "order": 7,
+                "type": "bool",
+                "value": True,
+                "depends_on": [{"field": "enumerate_all_sites", "value": False}],
+            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 6,
+                "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "value": False,
@@ -1121,7 +1214,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 7,
+                "order": 9,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1130,7 +1223,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
-                "order": 8,
+                "order": 10,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
                 "value": True,
@@ -1139,7 +1232,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 9,
+                "order": 11,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1148,7 +1241,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list permissions",
-                "order": 10,
+                "order": 12,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1157,7 +1250,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
-                "order": 11,
+                "order": 13,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1188,24 +1281,35 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
-
-        remote_sites = []
-
-        async for site_collection in self.client.site_collections():
-            async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"], [WILDCARD]
-            ):
-                remote_sites.append(site["name"])
-
         if WILDCARD in configured_root_sites:
             return
 
-        missing = [x for x in configured_root_sites if x not in remote_sites]
+        retrieved_sites = []
+
+        async for site_collection in self.client.site_collections():
+            async for site in self.client.sites(
+                site_collection["siteCollection"]["hostname"],
+                configured_root_sites,
+                self.configuration["enumerate_all_sites"],
+            ):
+                if self.configuration["enumerate_all_sites"]:
+                    retrieved_sites.append(site["name"])
+                else:
+                    retrieved_sites.append(self._site_path_from_web_url(site["webUrl"]))
+
+        missing = [x for x in configured_root_sites if x not in retrieved_sites]
 
         if missing:
             raise Exception(
-                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
+                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
             )
+
+    def _site_path_from_web_url(self, web_url):
+        url_parts = web_url.split("/sites/")
+        site_path_parts = url_parts[1:]
+        return "/sites/".join(
+            site_path_parts
+        )  # just in case there was a /sites/ in the site path
 
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
@@ -1671,6 +1775,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site in self.client.sites(
             hostname,
             collections,
+            enumerate_all_sites=self.configuration["enumerate_all_sites"],
+            fetch_subsites=self.configuration["fetch_subsites"],
         ):  # TODO: simplify and eliminate root call
             site["_id"] = site["id"]
             site["object_type"] = "site"
@@ -1749,20 +1855,12 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             user_id = _get_id(granted_to_v2, "user")
             group_id = _get_id(granted_to_v2, "group")
-            site_group_id = _get_id(granted_to_v2, "siteGroup")
-            site_user_id = _get_id(granted_to_v2, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
 
             if group_id:
                 access_control.append(_prefix_group(group_id))
-
-            if site_group_id:
-                access_control.append(_prefix_site_group(site_group_id))
-
-            if site_user_id:
-                access_control.append(_prefix_site_user_id(site_user_id))
 
         return self._decorate_with_access_control(drive_item, access_control)
 
