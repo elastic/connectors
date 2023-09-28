@@ -388,28 +388,6 @@ class ZoomDataSource(BaseDataSource):
         )
         return doc
 
-    def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
-    ):
-        if attachment_extension == "":
-            self._logger.warning(
-                f"Files without extension are not supported, skipping {attachment_name}."
-            )
-            return False
-
-        if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
-            )
-            return False
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return False
-        return True
-
     async def get_content(self, chat_file, timestamp=None, doit=False):
         file_size = chat_file["file_size"]
         if not (doit and file_size > 0):
