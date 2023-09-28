@@ -42,7 +42,7 @@ CHUNK_SIZE = 1024
 FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # ~ 5 MB
 MAX_CONCURRENCY = 2000
-CONCURRENT_DOWNLOADS = 15
+MAX_CONCURRENT_DOWNLOADS = 15
 FIELDS = "name,modified_at,size,type,sequence_id,etag,created_at,modified_at,content_created_at,content_modified_at,description,created_by,modified_by,owned_by,parent,item_status"
 FILE = "file"
 BOX_FREE = "box_free"
@@ -147,8 +147,7 @@ class BoxClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def _put_to_sleep(self, exception):
-        retry_after = int(exception.headers.get("retry-after", 5))
+    async def _put_to_sleep(self, retry_after):
         self._logger.debug(
             f"Connector will attempt to retry after {retry_after} seconds."
         )
@@ -161,7 +160,8 @@ class BoxClient:
                 await self.token._set_access_token()
                 raise
             case 429:
-                await self._put_to_sleep(exception=exception)
+                retry_after = int(exception.headers.get("retry-after", 5))
+                await self._put_to_sleep(retry_after=retry_after)
             case 404:
                 raise NotFound(f"Resource Not Found. Error: {exception}")
             case _:
@@ -218,6 +218,7 @@ class BoxDataSource(BaseDataSource):
         self.is_enterprise = configuration["is_enterprise"]
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
+        self.concurrent_downloads = configuration["concurrent_downloads"]
 
     def _set_internal_logger(self):
         self.client.set_logger(logger_=self._logger)
@@ -232,7 +233,7 @@ class BoxDataSource(BaseDataSource):
         Args:
             options (dict): Config bulker options.
         """
-        options["concurrent_downloads"] = CONCURRENT_DOWNLOADS
+        options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
     def get_default_configuration(cls):
@@ -277,9 +278,23 @@ class BoxDataSource(BaseDataSource):
                 "order": 5,
                 "type": "int",
             },
+            "concurrent_downloads": {
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
+                "display": "numeric",
+                "label": "Maximum concurrent downloads",
+                "order": 6,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
+            },
         }
 
     async def close(self):
+        while not self.queue.empty():
+            await self.queue.get()
         await self.client.close()
 
     async def ping(self):
@@ -296,7 +311,7 @@ class BoxDataSource(BaseDataSource):
         ):
             yield user.get("id")
 
-    async def _fetch_files_folders(self, doc_id, user_id=None):
+    async def _fetch(self, doc_id, user_id=None):
         try:
             params = {
                 "fields": FIELDS,
@@ -324,7 +339,7 @@ class BoxDataSource(BaseDataSource):
                     await self.queue.put((doc, None))
                     await self.fetchers.put(
                         partial(
-                            self._fetch_files_folders,
+                            self._fetch,
                             doc_id=folder_entry.get("id"),
                             user_id=user_id,
                         )
@@ -440,9 +455,9 @@ class BoxDataSource(BaseDataSource):
         if self.is_enterprise == BOX_ENTERPRISE:
             async for user_id in self.get_users_id():
                 # "0" refers to the root folder
-                await self._fetch_files_folders(doc_id="0", user_id=user_id)
+                await self._fetch(doc_id="0", user_id=user_id)
         else:
-            await self._fetch_files_folders(doc_id="0")
+            await self._fetch(doc_id="0")
 
         self.tasks += 1
         async for item in self._consumer():
