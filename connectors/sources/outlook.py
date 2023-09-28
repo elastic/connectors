@@ -32,12 +32,10 @@ from ldap3 import SAFE_SYNC, Connection, Server
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
-    get_base64_value,
     get_pem_format,
     html_to_text,
     retryable,
@@ -700,14 +698,12 @@ class OutlookDataSource(BaseDataSource):
                 "label": "Tenant ID",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_CLOUD}],
                 "label": "Client ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "client_secret": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_CLOUD}],
@@ -715,7 +711,6 @@ class OutlookDataSource(BaseDataSource):
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "exchange_server": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
@@ -723,7 +718,6 @@ class OutlookDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "Exchange server's IP address. E.g. 127.0.0.1",
                 "type": "str",
-                "value": "",
             },
             "active_directory_server": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
@@ -731,14 +725,12 @@ class OutlookDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "Active Directory server's IP address. E.g. 127.0.0.1",
                 "type": "str",
-                "value": "",
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server username",
                 "order": 7,
                 "type": "str",
-                "value": "",
             },
             "password": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
@@ -746,7 +738,6 @@ class OutlookDataSource(BaseDataSource):
                 "order": 8,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "domain": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
@@ -754,7 +745,6 @@ class OutlookDataSource(BaseDataSource):
                 "order": 9,
                 "tooltip": "Domain name such as gmail.com, outlook.com",
                 "type": "str",
-                "value": "",
             },
             "ssl_enabled": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
@@ -772,34 +762,19 @@ class OutlookDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 11,
                 "type": "str",
-                "value": "",
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 7,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
             },
         }
 
     async def close(self):
         await self.client._get_user_instance.close()
-
-    def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
-    ):
-        if attachment_extension == "":
-            self._logger.debug(
-                f"Files without extension are not supported, skipping {attachment_name}."
-            )
-            return
-
-        if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(
-                f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
-            )
-            return
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-        return True
 
     async def get_content(self, attachment, timezone, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
@@ -813,35 +788,40 @@ class OutlookDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        attachment_size = attachment.size
-        if not (doit and attachment_size > 0):
+        file_size = attachment.size
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = attachment.name
-        attachment_extension = (
-            attachment_name[attachment_name.rfind(".") :]  # noqa
-            if "." in attachment_name
-            else ""
-        )
-
-        if not self._pre_checks_for_get_content(
-            attachment_extension=attachment_extension,
-            attachment_name=attachment_name,
-            attachment_size=attachment_size,
+        filename = attachment.name
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(
+            file_extension,
+            filename,
+            file_size,
         ):
             return
-
-        self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
             "_id": attachment.attachment_id.id,
             "_timestamp": ews_format_to_datetime(
                 source_datetime=attachment.last_modified_time, timezone=timezone
             ),
-            "_attachment": get_base64_value(attachment.content),
         }
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(self.download_func, attachment.content),
+        )
 
-        return document
+    async def download_func(self, content):
+        """This is a fake-download function
+        Its only purpose is to allow attachment content to be
+        written to a temp file.
+        This is because outlook doesn't download files,
+        it instead contains a key with bytes in its response.
+        """
+        yield content
 
     async def _fetch_attachments(self, attachment_type, outlook_object, timezone):
         for attachment in outlook_object.attachments:
