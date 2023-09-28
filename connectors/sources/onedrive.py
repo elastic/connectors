@@ -19,6 +19,11 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 from wcmatch import glob
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -31,6 +36,7 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     convert_to_b64,
+    iso_utc,
     retryable,
 )
 
@@ -46,15 +52,18 @@ FILE = "file"
 FOLDER = "folder"
 
 USERS = "users"
-CONTENT = "content"
+GROUPS = "groups"
+PERMISSIONS = "permissions"
 DELTA = "delta"
 PING = "ping"
+ITEM_FIELDS = "id,name,lastModifiedDateTime,content.downloadUrl,createdDateTime,size,webUrl,parentReference,file,folder"
 
 ENDPOINTS = {
     PING: "drives",
     USERS: "users",
+    GROUPS: "users/{user_id}/transitiveMemberOf",
+    PERMISSIONS: "users/{user_id}/drive/items/{item_id}/permissions",
     DELTA: "users/{user_id}/drive/root/delta",
-    CONTENT: "users/{user_id}/drive/items/{item_id}/content",
 }
 
 if "OVERRIDE_URL" in os.environ:
@@ -70,6 +79,22 @@ if "OVERRIDE_URL" in os.environ:
 else:
     BASE_URL = "https://graph.microsoft.com/v1.0/"
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
+
+
+def _prefix_email(email):
+    return prefix_identity("email", email)
+
+
+def _prefix_user(user):
+    return prefix_identity("user", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
+
+
+def _prefix_group(group):
+    return prefix_identity("group", group)
 
 
 class TokenRetrievalError(Exception):
@@ -276,10 +301,13 @@ class OneDriveClient:
             else:
                 raise
 
-    async def paginated_api_call(self, url_name, **url_kwargs):
-        url = parse.urljoin(BASE_URL, ENDPOINTS[url_name].format(**url_kwargs))
-        url = f"{url}?$top={FETCH_SIZE}"
+    async def paginated_api_call(self, url, params=None, fetch_size=FETCH_SIZE):
+        if params is None:
+            params = {}
+        params["$top"] = fetch_size
+        params = "&".join(f"{key}={val}" for key, val in params.items())
 
+        url = f"{url}?{params}"
         while True:
             try:
                 async for response in self.get(
@@ -298,17 +326,43 @@ class OneDriveClient:
                         return
             except Exception as exception:
                 self._logger.warning(
-                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
+                    f"Skipping data for {url}. Exception: {exception}."
                 )
                 break
 
-    async def list_users(self):
-        async for response in self.paginated_api_call(url_name=USERS):
+    async def list_users(self, include_groups=False):
+        params = {
+            "$filter": "accountEnabled eq true",
+            "$select": "userPrincipalName,mail,transitiveMemberOf,id,createdDateTime",
+        }
+        if include_groups:
+            params["$expand"] = "transitiveMemberOf($select=id)"
+        url = parse.urljoin(BASE_URL, ENDPOINTS[USERS])
+
+        async for response in self.paginated_api_call(url, params):
             for user_detail in response:
                 yield user_detail
 
+    async def list_groups(self, user_id):
+        url = parse.urljoin(BASE_URL, ENDPOINTS[GROUPS].format(user_id=user_id))
+        async for response in self.paginated_api_call(url):
+            for group_detail in response:
+                yield group_detail
+
+    async def list_file_permission(self, user_id, file_id):
+        url = parse.urljoin(
+            BASE_URL, ENDPOINTS[PERMISSIONS].format(user_id=user_id, item_id=file_id)
+        )
+        async for response in self.paginated_api_call(url):
+            for permission_detail in response:
+                yield permission_detail
+
     async def get_owned_files(self, user_id, skipped_extensions=None, pattern=""):
-        async for response in self.paginated_api_call(url_name=DELTA, user_id=user_id):
+        params = {"$select": ITEM_FIELDS}
+        delta_endpoint = ENDPOINTS[DELTA].format(user_id=user_id)
+
+        url = parse.urljoin(BASE_URL, delta_endpoint)
+        async for response in self.paginated_api_call(url, params):
             for file in response:
                 if file.get("name", "") != "root":
                     parent_path = file.get("parentReference", {}).get("path")
@@ -319,7 +373,7 @@ class OneDriveClient:
                     if has_skipped_extension or (pattern and not is_match):
                         continue
                     else:
-                        yield file
+                        yield file, file.get("@microsoft.graph.downloadUrl")
 
 
 class OneDriveDataSource(BaseDataSource):
@@ -328,6 +382,7 @@ class OneDriveDataSource(BaseDataSource):
     name = "OneDrive"
     service_type = "onedrive"
     advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to OneDrive
@@ -337,6 +392,7 @@ class OneDriveDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.configuration = configuration
+        self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
     @cached_property
     def client(self):
@@ -378,7 +434,33 @@ class OneDriveDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
             },
+            "concurrent_downloads": {
+                "default_value": DEFAULT_PARALLEL_CONNECTION_COUNT,
+                "display": "numeric",
+                "label": "Maximum concurrent downloads",
+                "order": 5,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+            },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 6,
+                "tooltip": "Document level security ensures identities and permissions set in OneDrive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def tweak_bulk_options(self, options):
+        """Tweak bulk options as per concurrent downloads support by ServiceNow
+
+        Args:
+            options (dict): Config bulker options.
+        """
+
+        options["concurrent_downloads"] = self.concurrent_downloads
 
     def advanced_rules_validators(self):
         return [OneDriveAdvancedRulesValidator(self)]
@@ -419,16 +501,10 @@ class OneDriveDataSource(BaseDataSource):
             return
         return True
 
-    async def _get_document_with_content(
-        self, file, attachment_name, document, user_id
-    ):
+    async def _get_document_with_content(self, attachment_name, document, url):
         temp_filename = ""
 
         async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            url = parse.urljoin(
-                BASE_URL,
-                ENDPOINTS[CONTENT].format(user_id=user_id, item_id=file["_id"]),
-            )
             async for response in self.client.get(url=url):
                 async for data in response.content.iter_chunked(n=CHUNK_SIZE):
                     await async_buffer.write(data)
@@ -452,18 +528,19 @@ class OneDriveDataSource(BaseDataSource):
             )
         return document
 
-    async def get_content(self, file, user_id, timestamp=None, doit=False):
+    async def get_content(self, file, download_url, timestamp=None, doit=False):
         """Extracts the content for allowed file types.
 
         Args:
             file (dict): File metadata
-            user_id (str): User ID of OneDrive user
+            download_url (str): Download URL for the file
             timestamp (timestamp, optional): Timestamp of file last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
             dictionary: Content document with _id, _timestamp and file content
         """
+
         attachment_size = int(file["size"])
         if not (doit and attachment_size > 0):
             return
@@ -491,10 +568,9 @@ class OneDriveDataSource(BaseDataSource):
         }
 
         return await self._get_document_with_content(
-            file=file,
             attachment_name=attachment_name,
             document=document,
-            user_id=user_id,
+            url=download_url,
         )
 
     def prepare_doc(self, file):
@@ -507,6 +583,88 @@ class OneDriveDataSource(BaseDataSource):
             "size": file.get("size"),
             "url": file.get("webUrl"),
         }
+
+    def _dls_enabled(self):
+        if self._features is None:
+            return False
+
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    async def _decorate_with_access_control(self, document, user_id, file_id):
+        if self._dls_enabled():
+            entity_permissions = await self.get_entity_permission(
+                user_id=user_id, file_id=file_id
+            )
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + entity_permissions)
+            )
+        return document
+
+    async def _user_access_control_doc(self, user):
+        email = user.get("mail")
+        username = user.get("userPrincipalName")
+
+        prefixed_email = _prefix_email(email)
+        prefixed_username = _prefix_user(username)
+        prefixed_user_id = _prefix_user_id(user.get("id"))
+
+        prefixed_groups = set()
+        user_groups = user.get("transitiveMemberOf", [])
+        if len(user_groups) < 100:  # $expand param has a max of 100
+            for group in user_groups:
+                prefixed_groups.add(_prefix_group(group.get("id")))
+        else:
+            async for group in self.client.list_groups(user_id=user.get("id")):
+                prefixed_groups.add(_prefix_group(group.get("id")))
+
+        access_control = list(
+            {prefixed_email, prefixed_username, prefixed_user_id}.union(prefixed_groups)
+        )
+        return {
+            "_id": email if email else username,
+            "identity": {
+                "email": prefixed_email,
+                "username": prefixed_username,
+                "user_id": prefixed_user_id,
+            },
+            "created_at": user.get("createdDateTime", iso_utc()),
+        } | es_access_control_query(access_control)
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        self._logger.info("Fetching all users")
+        async for user in self.client.list_users(include_groups=True):
+            yield await self._user_access_control_doc(user=user)
+
+    async def get_entity_permission(self, user_id, file_id):
+        if not self._dls_enabled():
+            return []
+
+        permissions = []
+        async for permission in self.client.list_file_permission(
+            user_id=user_id, file_id=file_id
+        ):
+            if identity := permission.get("grantedToV2"):
+                permissions.append(_prefix_user_id(identity.get("user").get("id")))
+
+            if identities := permission.get("grantedToIdentitiesV2"):
+                for identity in identities:
+                    user_permission = identity.get("user", {}).get("id")
+                    group_permission = identity.get("group", {}).get("id")
+
+                    if user_permission:
+                        permissions.append(_prefix_user_id(user_permission))
+
+                    if group_permission:
+                        permissions.append(_prefix_group(group_permission))
+
+        return permissions
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch OneDrive objects in async manner
@@ -535,13 +693,13 @@ class OneDriveDataSource(BaseDataSource):
 
                 for mail in user_mails:
                     user_id = user_mail_id_map.get(mail)
-                    async for entity in self.client.get_owned_files(
+                    async for entity, download_url in self.client.get_owned_files(
                         user_id, skipped_extensions, pattern
                     ):
                         entity = self.prepare_doc(entity)
-                        if entity["type"] == FILE:
+                        if entity["type"] == FILE and download_url:
                             yield entity, partial(
-                                self.get_content, entity.copy(), user_id
+                                self.get_content, entity.copy(), download_url
                             )
                         else:
                             yield entity, None
@@ -549,9 +707,13 @@ class OneDriveDataSource(BaseDataSource):
             async for user in self.client.list_users():
                 user_id = user.get("id")
 
-                async for entity in self.client.get_owned_files(user_id):
+                async for entity, download_url in self.client.get_owned_files(user_id):
                     entity = self.prepare_doc(entity)
-                    if entity["type"] == FILE:
-                        yield entity, partial(self.get_content, entity.copy(), user_id)
+                    if entity["type"] == FILE and download_url:
+                        yield await self._decorate_with_access_control(
+                            entity, user_id, entity.get("_id")
+                        ), partial(self.get_content, entity.copy(), download_url)
                     else:
-                        yield entity, None
+                        yield await self._decorate_with_access_control(
+                            entity, user_id, entity.get("_id")
+                        ), None

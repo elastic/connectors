@@ -7,16 +7,20 @@ import asyncio
 import datetime
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
+from elasticsearch import BadRequestError
 
-from connectors.es.settings import TEXT_FIELD_MAPPING
+from connectors.es import Mappings
+from connectors.es.settings import Settings
 from connectors.es.sink import (
+    OP_DELETE,
+    OP_INDEX,
+    OP_UPSERT,
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
     Extractor,
-    IndexMissing,
     Sink,
     SyncOrchestrator,
 )
@@ -54,31 +58,83 @@ async def test_prepare_content_index_raise_error_when_index_name_invalid():
 
 
 @pytest.mark.asyncio
-async def test_prepare_content_index_raise_error_when_index_does_not_exist(
+async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses,
 ):
+    index_name = "search-new-index"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        f"http://nowhere.com:9200/{index_name}?expand_wildcards=open",
         headers=headers,
         status=404,
     )
     mock_responses.put(
-        "http://nowhere.com:9200/search-new-index",
+        f"http://nowhere.com:9200/{index_name}",
         payload={"_id": "1"},
         headers=headers,
     )
 
     es = SyncOrchestrator(config)
 
-    with pytest.raises(IndexMissing):
-        await es.prepare_content_index("search-new-index")
+    with mock.patch.object(
+        es.client.indices,
+        "create",
+        side_effect=[BadRequestError(message="test", body=None, meta=None)],
+    ):
+        with pytest.raises(BadRequestError):
+            await es.prepare_content_index(index_name)
 
-    await es.close()
+        await es.close()
+
+
+@pytest.mark.asyncio
+async def test_prepare_content_index_create_index(
+    mock_responses,
+):
+    index_name = "search-new-index"
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.post(
+        "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
+    )
+    mock_responses.head(
+        f"http://nowhere.com:9200/{index_name}?expand_wildcards=open",
+        headers=headers,
+        status=404,
+    )
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+
+    es = SyncOrchestrator(config)
+
+    create_index_result = asyncio.Future()
+    create_index_result.set_result({"acknowledged": True})
+
+    mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+
+    settings = Settings(analysis_icu=False).to_hash()
+
+    with mock.patch.object(
+        es.client.indices, "create", return_value=create_index_result
+    ) as create_index_mock:
+        await es.prepare_content_index(index_name)
+
+        await es.close()
+
+        expected_params = {
+            "index": index_name,
+            "mappings": mappings,
+            "settings": settings,
+        }
+
+        create_index_mock.assert_called_with(**expected_params)
 
 
 @pytest.mark.asyncio
@@ -86,17 +142,9 @@ async def test_prepare_content_index(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     # prepare-index, with mappings
-    dynamic_templates = {
-        "data": {
-            "match_mapping_type": "string",
-            "mapping": TEXT_FIELD_MAPPING,
-        }
-    }
-    mappings = {
-        "dynamic": True,
-        "dynamic_templates": dynamic_templates,
-        "properties": {"name": {"type": "keyword"}},
-    }
+
+    mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+
     mock_responses.head(
         "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
         headers=headers,
@@ -121,7 +169,7 @@ async def test_prepare_content_index(mock_responses):
         return_value=put_mappings_result,
     ) as put_mapping_mock:
         index_name = "search-new-index"
-        await es.prepare_content_index(index_name, mappings=mappings)
+        await es.prepare_content_index(index_name)
 
         await es.close()
 
@@ -1029,12 +1077,33 @@ def test_bulk_populate_stats(res, expected_result):
         pipeline=None,
         chunk_mem_size=0,
         max_concurrency=0,
+        max_retries=3,
     )
     sink._populate_stats(deepcopy(STATS), res)
 
     assert sink.indexed_document_count == expected_result["indexed_document_count"]
     assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
     assert sink.deleted_document_count == expected_result["deleted_document_count"]
+
+
+async def test_batch_bulk_with_retry():
+    client = Mock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+    )
+
+    with mock.patch.object(asyncio, "sleep"):
+        # first call raises exception, and the second call succeeds
+        client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
+
+        assert client.bulk.await_count == 2
 
 
 @pytest.mark.parametrize(

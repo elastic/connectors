@@ -25,9 +25,7 @@ from connectors.sources.generic_database import (
 )
 from connectors.utils import get_pem_format, iso_utc
 
-# Below schemas are system schemas and the tables of the systems schema's will not get indexed
-SYSTEM_SCHEMA = ["pg_toast", "pg_catalog", "information_schema"]
-DEFAULT_SSL_ENABLED = False
+DEFAULT_SSL_DISABLED = True
 
 
 class PostgreSQLQueries(Queries):
@@ -59,7 +57,7 @@ class PostgreSQLQueries(Queries):
 
     def all_schemas(self):
         """Query to get all schemas of database"""
-        return "SELECT schema_name FROM information_schema.schemata"
+        pass
 
 
 class PostgreSQLClient:
@@ -70,6 +68,7 @@ class PostgreSQLClient:
         user,
         password,
         database,
+        schema,
         tables,
         ssl_enabled,
         ssl_ca,
@@ -82,6 +81,7 @@ class PostgreSQLClient:
         self.user = user
         self.password = password
         self.database = database
+        self.schema = schema
         self.tables = tables
         self.retry_count = retry_count
         self.fetch_size = fetch_size
@@ -131,15 +131,7 @@ class PostgreSQLClient:
             )
         )
 
-    async def get_all_schemas(self):
-        async for row in fetch(
-            cursor_func=partial(self.get_cursor, self.queries.all_schemas()),
-            fetch_size=self.fetch_size,
-            retry_count=self.retry_count,
-        ):
-            yield row[0]
-
-    async def get_tables_to_fetch(self, schema):
+    async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
         if is_wildcard(tables):
             async for row in fetch(
@@ -147,7 +139,7 @@ class PostgreSQLClient:
                     self.get_cursor,
                     self.queries.all_tables(
                         database=self.database,
-                        schema=schema,
+                        schema=self.schema,
                     ),
                 ),
                 fetch_size=self.fetch_size,
@@ -158,13 +150,13 @@ class PostgreSQLClient:
             for table in tables:
                 yield table
 
-    async def get_table_row_count(self, schema, table):
+    async def get_table_row_count(self, table):
         [row_count] = await anext(
             fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_data_count(
-                        schema=schema,
+                        schema=self.schema,
                         table=table,
                     ),
                 ),
@@ -174,14 +166,14 @@ class PostgreSQLClient:
         )
         return row_count
 
-    async def get_table_primary_key(self, schema, table):
+    async def get_table_primary_key(self, table):
         primary_keys = [
             key
             async for [key] in fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_primary_key(
-                        schema=schema,
+                        schema=self.schema,
                         table=table,
                     ),
                 ),
@@ -192,13 +184,13 @@ class PostgreSQLClient:
 
         return primary_keys
 
-    async def get_table_last_update_time(self, schema, table):
+    async def get_table_last_update_time(self, table):
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_last_update_time(
-                        schema=schema,
+                        schema=self.schema,
                         table=table,
                     ),
                 ),
@@ -208,11 +200,10 @@ class PostgreSQLClient:
         )
         return last_update_time
 
-    async def data_streamer(self, schema, table):
+    async def data_streamer(self, table):
         """Streaming data from a table
 
         Args:
-            schema (str): Schema.
             table (str): Table.
 
         Raises:
@@ -225,7 +216,7 @@ class PostgreSQLClient:
             cursor_func=partial(
                 self.get_cursor,
                 self.queries.table_data(
-                    schema=schema,
+                    schema=self.schema,
                     table=table,
                 ),
             ),
@@ -265,12 +256,14 @@ class PostgreSQLDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
         self.database = self.configuration["database"]
+        self.schema = self.configuration["schema"]
         self.postgresql_client = PostgreSQLClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
             user=self.configuration["username"],
             password=self.configuration["password"],
             database=self.configuration["database"],
+            schema=self.configuration["schema"],
             tables=self.configuration["tables"],
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_ca=self.configuration["ssl_ca"],
@@ -312,18 +305,23 @@ class PostgreSQLDataSource(BaseDataSource):
                 "order": 5,
                 "type": "str",
             },
+            "schema": {
+                "label": "Schema",
+                "order": 6,
+                "type": "str",
+            },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "options": [],
-                "order": 6,
+                "order": 7,
                 "type": "list",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
                 "label": "Rows fetched per request",
-                "order": 7,
+                "order": 8,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -332,7 +330,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 8,
+                "order": 9,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -340,14 +338,14 @@ class PostgreSQLDataSource(BaseDataSource):
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL verification",
-                "order": 9,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 10,
+                "order": 11,
                 "type": "str",
             },
         }
@@ -363,33 +361,28 @@ class PostgreSQLDataSource(BaseDataSource):
                 f"Can't connect to Postgresql on {self.postgresql_client.host}."
             ) from e
 
-    async def fetch_documents(self, table, schema):
+    async def fetch_documents(self, table):
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
             table (str): Name of table
-            schema (str): Name of schema
 
         Yields:
             Dict: Document to be indexed
         """
         try:
-            row_count = await self.postgresql_client.get_table_row_count(
-                schema=schema, table=table
-            )
+            row_count = await self.postgresql_client.get_table_row_count(table=table)
             if row_count > 0:
                 # Query to get the table's primary key
-                keys = await self.postgresql_client.get_table_primary_key(
-                    schema=schema, table=table
-                )
+                keys = await self.postgresql_client.get_table_primary_key(table=table)
                 keys = map_column_names(
-                    column_names=keys, schema=schema, tables=[table]
+                    column_names=keys, schema=self.schema, tables=[table]
                 )
                 if keys:
                     try:
                         last_update_time = (
                             await self.postgresql_client.get_table_last_update_time(
-                                schema=schema, table=table
+                                table=table
                             )
                         )
                     except Exception:
@@ -397,12 +390,10 @@ class PostgreSQLDataSource(BaseDataSource):
                             f"Unable to fetch last_updated_time for {table}"
                         )
                         last_update_time = None
-                    streamer = self.postgresql_client.data_streamer(
-                        schema=schema, table=table
-                    )
+                    streamer = self.postgresql_client.data_streamer(table=table)
                     column_names = await anext(streamer)
                     column_names = map_column_names(
-                        column_names=column_names, schema=schema, tables=[table]
+                        column_names=column_names, schema=self.schema, tables=[table]
                     )
                     async for row in streamer:
                         row = dict(zip(column_names, row, strict=True))
@@ -411,11 +402,11 @@ class PostgreSQLDataSource(BaseDataSource):
                             keys_value += f"{row.get(key)}_" if row.get(key) else ""
                         row.update(
                             {
-                                "_id": f"{self.database}_{schema}_{table}_{keys_value}",
+                                "_id": f"{self.database}_{self.schema}_{table}_{keys_value}",
                                 "_timestamp": last_update_time or iso_utc(),
                                 "Database": self.database,
                                 "Table": table,
-                                "schema": schema,
+                                "schema": self.schema,
                             }
                         )
                         yield self.serialize(doc=row)
@@ -436,20 +427,17 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        async for schema in self.postgresql_client.get_all_schemas():
-            if schema not in SYSTEM_SCHEMA:
-                table_count = 0
-                async for table in self.postgresql_client.get_tables_to_fetch(schema):
-                    self._logger.debug(
-                        f"Found table: {table} in database: {self.database}."
-                    )
-                    table_count += 1
-                    async for row in self.fetch_documents(
-                        table=table,
-                        schema=schema,
-                    ):
-                        yield row, None
-                if table_count < 1:
-                    self._logger.warning(
-                        f"Fetched 0 tables for schema: {schema} and database: {self.database}"
-                    )
+        table_count = 0
+
+        async for table in self.postgresql_client.get_tables_to_fetch():
+            self._logger.debug(f"Found table: {table} in database: {self.database}.")
+            table_count += 1
+            async for row in self.fetch_documents(
+                table=table,
+            ):
+                yield row, None
+
+        if table_count < 1:
+            self._logger.warning(
+                f"Fetched 0 tables for schema: {self.schema} and database: {self.database}"
+            )
