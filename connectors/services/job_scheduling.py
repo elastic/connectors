@@ -175,7 +175,9 @@ class JobSchedulingService(BaseService):
         expected_wake_up_time = self.next_wake_up_time
         actual_wake_up_time = datetime.utcnow()
 
-        print(f"Expected to wake up at {expected_wake_up_time}, woke up at {actual_wake_up_time}")
+        print(
+            f"Expected to wake up at {expected_wake_up_time}, woke up at {actual_wake_up_time}"
+        )
 
         self.next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
 
