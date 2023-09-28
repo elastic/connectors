@@ -5,17 +5,13 @@
 #
 """OneDrive source module responsible to fetch documents from OneDrive.
 """
-import asyncio
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
 from urllib import parse
 
-import aiofiles
 import aiohttp
 import fastjsonschema
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 from wcmatch import glob
 
@@ -34,7 +30,6 @@ from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,
-    convert_to_b64,
     iso_utc,
     retryable,
 )

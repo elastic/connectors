@@ -1052,7 +1052,7 @@ async def test_get_site_pages_content():
         "_timestamp": "2022-06-20T10:37:44Z",
     }
     async with create_sps_source() as source:
-        response_content = await source.sharepoint_client.get_site_pages_content(
+        response_content = await source.get_site_pages_content(
             document=EXPECTED_ATTACHMENT,
             list_response=RESPONSE_DATA,
             doit=True,
@@ -1072,7 +1072,7 @@ async def coroutine_generator(item):
 async def test_get_site_pages_content_when_doit_is_none():
     document = {"title": "Home.aspx", "type": "File", "size": 1000000}
     async with create_sps_source() as source:
-        response_content = await source.sharepoint_client.get_site_pages_content(
+        response_content = await source.get_site_pages_content(
             document=document,
             list_response={},
             doit=None,
@@ -1085,7 +1085,7 @@ async def test_get_site_pages_content_when_doit_is_none():
 async def test_get_site_pages_content_for_wikifiled_none():
     async with create_sps_source() as source:
         EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": "1000000"}
-        response_content = await source.sharepoint_client.get_site_pages_content(
+        response_content = await source.get_site_pages_content(
             document=EXPECTED_ATTACHMENT,
             list_response={"WikiField": None},
             doit=True,

@@ -15,7 +15,6 @@ from aiohttp.client_exceptions import ClientResponseError
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,

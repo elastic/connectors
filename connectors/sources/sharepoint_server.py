@@ -5,7 +5,6 @@
 #
 """SharePoint source module responsible to fetch documents from SharePoint Server.
 """
-import asyncio
 import os
 from functools import partial
 from urllib.parse import quote
@@ -13,7 +12,6 @@ from urllib.parse import quote
 import aiofiles
 import aiohttp
 from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
@@ -22,7 +20,6 @@ from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     RetryStrategy,
-    convert_to_b64,
     retryable,
     ssl_context,
 )
@@ -183,61 +180,6 @@ class SharepointServerClient:
                 f"Could not remove file: {source_file_name}. Error: {exception}"
             )
         return attachment_content
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def get_site_pages_content(
-        self, document, list_response, timestamp=None, doit=False
-    ):
-        """Get content of site pages for SharePoint
-
-        Args:
-            document (dictionary): Modified document.
-            list_response (dict): Dictionary of list item response
-            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
-
-        Returns:
-            dictionary: Content document with id, timestamp & text.
-        """
-        document_size = int(document["size"])
-        if not (doit and document_size):
-            return
-
-        filename = (
-            document["title"] if document["type"] == "File" else document["file_name"]
-        )
-
-        if document_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-
-        source_file_name = ""
-
-        response_data = list_response["WikiField"]
-
-        if response_data is None:
-            return
-
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await async_buffer.write(bytes(response_data, "utf-8"))
-
-            source_file_name = async_buffer.name
-
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        return {
-            "_id": document.get("id"),
-            "_timestamp": document.get("_timestamp"),
-            "_attachment": await self.convert_file_to_b64(source_file_name),
-        }
 
     async def _api_call(self, url_name, url="", **url_kwargs):
         """Make an API call to the SharePoint Server
@@ -846,12 +788,12 @@ class SharepointServerDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
-        document = {
+        file_doc = {
             "_id": document.get("id"),
             "_timestamp": document.get("_timestamp"),
         }
         return await self.download_and_extract_file(
-            document,
+            file_doc,
             filename,
             file_extension,
             partial(
@@ -865,3 +807,55 @@ class SharepointServerDataSource(BaseDataSource):
                 ),
             ),
         )
+
+    async def get_site_pages_content(
+        self, document, list_response, timestamp=None, doit=False
+    ):
+        """Get content of site pages for SharePoint
+
+        Args:
+            document (dictionary): Modified document.
+            list_response (dict): Dictionary of list item response
+            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text.
+        """
+        file_size = int(document["size"])
+        if not (doit and file_size):
+            return
+
+        filename = (
+            document["title"] if document["type"] == "File" else document["file_name"]
+        )
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        response_data = list_response["WikiField"]
+        if response_data is None:
+            return
+
+        file_doc = {
+            "_id": document.get("id"),
+            "_timestamp": document.get("_timestamp"),
+        }
+        return await self.download_and_extract_file(
+            file_doc,
+            filename,
+            file_extension,
+            partial(
+                self.download_func,
+                response_data,
+            ),
+        )
+
+    async def download_func(self, response_data):
+        """This is a fake-download function
+        Its only purpose is to allow response_data to be
+        written to a temp file.
+        This is because sharepoint server page content aren't download files,
+        it instead contains a key with bytes in its response.
+        """
+        yield bytes(response_data, "utf-8")
