@@ -11,18 +11,12 @@ from functools import partial
 from hashlib import md5
 
 import aioboto3
-import aiofiles
 from aiobotocore.config import AioConfig
-from aiobotocore.response import AioReadTimeoutError
 from aiobotocore.utils import logger as aws_logger
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ServerTimeoutError
 from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64
 
 MAX_CHUNK_SIZE = 1048576
 DEFAULT_MAX_FILE_SIZE = 10485760
@@ -160,76 +154,6 @@ class S3Client:
 
         return region
 
-    async def get_content(self, doc, s3_client, timestamp=None, doit=None):
-        """Extracts the content for allowed file types.
-
-        Args:
-            doc (dict): Dictionary of document
-            s3_client (obj): S3 client instance
-            timestamp (timestamp): Timestamp of object last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
-
-        Returns:
-            dictionary: Document of file content
-        """
-        # Reuse the same for all files
-        if not (doit):
-            return
-        filename = doc["filename"]
-        if (os.path.splitext(filename)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(f"{filename} can't be extracted")
-            return
-        if doc["size_in_bytes"] > DEFAULT_MAX_FILE_SIZE:
-            self._logger.warning(
-                f"File size for {filename} is larger than {DEFAULT_MAX_FILE_SIZE} bytes. Discarding the file content"
-            )
-            return
-
-        bucket = doc["bucket"]
-        self._logger.debug(f"Downloading {filename}")
-        document = {
-            "_id": doc["id"],
-            "_timestamp": doc["_timestamp"],
-        }
-        source_file_name = ""
-        try:
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                source_file_name = async_buffer.name
-                await s3_client.download_fileobj(
-                    Bucket=bucket, Key=filename, Fileobj=async_buffer
-                )
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=source_file_name,
-            )
-            async with aiofiles.open(file=source_file_name, mode="r") as async_buffer:
-                document["_attachment"] = (await async_buffer.read()).strip()
-
-            self._logger.debug(
-                f"Downloaded {filename} for {doc['size_in_bytes']} bytes "
-            )
-            return document
-        except ClientError as exception:
-            if (
-                getattr(exception, "response", {}).get("Error", {}).get("Code")
-                == "InvalidObjectState"
-            ):
-                self._logger.warning(
-                    f"{filename} of {bucket} is archived and inaccessible until restored. Error: {exception}"
-                )
-            else:
-                self._logger.error(
-                    f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
-                )
-                raise
-        except (ServerTimeoutError, AioReadTimeoutError) as exception:
-            self._logger.error(
-                f"Something went wrong while extracting data from {filename} of {bucket}. Error: {exception}"
-            )
-            raise
-        finally:
-            await remove(source_file_name)  # pyright: ignore
-
 
 class S3DataSource(BaseDataSource):
     """Amazon S3"""
@@ -299,10 +223,38 @@ class S3DataSource(BaseDataSource):
                     bucket_name=bucket, bucket_object=obj_summary
                 )
                 yield document, partial(
-                    self.s3_client.get_content,
+                    self.get_content,
                     doc=document,
                     s3_client=s3_client,
                 )
+
+    async def get_content(self, doc, s3_client, timestamp=None, doit=None):
+        if not (doit):
+            return
+
+        filename = doc["filename"]
+        file_size = doc["size_in_bytes"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        bucket = doc["bucket"]
+        document = {
+            "_id": doc["id"],
+            "_timestamp": doc["_timestamp"],
+        }
+
+        # s3 has a unique download method so we can't utilize
+        # the generic download_and_extract_file func
+        async with self.create_temp_file(file_extension) as async_buffer:
+            await s3_client.download_fileobj(
+                Bucket=bucket, Key=filename, Fileobj=async_buffer
+            )
+            document = await self.handle_file_content_extraction(
+                document, filename, async_buffer.name
+            )
+
+        return document
 
     async def close(self):
         """Closes unclosed client session"""
@@ -368,5 +320,13 @@ class S3DataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 8,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
             },
         }

@@ -187,6 +187,11 @@ EXPECTED_CONTENT = {
     "_timestamp": "2023-02-01T01:02:20",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
+EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "TP-1-10001",
+    "_timestamp": "2023-02-01T01:02:20",
+    "body": RESPONSE_CONTENT,
+}
 
 MOCK_USER = (
     {
@@ -294,7 +299,7 @@ ACCESS_CONTROL = "_allow_access_control"
 
 
 @asynccontextmanager
-async def create_jira_source():
+async def create_jira_source(use_text_extraction_service=False):
     async with create_source(
         JiraDataSource,
         data_source="jira_cloud",
@@ -305,6 +310,7 @@ async def create_jira_source():
         jira_url="http://127.0.0.1:8080",
         projects="*",
         ssl_enabled=False,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -763,6 +769,32 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
+async def test_get_content_with_text_extraction_enabled_adds_body():
+    """Tests the get content method."""
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=RESPONSE_CONTENT,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_jira_source(use_text_extraction_service=True) as source:
+            with mock.patch(
+                "aiohttp.ClientSession.get", return_value=get_stream_reader()
+            ):
+                with mock.patch(
+                    "aiohttp.StreamReader.iter_chunked",
+                    return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+                ):
+                    response = await source.get_content(
+                        issue_key="TP-1",
+                        attachment=MOCK_ATTACHMENT[0],
+                        doit=True,
+                    )
+                    assert response == EXPECTED_CONTENT_EXTRACTED
+
+
+@pytest.mark.asyncio
 async def test_get_content_with_upper_extension():
     """Tests the get content method."""
 
@@ -788,8 +820,6 @@ async def test_get_content_when_filesize_is_large():
     """Tests the get content method for file size greater than max limit."""
 
     async with create_jira_source() as source:
-        RESPONSE_CONTENT = "# This is the dummy file"
-
         with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
             with mock.patch(
                 "aiohttp.StreamReader.iter_any",
@@ -811,8 +841,6 @@ async def test_get_content_for_unsupported_filetype():
     """Tests the get content method for file type is not supported."""
 
     async with create_jira_source() as source:
-        RESPONSE_CONTENT = "# This is the dummy file"
-
         with mock.patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
             with mock.patch(
                 "aiohttp.StreamReader.iter_any",
