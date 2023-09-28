@@ -760,7 +760,8 @@ class BaseDataSource:
             return doc
         except Exception as e:
             self._logger.warning(
-                f"File download and extraction or conversion for file {source_filename} failed: {e}", exc_info=True
+                f"File download and extraction or conversion for file {source_filename} failed: {e}",
+                exc_info=True,
             )
             if return_doc_if_failed:
                 return doc
