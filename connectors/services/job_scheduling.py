@@ -126,7 +126,6 @@ class JobSchedulingService(BaseService):
         """Main event loop."""
         self.connector_index = ConnectorIndex(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
-        self.next_wake_up_time = datetime.utcnow()
 
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
@@ -170,8 +169,13 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _try_schedule_sync(self, connector, job_type):
+        if not self.next_wake_up_time:
+            self.next_wake_up_time = datetime.utcnow()
+
         expected_wake_up_time = self.next_wake_up_time
         actual_wake_up_time = datetime.utcnow()
+
+        self.next_wake_up_time = actual_wake_up_time + timedelta(seconds = self.idling)
 
         @with_concurrency_control()
         async def _should_schedule(job_type):
@@ -210,8 +214,6 @@ class JobSchedulingService(BaseService):
                 connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
-
-            self.next_wake_up_time = actual_wake_up_time + timedelta(seconds = self.idling)
 
             if self.next_wake_up_time < next_sync:
                 next_sync_due = (next_sync - self.next_wake_up_time).total_seconds()
