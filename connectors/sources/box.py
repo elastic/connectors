@@ -41,7 +41,7 @@ CHUNK_SIZE = 1024
 FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # ~ 5 MB
 MAX_CONCURRENCY = 2000
-CONCURRENT_DOWNLOADS = 15
+MAX_CONCURRENT_DOWNLOADS = 15
 FIELDS = "name,modified_at,size,type,sequence_id,etag,created_at,modified_at,content_created_at,content_modified_at,description,created_by,modified_by,owned_by,parent,item_status"
 FILE = "file"
 BOX_FREE = "box_free"
@@ -212,6 +212,7 @@ class BoxDataSource(BaseDataSource):
         self.is_enterprise = configuration["is_enterprise"]
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
+        self.concurrent_downloads = configuration["concurrent_downloads"]
 
     def _set_internal_logger(self):
         self.client.set_logger(logger_=self._logger)
@@ -226,7 +227,7 @@ class BoxDataSource(BaseDataSource):
         Args:
             options (dict): Config bulker options.
         """
-        options["concurrent_downloads"] = CONCURRENT_DOWNLOADS
+        options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
     def get_default_configuration(cls):
@@ -270,6 +271,18 @@ class BoxDataSource(BaseDataSource):
                 "label": "Enterprise ID",
                 "order": 5,
                 "type": "int",
+            },
+            "concurrent_downloads": {
+                "default_value": MAX_CONCURRENT_DOWNLOADS,
+                "display": "numeric",
+                "label": "Maximum concurrent downloads",
+                "order": 6,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+                "validations": [
+                    {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
+                ],
             },
         }
 
