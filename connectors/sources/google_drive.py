@@ -769,7 +769,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return folders
 
-    async def _download_content(self, file, download_func):
+    async def _download_content(self, file, file_extension, download_func):
         """Downloads the file from Google Drive and returns the encoded file content.
 
         Args:
@@ -781,7 +781,7 @@ class GoogleDriveDataSource(BaseDataSource):
         """
 
         file_name = file["name"]
-        file_extension = self.get_file_extension(file_name)
+        # file_extension = self.get_file_extension(file_name)
         attachment, body, file_size = None, None, 0
 
         async with self.create_temp_file(file_extension) as async_buffer:
@@ -813,7 +813,12 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Content document with id, timestamp & text
         """
 
-        file_name, file_id, file_mime_type = file["name"], file["id"], file["mime_type"]
+        file_name, file_id, file_mime_type, file_extension = (
+            file["name"],
+            file["id"],
+            file["mime_type"],
+            f".{file['file_extension']}",
+        )
 
         document = {
             "_id": file_id,
@@ -821,6 +826,7 @@ class GoogleDriveDataSource(BaseDataSource):
         }
         attachment, body, file_size = await self._download_content(
             file=file,
+            file_extension=file_extension,
             download_func=partial(
                 self.google_drive_client.api_call,
                 resource="files",
@@ -876,6 +882,7 @@ class GoogleDriveDataSource(BaseDataSource):
         }
         attachment, body, _ = await self._download_content(
             file=file,
+            file_extension=file_extension,
             download_func=partial(
                 self.google_drive_client.api_call,
                 resource="files",

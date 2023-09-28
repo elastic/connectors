@@ -19,8 +19,6 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
-    RetryStrategy,
-    retryable,
     ssl_context,
 )
 
