@@ -168,60 +168,6 @@ class SharepointServerClient:
         await self.session.close()  # pyright: ignore
         self.session = None
 
-    async def get_content(
-        self, document, file_relative_url, site_url, timestamp=None, doit=False
-    ):
-        """Get content of list items and drive items
-
-        Args:
-            document (dictionary): Modified document.
-            file_relative_url (str): Relative url of file
-            site_url (str): Site path of SharePoint
-            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
-            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
-
-        Returns:
-            dictionary: Content document with id, timestamp & text.
-        """
-        document_size = int(document["size"])
-        filename = (
-            document["title"] if document["type"] == "File" else document["file_name"]
-        )
-        if not (doit and document_size):
-            return
-
-        if document_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {document_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-
-        source_file_name = ""
-
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self._api_call(
-                url_name=ATTACHMENT,
-                host_url=self.host_url,
-                value=site_url,
-                file_relative_url=file_relative_url,
-            ):
-                async for data in response.content.iter_chunked(  # pyright: ignore
-                    CHUNK_SIZE
-                ):
-                    await async_buffer.write(data)
-
-            source_file_name = async_buffer.name
-
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        return {
-            "_id": document.get("id"),
-            "_timestamp": document.get("_timestamp"),
-            "_attachment": await self.convert_file_to_b64(source_file_name),
-        }
-
     async def convert_file_to_b64(self, source_file_name):
         """This method converts the file content into b64
         Args:
@@ -636,6 +582,14 @@ class SharepointServerDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 8,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def close(self):
@@ -862,8 +816,54 @@ class SharepointServerDataSource(BaseDataSource):
                                 )
                             else:
                                 yield document, partial(
-                                    self.sharepoint_client.get_content,
+                                    self.get_content,
                                     document,
                                     file_relative_url,
                                     site_url,
                                 )
+
+    async def get_content(
+            self, document, file_relative_url, site_url, timestamp=None, doit=False
+    ):
+        """Get content of list items and drive items
+
+        Args:
+            document (dictionary): Modified document.
+            file_relative_url (str): Relative url of file
+            site_url (str): Site path of SharePoint
+            timestamp (timestamp, optional): Timestamp of item last modified. Defaults to None.
+            doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
+
+        Returns:
+            dictionary: Content document with id, timestamp & text.
+        """
+        file_size = int(document["size"])
+        if not (doit and file_size):
+            return
+
+        filename = (
+            document["title"] if document["type"] == "File" else document["file_name"]
+        )
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        document = {
+            "_id": document.get("id"),
+            "_timestamp": document.get("_timestamp"),
+        }
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.sharepoint_client._api_call,
+                    url_name=ATTACHMENT,
+                    host_url=self.sharepoint_client.host_url,
+                    value=site_url,
+                    file_relative_url=file_relative_url,
+                )
+            )
+        )
