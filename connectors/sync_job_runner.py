@@ -8,7 +8,6 @@ import time
 
 import elasticsearch
 
-from connectors.es import Mappings
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
@@ -195,12 +194,11 @@ class SyncJobRunner:
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
         if sync_rules_enabled:
             await self.sync_job.validate_filtering(validator=self.data_provider)
-        mappings = Mappings.default_text_fields_mappings(
-            is_connectors_index=True,
-        )
+
         logger.debug("Preparing the content index")
+
         await self.elastic_server.prepare_content_index(
-            self.sync_job.index_name, mappings=mappings
+            index=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
         content_extraction_enabled = (

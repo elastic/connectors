@@ -7,15 +7,42 @@
 """
 import io
 import os
-import random
-import string
+import time
 
 from flask import Flask, request
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 1000000, "medium": 2000000, "large": 6000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+match DATA_SIZE:
+    case "small":
+        SPACE_COUNT = 100
+        SPACE_OBJECT_COUNT = 100
+        ATTACHMENT_COUNT = 3
+    case "medium":
+        SPACE_COUNT = 100
+        SPACE_OBJECT_COUNT = 200
+        ATTACHMENT_COUNT = 5
+    case "large":
+        SPACE_COUNT = 100
+        SPACE_OBJECT_COUNT = 250
+        ATTACHMENT_COUNT = 7
+    case _:
+        raise Exception(
+            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        )
+
+
+def get_num_docs():
+    # 2 is multiplier cause SPACE_OBJECTs will be delivered twice:
+    # Test returns SPACE_OBJECT_COUNT objects for each type of content
+    # There are 2 types of content:
+    # - blogpost
+    # - page
+    print(SPACE_COUNT + SPACE_OBJECT_COUNT * ATTACHMENT_COUNT * 2)
 
 
 class ConfluenceAPI:
@@ -23,10 +50,11 @@ class ConfluenceAPI:
         self.app = Flask(__name__)
         self.space_start_at = 0
         self.space_page_limit = 100
-        self.total_spaces = 4000
-        self.total_content = 50
+        self.total_spaces = SPACE_COUNT
+        self.total_content = SPACE_OBJECT_COUNT
         self.attachment_start_at = 1
-        self.attachment_end_at = 6
+        self.attachment_end_at = self.attachment_start_at + ATTACHMENT_COUNT - 1
+        self.attachments = {}
 
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
         self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
@@ -37,6 +65,10 @@ class ConfluenceAPI:
             "/download/attachments/<string:content_id>/<string:attachment_id>",
             methods=["GET"],
         )(self.download)
+
+        @self.app.before_request
+        def before_request():
+            time.sleep(0.05)
 
     def get_spaces(self):
         """Function to handle get spaces calls with pagination
@@ -111,7 +143,7 @@ class ConfluenceAPI:
                     "title": f"ES-scrum_{content_count}",
                     "type": document_type,
                     "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
-                    "children": {"attachment": {"size": 5}},
+                    "children": {"attachment": {"size": ATTACHMENT_COUNT}},
                     "body": {"storage": {"value": f"This is a test {document_type}"}},
                     "space": {"name": "Demo Space 0"},
                     "_links": {
@@ -134,20 +166,23 @@ class ConfluenceAPI:
             "results": [],
             "start": 0,
             "limit": 100,
-            "size": 5,
+            "size": ATTACHMENT_COUNT,
             "_links": {"next": None},
         }
 
         for attachment_count in range(self.attachment_start_at, self.attachment_end_at):
+            attachment_name = f"attachment_{content_id}_{attachment_count}.html"
+            attachment_file = fake_provider.get_html()
+            self.attachments[attachment_name] = attachment_file
             attachment = {
                 "id": f"attachment_{content_id}_{attachment_count}",
-                "title": f"attachment_{content_id}_{attachment_count}.py",
+                "title": attachment_name,
                 "type": "attachment",
                 "version": {"when": "2023-01-03T09:24:50.633Z"},
-                "extensions": {"fileSize": FILE_SIZE},
+                "extensions": {"fileSize": len(attachment_file.encode("utf-8"))},
                 "_links": {
-                    "download": f"/download/attachments/{content_id}/attachment_{content_id}_{attachment_count}.py",
-                    "webui": f"/pages/viewpageattachments.action?pageId={content_id}&preview=attachment_{content_id}_{attachment_count}.py",
+                    "download": f"/download/attachments/{content_id}/attachment_{content_id}_{attachment_count}.html",
+                    "webui": f"/pages/viewpageattachments.action?pageId={content_id}&preview=attachment_{content_id}_{attachment_count}.html",
                 },
             }
             attachments["results"].append(attachment)
@@ -163,7 +198,9 @@ class ConfluenceAPI:
         Returns:
             data_reader (io.BytesIO): object of io.BytesIO.
         """
-        data_reader = io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
+        data_reader = io.BytesIO(
+            bytes(self.attachments[attachment_id], encoding="utf-8")
+        )
         return data_reader
 
 
