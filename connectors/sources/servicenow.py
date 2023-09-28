@@ -33,9 +33,7 @@ from connectors.utils import (
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
-FILE_SIZE_LIMIT = 10485760  # Size in Bytes
 CONCURRENT_TASKS = 1000  # Depends on total number of services and size of each service
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
