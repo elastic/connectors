@@ -36,7 +36,7 @@ from connectors.utils import (
     hash_id,
 )
 
-CHUNK_SIZE = 1024
+CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
 
 DEFAULT_CONFIGURATION = {
