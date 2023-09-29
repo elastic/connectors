@@ -259,7 +259,7 @@ class NASDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enable document level security",
                 "order": 6,
-                "tooltip": "Document level security ensures identities and permissions set in Network Drive are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "tooltip": "Document level security ensures identities and permissions set in your network drive are mirrored in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
             },
@@ -479,7 +479,7 @@ class NASDataSource(BaseDataSource):
                 self.security_info.fetch_members, group_name
             )
 
-        self._logger.info("Fetching all users")
+        self._logger.info(f"Fetching all users for drive at path '{self.drive_path}'")
         users_info = await asyncio.to_thread(self.security_info.fetch_users)
 
         for user, sid in users_info.items():
