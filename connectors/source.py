@@ -693,6 +693,11 @@ class BaseDataSource:
         return get_file_extension(filename)
 
     def can_file_be_downloaded(self, file_extension, filename, file_size):
+        return self.is_valid_file_type(
+            file_extension, filename
+        ) and self.is_file_size_within_limit(file_size, filename)
+
+    def is_valid_file_type(self, file_extension, filename):
         if file_extension == "":
             self._logger.debug(
                 f"Files without extension are not supported, skipping {filename}."
@@ -705,6 +710,9 @@ class BaseDataSource:
             )
             return False
 
+        return True
+
+    def is_file_size_within_limit(self, file_size, filename):
         if file_size > FILE_SIZE_LIMIT and not self.configuration.get(
             "use_text_extraction_service"
         ):
@@ -716,26 +724,49 @@ class BaseDataSource:
         return True
 
     async def download_and_extract_file(
-        self, doc, source_filename, file_extension, download_func
+        self,
+        doc,
+        source_filename,
+        file_extension,
+        download_func,
+        return_doc_if_failed=False,
     ):
-        # 1 create tempfile
-        async with self.create_temp_file(file_extension) as async_buffer:
-            temp_filename = async_buffer.name
+        """
+        Performs all the steps required for handling binary content:
+        1. Make temp file
+        2. Download content to temp file
+        3. Extract using local service or convert to b64
 
-            # 2 download to tempfile
-            await self.download_to_temp_file(
-                temp_filename,
-                source_filename,
-                async_buffer,
-                download_func,
+        Will return the doc with either `_attachment` or `body` added.
+        Returns `None` if any step fails.
+
+        If the optional arg `return_doc_if_failed` is `True`,
+        will return the original doc upon failure
+        """
+        try:
+            async with self.create_temp_file(file_extension) as async_buffer:
+                temp_filename = async_buffer.name
+
+                await self.download_to_temp_file(
+                    temp_filename,
+                    source_filename,
+                    async_buffer,
+                    download_func,
+                )
+
+                doc = await self.handle_file_content_extraction(
+                    doc, source_filename, temp_filename
+                )
+            return doc
+        except Exception as e:
+            self._logger.warning(
+                f"File download and extraction or conversion for file {source_filename} failed: {e}",
+                exc_info=True,
             )
-
-            # 3 extract or convert content
-            doc = await self.handle_file_content_extraction(
-                doc, source_filename, temp_filename
-            )
-
-        return doc
+            if return_doc_if_failed:
+                return doc
+            else:
+                return
 
     @asynccontextmanager
     async def create_temp_file(self, file_extension):

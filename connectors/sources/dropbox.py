@@ -671,7 +671,7 @@ class DropboxDataSource(BaseDataSource):
             "_id": attachment["id"],
             "_timestamp": attachment["server_modified"],
         }
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
@@ -680,8 +680,6 @@ class DropboxDataSource(BaseDataSource):
                 download_func,
             ),
         )
-
-        return document
 
     def download_func(self, is_shared, attachment, filename):
         if is_shared:

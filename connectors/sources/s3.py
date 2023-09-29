@@ -250,6 +250,8 @@ class S3DataSource(BaseDataSource):
             await s3_client.download_fileobj(
                 Bucket=bucket, Key=filename, Fileobj=async_buffer
             )
+            await async_buffer.close()
+
             document = await self.handle_file_content_extraction(
                 document, filename, async_buffer.name
             )

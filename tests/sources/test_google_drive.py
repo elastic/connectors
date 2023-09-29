@@ -26,12 +26,13 @@ MORE_THAN_DEFAULT_FILE_SIZE_LIMIT = 10485760 + 1
 
 
 @asynccontextmanager
-async def create_gdrive_source():
+async def create_gdrive_source(use_text_extraction_service=False):
     async with create_source(
         GoogleDriveDataSource,
         service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
         use_document_level_security=False,
         google_workspace_admin_email="admin@your-organization.com",
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -719,7 +720,7 @@ async def test_get_google_workspace_content():
             "_timestamp": "2023-06-28T07:46:28.000Z",
             "_attachment": "I love unit tests",
         }
-        file_content_response = ("I love unit tests", 1234)
+        file_content_response = ("I love unit tests", None, 1234)
         future_file_content_response = asyncio.Future()
         future_file_content_response.set_result(file_content_response)
 
@@ -731,6 +732,52 @@ async def test_get_google_workspace_content():
             doit=True,
         )
         assert content == expected_file_document
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.content_extraction.ContentExtraction._check_configured",
+    lambda *_: True,
+)
+async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body():
+    """Test the module responsible for fetching the content of the Google Suite document."""
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="I love unit tests",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_gdrive_source(use_text_extraction_service=True) as source:
+            file_document = {
+                "id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": 28,
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "application/vnd.google-apps.document",
+                "file_extension": None,
+                "url": None,
+                "type": "file",
+            }
+            expected_file_document = {
+                "_id": "id1",
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "body": "I love unit tests",
+            }
+            file_content_response = (None, "I love unit tests", 1234)
+            future_file_content_response = asyncio.Future()
+            future_file_content_response.set_result(file_content_response)
+
+            source._download_content = mock.MagicMock(
+                return_value=future_file_content_response
+            )
+            content = await source.get_content(
+                file=file_document,
+                doit=True,
+            )
+            assert content == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -752,7 +799,11 @@ async def test_get_google_workspace_content_size_limit():
             "type": "file",
         }
 
-        file_content_response = ("I love unit tests", MORE_THAN_DEFAULT_FILE_SIZE_LIMIT)
+        file_content_response = (
+            "I love unit tests",
+            None,
+            MORE_THAN_DEFAULT_FILE_SIZE_LIMIT,
+        )
         future_file_content_response = asyncio.Future()
         future_file_content_response.set_result(file_content_response)
 
@@ -788,7 +839,7 @@ async def test_get_generic_file_content():
             "_timestamp": "2023-06-28T07:46:28.000Z",
             "_attachment": "I love unit tests generic file",
         }
-        file_content_response = ("I love unit tests generic file", 1234)
+        file_content_response = ("I love unit tests generic file", None, 1234)
         future_file_content_response = asyncio.Future()
         future_file_content_response.set_result(file_content_response)
 
@@ -800,6 +851,52 @@ async def test_get_generic_file_content():
             doit=True,
         )
         assert content == expected_file_document
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.content_extraction.ContentExtraction._check_configured",
+    lambda *_: True,
+)
+async def test_get_generic_file_content_with_text_extraction_enabled_adds_body():
+    """Test the module responsible for fetching the content of the file if it is extractable."""
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="I love unit tests generic file",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_gdrive_source(use_text_extraction_service=True) as source:
+            file_document = {
+                "id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": 28,
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "text/plain",
+                "file_extension": "txt",
+                "url": None,
+                "type": "file",
+            }
+            expected_file_document = {
+                "_id": "id1",
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "body": "I love unit tests generic file",
+            }
+            file_content_response = (None, "I love unit tests generic file", 1234)
+            future_file_content_response = asyncio.Future()
+            future_file_content_response.set_result(file_content_response)
+
+            source._download_content = mock.MagicMock(
+                return_value=future_file_content_response
+            )
+            content = await source.get_content(
+                file=file_document,
+                doit=True,
+            )
+            assert content == expected_file_document
 
 
 @pytest.mark.asyncio

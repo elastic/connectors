@@ -653,7 +653,7 @@ class ConfluenceDataSource(BaseDataSource):
             return
 
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
@@ -665,8 +665,6 @@ class ConfluenceDataSource(BaseDataSource):
                 ),
             ),
         )
-
-        return document
 
     async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content

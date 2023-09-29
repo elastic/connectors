@@ -178,14 +178,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
             partial(self.blob_download_func, filename, blob["container"]),
         )
-
-        return document
 
     async def blob_download_func(self, blob_name, container_name):
         async with BlobClient.from_connection_string(

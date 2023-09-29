@@ -31,7 +31,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,
@@ -451,6 +450,14 @@ class OneDriveDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 7,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     def tweak_bulk_options(self, options):
@@ -478,28 +485,6 @@ class OneDriveDataSource(BaseDataSource):
         except Exception:
             self._logger.exception("Error while connecting to OneDrive")
             raise
-
-    def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
-    ):
-        if attachment_extension == "":
-            self._logger.warning(
-                f"Files without extension are not supported, skipping {attachment_name}."
-            )
-            return False
-
-        if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
-            )
-            return False
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-        return True
 
     async def _get_document_with_content(self, attachment_name, document, url):
         temp_filename = ""
@@ -541,36 +526,28 @@ class OneDriveDataSource(BaseDataSource):
             dictionary: Content document with _id, _timestamp and file content
         """
 
-        attachment_size = int(file["size"])
-        if not (doit and attachment_size > 0):
+        file_size = int(file["size"])
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = file["title"]
+        filename = file["title"]
 
-        attachment_extension = (
-            attachment_name[attachment_name.rfind(".") :]  # noqa
-            if "." in attachment_name
-            else ""
-        )
-
-        if not self._pre_checks_for_get_content(
-            attachment_extension=attachment_extension,
-            attachment_name=attachment_name,
-            attachment_size=attachment_size,
-        ):
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
-
-        self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
             "_id": file["_id"],
             "_timestamp": file["_timestamp"],
         }
-
-        return await self._get_document_with_content(
-            attachment_name=attachment_name,
-            document=document,
-            url=download_url,
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(self.client.get, url=download_url),
+            ),
         )
 
     def prepare_doc(self, file):
