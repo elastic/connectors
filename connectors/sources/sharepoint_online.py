@@ -17,6 +17,7 @@ import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
+from aiohttp.client_reqrep import RequestInfo
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import (
@@ -359,9 +360,11 @@ class MicrosoftAPISession:
         return await self._get_json(url)
 
     async def post(self, url, payload):
-        self._logger.debug(f"Post to url: {url}")
+        self._logger.debug(f"Post to url: '{url}' with body: {payload}")
         async with self._post(url, payload) as resp:
-            return await resp.json()
+            result = await resp.json()
+            # self._logger.debug(f"Response was: {result}")
+            return result
 
     async def pipe(self, url, stream):
         async with self._get(url) as resp:
@@ -410,6 +413,8 @@ class MicrosoftAPISession:
             async with self._http_session.post(
                 absolute_url, headers=headers, json=payload
             ) as resp:
+                if absolute_url.endswith("/$batch"):  # response code of $batch lies
+                    await self._check_batch_items_for_errors(absolute_url, resp)
                 yield resp
         except aiohttp.client_exceptions.ClientOSError:
             self._logger.warning(
@@ -420,6 +425,23 @@ class MicrosoftAPISession:
             await self._handle_client_response_error(absolute_url, e, retry_count)
         except ClientPayloadError as e:
             await self._handle_client_payload_error(e, retry_count)
+
+    async def _check_batch_items_for_errors(self, url, batch_resp):
+        body = await batch_resp.json()
+        responses = body.get("responses", [])
+        for response in responses:
+            status = response.get("status", 200)
+            if status != 200:
+                self._logger.warning(f"Batch request item failed with: {response}")
+                headers = response.get("headers", {})
+                req_info = RequestInfo(url=url, method="POST", headers=headers)
+                raise ClientResponseError(
+                    request_info=req_info,
+                    headers=headers,
+                    status=status,
+                    message=response.get("body", {}).get("error", {}).get("message"),
+                    history=(batch_resp),
+                )
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
@@ -461,7 +483,7 @@ class MicrosoftAPISession:
                 retry_after = int(response_headers["Retry-After"])
             else:
                 self._logger.warning(
-                    f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    f"Response Code from Sharepoint Online is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
                 retry_after = DEFAULT_RETRY_SECONDS
 
@@ -759,16 +781,6 @@ class SharepointOnlineClient:
 
         async for page in self.drive_items_delta(url):
             yield page
-
-    async def drive_item_permissions(self, drive_id, item_id):
-        try:
-            async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
-            ):
-                for permission in page:
-                    yield permission
-        except NotFound:
-            return
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
@@ -1844,6 +1856,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not identities:
             self._logger.debug(
                 f"'grantedToV2' and 'grantedToIdentitiesV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
+            )
+            self._logger.warning(
+                f"Drive item permissions were: {drive_item_permissions}"
             )
             return drive_item
 

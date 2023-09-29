@@ -39,6 +39,7 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineDataSource,
     SharepointRestAPIToken,
     SyncCursorEmpty,
+    ThrottledError,
     TokenFetchFailed,
     _emails_and_usernames_of_domain_group,
     _get_login_name,
@@ -502,6 +503,95 @@ class TestMicrosoftAPISession:
         response = await microsoft_api_session.post(url, payload)
 
         assert response == expected_response
+
+    @pytest.mark.asyncio
+    async def test_post_with_batch_failures(
+        self, microsoft_api_session, mock_responses
+    ):
+        url = "https://graph.microsoft.com/v1.0/$batch"
+        first_response = {
+            "responses": [
+                {
+                    "id": "014DQHDVKA25ZKRFXRQBDKQS2ZMJ3C442M",
+                    "status": 429,
+                    "headers": {
+                        "Link": '<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html",<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html"',
+                        "Deprecation": "Fri, 03 Sep 2021 23:59:59 GMT",
+                        "Sunset": "Sun, 01 Oct 2023 23:59:59 GMT",
+                        "Retry-After": "28",
+                        "Cache-Control": "private",
+                        "Content-Type": "application/json",
+                    },
+                    "body": {
+                        "error": {
+                            "code": "activityLimitReached",
+                            "message": "The request has been throttled",
+                            "innerError": {
+                                "code": "throttledRequest",
+                                "innerError": {"code": "quota"},
+                                "date": "2023-09-29T14:31:03",
+                                "request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                                "client-request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                            },
+                        }
+                    },
+                }
+            ]
+        }
+        second_response = {"responses": [{"key": "value"}]}
+        payload = {"key": "value"}
+
+        mock_responses.post(url, payload=first_response)
+        mock_responses.post(url, payload=second_response)
+
+        response = await microsoft_api_session.post(url, payload)
+
+        assert response == second_response
+
+    @pytest.mark.asyncio
+    async def test_post_with_consecutive_batch_failures(
+        self, microsoft_api_session, mock_responses, patch_cancellable_sleeps
+    ):
+        url = "https://graph.microsoft.com/v1.0/$batch"
+        response = {
+            "responses": [
+                {
+                    "id": "014DQHDVKA25ZKRFXRQBDKQS2ZMJ3C442M",
+                    "status": 429,
+                    "headers": {
+                        "Link": '<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html",<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html"',
+                        "Deprecation": "Fri, 03 Sep 2021 23:59:59 GMT",
+                        "Sunset": "Sun, 01 Oct 2023 23:59:59 GMT",
+                        "Retry-After": "28",
+                        "Cache-Control": "private",
+                        "Content-Type": "application/json",
+                    },
+                    "body": {
+                        "error": {
+                            "code": "activityLimitReached",
+                            "message": "The request has been throttled",
+                            "innerError": {
+                                "code": "throttledRequest",
+                                "innerError": {"code": "quota"},
+                                "date": "2023-09-29T14:31:03",
+                                "request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                                "client-request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                            },
+                        }
+                    },
+                }
+            ]
+        }
+        payload = {"key": "value"}
+
+        mock_responses.post(url, payload=response)
+        mock_responses.post(url, payload=response)
+        mock_responses.post(url, payload=response)
+        mock_responses.post(url, payload=response)
+        mock_responses.post(url, payload=response)
+
+        with pytest.raises(ThrottledError):
+            await microsoft_api_session.post(url, payload)
 
     @pytest.mark.asyncio
     async def test_fetch_with_retry(
@@ -1372,37 +1462,6 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == 0
 
     @pytest.mark.asyncio
-    async def test_drive_item_permissions(self, client, patch_scroll):
-        drive_id = 1
-        drive_item = {"id": 1}
-
-        permissions = ["permission"]
-        actual_permissions = await self._execute_scrolling_method(
-            client.drive_item_permissions,
-            patch_scroll,
-            permissions,
-            drive_id,
-            drive_item,
-        )
-
-        patch_scroll.return_value = permissions
-
-        assert actual_permissions == permissions
-
-    @pytest.mark.asyncio
-    async def test_drive_item_permissions_not_found(self, client, patch_scroll):
-        drive_id = 1
-        drive_item = {"id": 1}
-
-        patch_scroll.side_effect = NotFound()
-        returned_permissions = []
-
-        async for permission in client.drive_item_permissions(drive_id, drive_item):
-            returned_permissions.append(permission)
-
-        assert len(returned_permissions) == 0
-
-    @pytest.mark.asyncio
     async def test_drive_items_permissions_batch(self, client, patch_post):
         drive_id = 1
         drive_item_ids = [1, 2, 3]
@@ -2054,7 +2113,6 @@ class TestSharepointOnlineDataSource:
             client.group_members = AsyncIterator(self.group_members)
             client.group_owners = AsyncIterator(self.group_owners)
             client.site_users = AsyncIterator(self.site_users)
-            client.drive_item_permissions = AsyncIterator(self.drive_item_permissions)
             client.drive_items_permissions_batch = AsyncIterator(
                 self.drive_items_permissions_batch
             )
