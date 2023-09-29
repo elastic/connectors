@@ -16,7 +16,6 @@ BLOB_SCHEMA = {
     "size": "size",
     "container": "container",
 }
-DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
     100  # Max concurrent download supported by Azure Blob Storage
