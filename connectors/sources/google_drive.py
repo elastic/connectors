@@ -781,7 +781,6 @@ class GoogleDriveDataSource(BaseDataSource):
         """
 
         file_name = file["name"]
-        # file_extension = self.get_file_extension(file_name)
         attachment, body, file_size = None, None, 0
 
         async with self.create_temp_file(file_extension) as async_buffer:
