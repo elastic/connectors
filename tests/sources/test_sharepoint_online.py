@@ -536,7 +536,7 @@ class TestMicrosoftAPISession:
 
     @pytest.mark.asyncio
     async def test_post_with_batch_failures(
-        self, microsoft_api_session, mock_responses
+        self, microsoft_api_session, mock_responses, patch_cancellable_sleeps
     ):
         url = "https://graph.microsoft.com/v1.0/$batch"
         first_response = BATCH_THROTTLED_RESPONSE
