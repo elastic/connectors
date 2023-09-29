@@ -24,14 +24,18 @@ import logging
 import time
 from collections import defaultdict
 
-from elasticsearch import NotFoundError as ElasticNotFoundError
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 from elasticsearch.helpers import async_scan
 
-from connectors.es import ESClient
+from connectors.es import ESClient, Mappings
+from connectors.es.settings import Settings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
+    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -44,6 +48,7 @@ from connectors.utils import (
     aenumerate,
     get_size,
     iso_utc,
+    retryable,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -87,6 +92,7 @@ class Sink:
         pipeline,
         chunk_mem_size,
         max_concurrency,
+        max_retries,
         logger_=None,
     ):
         self.client = client
@@ -99,6 +105,7 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.max_retires = max_retries
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
@@ -122,6 +129,12 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
+        @retryable(retries=self.max_retires)
+        async def _bulk_api_call():
+            return await self.client.bulk(
+                operations=operations, pipeline=self.pipeline["name"]
+            )
+
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
@@ -131,10 +144,7 @@ class Sink:
             )
         start = time.time()
         try:
-            res = await self.client.bulk(
-                operations=operations, pipeline=self.pipeline["name"]
-            )
-
+            res = await _bulk_api_call()
             if res.get("errors"):
                 for item in res["items"]:
                     for op, data in item.items():
@@ -640,7 +650,7 @@ class SyncOrchestrator(ESClient):
         self._sink = None
         self._sink_task = None
 
-    async def prepare_content_index(self, index, *, mappings=None):
+    async def prepare_content_index(self, index, language_code=None):
         """Creates the index, given a mapping if it does not exists."""
         if not index.startswith("search-"):
             raise ContentIndexNameInvalid(
@@ -653,29 +663,50 @@ class SyncOrchestrator(ESClient):
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
+
+        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+
         if exists:
+            # Update the index mappings if needed
             self._logger.debug(f"{index} exists")
-            response = await self.client.indices.get_mapping(
-                index=index, expand_wildcards=expand_wildcards
-            )
-            existing_mappings = response[index].get("mappings", {})
-            if len(existing_mappings) == 0 and mappings:
-                self._logger.debug(
-                    "Index %s has no mappings or it's empty. Adding mappings...", index
-                )
-                await self.client.indices.put_mapping(
-                    index=index,
-                    dynamic=mappings.get("dynamic", False),
-                    dynamic_templates=mappings.get("dynamic_templates", []),
-                    properties=mappings.get("properties", {}),
-                    expand_wildcards=expand_wildcards,
-                )
-                self._logger.debug("Index %s mappings added", index)
-            else:
-                self._logger.debug("Index %s already has mappings. Skipping...", index)
-            return
+            await self._ensure_content_index_mappings(index, mappings, expand_wildcards)
         else:
-            raise IndexMissing(f"Index {index} does not exist!")
+            # Create a new index
+            self._logger.info(f"Creating content index: {index}")
+            await self._create_content_index(
+                index=index, language_code=language_code, mappings=mappings
+            )
+            self._logger.info(f"Content index successfully created:  {index}")
+
+    async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
+        response = await self.client.indices.get_mapping(
+            index=index, expand_wildcards=expand_wildcards
+        )
+
+        existing_mappings = response[index].get("mappings", {})
+        if len(existing_mappings) == 0 and mappings:
+            self._logger.debug(
+                "Index %s has no mappings or it's empty. Adding mappings...", index
+            )
+            await self.client.indices.put_mapping(
+                index=index,
+                dynamic=mappings.get("dynamic", False),
+                dynamic_templates=mappings.get("dynamic_templates", []),
+                properties=mappings.get("properties", {}),
+                expand_wildcards=expand_wildcards,
+            )
+            self._logger.debug("Successfully added mappings for index %s", index)
+        else:
+            self._logger.debug(
+                "Index %s already has mappings, skipping mappings creation", index
+            )
+
+    async def _create_content_index(self, index, mappings, language_code=None):
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        return await self.client.indices.create(
+            index=index, mappings=mappings, settings=settings
+        )
 
     def done(self):
         if self._extractor_task is not None and not self._extractor_task.done():
@@ -764,6 +795,7 @@ class SyncOrchestrator(ESClient):
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
+        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
 
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
 
@@ -791,6 +823,7 @@ class SyncOrchestrator(ESClient):
             pipeline,
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
+            max_retries=max_bulk_retries,
             logger_=self._logger,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

@@ -73,6 +73,21 @@
                         "ui_restrictions": ["advanced"],
                         "value": 3,
                         "validations": [{"type": "less_than", "constraint": 10}]
+                },
+                "use_text_extraction_service": {
+                        "default_value": null,
+                        "depends_on": [],
+                        "display": "toggle",
+                        "label": "Use text extraction service",
+                        "options": [],
+                        "order": 8,
+                        "required": true,
+                        "sensitive": false,
+                        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                        "type": "bool",
+                        "ui_restrictions": [],
+                        "validations": [],
+                        "value": false
                 }
         },
         "filtering": [

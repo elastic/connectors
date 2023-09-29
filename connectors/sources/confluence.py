@@ -10,10 +10,7 @@ import os
 from copy import copy
 from functools import partial
 
-import aiofiles
 import aiohttp
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.access_control import ACCESS_CONTROL
@@ -26,16 +23,13 @@ from connectors.sources.atlassian import (
     prefix_group_id,
 )
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
-    convert_to_b64,
     iso_utc,
     ssl_context,
 )
 
-FILE_SIZE_LIMIT = 10485760
 RETRY_INTERVAL = 2
 SPACE = "space"
 BLOGPOST = "blogpost"
@@ -60,7 +54,6 @@ URLS = {
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
-CHUNK_SIZE = 1024
 MAX_CONCURRENCY = 50
 QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
@@ -322,6 +315,14 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Enable document level security",
                 "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 13,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "value": False,
             },
@@ -640,46 +641,28 @@ class ConfluenceDataSource(BaseDataSource):
         Returns:
             Dictionary: Document of the attachment to be indexed.
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size):
-            return
-        attachment_name = attachment["title"]
-        file_extension = os.path.splitext(attachment_name)[-1]
-        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(f"{attachment_name} can't be extracted")
+        file_size = int(attachment["size"])
+        if not (doit and file_size):
             return
 
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
+        filename = attachment["title"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
-        self._logger.debug(
-            f"Downloading {attachment_name} of size {attachment_size} bytes"
-        )
+
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.confluence_client.api_call(
-                url=os.path.join(self.confluence_client.host_url, url),
-            ):
-                async for data in response.content.iter_chunked(n=CHUNK_SIZE):
-                    await async_buffer.write(data)
-            source_file_name = str(async_buffer.name)
-
-        self._logger.debug(
-            f"Download completed for file: {attachment_name}. Calling convert_to_b64"
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.confluence_client.api_call,
+                    url=os.path.join(self.confluence_client.host_url, url),
+                ),
+            ),
         )
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
-        await remove(source_file_name)
-        self._logger.debug(f"Downloaded {attachment_name} for {attachment_size} bytes ")
-        return document
 
     async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content

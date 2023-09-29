@@ -4,26 +4,20 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Zoom source module responsible to fetch documents from Zoom."""
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from functools import cached_property, partial
 
-import aiofiles
 import aiohttp
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
     RetryStrategy,
-    convert_to_b64,
     get_base64_value,
     iso_utc,
     retryable,
@@ -33,7 +27,6 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 CHAT_PAGE_SIZE = 50
 MEETING_PAGE_SIZE = 300
-FILE_SIZE_LIMIT = 10485760
 
 if "OVERRIDE_URL" in os.environ:
     override_url = os.environ["OVERRIDE_URL"]
@@ -304,7 +297,8 @@ class ZoomClient:
                 yield chat
 
     async def get_file_content(self, download_url):
-        return await self.api_client.content(url=download_url)
+        content = await self.api_client.content(url=download_url)
+        yield content.encode("utf-8")
 
 
 class ZoomDataSource(BaseDataSource):
@@ -355,6 +349,15 @@ class ZoomDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "How far back in time to request recordings from zoom. Recordings older than this will not be indexed.",
                 "type": "int",
+                "validations": [{"type": "greater_than", "constraint": -1}],
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 6,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
             },
         }
 
@@ -383,85 +386,33 @@ class ZoomDataSource(BaseDataSource):
         )
         return doc
 
-    def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
-    ):
-        if attachment_extension == "":
-            self._logger.warning(
-                f"Files without extension are not supported, skipping {attachment_name}."
-            )
-            return False
-
-        if attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"Files with the extension {attachment_extension} are not supported, skipping {attachment_name}."
-            )
-            return False
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return False
-        return True
-
-    async def _get_document_with_content(self, doc):
-        document = {
-            "_id": doc["id"],
-            "_timestamp": doc["date_time"],
-        }
-
-        temp_filename = ""
-
-        try:
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                temp_filename = str(async_buffer.name)
-                response = await self.client.get_file_content(
-                    download_url=doc["download_url"]
-                )
-
-                if not response:
-                    return
-                await async_buffer.write(response.encode("utf-8"))
-
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=temp_filename,
-            )
-            async with aiofiles.open(file=temp_filename, mode="r") as target_file:
-                # base64 on macOS will add a EOL, so we strip() here
-                document["_attachment"] = (await target_file.read()).strip()
-            return document
-        finally:
-            try:
-                await remove(temp_filename)
-            except Exception as exception:
-                self._logger.warning(
-                    f"Error while deleting the file: {temp_filename} from disk. Error: {exception}"
-                )
-
-    async def get_content(self, doc, timestamp=None, doit=False):
-        attachment_size = doc["file_size"]
-        if not (doit and attachment_size > 0):
+    async def get_content(self, chat_file, timestamp=None, doit=False):
+        file_size = chat_file["file_size"]
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = doc["file_name"]
-
-        attachment_extension = (
-            attachment_name[attachment_name.rfind(".") :]
-            if "." in attachment_name
-            else ""
-        )
-
-        if not self._pre_checks_for_get_content(
-            attachment_extension=attachment_extension,
-            attachment_name=attachment_name,
-            attachment_size=attachment_size,
+        filename = chat_file["file_name"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(
+            file_extension,
+            filename,
+            file_size,
         ):
             return
 
-        self._logger.debug(f"Downloading {attachment_name}")
-        return await self._get_document_with_content(doc)
+        document = {
+            "_id": chat_file["id"],
+            "_timestamp": chat_file["date_time"],
+        }
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.client.get_file_content,
+                download_url=chat_file["download_url"],
+            ),
+        )
 
     async def fetch_previous_meeting_details(self, meeting_id):
         previous_meeting = await self.client.get_past_meeting(meeting_id=meeting_id)
@@ -543,4 +494,4 @@ class ZoomDataSource(BaseDataSource):
                 chat_file["id"] = chat_file.get("file_id")
                 yield self._format_doc(
                     doc=chat_file, doc_time=chat_file.get("date_time")
-                ), partial(self.get_content, doc=chat_file.copy())
+                ), partial(self.get_content, chat_file=chat_file.copy())

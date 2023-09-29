@@ -72,6 +72,36 @@
       "ui_restrictions": [
         "advanced"
       ]
+    },
+    "use_document_level_security": {
+      "depends_on": [],
+      "display": "toggle",
+      "tooltip": null,
+      "default_value": false,
+      "label": "Enable document level security",
+      "sensitive": false,
+      "type": "bool",
+      "required": false,
+      "options": [],
+      "validations": [],
+      "value": false,
+      "order": 6,
+      "ui_restrictions": []
+    },
+    "use_text_extraction_service": {
+      "default_value": null,
+      "depends_on": [],
+      "display": "toggle",
+      "label": "Use text extraction service",
+      "options": [],
+      "order": 7,
+      "required": true,
+      "sensitive": false,
+      "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+      "type": "bool",
+      "ui_restrictions": [],
+      "validations": [],
+      "value": false
     }
   },
   "custom_scheduling": {},

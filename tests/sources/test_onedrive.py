@@ -4,7 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the OneDrive source class methods"""
-from unittest.mock import ANY, AsyncMock, Mock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from aiohttp import StreamReader
@@ -28,43 +29,55 @@ from tests.sources.support import create_source
 ADVANCED_SNIPPET = "advanced_snippet"
 EXPECTED_USERS = [
     {
-        "displayName": "Adele Vance",
-        "givenName": "Adele",
-        "jobTitle": "Retail Manager",
         "mail": "AdeleV@w076v.onmicrosoft.com",
-        "officeLocation": "18/2111",
-        "preferredLanguage": "en-US",
         "id": "3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+        "createdDateTime": "2022-06-11T14:47:53Z",
+        "userPrincipalName": "AdeleV@w076v.onmicrosoft.com",
+        "transitiveMemberOf": [
+            {
+                "@odata.type": "#microsoft.graph.group",
+                "id": "e35d6159-f6c1-462c-a60c-11f29880e9c0",
+            }
+        ],
     },
     {
-        "displayName": "Alex Wilber",
-        "givenName": "Alex",
-        "jobTitle": "Marketing Assistant",
         "mail": "AlexW@w076v.onmicrosoft.com",
-        "officeLocation": "131/1104",
-        "preferredLanguage": "en-US",
         "id": "8e083933-1720-4d2f-80d0-3976669b40ee",
+        "createdDateTime": "2022-06-11T14:47:53Z",
+        "userPrincipalName": "AlexW@w076v.onmicrosoft.com",
+        "transitiveMemberOf": [
+            {
+                "@odata.type": "#microsoft.graph.group",
+                "id": "5010ad09-7ad0-48e7-8047-1ae0f6117a17",
+            }
+        ],
     },
 ]
 RESPONSE_USERS = {
     "value": [
         {
-            "displayName": "Adele Vance",
-            "givenName": "Adele",
-            "jobTitle": "Retail Manager",
             "mail": "AdeleV@w076v.onmicrosoft.com",
-            "officeLocation": "18/2111",
-            "preferredLanguage": "en-US",
             "id": "3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+            "createdDateTime": "2022-06-11T14:47:53Z",
+            "userPrincipalName": "AdeleV@w076v.onmicrosoft.com",
+            "transitiveMemberOf": [
+                {
+                    "@odata.type": "#microsoft.graph.group",
+                    "id": "e35d6159-f6c1-462c-a60c-11f29880e9c0",
+                }
+            ],
         },
         {
-            "displayName": "Alex Wilber",
-            "givenName": "Alex",
-            "jobTitle": "Marketing Assistant",
             "mail": "AlexW@w076v.onmicrosoft.com",
-            "officeLocation": "131/1104",
-            "preferredLanguage": "en-US",
             "id": "8e083933-1720-4d2f-80d0-3976669b40ee",
+            "createdDateTime": "2022-06-11T14:47:53Z",
+            "userPrincipalName": "AlexW@w076v.onmicrosoft.com",
+            "transitiveMemberOf": [
+                {
+                    "@odata.type": "#microsoft.graph.group",
+                    "id": "5010ad09-7ad0-48e7-8047-1ae0f6117a17",
+                }
+            ],
         },
     ]
 }
@@ -276,8 +289,108 @@ EXPECTED_CONTENT = {
     "_timestamp": "2023-05-01T09:10:21Z",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
+EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+    "_timestamp": "2023-05-01T09:10:21Z",
+    "body": RESPONSE_CONTENT,
+}
 
 EXPECTED_FILES_FOLDERS = {}
+
+RESPONSE_PERMISSION1 = {
+    "grantedToV2": {
+        "user": {
+            "id": "user_id_1",
+        }
+    },
+    "grantedToIdentitiesV2": [
+        {
+            "user": {
+                "id": "user_id_2",
+            },
+            "group": {
+                "id": "group_id_1",
+            },
+        },
+    ],
+}
+RESPONSE_PERMISSION2 = {
+    "grantedToV2": {
+        "user": {
+            "id": "user_id_3",
+        }
+    },
+    "grantedToIdentitiesV2": [
+        {
+            "user": {
+                "id": "user_id_4",
+            },
+            "group": {
+                "id": "group_id_2",
+            },
+        }
+    ],
+}
+EXPECTED_USER1_FILES_PERMISSION = [
+    {
+        "type": "folder",
+        "title": "folder3",
+        "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "_timestamp": "2023-05-01T09:09:19Z",
+        "created_at": "2023-05-01T09:09:19Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "_allow_access_control": [
+            "group:group_id_1",
+            "user_id:user_id_1",
+            "user_id:user_id_2",
+        ],
+    },
+    {
+        "type": "file",
+        "title": "doit.py",
+        "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "_timestamp": "2023-05-01T09:10:21Z",
+        "created_at": "2023-05-01T09:09:31Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
+        "_allow_access_control": [
+            "group:group_id_1",
+            "user_id:user_id_1",
+            "user_id:user_id_2",
+        ],
+    },
+]
+EXPECTED_USER2_FILES_PERMISSION = [
+    {
+        "type": "folder",
+        "title": "folder4",
+        "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "_timestamp": "2023-05-01T09:09:19Z",
+        "created_at": "2023-05-01T09:09:19Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
+        "_allow_access_control": [
+            "group:group_id_2",
+            "user_id:user_id_3",
+            "user_id:user_id_4",
+        ],
+    },
+    {
+        "type": "file",
+        "title": "mac.txt",
+        "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "_timestamp": "2023-05-01T09:10:21Z",
+        "created_at": "2023-05-01T09:09:31Z",
+        "size": 10484,
+        "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
+        "_allow_access_control": [
+            "group:group_id_2",
+            "user_id:user_id_3",
+            "user_id:user_id_4",
+        ],
+    },
+]
 
 
 def token_retrieval_errors(message, error_code):
@@ -316,6 +429,18 @@ def test_get_configuration():
     assert config["client_id"] == ""
 
 
+@asynccontextmanager
+async def create_onedrive_source(use_text_extraction_service=False):
+    async with create_source(
+        OneDriveDataSource,
+        client_id="foo",
+        client_secret="bar",
+        tenant_id="faa",
+        use_text_extraction_service=use_text_extraction_service,
+    ) as source:
+        yield source
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "extras",
@@ -339,7 +464,7 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
 
 @pytest.mark.asyncio
 async def test_close_with_client_session():
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         source.client.access_token = "dummy"
 
         await source.close()
@@ -349,7 +474,7 @@ async def test_close_with_client_session():
 
 @pytest.mark.asyncio
 async def test_set_access_token():
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         mock_token = {"access_token": "msgraphtoken", "expires_in": "1234555"}
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(
@@ -364,7 +489,7 @@ async def test_set_access_token():
 
 @pytest.mark.asyncio
 async def test_ping_for_successful_connection():
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         DUMMY_RESPONSE = {}
         source.client.get = AsyncIterator([[DUMMY_RESPONSE]])
 
@@ -374,7 +499,7 @@ async def test_ping_for_successful_connection():
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
 async def test_ping_for_failed_connection_exception(mock_get):
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         with patch.object(
             OneDriveClient, "get", side_effect=Exception("Something went wrong")
         ):
@@ -452,7 +577,7 @@ async def test_get_with_429_status():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch(
                 "aiohttp.ClientSession.get",
@@ -478,7 +603,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
     with patch("connectors.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
-        async with create_source(OneDriveDataSource) as source:
+        async with create_onedrive_source() as source:
             with patch.object(AccessToken, "get", return_value="abc"):
                 with patch(
                     "aiohttp.ClientSession.get",
@@ -497,7 +622,7 @@ async def test_get_with_404_status():
     error = ClientResponseError(None, None)
     error.status = 404
 
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch(
                 "aiohttp.ClientSession.get",
@@ -516,7 +641,7 @@ async def test_get_with_500_status():
     error = ClientResponseError(None, None)
     error.status = 500
 
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch(
                 "aiohttp.ClientSession.get",
@@ -531,7 +656,7 @@ async def test_get_with_500_status():
 
 @pytest.mark.asyncio
 async def test_get_owned_files():
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_FILES)
@@ -552,7 +677,7 @@ async def test_get_owned_files():
 
 @pytest.mark.asyncio
 async def test_list_users():
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         response = []
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(
@@ -579,7 +704,7 @@ async def test_list_users():
 async def test_get_content_when_is_downloadable_is_true(
     file, download_url, expected_content
 ):
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
                 with patch(
@@ -592,6 +717,32 @@ async def test_get_content_when_is_downloadable_is_true(
                         doit=True,
                     )
                     assert response == expected_content
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=RESPONSE_CONTENT,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_onedrive_source(use_text_extraction_service=True) as source:
+            with patch.object(AccessToken, "get", return_value="abc"):
+                with patch(
+                    "aiohttp.ClientSession.get", return_value=get_stream_reader()
+                ):
+                    with patch(
+                        "aiohttp.StreamReader.iter_chunked",
+                        return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+                    ):
+                        response = await source.get_content(
+                            file=MOCK_ATTACHMENT,
+                            download_url="https://content1",
+                            doit=True,
+                        )
+                        assert response == EXPECTED_CONTENT_EXTRACTED
 
 
 @patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
@@ -619,7 +770,7 @@ async def test_get_content_when_is_downloadable_is_true(
 )
 @pytest.mark.asyncio
 async def test_get_docs(users_patch, files_patch):
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         expected_responses = [*EXPECTED_USER1_FILES, *EXPECTED_USER2_FILES]
         source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
 
@@ -728,7 +879,7 @@ async def test_get_docs(users_patch, files_patch):
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         validation_result = await OneDriveAdvancedRulesValidator(source).validate(
             advanced_rules
         )
@@ -759,7 +910,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 )
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(filtering):
-    async with create_source(OneDriveDataSource) as source:
+    async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch.object(
                 OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
@@ -787,3 +938,149 @@ async def test_get_docs_with_advanced_rules(filtering):
                         documents.append(item)
 
         assert documents == expected_responses
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_onedrive_source() as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+
+        assert len(acl) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_enabled():
+    expected_user_access_control = [
+        [
+            "email:AdeleV@w076v.onmicrosoft.com",
+            "group:e35d6159-f6c1-462c-a60c-11f29880e9c0",
+            "user:AdeleV@w076v.onmicrosoft.com",
+            "user_id:3fada5d6-125c-4aaa-bc23-09b5d301b2a7",
+        ],
+        [
+            "email:AlexW@w076v.onmicrosoft.com",
+            "group:5010ad09-7ad0-48e7-8047-1ae0f6117a17",
+            "user:AlexW@w076v.onmicrosoft.com",
+            "user_id:8e083933-1720-4d2f-80d0-3976669b40ee",
+        ],
+    ]
+
+    async with create_onedrive_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch.object(
+                OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
+            ):
+                user_access_control = []
+                async for user_doc in source.get_access_control():
+                    user_doc["query"]["template"]["params"]["access_control"].sort()
+                    user_access_control.append(
+                        user_doc["query"]["template"]["params"]["access_control"]
+                    )
+
+                assert expected_user_access_control == user_access_control
+
+
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
+@patch.object(
+    OneDriveClient,
+    "get_owned_files",
+    side_effect=[
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER1_FILES[0], None),
+                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
+                ]
+            )
+        ),
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER2_FILES[0], None),
+                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                ]
+            )
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_without_dls_enabled(users_patch, files_patch):
+    async with create_onedrive_source() as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        expected_responses = [*EXPECTED_USER1_FILES, *EXPECTED_USER2_FILES]
+        source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
+
+        documents, downloads = [], []
+        async for item, content in source.get_docs():
+            documents.append(item)
+
+            if content:
+                downloads.append(content)
+
+        assert documents == expected_responses
+
+        assert len(downloads) == 2
+
+
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
+@patch.object(
+    OneDriveClient,
+    "get_owned_files",
+    side_effect=[
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER1_FILES[0], None),
+                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
+                ]
+            )
+        ),
+        (
+            AsyncIterator(
+                [
+                    (RESPONSE_USER2_FILES[0], None),
+                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                ]
+            )
+        ),
+    ],
+)
+@patch.object(
+    OneDriveClient,
+    "list_file_permission",
+    side_effect=[
+        (AsyncIterator([RESPONSE_PERMISSION1])),
+        (AsyncIterator([RESPONSE_PERMISSION1])),
+        (AsyncIterator([RESPONSE_PERMISSION2])),
+        (AsyncIterator([RESPONSE_PERMISSION2])),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_dls_enabled(users_patch, files_patch, permissions_patch):
+    async with create_onedrive_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        expected_responses = [
+            *EXPECTED_USER1_FILES_PERMISSION,
+            *EXPECTED_USER2_FILES_PERMISSION,
+        ]
+        source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
+
+        documents, downloads = [], []
+        async for item, content in source.get_docs():
+            item.get("_allow_access_control", []).sort()
+            documents.append(item)
+
+            if content:
+                downloads.append(content)
+
+        assert documents == expected_responses
+
+        assert len(downloads) == 2

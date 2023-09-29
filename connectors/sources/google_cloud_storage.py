@@ -10,9 +10,6 @@ import os
 import urllib.parse
 from functools import cached_property, partial
 
-import aiofiles
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
@@ -22,7 +19,7 @@ from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,
 )
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
+from connectors.utils import get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -47,7 +44,6 @@ BLOB_ADAPTER = {
 }
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
@@ -229,6 +225,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 3,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def validate_config(self):
@@ -370,50 +374,40 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        blob_size = int(blob["size"])
-        if not (doit and blob_size):
+        file_size = int(blob["size"])
+        if not (doit and file_size):
             return
 
-        blob_name = blob["name"]
-        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(f"{blob_name} can't be extracted")
+        filename = blob["name"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
-        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
-            )
-            return
-        self._logger.debug(f"Downloading {blob_name}")
         document = {
             "_id": blob["id"],
             "_timestamp": blob["_timestamp"],
         }
-        source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+
+        # gcs has a unique download method so we can't utilize
+        # the generic download_and_extract_file func
+        async with self.create_temp_file(file_extension) as async_buffer:
             await anext(
                 self._google_storage_client.api_call(
                     resource="objects",
                     method="get",
                     bucket=blob["bucket_name"],
-                    object=blob_name,
+                    object=filename,
                     alt="media",
                     userProject=self._google_storage_client.user_project_id,
                     pipe_to=async_buffer,
                 )
             )
-            source_file_name = async_buffer.name
+            await async_buffer.close()
 
-        self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
-        await remove(str(source_file_name))
-        self._logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
+            document = await self.handle_file_content_extraction(
+                document, filename, async_buffer.name
+            )
+
         return document
 
     async def get_docs(self, filtering=None):
