@@ -5,6 +5,7 @@
 #
 import asyncio
 import datetime
+import itertools
 from copy import deepcopy
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
@@ -21,6 +22,7 @@ from connectors.es.sink import (
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
     Extractor,
+    ForceCanceledError,
     Sink,
     SyncOrchestrator,
 )
@@ -1086,6 +1088,7 @@ def test_bulk_populate_stats(res, expected_result):
     assert sink.deleted_document_count == expected_result["deleted_document_count"]
 
 
+@pytest.mark.asyncio
 async def test_batch_bulk_with_retry():
     client = Mock()
     sink = Sink(
@@ -1137,3 +1140,132 @@ async def test_elastic_server_done(
     assert es.done() == expected_result
 
     await es.close()
+
+
+@pytest.mark.asyncio
+async def test_extractor_put_doc():
+    doc = {"id": 123}
+    queue = Mock()
+    queue.put = AsyncMock()
+    extractor = Extractor(
+        None,
+        queue,
+        INDEX,
+    )
+
+    await extractor.put_doc(doc)
+    queue.put.assert_awaited_once_with(doc)
+
+
+@pytest.mark.asyncio
+async def test_force_canceled_extractor_put_doc():
+    doc = {"id": 123}
+    queue = Mock()
+    queue.put = AsyncMock()
+    extractor = Extractor(
+        None,
+        queue,
+        INDEX,
+    )
+
+    extractor.force_cancel()
+    with pytest.raises(ForceCanceledError):
+        await extractor.put_doc(doc)
+        queue.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sink_fetch_doc():
+    expected_doc = {"id": 123}
+    queue = Mock()
+    queue.get = AsyncMock(return_value=expected_doc)
+    sink = Sink(
+        None,
+        queue,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+    )
+
+    doc = await sink.fetch_doc()
+    queue.get.assert_awaited_once()
+    assert doc == expected_doc
+
+
+@pytest.mark.asyncio
+async def test_force_canceled_sink_fetch_doc():
+    expected_doc = {"id": 123}
+    queue = Mock()
+    queue.get = AsyncMock(return_value=expected_doc)
+    sink = Sink(
+        None,
+        queue,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+    )
+
+    sink.force_cancel()
+    with pytest.raises(ForceCanceledError):
+        await sink.fetch_doc()
+        queue.get.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "extractor_task_done, sink_task_done, force_cancel",
+    [
+        (
+            itertools.chain([False, False, False], itertools.repeat(True)),
+            itertools.chain([False, False], itertools.repeat(True)),
+            False,
+        ),
+        (
+            itertools.chain([False, False, False], itertools.repeat(True)),
+            itertools.repeat(False),
+            True,
+        ),
+        (
+            itertools.repeat(False),
+            itertools.chain([False, False], itertools.repeat(True)),
+            True,
+        ),
+        (
+            itertools.repeat(False),
+            itertools.repeat(False),
+            True,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    es = SyncOrchestrator(config)
+    es._extractor = Mock()
+    es._extractor.force_cancel = Mock()
+
+    es._sink = Mock()
+    es._sink.force_cancel = Mock()
+
+    es._extractor_task = Mock()
+    es._extractor_task.cancel = Mock()
+    es._extractor_task.done = Mock(side_effect=extractor_task_done)
+
+    es._sink_task = Mock()
+    es._sink_task.cancel = Mock()
+    es._sink_task.done = Mock(side_effect=sink_task_done)
+
+    with mock.patch.object(asyncio, "sleep"):
+        await es.cancel()
+        es._extractor_task.cancel.assert_called_once()
+        es._sink_task.cancel.assert_called_once()
+
+        if force_cancel:
+            es._extractor.force_cancel.assert_called_once()
+            es._sink.force_cancel.assert_called_once()
+        else:
+            es._extractor.force_cancel.assert_not_called()
+            es._sink.force_cancel.assert_not_called()
