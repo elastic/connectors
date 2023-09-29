@@ -8,6 +8,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 from aiogoogle import Aiogoogle
@@ -24,11 +25,12 @@ API_VERSION = "v1"
 
 
 @asynccontextmanager
-async def create_gcs_source():
+async def create_gcs_source(use_text_extraction_service=False):
     async with create_source(
         GoogleCloudStorageDataSource,
         service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
         retry_count=0,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -362,6 +364,63 @@ async def test_get_content():
                     doit=True,
                 )
                 assert content == expected_blob_document
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.content_extraction.ContentExtraction._check_configured",
+    lambda *_: True,
+)
+async def test_get_content_with_text_extraction_enabled_adds_body():
+    """Test the module responsible for fetching the content of the file if it is extractable."""
+
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="file content",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_gcs_source(use_text_extraction_service=True) as source:
+            blob_document = {
+                "id": "bucket_1/blob_1/123123123",
+                "component_count": None,
+                "content_encoding": None,
+                "content_language": None,
+                "created_at": None,
+                "last_updated": "2011-10-12T00:01:00Z",
+                "metadata": None,
+                "name": "blob_1.txt",
+                "size": "15",
+                "storage_class": None,
+                "_timestamp": "2011-10-12T00:01:00Z",
+                "type": None,
+                "url": "https://console.cloud.google.com/storage/browser/_details/bucket_1/blob_1;tab=live_object?project=dummy123",
+                "version": None,
+                "bucket_name": "bucket_1",
+            }
+            expected_blob_document = {
+                "_id": "bucket_1/blob_1/123123123",
+                "_timestamp": "2011-10-12T00:01:00Z",
+                "body": "file content",
+            }
+            blob_content_response = ""
+
+            with mock.patch.object(
+                Aiogoogle, "as_service_account", return_value=blob_content_response
+            ):
+                async with Aiogoogle(
+                    service_account_creds=source._google_storage_client.service_account_credentials
+                ) as google_client:
+                    storage_client = await google_client.discover(
+                        api_name=API_NAME, api_version=API_VERSION
+                    )
+                    storage_client.objects = mock.MagicMock()
+                    content = await source.get_content(
+                        blob=blob_document,
+                        doit=True,
+                    )
+                    assert content == expected_blob_document
 
 
 @pytest.mark.asyncio

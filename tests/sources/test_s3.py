@@ -19,12 +19,13 @@ from tests.sources.support import create_source
 
 
 @asynccontextmanager
-async def create_s3_source():
+async def create_s3_source(use_text_extraction_service=False):
     async with create_source(
         S3DataSource,
         buckets="ent-search-ingest-dev",
         aws_access_key_id="A1B2C3D4",
         aws_secret_access_key="A1B2C3D4",
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -218,7 +219,7 @@ async def test_get_content(s3_client):
         with patch("aiofiles.os.remove"):
             with patch("connectors.utils.convert_to_b64"):
                 with patch.object(aiofiles, "open", return_value=async_response):
-                    result = await source.s3_client.get_content(
+                    result = await source.get_content(
                         document, s3_client, timestamp=None, doit=True
                     )
 
@@ -227,6 +228,41 @@ async def test_get_content(s3_client):
                         "_timestamp": "2022-01-01T00:00:00.000Z",
                         "_attachment": b"test content",
                     }
+
+
+@mock.patch("aiobotocore.client.AioBaseClient")
+@pytest.mark.asyncio
+async def test_get_content_with_text_extraction_enabled_adds_body(s3_client):
+    """Test get_content method of S3Client"""
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="test content",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_s3_source(use_text_extraction_service=True) as source:
+            document = {
+                "id": "123",
+                "filename": "test.pdf",
+                "bucket": "test-bucket",
+                "_timestamp": "2022-01-01T00:00:00.000Z",
+                "size_in_bytes": 1024,
+            }
+            s3_client = MagicMock()
+            s3_client.download_fileobj = AsyncMock()
+            async_response = AsyncMock()
+            async_response.__aenter__ = AsyncMock(return_value=ReadAsyncMock)
+
+            result = await source.get_content(
+                document, s3_client, timestamp=None, doit=True
+            )
+
+            assert result == {
+                "_id": "123",
+                "_timestamp": "2022-01-01T00:00:00.000Z",
+                "body": "test content",
+            }
 
 
 @mock.patch("aiobotocore.client.AioBaseClient")
@@ -250,7 +286,7 @@ async def test_get_content_with_upper_extension(s3_client):
         with patch("aiofiles.os.remove"):
             with patch("connectors.utils.convert_to_b64"):
                 with patch.object(aiofiles, "open", return_value=async_response):
-                    result = await source.s3_client.get_content(
+                    result = await source.get_content(
                         document, s3_client, timestamp=None, doit=True
                     )
 
@@ -266,8 +302,10 @@ async def test_get_content_with_unsupported_file(mock_aws):
     """Test get_content method of S3Client for unsupported file"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-            response = await source.s3_client.get_content(
-                {"id": 1, "filename": "a.png", "bucket": "dummy"}, "client", doit=1
+            response = await source.get_content(
+                {"id": 1, "filename": "a.png", "bucket": "dummy", "size_in_bytes": 1},
+                "client",
+                doit=1,
             )
             assert response is None
 
@@ -277,7 +315,7 @@ async def test_get_content_when_not_doit(mock_aws):
     """Test get_content method of S3Client when doit is none"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-            response = await source.s3_client.get_content(
+            response = await source.get_content(
                 {"id": 1, "filename": "a.txt", "bucket": "dummy"}, "client"
             )
             assert response is None
@@ -288,7 +326,7 @@ async def test_get_content_when_size_is_large(mock_aws):
     """Test get_content method of S3Client when size is greater than max size"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
-            response = await source.s3_client.get_content(
+            response = await source.get_content(
                 {
                     "id": 1,
                     "filename": "a.txt",
@@ -387,7 +425,7 @@ async def test_get_content_with_clienterror():
             {"Error": {"Code": "MockException"}}, "operation_name"
         )
         with pytest.raises(ClientError):
-            await source.s3_client.get_content(
+            await source.get_content(
                 doc=document, s3_client=s3_client, timestamp=None, doit=True
             )
 

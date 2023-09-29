@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: Dockerfile.ftest
-    command: python tests/sources/fixtures/sharepoint_server/fixture.py
+    command: bin/python tests/sources/fixtures/sharepoint_server/fixture.py
     ports:
       - "8491:8491"
     volumes:

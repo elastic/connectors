@@ -28,13 +28,14 @@ ADVANCED_SNIPPET = "advanced_snippet"
 
 
 @asynccontextmanager
-async def create_service_now_source():
+async def create_service_now_source(use_text_extraction_service=False):
     async with create_source(
         ServiceNowDataSource,
         url="http://127.0.0.1:1234",
         username="admin",
         password="changeme",
         services="*",
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -402,7 +403,7 @@ async def test_fetch_attachment_content_with_doit():
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
@@ -420,13 +421,46 @@ async def test_fetch_attachment_content_with_doit():
 
 
 @pytest.mark.asyncio
+async def test_fetch_attachment_content_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="Attachment Content",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_service_now_source(
+            use_text_extraction_service=True
+        ) as source:
+            source.servicenow_client._api_call = mock.AsyncMock(
+                return_value=MockResponse(res=b"Attachment Content", headers={})
+            )
+
+            response = await source.get_content(
+                metadata={
+                    "id": "id_1",
+                    "_timestamp": "1212-12-12 12:12:12",
+                    "file_name": "file_1.txt",
+                    "size_bytes": "2048",
+                },
+                doit=True,
+            )
+
+            assert response == {
+                "_id": "id_1",
+                "_timestamp": "1212-12-12 12:12:12",
+                "body": "Attachment Content",
+            }
+
+
+@pytest.mark.asyncio
 async def test_fetch_attachment_content_with_upper_extension():
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
@@ -450,7 +484,7 @@ async def test_fetch_attachment_content_without_doit():
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
@@ -469,7 +503,7 @@ async def test_fetch_attachment_content_with_exception():
             side_effect=Exception("Something went wrong")
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
@@ -489,7 +523,7 @@ async def test_fetch_attachment_content_with_unsupported_extension_then_skip():
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
@@ -509,7 +543,7 @@ async def test_fetch_attachment_content_without_extension_then_skip():
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
@@ -529,7 +563,7 @@ async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
             return_value=MockResponse(res=b"Attachment Content", headers={})
         )
 
-        response = await source.servicenow_client.fetch_attachment_content(
+        response = await source.get_content(
             metadata={
                 "id": "id_1",
                 "_timestamp": "1212-12-12 12:12:12",
