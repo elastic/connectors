@@ -335,7 +335,7 @@ class BoxDataSource(BaseDataSource):
                             ),
                         )
                     )
-                else:
+                elif folder_entry.get("type") == "folder":
                     await self.queue.put((doc, None))
                     await self.fetchers.put(
                         partial(
@@ -452,15 +452,24 @@ class BoxDataSource(BaseDataSource):
                 yield item
 
     async def get_docs(self, filtering=None):
+        stored_id = set()
         if self.is_enterprise == BOX_ENTERPRISE:
             async for user_id in self.get_users_id():
                 # "0" refers to the root folder
-                await self._fetch(doc_id="0", user_id=user_id)
+                await self.fetchers.put(
+                    partial(self._fetch, doc_id="0", user_id=user_id)
+                )
+                self.tasks += 1
         else:
-            await self._fetch(doc_id="0")
+            await self.fetchers.put(partial(self._fetch, doc_id="0"))
+            self.tasks += 1
 
-        self.tasks += 1
         async for item in self._consumer():
-            yield item
+            current_id = item[0].get("_id")
+            if current_id in stored_id:
+                continue
+            else:
+                stored_id.add(current_id)
+                yield item
 
         await self.fetchers.join()
