@@ -772,7 +772,7 @@ class TestMicrosoftAPISession:
             assert actual_payload == payload
 
         patch_cancellable_sleeps.assert_awaited_with(
-            DEFAULT_RETRY_SECONDS * DEFAULT_BACKOFF_MULTIPLIER * retry_count
+            DEFAULT_RETRY_SECONDS + DEFAULT_BACKOFF_MULTIPLIER * retry_count
         )
 
     @pytest.mark.asyncio
