@@ -143,6 +143,9 @@ class JobSchedulingService(BaseService):
         try:
             while self.running:
                 try:
+                    if not self.next_wake_up_time:
+                        self.next_wake_up_time = datetime.utcnow()
+
                     logger.debug(
                         f"Polling every {self.idling} seconds for Job Scheduling"
                     )
@@ -151,6 +154,8 @@ class JobSchedulingService(BaseService):
                         connector_ids=connector_ids,
                     ):
                         await self._schedule(connector)
+
+                    self.next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -169,17 +174,13 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _try_schedule_sync(self, connector, job_type):
-        if not self.next_wake_up_time:
-            self.next_wake_up_time = datetime.utcnow()
-
         expected_wake_up_time = self.next_wake_up_time
         actual_wake_up_time = datetime.utcnow()
+        next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
 
         print(
             f"Expected to wake up at {expected_wake_up_time}, woke up at {actual_wake_up_time}"
         )
-
-        self.next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
 
         @with_concurrency_control()
         async def _should_schedule(job_type):
@@ -222,7 +223,7 @@ class JobSchedulingService(BaseService):
                 connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
-            if self.next_wake_up_time < next_sync:
+            if next_wake_up_time < next_sync:
                 next_sync_due = (next_sync - self.next_wake_up_time).total_seconds()
                 connector.log_debug(
                     f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
