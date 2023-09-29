@@ -18,8 +18,6 @@ from botocore.exceptions import ClientError
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
 
-MAX_CHUNK_SIZE = 1048576
-DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
 DEFAULT_CONNECTION_TIMEOUT = 90
@@ -250,6 +248,8 @@ class S3DataSource(BaseDataSource):
             await s3_client.download_fileobj(
                 Bucket=bucket, Key=filename, Fileobj=async_buffer
             )
+            await async_buffer.close()
+
             document = await self.handle_file_content_extraction(
                 document, filename, async_buffer.name
             )
