@@ -164,6 +164,38 @@ class SecurityInfo:
         )
 
     def parse_output(self, raw_output):
+        """
+        Formats and extracts key-value pairs from raw output data.
+
+        This method takes raw output data as input and processes it to extract
+        key-value pairs. It handles cases where key-value pairs may be spread
+        across multiple lines and returns a dictionary containing the formatted
+        key-value pairs.
+
+        Args:
+            raw_output (str): The raw output data to be processed.
+
+        Returns:
+            dict: A dictionary containing key-value pairs extracted from the raw
+                output data.
+
+        Example:
+            Given the following raw output:
+
+            Header 1: Value 1
+            Header 2: Value 2
+            Key 1   Value1
+            Key 2   Value2
+            Key 3   Value3
+
+            The method will return the following dictionary:
+
+            {
+                "Key 1": "Value1",
+                "Key 2": "Value2",
+                "Key 3": "Value3"
+            }
+        """
         formatted_result = {}
         output_lines = raw_output.std_out.decode().splitlines()
 
@@ -445,7 +477,7 @@ class NASDataSource(BaseDataSource):
 
     async def _user_access_control_doc(self, user, sid, groups_info, groups_members):
         prefixed_username = _prefix_user(user)
-        sid_users = _prefix_sid(sid)
+        sid_user = _prefix_sid(sid)
         sid_groups = []
 
         for group_name, group_sid in groups_info.items():
@@ -454,13 +486,13 @@ class NASDataSource(BaseDataSource):
             if sid in members.values():
                 sid_groups.append(_prefix_sid(group_sid))
 
-        access_control = [sid_users, prefixed_username, *sid_groups]
+        access_control = [sid_user, prefixed_username, *sid_groups]
 
         return {
             "_id": sid,
             "identity": {
                 "username": prefixed_username,
-                "user_id": sid_users,
+                "user_id": sid_user,
             },
             "created_at": iso_utc(),
         } | es_access_control_query(access_control)
@@ -470,7 +502,9 @@ class NASDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        self._logger.info("Fetching all groups and members")
+        self._logger.info(
+            f"Fetching all groups and members for drive at path '{self.drive_path}'"
+        )
         groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
 
         groups_members = {}
