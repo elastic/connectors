@@ -16,7 +16,6 @@ BLOB_SCHEMA = {
     "size": "size",
     "container": "container",
 }
-DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
     100  # Max concurrent download supported by Azure Blob Storage
@@ -178,14 +177,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
             return
 
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
             partial(self.blob_download_func, filename, blob["container"]),
         )
-
-        return document
 
     async def blob_download_func(self, blob_name, container_name):
         async with BlobClient.from_connection_string(
