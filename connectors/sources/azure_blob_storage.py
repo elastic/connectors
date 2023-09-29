@@ -4,13 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
-import os
 from functools import partial
 
 from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
 
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -18,7 +16,6 @@ BLOB_SCHEMA = {
     "size": "size",
     "container": "container",
 }
-DEFAULT_FILE_SIZE_LIMIT = 10485760
 DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
     100  # Max concurrent download supported by Azure Blob Storage
@@ -103,7 +100,6 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
-                "ui_restrictions": ["self-managed"],
                 "value": False,
             },
         }
@@ -165,37 +161,28 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        blob_size = int(blob["size"])
-        if not (doit and blob_size > 0):
+        file_size = int(blob["size"])
+        if not (doit and file_size > 0):
             return
 
-        blob_name = blob["title"]
-        file_extension = (os.path.splitext(blob_name)[-1]).lower()
-        if file_extension not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(f"{blob_name} can't be extracted")
-            return
-
+        filename = blob["title"]
         if blob["tier"] == "Archive":
             self._logger.warning(
-                f"{blob_name} can't be downloaded as blob tier is archive"
+                f"{filename} can't be downloaded as blob tier is archive"
             )
             return
 
-        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
-            )
+        file_extension = self.get_file_extension(filename).lower()
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
-            blob_name,
+            filename,
             file_extension,
-            partial(self.blob_download_func, blob_name, blob["container"]),
+            partial(self.blob_download_func, filename, blob["container"]),
         )
-
-        return document
 
     async def blob_download_func(self, blob_name, container_name):
         async with BlobClient.from_connection_string(

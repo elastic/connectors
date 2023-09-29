@@ -8,6 +8,7 @@ import re
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from unittest import TestCase, mock
+from unittest.mock import patch
 
 import pytest
 from aiohttp.client_exceptions import ClientConnectionError
@@ -421,12 +422,15 @@ CACHED_SOBJECTS = {
 
 
 @asynccontextmanager
-async def create_salesforce_source(mock_token=True, mock_queryables=True):
+async def create_salesforce_source(
+    use_text_extraction_service=False, mock_token=True, mock_queryables=True
+):
     async with create_source(
         SalesforceDataSource,
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         if mock_token is True:
             source.salesforce_client.api_token.token = mock.AsyncMock(
@@ -1041,12 +1045,13 @@ async def test_get_all_with_content_docs_when_success(
             "url": f"{TEST_BASE_URL}/content_document_id",
             "version_number": "2",
             "version_url": f"{TEST_BASE_URL}/content_version_id",
-            "_attachment": expected_attachment,
         }
+        if expected_attachment is not None:
+            expected_doc["_attachment"] = expected_attachment
 
         mock_responses.get(
             f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
-            status=response_body,
+            status=response_status,
             body=response_body,
         )
         mock_responses.get(
@@ -1059,6 +1064,60 @@ async def test_get_all_with_content_docs_when_success(
                 content_document_records.append(record)
 
         TestCase().assertCountEqual(content_document_records, [expected_doc])
+
+
+@pytest.mark.asyncio
+async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="chunk1",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_salesforce_source(use_text_extraction_service=True) as source:
+            expected_doc = {
+                "_id": "content_document_id",
+                "content_size": 1000,
+                "created_at": "",
+                "created_by": "Frodo",
+                "created_by_email": "frodo@tlotr.com",
+                "body": "chunk1",
+                "description": "A file about a ring.",
+                "file_extension": "txt",
+                "last_updated": "",
+                "linked_ids": [
+                    "account_id",
+                    "campaign_id",
+                    "case_id",
+                    "contact_id",
+                    "lead_id",
+                    "opportunity_id",
+                ],  # contains every SObject that is connected to this doc
+                "owner": "Frodo",
+                "owner_email": "frodo@tlotr.com",
+                "title": "the_ring.txt",
+                "type": "content_document",
+                "url": f"{TEST_BASE_URL}/content_document_id",
+                "version_number": "2",
+                "version_url": f"{TEST_BASE_URL}/content_version_id",
+            }
+
+            mock_responses.get(
+                f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+                status=200,
+                body=b"chunk1",
+            )
+            mock_responses.get(
+                TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+            )
+
+            content_document_records = []
+            async for record, _ in source.get_docs():
+                if record["type"] == "content_document":
+                    content_document_records.append(record)
+
+            TestCase().assertCountEqual(content_document_records, [expected_doc])
 
 
 @pytest.mark.asyncio

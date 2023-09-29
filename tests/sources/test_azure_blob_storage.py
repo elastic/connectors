@@ -531,7 +531,7 @@ async def test_get_content_when_blob_tier_archive():
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_content_with_with_text_extraction_enabled_adds_body():
+async def test_get_content_with_text_extraction_enabled_adds_body():
     mock_response = {
         "type": "blob",
         "id": "container1/blob1",
