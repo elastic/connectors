@@ -162,7 +162,9 @@ class JobSchedulingService(BaseService):
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
-                self.next_wake_up_time = datetime.utcnow() + timedelta(seconds=self.idling)
+                self.next_wake_up_time = datetime.utcnow() + timedelta(
+                    seconds=self.idling
+                )
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
