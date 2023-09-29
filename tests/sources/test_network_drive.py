@@ -691,7 +691,8 @@ def test_fetch_members():
 @pytest.mark.asyncio
 async def test_get_access_control_dls_disabled():
     async with create_source(NASDataSource) as source:
-        source._dls_enabled = MagicMock(return_value=False)
+        source._features = mock.Mock()
+        source._features.document_level_security_enabled = MagicMock(return_value=False)
 
         acl = []
         async for access_control in source.get_access_control():
