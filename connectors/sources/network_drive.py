@@ -167,7 +167,7 @@ class SecurityInfo:
         formatted_result = {}
         output_lines = raw_output.std_out.decode().splitlines()
 
-        #  Ignoring initial headers with fixed length of 3
+        #  Ignoring initial headers with fixed length of 2
         if len(output_lines) > 2:
             for line in output_lines[3:]:
                 parts = line.rsplit(maxsplit=1)

@@ -42,13 +42,6 @@ def mock_permission(sid):
     mock_response["sid"] = mock.Mock()
     mock_response["sid"].return_value = sid
 
-    # mock_response[1]['ace_type'] =  mock.Mock()
-    # mock_response[1]['ace_type'].value.return_value = 1
-    # mock_response[1]['mask'] = mock.Mock()
-    # mock_response[1]['mask'].value.return_value = 278
-    # mock_response[1]['sid'] = mock.Mock()
-    # mock_response[1]['sid'].return_value = 'S-2-21-211-2112'
-
     return mock_response
 
 
