@@ -38,10 +38,8 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
-FILE_SIZE_LIMIT = 10485760
 
 FETCH_SIZE = 100
-CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira

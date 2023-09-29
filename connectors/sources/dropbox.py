@@ -34,8 +34,6 @@ from connectors.utils import (
 RETRY_COUNT = 3
 DEFAULT_RETRY_AFTER = 300  # seconds
 RETRY_INTERVAL = 2
-CHUNK_SIZE = 1024
-FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
 MAX_CONCURRENT_DOWNLOADS = 100
 LIMIT = 300  # Limit for fetching shared files per call
 PAPER = "paper"

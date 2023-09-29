@@ -18,8 +18,6 @@ from botocore.exceptions import ClientError
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
 
-MAX_CHUNK_SIZE = 1048576
-DEFAULT_MAX_FILE_SIZE = 10485760
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
 DEFAULT_CONNECTION_TIMEOUT = 90

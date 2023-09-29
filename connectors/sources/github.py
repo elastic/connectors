@@ -4,16 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
-import asyncio
 import time
 from enum import Enum
 from functools import cached_property, partial
 
-import aiofiles
 import aiohttp
 import fastjsonschema
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub.aiohttp import GitHubAPI
 
@@ -26,7 +22,6 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    convert_to_b64,
     decode_base64_value,
     retryable,
     ssl_context,
@@ -41,7 +36,6 @@ REPOSITORY_OBJECT = "repository"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 FORBIDDEN = 403
 NODE_SIZE = 100
 REVIEWS_COUNT = 45
@@ -920,6 +914,14 @@ class GitHubDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": RETRIES,
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 8,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "value": False,
+            },
         }
 
     async def get_invalid_repos(self):
@@ -1320,29 +1322,6 @@ class GitHubDataSource(BaseDataSource):
                 f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}"
             )
 
-    async def _get_document_with_content(self, url, attachment_name, document):
-        file_data = await self.github_client.get_github_item(resource=url)
-        temp_filename = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await async_buffer.write(
-                decode_base64_value(content=file_data["content"])  # pyright: ignore
-            )
-            temp_filename = str(async_buffer.name)
-
-        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
-        await asyncio.to_thread(convert_to_b64, source=temp_filename)
-        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await async_buffer.read()).strip()
-
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file from: {temp_filename}. Error: {exception}"
-            )
-        return document
-
     async def get_content(self, attachment, timestamp=None, doit=False):
         """Extracts the content for Apache TIKA supported file types.
 
@@ -1354,30 +1333,35 @@ class GitHubDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size > 0):
+        file_size = int(attachment["size"])
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = attachment["name"]
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
+        filename = attachment["name"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
-
-        self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
-            "_id": f"{attachment['repo_name']}/{attachment['name']}",
+            "_id": f"{attachment['repo_name']}/{filename}",
             "_timestamp": attachment["_timestamp"],
         }
-
-        return await self._get_document_with_content(
-            url=attachment["url"],
-            attachment_name=attachment_name,
-            document=document,
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.download_func,
+                attachment["url"],
+            ),
         )
+
+    async def download_func(self, url):
+        file_data = await self.github_client.get_github_item(resource=url)
+        if file_data:
+            yield decode_base64_value(content=file_data["content"])
+        else:
+            yield
 
     def _filter_rule_query(self, repo, query, query_type):
         """

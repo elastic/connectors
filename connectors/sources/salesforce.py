@@ -26,7 +26,6 @@ RUNNING_FTEST = (
 
 RETRIES = 3
 RETRY_INTERVAL = 1
-CHUNK_SIZE = 1024
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
