@@ -155,7 +155,6 @@ class JobSchedulingService(BaseService):
                     ):
                         await self._schedule(connector)
 
-                    self.next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -163,6 +162,7 @@ class JobSchedulingService(BaseService):
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
+                self.next_wake_up_time = datetime.utcnow() + timedelta(seconds=self.idling)
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
