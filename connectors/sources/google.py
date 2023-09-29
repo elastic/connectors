@@ -22,7 +22,6 @@ SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 DEFAULT_TIMEOUT = 1 * 60  # 1 min
 DEFAULT_PAGE_SIZE = 100
 

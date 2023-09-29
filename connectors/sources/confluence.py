@@ -30,7 +30,6 @@ from connectors.utils import (
     ssl_context,
 )
 
-FILE_SIZE_LIMIT = 10485760
 RETRY_INTERVAL = 2
 SPACE = "space"
 BLOGPOST = "blogpost"
@@ -55,7 +54,6 @@ URLS = {
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
-CHUNK_SIZE = 1024
 MAX_CONCURRENCY = 50
 QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
@@ -653,7 +651,7 @@ class ConfluenceDataSource(BaseDataSource):
             return
 
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
@@ -665,8 +663,6 @@ class ConfluenceDataSource(BaseDataSource):
                 ),
             ),
         )
-
-        return document
 
     async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content

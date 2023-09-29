@@ -34,8 +34,6 @@ from connectors.utils import (
 RETRY_COUNT = 3
 DEFAULT_RETRY_AFTER = 300  # seconds
 RETRY_INTERVAL = 2
-CHUNK_SIZE = 1024
-FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
 MAX_CONCURRENT_DOWNLOADS = 100
 LIMIT = 300  # Limit for fetching shared files per call
 PAPER = "paper"
@@ -671,7 +669,7 @@ class DropboxDataSource(BaseDataSource):
             "_id": attachment["id"],
             "_timestamp": attachment["server_modified"],
         }
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
             filename,
             file_extension,
@@ -680,8 +678,6 @@ class DropboxDataSource(BaseDataSource):
                 download_func,
             ),
         )
-
-        return document
 
     def download_func(self, is_shared, attachment, filename):
         if is_shared:
