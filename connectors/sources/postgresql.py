@@ -493,7 +493,7 @@ class PostgreSQLDataSource(BaseDataSource):
         """Fetches all the data from the given query and format them in Elasticsearch documents
 
         Args:
-            table (str): Name of table
+            tables (str): List of tables
             query (str): Database Query
 
         Yields:
