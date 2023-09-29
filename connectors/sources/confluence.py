@@ -23,7 +23,6 @@ from connectors.sources.atlassian import (
     prefix_group_id,
 )
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
@@ -327,7 +326,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 13,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
-                "ui_restrictions": ["self-managed"],
                 "value": False,
             },
         }
@@ -645,25 +643,19 @@ class ConfluenceDataSource(BaseDataSource):
         Returns:
             Dictionary: Document of the attachment to be indexed.
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size):
-            return
-        attachment_name = attachment["title"]
-        file_extension = os.path.splitext(attachment_name)[-1]
-        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(f"{attachment_name} can't be extracted")
+        file_size = int(attachment["size"])
+        if not (doit and file_size):
             return
 
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
+        filename = attachment["title"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        document = await self.download_and_extract_file(
+        return await self.download_and_extract_file(
             document,
-            attachment_name,
+            filename,
             file_extension,
             partial(
                 self.generic_chunked_download_func,
@@ -673,8 +665,6 @@ class ConfluenceDataSource(BaseDataSource):
                 ),
             ),
         )
-
-        return document
 
     async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content
