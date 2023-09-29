@@ -83,13 +83,29 @@ DELTA_NEXT_LINK_KEY = "@odata.nextLink"
 DELTA_LINK_KEY = "@odata.deltaLink"
 
 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
-VIEW_ITEM_MASK = 0x1
-
-# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
-VIEW_PAGE_MASK = 0x20000
+# See also: https://learn.microsoft.com/en-us/previous-versions/office/sharepoint-csom/ee536458(v=office.15)
+VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
+VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
 
 # See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
-VIEW_ROLE_TYPES = [2, 3, 4, 5, 6, 7, 0xFF]
+# See also: https://learn.microsoft.com/en-us/dotnet/api/microsoft.sharepoint.client.roletype?view=sharepoint-csom
+READER = 2
+CONTRIBUTOR = 3
+WEB_DESIGNER = 4
+ADMINISTRATOR = 5
+EDITOR = 6
+REVIEWER = 7
+SYSTEM = 0xFF
+# Note the exclusion of NONE(0), GUEST(1), RESTRICTED_READER(8), and RESTRICTED_GUEST(9)
+VIEW_ROLE_TYPES = [
+    READER,
+    CONTRIBUTOR,
+    WEB_DESIGNER,
+    ADMINISTRATOR,
+    EDITOR,
+    REVIEWER,
+    SYSTEM,
+]
 
 
 class NotFound(Exception):
@@ -572,6 +588,7 @@ class SharepointOnlineClient:
                 for role_assignment in page:
                     yield role_assignment
         except NotFound:
+            self._logger.debug(f"No role assignments found for site: '{site_web_url}'")
             return
 
     async def site_groups_users(self, site_web_url, site_group_id):
@@ -2029,6 +2046,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             # If there is no permission information, default to restrict access
             if not bindings:
+                self._logger.debug(
+                    f"No RoleDefinitionBindings found for '{role_assignment.get('odata.id')}'"
+                )
                 return True
 
             # if any binding grants view access, this role assignment's member has view access
