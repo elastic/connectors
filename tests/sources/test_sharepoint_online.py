@@ -195,6 +195,36 @@ SAMPLE_SITE_GROUP_USERS = [
     }
 ]
 
+BATCH_THROTTLED_RESPONSE = {
+    "responses": [
+        {
+            "id": "014DQHDVKA25ZKRFXRQBDKQS2ZMJ3C442M",
+            "status": 429,
+            "headers": {
+                "Link": '<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html",<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html"',
+                "Deprecation": "Fri, 03 Sep 2021 23:59:59 GMT",
+                "Sunset": "Sun, 01 Oct 2023 23:59:59 GMT",
+                "Retry-After": "28",
+                "Cache-Control": "private",
+                "Content-Type": "application/json",
+            },
+            "body": {
+                "error": {
+                    "code": "activityLimitReached",
+                    "message": "The request has been throttled",
+                    "innerError": {
+                        "code": "throttledRequest",
+                        "innerError": {"code": "quota"},
+                        "date": "2023-09-29T14:31:03",
+                        "request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                        "client-request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                    },
+                }
+            },
+        }
+    ]
+}
+
 
 @asynccontextmanager
 async def create_spo_source(
@@ -509,35 +539,7 @@ class TestMicrosoftAPISession:
         self, microsoft_api_session, mock_responses
     ):
         url = "https://graph.microsoft.com/v1.0/$batch"
-        first_response = {
-            "responses": [
-                {
-                    "id": "014DQHDVKA25ZKRFXRQBDKQS2ZMJ3C442M",
-                    "status": 429,
-                    "headers": {
-                        "Link": '<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html",<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html"',
-                        "Deprecation": "Fri, 03 Sep 2021 23:59:59 GMT",
-                        "Sunset": "Sun, 01 Oct 2023 23:59:59 GMT",
-                        "Retry-After": "28",
-                        "Cache-Control": "private",
-                        "Content-Type": "application/json",
-                    },
-                    "body": {
-                        "error": {
-                            "code": "activityLimitReached",
-                            "message": "The request has been throttled",
-                            "innerError": {
-                                "code": "throttledRequest",
-                                "innerError": {"code": "quota"},
-                                "date": "2023-09-29T14:31:03",
-                                "request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
-                                "client-request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
-                            },
-                        }
-                    },
-                }
-            ]
-        }
+        first_response = BATCH_THROTTLED_RESPONSE
         second_response = {"responses": [{"key": "value"}]}
         payload = {"key": "value"}
 
@@ -553,42 +555,13 @@ class TestMicrosoftAPISession:
         self, microsoft_api_session, mock_responses, patch_cancellable_sleeps
     ):
         url = "https://graph.microsoft.com/v1.0/$batch"
-        response = {
-            "responses": [
-                {
-                    "id": "014DQHDVKA25ZKRFXRQBDKQS2ZMJ3C442M",
-                    "status": 429,
-                    "headers": {
-                        "Link": '<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html",<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html"',
-                        "Deprecation": "Fri, 03 Sep 2021 23:59:59 GMT",
-                        "Sunset": "Sun, 01 Oct 2023 23:59:59 GMT",
-                        "Retry-After": "28",
-                        "Cache-Control": "private",
-                        "Content-Type": "application/json",
-                    },
-                    "body": {
-                        "error": {
-                            "code": "activityLimitReached",
-                            "message": "The request has been throttled",
-                            "innerError": {
-                                "code": "throttledRequest",
-                                "innerError": {"code": "quota"},
-                                "date": "2023-09-29T14:31:03",
-                                "request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
-                                "client-request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
-                            },
-                        }
-                    },
-                }
-            ]
-        }
         payload = {"key": "value"}
 
-        mock_responses.post(url, payload=response)
-        mock_responses.post(url, payload=response)
-        mock_responses.post(url, payload=response)
-        mock_responses.post(url, payload=response)
-        mock_responses.post(url, payload=response)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
 
         with pytest.raises(ThrottledError):
             await microsoft_api_session.post(url, payload)
