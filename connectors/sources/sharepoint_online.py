@@ -1418,8 +1418,8 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         expanded_member_groups = user.get("transitiveMemberOf", [])
         if (
-            len(expanded_member_groups) < 100
-        ):  # $expand param has a max of 100: see: https://learn.microsoft.com/en-us/graph/known-issues#query-parameters
+            len(expanded_member_groups) < 20
+        ):  # $expand param has a max of 20: see: https://developer.microsoft.com/en-us/graph/known-issues/?search=expand
             for group in expanded_member_groups:
                 prefixed_groups.add(_prefix_group(group.get("id", None)))
         else:
