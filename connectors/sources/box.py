@@ -5,6 +5,7 @@
 #
 """Box source module responsible to fetch documents from Box"""
 import asyncio
+import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
 
@@ -48,6 +49,11 @@ BOX_FREE = "box_free"
 BOX_ENTERPRISE = "box_enterprise"
 
 refresh_token = None
+
+if "BOX_BASE_URL" in os.environ:
+    BASE_URL = os.environ.get("BOX_BASE_URL")
+else:
+    BASE_URL = "https://api.box.com"
 
 
 class TokenError(Exception):
@@ -132,7 +138,7 @@ class BoxClient:
         self._logger = logger
         self.is_enterprise = configuration["is_enterprise"]
         self._http_session = aiohttp.ClientSession(
-            base_url="https://api.box.com", raise_for_status=True
+            base_url=BASE_URL, raise_for_status=True
         )
         self.token = AccessToken(
             configuration=configuration, http_session=self._http_session
