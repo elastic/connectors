@@ -106,6 +106,7 @@ def _default_config():
             "slack": "connectors.sources.slack:SlackDataSource",
             "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "zoom": "connectors.sources.zoom:ZoomDataSource",
+            "box": "connectors.sources.box:BoxDataSource",
         },
     }
 
