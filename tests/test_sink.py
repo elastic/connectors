@@ -8,7 +8,7 @@ import datetime
 import itertools
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 
@@ -17,8 +17,8 @@ from connectors.es.sink import (
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
     Extractor,
-    IndexMissing,
     ForceCanceledError,
+    IndexMissing,
     Sink,
     SyncOrchestrator,
 )
@@ -1039,27 +1039,6 @@ def test_bulk_populate_stats(res, expected_result):
     assert sink.deleted_document_count == expected_result["deleted_document_count"]
 
 
-@pytest.mark.asyncio
-async def test_batch_bulk_with_retry():
-    client = Mock()
-    sink = Sink(
-        client=client,
-        queue=None,
-        chunk_size=0,
-        pipeline={"name": "pipeline"},
-        chunk_mem_size=0,
-        max_concurrency=0,
-        max_retries=3,
-    )
-
-    with mock.patch.object(asyncio, "sleep"):
-        # first call raises exception, and the second call succeeds
-        client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
-        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
-
-        assert client.bulk.await_count == 2
-
-
 @pytest.mark.parametrize(
     "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [
@@ -1137,7 +1116,6 @@ async def test_sink_fetch_doc():
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
         max_concurrency=0,
-        max_retries=3,
     )
 
     doc = await sink.fetch_doc()
@@ -1157,7 +1135,6 @@ async def test_force_canceled_sink_fetch_doc():
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
         max_concurrency=0,
-        max_retries=3,
     )
 
     sink.force_cancel()
