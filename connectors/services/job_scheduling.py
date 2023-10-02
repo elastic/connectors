@@ -10,7 +10,7 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
@@ -39,7 +39,7 @@ class JobSchedulingService(BaseService):
         self.source_list = config["sources"]
         self.connector_index = None
         self.sync_job_index = None
-        self.next_wake_up_time = None
+        self.last_wake_up_time = datetime.utcnow()
 
     async def _schedule(self, connector):
         if self.running is False:
@@ -143,9 +143,6 @@ class JobSchedulingService(BaseService):
         try:
             while self.running:
                 try:
-                    if not self.next_wake_up_time:
-                        self.next_wake_up_time = datetime.utcnow()
-
                     logger.debug(
                         f"Polling every {self.idling} seconds for Job Scheduling"
                     )
@@ -162,9 +159,7 @@ class JobSchedulingService(BaseService):
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
-                self.next_wake_up_time = datetime.utcnow() + timedelta(
-                    seconds=self.idling
-                )
+                self.last_wake_up_time = datetime.utcnow()
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
@@ -176,12 +171,11 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _try_schedule_sync(self, connector, job_type):
-        expected_wake_up_time = self.next_wake_up_time
-        actual_wake_up_time = datetime.utcnow()
-        next_wake_up_time = actual_wake_up_time + timedelta(seconds=self.idling)
+        last_wake_up_time = self.last_wake_up_time
+        this_wake_up_time = datetime.utcnow()
 
         print(
-            f"Expected to wake up at {expected_wake_up_time}, woke up at {actual_wake_up_time}"
+            f"Last time woke up at {last_wake_up_time}, woke up at {this_wake_up_time}"
         )
 
         @with_concurrency_control()
@@ -193,12 +187,6 @@ class JobSchedulingService(BaseService):
                 return False
 
             job_type_value = job_type.value
-            lag = actual_wake_up_time - expected_wake_up_time
-
-            if lag.total_seconds() < 0:
-                print("Why?")
-
-            print(f"Lag was {lag.total_seconds()} seconds")
 
             last_sync_scheduled_at = connector.last_sync_scheduled_at_by_job_type(
                 job_type
@@ -206,7 +194,7 @@ class JobSchedulingService(BaseService):
 
             if (
                 last_sync_scheduled_at is not None
-                and last_sync_scheduled_at > expected_wake_up_time
+                and last_sync_scheduled_at > this_wake_up_time
             ):
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
@@ -214,7 +202,7 @@ class JobSchedulingService(BaseService):
                 return False
 
             try:
-                next_sync = connector.next_sync(job_type, expected_wake_up_time)
+                next_sync = connector.next_sync(job_type, last_wake_up_time)
                 print(f"Next sync is at {next_sync}")
             except Exception as e:
                 connector.log_critical(e, exc_info=True)
@@ -225,8 +213,8 @@ class JobSchedulingService(BaseService):
                 connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
-            if next_wake_up_time < next_sync:
-                next_sync_due = (next_sync - self.next_wake_up_time).total_seconds()
+            if this_wake_up_time < next_sync:
+                next_sync_due = (next_sync - datetime.utcnow()).total_seconds()
                 connector.log_debug(
                     f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
