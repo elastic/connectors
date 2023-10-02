@@ -526,6 +526,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
+                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }
