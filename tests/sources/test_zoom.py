@@ -291,6 +291,11 @@ FILE_EXPECTED_CONTENT = {
     "_timestamp": "2023-03-09T00:00:00Z",
     "_attachment": "Q29udGVudA==",
 }
+FILE_EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "file1",
+    "_timestamp": "2023-03-09T00:00:00Z",
+    "body": SAMPLE_CONTENT,
+}
 FILE_EXPECTED_RESPONSE = {
     "_id": "file1",
     "_timestamp": "2023-03-09T00:00:00Z",
@@ -403,7 +408,9 @@ def get_mock(mock_response):
 
 
 @asynccontextmanager
-async def create_zoom_source(fetch_past_meeting_details=False):
+async def create_zoom_source(
+    fetch_past_meeting_details=False, use_text_extraction_service=False
+):
     async with create_source(
         ZoomDataSource,
         account_id="123",
@@ -411,6 +418,7 @@ async def create_zoom_source(fetch_past_meeting_details=False):
         client_secret="secret#123",
         recording_age=4,
         fetch_past_meeting_details=fetch_past_meeting_details,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -755,10 +763,35 @@ async def test_get_content(attachment, doit, expected_content):
                 side_effect=mock_zoom_apis,
             ):
                 response = await source.get_content(
-                    doc=attachment,
+                    chat_file=attachment,
                     doit=doit,
                 )
                 assert response == expected_content
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=SAMPLE_CONTENT,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_zoom_source(use_text_extraction_service=True) as source:
+            with mock.patch(
+                "aiohttp.ClientSession.post",
+                return_value=mock_token_response(),
+            ):
+                with mock.patch(
+                    "aiohttp.ClientSession.get",
+                    side_effect=mock_zoom_apis,
+                ):
+                    response = await source.get_content(
+                        chat_file=FILE,
+                        doit=True,
+                    )
+                    assert response == FILE_EXPECTED_CONTENT_EXTRACTED
 
 
 @pytest.mark.asyncio

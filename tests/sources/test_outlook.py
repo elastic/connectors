@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Outlook source class methods"""
+from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,6 +29,11 @@ EXPECTED_CONTENT = {
     "_id": "attachment_id_1",
     "_timestamp": "2023-12-12T01:01:01Z",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
+}
+EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "attachment_id_1",
+    "_timestamp": "2023-12-12T01:01:01Z",
+    "body": str(RESPONSE_CONTENT),
 }
 
 TIMEZONE = "Asia/Kolkata"
@@ -349,6 +355,39 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
+@asynccontextmanager
+async def create_outlook_source(
+    data_source=OUTLOOK_CLOUD,
+    tenant_id="foo",
+    client_id="bar",
+    client_secret="faa",
+    exchange_server="127.0.0.1",
+    active_directory_server="127.0.0.1",
+    username="fee",
+    password="fuu",
+    domain="outlook.com",
+    ssl_enabled=False,
+    ssl_ca="",
+    use_text_extraction_service=False,
+):
+    async with create_source(
+        OutlookDataSource,
+        data_source=data_source,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        exchange_server=exchange_server,
+        active_directory_server=active_directory_server,
+        username=username,
+        password=password,
+        domain=domain,
+        ssl_enabled=ssl_enabled,
+        ssl_ca=ssl_ca,
+        use_text_extraction_service=use_text_extraction_service,
+    ) as source:
+        yield source
+
+
 def get_json_mock(mock_response, status):
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(
@@ -415,7 +454,7 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
     extras,
 ):
     # Setup
-    async with create_source(OutlookDataSource, **extras) as source:
+    async with create_outlook_source(**extras) as source:
         # Execute
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -452,7 +491,7 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
 async def test_validate_config_with_valid_dependency_fields_does_not_raise_error(
     extras,
 ):
-    async with create_source(OutlookDataSource, **extras) as source:
+    async with create_outlook_source(**extras) as source:
         await source.validate_config()
 
 
@@ -467,7 +506,7 @@ async def test_ping_for_server(mock_connection):
         None,
     )
 
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         source.client.is_cloud = False
         await source.ping()
 
@@ -483,7 +522,7 @@ async def test_ping_for_server_for_failed_connection(mock_connection):
         None,
     )
 
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         source.client.is_cloud = False
         with pytest.raises(UsersFetchFailed):
             await source.ping()
@@ -491,7 +530,7 @@ async def test_ping_for_server_for_failed_connection(mock_connection):
 
 @pytest.mark.asyncio
 async def test_ping_for_cloud():
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             return_value=get_json_mock(
@@ -520,7 +559,7 @@ async def test_ping_for_cloud_for_failed_connection(
     mock_time_to_sleep_between_retries, raised_exception, side_effect_exception
 ):
     mock_time_to_sleep_between_retries.return_value = 0
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
             side_effect=side_effect_exception,
@@ -535,7 +574,7 @@ async def test_ping_for_cloud_for_failed_connection(
 
 @pytest.mark.asyncio
 async def test_get_users_for_cloud():
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         users = []
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -565,13 +604,31 @@ async def test_get_users_for_cloud():
     ],
 )
 async def test_get_content(attachment, expected_content):
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         response = await source.get_content(
             attachment=attachment,
             timezone=TIMEZONE,
             doit=True,
         )
         assert response == expected_content
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=str(RESPONSE_CONTENT),
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_outlook_source(use_text_extraction_service=True) as source:
+            response = await source.get_content(
+                attachment=MOCK_ATTACHMENT,
+                timezone=TIMEZONE,
+                doit=True,
+            )
+            assert response == EXPECTED_CONTENT_EXTRACTED
 
 
 @pytest.mark.asyncio
@@ -584,7 +641,7 @@ async def test_get_content(attachment, expected_content):
 )
 @patch("connectors.sources.outlook.Account", return_value="account")
 async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         source.client.is_cloud = is_cloud
         source.client._get_user_instance.get_users = AsyncIterator([user_response])
 
@@ -594,7 +651,7 @@ async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
 
 @pytest.mark.asyncio
 async def test_get_docs():
-    async with create_source(OutlookDataSource) as source:
+    async with create_outlook_source() as source:
         source.client._get_user_instance.get_user_accounts = AsyncIterator(
             [MockAccount()]
         )

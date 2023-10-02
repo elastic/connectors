@@ -113,6 +113,7 @@ async def create_spo_source(
     use_text_extraction_service=False,
     fetch_drive_item_permissions=True,
     fetch_unique_list_permissions=True,
+    enumerate_all_sites=False,
 ):
     async with create_source(
         SharepointOnlineDataSource,
@@ -125,6 +126,7 @@ async def create_spo_source(
         use_text_extraction_service=use_text_extraction_service,
         fetch_drive_item_permissions=fetch_drive_item_permissions,
         fetch_unique_list_permissions=fetch_unique_list_permissions,
+        enumerate_all_sites=enumerate_all_sites,
     ) as source:
         source.set_features(
             Features(
@@ -617,7 +619,7 @@ class TestMicrosoftAPISession:
             assert actual_payload == payload
 
         patch_cancellable_sleeps.assert_awaited_with(
-            DEFAULT_RETRY_SECONDS * DEFAULT_BACKOFF_MULTIPLIER * retry_count
+            DEFAULT_RETRY_SECONDS + DEFAULT_BACKOFF_MULTIPLIER * retry_count
         )
 
     @pytest.mark.asyncio
@@ -892,7 +894,7 @@ class TestSharepointOnlineClient:
         ]
 
         returned_items = await self._execute_scrolling_method(
-            partial(client.sites, root_site, WILDCARD), patch_scroll, actual_items
+            partial(client.sites, root_site, [WILDCARD]), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
@@ -916,6 +918,59 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == len(filter_)
         assert actual_items[0] in returned_items
         assert actual_items[2] in returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually(self, client, patch_fetch):
+        root_site = "root"
+        actual_items = [
+            {"name": "First"},
+            {"name": "Third"},
+        ]
+        filter_ = ["First", "Third"]
+        patch_fetch.side_effect = actual_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=False
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == len(filter_)
+        assert actual_items == returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually_plus_subsites(
+        self, client, patch_fetch, patch_scroll
+    ):
+        root_site = "root"
+        root_item = {
+            "name": "First",
+            "id": "first",
+            "sites": [{"name": "Second"}],
+        }
+        sub_items = [
+            AsyncIterator(
+                [[{"name": "Second", "id": "second", "sites": [{"name": "Third"}]}]]
+            ),
+            AsyncIterator([[{"name": "Third", "id": "third"}]]),
+        ]
+        expected_items = [
+            {"name": "First", "id": "first"},
+            {"name": "Second", "id": "second"},
+            {"name": "Third", "id": "third"},
+        ]
+        filter_ = ["First"]
+        patch_fetch.side_effect = [root_item]
+        patch_scroll.side_effect = sub_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=True
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == 3
+        assert returned_items == expected_items
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
@@ -1697,7 +1752,7 @@ class TestSharepointOnlineDataSource:
         return [
             {
                 "id": "1",
-                "webUrl": "https://test.sharepoint.com/site-1",
+                "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
             }
@@ -2565,6 +2620,28 @@ class TestSharepointOnlineDataSource:
             assert e.match(another_non_existing_site)
 
     @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_all_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site-1"
+
+        async with create_spo_source(
+            site_collections=[existing_site], enumerate_all_sites=True
+        ) as source:
+            await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_individual_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site_1"
+
+        async with create_spo_source(
+            site_collections=[existing_site], enumerate_all_sites=False
+        ) as source:
+            await source.validate_config()
+
+    @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
         attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = b"This is content of attachment"
@@ -2606,7 +2683,10 @@ class TestSharepointOnlineDataSource:
             )
 
     @pytest.mark.asyncio
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
@@ -2614,9 +2694,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2634,7 +2715,10 @@ class TestSharepointOnlineDataSource:
                 assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: False,
+    )
     async def test_get_attachment_with_text_extraction_enabled_but_not_configured_adds_empty_string(
         self, patch_sharepoint_client
     ):
@@ -2642,9 +2726,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2665,7 +2750,10 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.parametrize(
         "filesize, expect_download", [(15, True), (10485761, False)]
     )
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_drive_item_content(
         self, patch_sharepoint_client, filesize, expect_download
     ):
@@ -2695,7 +2783,10 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_content_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client, filesize
     ):
@@ -2709,9 +2800,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2730,7 +2822,10 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: False,
+    )
     async def test_get_content_with_text_extraction_enabled_but_not_configured_adds_empty_string(
         self, patch_sharepoint_client, filesize
     ):
@@ -2744,9 +2839,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
