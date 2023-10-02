@@ -457,7 +457,7 @@ class MicrosoftAPISession:
         if retry_count <= 1:
             return retry_after
         else:
-            return retry_after * retry_count * backoff
+            return retry_after + retry_count * backoff
 
 
 class SharepointOnlineClient:
