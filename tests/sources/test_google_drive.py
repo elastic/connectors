@@ -68,6 +68,46 @@ async def test_raise_on_invalid_configuration():
 
 
 @pytest.mark.asyncio
+async def test_raise_on_invalid_email_configuration_misformatted_email():
+    """Test if invalid configuration raises an expected Exception"""
+
+    configuration = DataSourceConfiguration(
+        {
+            "service_account_credentials": "{'abc':'bcd','cd'}",
+            "use_domain_wide_delegation_for_sync": True,
+            "google_workspace_admin_email_for_data_sync": None,
+            "google_workspace_email_for_shared_drives_sync": "",
+        }
+    )
+    gd_object = GoogleDriveDataSource(configuration=configuration)
+
+    with pytest.raises(
+        ConfigurableFieldValueError,
+    ):
+        await gd_object._validate_google_workspace_email_for_shared_drives_sync()
+
+
+@pytest.mark.asyncio
+async def test_raise_on_invalid_email_configuration_empty_email():
+    """Test if invalid configuration raises an expected Exception"""
+
+    configuration = DataSourceConfiguration(
+        {
+            "service_account_credentials": "{'abc':'bcd','cd'}",
+            "use_domain_wide_delegation_for_sync": True,
+            "google_workspace_admin_email_for_data_sync": "admin@.com",
+            "google_workspace_email_for_shared_drives_sync": "admin.com",
+        }
+    )
+    gd_object = GoogleDriveDataSource(configuration=configuration)
+
+    with pytest.raises(
+        ConfigurableFieldValueError,
+    ):
+        await gd_object._validate_google_workspace_email_for_shared_drives_sync()
+
+
+@pytest.mark.asyncio
 async def test_ping_for_successful_connection():
     """Tests the ping functionality for ensuring connection to Google Drive."""
 
@@ -549,21 +589,26 @@ async def test_get_docs_with_domain_wide_delegation():
             "url": None,
             "type": "file",
         }
-        dummy_url = "https://www.googleapis.com/drive/v3/files"
 
-        expected_response_object = Response(
-            status_code=200,
-            url=dummy_url,
-            json=expected_response,
-            req=Request(method="GET", url=dummy_url),
+        mock_gdrive_client = mock.MagicMock()
+        mock_gdrive_client.list_files_from_my_drive = mock.MagicMock(
+            return_value=AsyncIterator([expected_response])
         )
 
-        with mock.patch.object(
-            Aiogoogle, "as_service_account", return_value=expected_response_object
-        ):
-            with mock.patch.object(ServiceAccountManager, "refresh"):
-                async for file_document in source.get_docs():
-                    assert file_document[0] == expected_file_document
+        mock_empty_response_future = asyncio.Future()
+        mock_empty_response_future.set_result(dict())
+
+        mock_gdrive_client.get_all_folders = mock.MagicMock(
+            return_value=mock_empty_response_future
+        )
+        mock_gdrive_client.get_all_drives = mock.MagicMock(
+            return_value=mock_empty_response_future
+        )
+
+        source.google_drive_client = mock.MagicMock(return_value=mock_gdrive_client)
+
+        async for file_document in source.get_docs():
+            assert file_document[0] == expected_file_document
 
 
 @pytest.mark.asyncio
@@ -851,6 +896,7 @@ async def test_get_google_workspace_content_with_text_extraction_enabled_adds_bo
                 return_value=future_file_content_response
             )
             content = await source.get_content(
+                client=source.google_drive_client(),
                 file=file_document,
                 doit=True,
             )
@@ -974,6 +1020,7 @@ async def test_get_generic_file_content_with_text_extraction_enabled_adds_body()
             content = await source.get_content(
                 file=file_document,
                 doit=True,
+                client=source.google_drive_client(),
             )
             assert content == expected_file_document
 

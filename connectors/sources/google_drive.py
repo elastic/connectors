@@ -578,7 +578,7 @@ class GoogleDriveDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 5,
+                "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -587,11 +587,25 @@ class GoogleDriveDataSource(BaseDataSource):
         }
 
     def google_drive_client(self, impersonate_email=None):
-        """Initialize and return the GoogleDriveClient
+        """
+        Initialize and return an instance of the GoogleDriveClient.
+
+        This method sets up a Google Drive client using service account credentials.
+        If an impersonate_email is provided, the client will be set up for domain-wide
+        delegation, allowing it to impersonate the provided user account within
+        a Google Workspace domain.
+
+        GoogleDriveClient needs to be reinstantiated for different values of impersonate_email,
+        therefore the client is not cached.
+
+        Args:
+            impersonate_email (str, optional): The email of the user account to impersonate.
+                Defaults to None, in which case no impersonation is set up (in case domain-wide delegation is disabled).
 
         Returns:
-            GoogleDriveClient: An instance of the GoogleDriveClient.
+            GoogleDriveClient: An initialized instance of the GoogleDriveClient.
         """
+
         service_account_credentials = self.configuration["service_account_credentials"]
 
         validate_service_account_json(
@@ -751,7 +765,6 @@ class GoogleDriveDataSource(BaseDataSource):
             return None
 
     def _google_google_workspace_email_for_shared_drives_sync(self):
-        """Get Google Workspace email for syncing shared drives"""
         return self.configuration.get("google_workspace_email_for_shared_drives_sync")
 
     def _dls_enabled(self):
@@ -1249,14 +1262,6 @@ class GoogleDriveDataSource(BaseDataSource):
         seen_ids = set()
 
         if self._domain_wide_delegation_sync_enabled():
-            email_for_shared_drives_sync = (
-                self._google_google_workspace_email_for_shared_drives_sync()
-            )
-
-            shared_drives_client = self.google_drive_client(
-                impersonate_email=email_for_shared_drives_sync
-            )
-
             # sync personal drives first
             async for user in self.google_admin_directory_client.users():
                 email = user.get(UserFields.EMAIL.value)
@@ -1273,12 +1278,20 @@ class GoogleDriveDataSource(BaseDataSource):
                     ):
                         yield file, partial(self.get_content, google_drive_client, file)
 
+            email_for_shared_drives_sync = (
+                self._google_google_workspace_email_for_shared_drives_sync()
+            )
+
+            shared_drives_client = self.google_drive_client(
+                impersonate_email=email_for_shared_drives_sync
+            )
+
             # Build a path lookup, parentId -> parent path
             resolved_paths = await self.resolve_paths(
                 google_drive_client=shared_drives_client
             )
 
-            # sync shared drives impersonating the admin account
+            # sync shared drives
             self._logger.debug(
                 f"Syncing shared drives using admin account: {email_for_shared_drives_sync}"
             )
