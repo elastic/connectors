@@ -7,9 +7,6 @@ import asyncio
 import os
 from functools import cached_property, partial
 
-import aiofiles
-from aiofiles.os import remove, stat
-from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
@@ -27,9 +24,7 @@ from connectors.sources.google import (
 )
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
-    TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
-    convert_to_b64,
     retryable,
     validate_email_address,
 )
@@ -39,7 +34,6 @@ GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME = "Google Admin Directory"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 
 GOOGLE_API_MAX_CONCURRENCY = 25  # Max open connections to Google API
 
@@ -513,6 +507,15 @@ class GoogleDriveDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "validations": [{"type": "greater_than", "constraint": 0}],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 5,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
         }
 
     @cached_property
@@ -767,7 +770,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return folders
 
-    async def _download_content(self, file, download_func):
+    async def _download_content(self, file, file_extension, download_func):
         """Downloads the file from Google Drive and returns the encoded file content.
 
         Args:
@@ -778,43 +781,22 @@ class GoogleDriveDataSource(BaseDataSource):
             attachment, file_size (tuple): base64 encoded contnet of the file and size in bytes of the attachment
         """
 
-        temp_file_name = ""
         file_name = file["name"]
-        attachment, file_size = None, 0
+        attachment, body, file_size = None, None, 0
 
-        self._logger.debug(f"Downloading {file_name}")
-
-        try:
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                await download_func(
-                    pipe_to=async_buffer,
-                )
-
-                temp_file_name = async_buffer.name
-
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=temp_file_name,
+        async with self.create_temp_file(file_extension) as async_buffer:
+            await download_func(
+                pipe_to=async_buffer,
             )
+            await async_buffer.close()
 
-            file_stat = await stat(temp_file_name)
-            file_size = file_stat.st_size
-
-            async with aiofiles.open(file=temp_file_name, mode="r") as target_file:
-                attachment = (await target_file.read()).strip()
-
-            self._logger.debug(
-                f"Downloaded {file_name} with the size of {file_size} bytes "
+            doc = await self.handle_file_content_extraction(
+                {}, file_name, async_buffer.name
             )
-        except Exception as e:
-            self._logger.error(
-                f"Exception encountered when processing file: {file_name}. Exception: {e}"
-            )
-        finally:
-            if temp_file_name:
-                await remove(str(temp_file_name))
+            attachment = doc.get("_attachment")
+            body = doc.get("body")
 
-        return attachment, file_size
+        return attachment, body, file_size
 
     async def get_google_workspace_content(self, file, timestamp=None):
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
@@ -831,15 +813,20 @@ class GoogleDriveDataSource(BaseDataSource):
             dict: Content document with id, timestamp & text
         """
 
-        file_name, file_id, file_mime_type = file["name"], file["id"], file["mime_type"]
+        file_name, file_id, file_mime_type, file_extension = (
+            file["name"],
+            file["id"],
+            file["mime_type"],
+            f".{file['file_extension']}",
+        )
 
         document = {
             "_id": file_id,
             "_timestamp": file["_timestamp"],
         }
-
-        attachment, file_size = await self._download_content(
+        attachment, body, file_size = await self._download_content(
             file=file,
+            file_extension=file_extension,
             download_func=partial(
                 self.google_drive_client.api_call,
                 resource="files",
@@ -854,13 +841,14 @@ class GoogleDriveDataSource(BaseDataSource):
         #    into text/plain format. We usually we end up with tiny .txt files.
         # 2. Google will ofter report the Google Workspace shared documents to have size 0
         #    as they don't count against user's storage quota.
-        if file_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {file_size} of file {file_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding the file content"
-            )
+        if not self.is_file_size_within_limit(file_size, file_name):
             return
 
-        document["_attachment"] = attachment
+        if attachment is not None:
+            document["_attachment"] = attachment
+        elif body is not None:
+            document["body"] = body
+
         return document
 
     async def get_generic_file_content(self, file, timestamp=None):
@@ -885,23 +873,16 @@ class GoogleDriveDataSource(BaseDataSource):
             f".{file['file_extension']}",
         )
 
-        if file_extension not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(f"{file_name} can't be extracted")
-            return
-
-        if file_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {file_size} of file {file_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding the file content"
-            )
+        if not self.can_file_be_downloaded(file_extension, file_name, file_size):
             return
 
         document = {
             "_id": file_id,
             "_timestamp": file["_timestamp"],
         }
-
-        attachment, _ = await self._download_content(
+        attachment, body, _ = await self._download_content(
             file=file,
+            file_extension=file_extension,
             download_func=partial(
                 self.google_drive_client.api_call,
                 resource="files",
@@ -912,7 +893,11 @@ class GoogleDriveDataSource(BaseDataSource):
             ),
         )
 
-        document["_attachment"] = attachment
+        if attachment is not None:
+            document["_attachment"] = attachment
+        elif body is not None:
+            document["body"] = body
+
         return document
 
     async def get_content(self, file, timestamp=None, doit=None):
