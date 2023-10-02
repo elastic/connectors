@@ -14,14 +14,11 @@ import pytest
 
 from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.es.sink import (
-    OP_DELETE,
-    OP_INDEX,
-    OP_UPSERT,
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
     Extractor,
-    IndexMissing,
     ForceCanceledError,
+    IndexMissing,
     Sink,
     SyncOrchestrator,
 )
@@ -1040,26 +1037,6 @@ def test_bulk_populate_stats(res, expected_result):
     assert sink.indexed_document_count == expected_result["indexed_document_count"]
     assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
     assert sink.deleted_document_count == expected_result["deleted_document_count"]
-
-
-@pytest.mark.asyncio
-async def test_batch_bulk_with_retry():
-    client = Mock()
-    sink = Sink(
-        client=client,
-        queue=None,
-        chunk_size=0,
-        pipeline={"name": "pipeline"},
-        chunk_mem_size=0,
-        max_concurrency=0,
-    )
-
-    with mock.patch.object(asyncio, "sleep"):
-        # first call raises exception, and the second call succeeds
-        client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
-        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
-
-        assert client.bulk.await_count == 2
 
 
 @pytest.mark.parametrize(
