@@ -8,12 +8,15 @@ import datetime
 import itertools
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 
 from connectors.es.settings import TEXT_FIELD_MAPPING
 from connectors.es.sink import (
+    OP_DELETE,
+    OP_INDEX,
+    OP_UPSERT,
     AsyncBulkRunningError,
     ContentIndexNameInvalid,
     Extractor,
@@ -1049,7 +1052,6 @@ async def test_batch_bulk_with_retry():
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
         max_concurrency=0,
-        max_retries=3,
     )
 
     with mock.patch.object(asyncio, "sleep"):
@@ -1137,7 +1139,6 @@ async def test_sink_fetch_doc():
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
         max_concurrency=0,
-        max_retries=3,
     )
 
     doc = await sink.fetch_doc()
@@ -1157,7 +1158,6 @@ async def test_force_canceled_sink_fetch_doc():
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
         max_concurrency=0,
-        max_retries=3,
     )
 
     sink.force_cancel()
