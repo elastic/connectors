@@ -108,6 +108,9 @@ VIEW_ROLE_TYPES = [
     SYSTEM,
 ]
 
+# $expand param has a max of 20: see: https://developer.microsoft.com/en-us/graph/known-issues/?search=expand
+SPO_MAX_EXPAND_SIZE = 20
+
 
 class NotFound(Exception):
     """Internal exception class to handle 404s from the API that has a meaning, that collection
@@ -1417,9 +1420,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_groups = set()
 
         expanded_member_groups = user.get("transitiveMemberOf", [])
-        if (
-            len(expanded_member_groups) < 20
-        ):  # $expand param has a max of 20: see: https://developer.microsoft.com/en-us/graph/known-issues/?search=expand
+        if len(expanded_member_groups) < SPO_MAX_EXPAND_SIZE:
             for group in expanded_member_groups:
                 prefixed_groups.add(_prefix_group(group.get("id", None)))
         else:
