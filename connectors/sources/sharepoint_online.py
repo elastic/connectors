@@ -365,9 +365,7 @@ class MicrosoftAPISession:
     async def post(self, url, payload):
         self._logger.debug(f"Post to url: '{url}' with body: {payload}")
         async with self._post(url, payload) as resp:
-            result = await resp.json()
-            # self._logger.debug(f"Response was: {result}")
-            return result
+            return await resp.json()
 
     async def pipe(self, url, stream):
         async with self._get(url) as resp:
