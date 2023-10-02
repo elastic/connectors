@@ -472,7 +472,7 @@ class MicrosoftAPISession:
         if retry_count <= 1:
             return retry_after
         else:
-            return retry_after * retry_count * backoff
+            return retry_after + retry_count * backoff
 
 
 class SharepointOnlineClient:
@@ -1218,6 +1218,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
+                "ui_restrictions": ["advanced"],
                 "value": False,
             },
             "use_document_level_security": {
