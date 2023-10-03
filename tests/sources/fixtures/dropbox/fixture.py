@@ -9,14 +9,12 @@
 import io
 import json
 import os
-import random
-import string
+
+from flask import Flask, jsonify, make_response, request
 
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
-
-from flask import Flask, jsonify, make_response, request
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
