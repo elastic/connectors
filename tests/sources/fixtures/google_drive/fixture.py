@@ -27,7 +27,10 @@ match DATA_SIZE:
 
 app = Flask(__name__)
 
-PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
+PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.1"))
+
+def get_num_docs():
+    print(DOCS_COUNT)
 
 
 @app.before_request
