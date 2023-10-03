@@ -7,10 +7,9 @@
 """
 import io
 import os
-import random
-import string
 
 from flask import Flask, request
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
@@ -55,7 +54,9 @@ def get_projects():
         projects.append(
             {"id": f"project {i}", "key": f"DP-{i}", "name": f"Demo Project {i}"}
         )
-    projects_count -= PROJECT_TO_DELETE_COUNT  # to delete 100 projects from Jira in next sync
+    projects_count -= (
+        PROJECT_TO_DELETE_COUNT  # to delete 100 projects from Jira in next sync
+    )
     return projects
 
 
