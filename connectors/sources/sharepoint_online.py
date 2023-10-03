@@ -1183,14 +1183,14 @@ class SharepointOnlineDataSource(BaseDataSource):
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of sites",
-                "tooltip": "A comma-separated list of sites to ingest data from. Use * to include all available sites.",
+                "tooltip": "A comma-separated list of sites to ingest data from. If enumerating all sites, use * to include all available sites, or specify a list of site names. Otherwise, specify a list of site paths.",
                 "order": 5,
                 "type": "list",
             },
             "enumerate_all_sites": {
                 "display": "toggle",
                 "label": "Enumerate all sites?",
-                "tooltip": 'Whether sites should be fetched by name from "all sites". If disabled, each configured site will be fetched with an individual request.',
+                "tooltip": 'If enabled, sites will be fetched in bulk, then filtered down to the configured list of sites. This is efficient when syncing many sites. If disabled, each configured site will be fetched with an individual request. This is efficient when syncing fewer sites.',
                 "order": 6,
                 "type": "bool",
                 "value": True,
