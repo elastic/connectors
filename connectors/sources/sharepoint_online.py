@@ -1190,7 +1190,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "enumerate_all_sites": {
                 "display": "toggle",
                 "label": "Enumerate all sites?",
-                "tooltip": 'If enabled, sites will be fetched in bulk, then filtered down to the configured list of sites. This is efficient when syncing many sites. If disabled, each configured site will be fetched with an individual request. This is efficient when syncing fewer sites.',
+                "tooltip": "If enabled, sites will be fetched in bulk, then filtered down to the configured list of sites. This is efficient when syncing many sites. If disabled, each configured site will be fetched with an individual request. This is efficient when syncing fewer sites.",
                 "order": 6,
                 "type": "bool",
                 "value": True,
