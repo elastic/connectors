@@ -17,6 +17,7 @@ import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_reqrep import RequestInfo
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.es.sink import OP_DELETE, OP_INDEX
@@ -79,6 +80,34 @@ CURSOR_SITE_DRIVE_KEY = "site_drives"
 
 DELTA_NEXT_LINK_KEY = "@odata.nextLink"
 DELTA_LINK_KEY = "@odata.deltaLink"
+
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+# See also: https://learn.microsoft.com/en-us/previous-versions/office/sharepoint-csom/ee536458(v=office.15)
+VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
+VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
+
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
+# See also: https://learn.microsoft.com/en-us/dotnet/api/microsoft.sharepoint.client.roletype?view=sharepoint-csom
+READER = 2
+CONTRIBUTOR = 3
+WEB_DESIGNER = 4
+ADMINISTRATOR = 5
+EDITOR = 6
+REVIEWER = 7
+SYSTEM = 0xFF
+# Note the exclusion of NONE(0), GUEST(1), RESTRICTED_READER(8), and RESTRICTED_GUEST(9)
+VIEW_ROLE_TYPES = [
+    READER,
+    CONTRIBUTOR,
+    WEB_DESIGNER,
+    ADMINISTRATOR,
+    EDITOR,
+    REVIEWER,
+    SYSTEM,
+]
+
+# $expand param has a max of 20: see: https://developer.microsoft.com/en-us/graph/known-issues/?search=expand
+SPO_MAX_EXPAND_SIZE = 20
 
 
 class NotFound(Exception):
@@ -332,7 +361,7 @@ class MicrosoftAPISession:
         return await self._get_json(url)
 
     async def post(self, url, payload):
-        self._logger.debug(f"Post to url: {url}")
+        self._logger.debug(f"Post to url: '{url}' with body: {payload}")
         async with self._post(url, payload) as resp:
             return await resp.json()
 
@@ -383,6 +412,8 @@ class MicrosoftAPISession:
             async with self._http_session.post(
                 absolute_url, headers=headers, json=payload
             ) as resp:
+                if absolute_url.endswith("/$batch"):  # response code of $batch lies
+                    await self._check_batch_items_for_errors(absolute_url, resp)
                 yield resp
         except aiohttp.client_exceptions.ClientOSError:
             self._logger.warning(
@@ -391,6 +422,23 @@ class MicrosoftAPISession:
             raise
         except ClientResponseError as e:
             await self._handle_client_response_error(absolute_url, e, retry_count)
+
+    async def _check_batch_items_for_errors(self, url, batch_resp):
+        body = await batch_resp.json()
+        responses = body.get("responses", [])
+        for response in responses:
+            status = response.get("status", 200)
+            if status != 200:
+                self._logger.warning(f"Batch request item failed with: {response}")
+                headers = response.get("headers", {})
+                req_info = RequestInfo(url=url, method="POST", headers=headers)
+                raise ClientResponseError(
+                    request_info=req_info,
+                    headers=headers,
+                    status=status,
+                    message=response.get("body", {}).get("error", {}).get("message"),
+                    history=(batch_resp),
+                )
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
@@ -421,7 +469,7 @@ class MicrosoftAPISession:
                 retry_after = int(response_headers["Retry-After"])
             else:
                 self._logger.warning(
-                    f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    f"Response Code from Sharepoint Online is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
                 retry_after = DEFAULT_RETRY_SECONDS
 
@@ -457,7 +505,7 @@ class MicrosoftAPISession:
         if retry_count <= 1:
             return retry_after
         else:
-            return retry_after * retry_count * backoff
+            return retry_after + retry_count * backoff
 
 
 class SharepointOnlineClient:
@@ -537,24 +585,35 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def user_information_list(self, site_id):
-        expand = "fields"
-        url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
+    async def site_role_assignments(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+        expand = "Member/users,RoleDefinitionBindings"
+
+        url = f"{site_web_url}/_api/web/roleassignments?$expand={expand}"
 
         try:
-            async for page in self._graph_api_client.scroll(url):
-                for user_information in page:
-                    yield user_information
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
         except NotFound:
+            self._logger.debug(f"No role assignments found for site: '{site_web_url}'")
             return
 
-    async def user(self, user_principal_name):
-        url = f"{GRAPH_API_URL}/users/{user_principal_name}"
+    async def site_groups_users(self, site_web_url, site_group_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        select_ = "Email,Id,UserPrincipalName,LoginName,Title"
+        url = f"{site_web_url}/_api/web/sitegroups/getbyid({site_group_id})/users?$select={select_}"
 
         try:
-            return await self._graph_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for site_group_user in page:
+                    yield site_group_user
         except NotFound:
-            return {}
+            self._logger.warning(
+                f"NotFound error when fetching users for sitegroup '{site_group_id}' at '{site_web_url}'."
+            )
+            return
 
     async def active_users_with_groups(self):
         expand = "transitiveMemberOf($select=id)"
@@ -708,16 +767,6 @@ class SharepointOnlineClient:
 
         async for page in self.drive_items_delta(url):
             yield page
-
-    async def drive_item_permissions(self, drive_id, item_id):
-        try:
-            async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
-            ):
-                for permission in page:
-                    yield permission
-        except NotFound:
-            return
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
@@ -1037,51 +1086,6 @@ def _postfix_group(group):
     return f"{group} Members"
 
 
-def is_domain_group(user_fields):
-    return user_fields.get(
-        "ContentType"
-    ) == "DomainGroup" and "federateddirectoryclaimprovider" in user_fields.get(
-        "Name", ""
-    )
-
-
-def is_person(user_fields):
-    return user_fields["ContentType"] == "Person"
-
-
-def _domain_group_id(user_info_name):
-    """Extracts the domain group id.
-
-    The domain group id can have the following formats:
-    - abc|def|domain-group-id
-    - abc|def|some-prefix/domain-group-id
-
-    Returns:
-        str: domain group id
-
-    """
-    if user_info_name is None or len(user_info_name) == 0:
-        return None
-
-    name_parts = user_info_name.split("|")
-
-    if len(name_parts) <= 2:
-        return None
-
-    domain_group_id = name_parts[2]
-
-    if "/" in domain_group_id:
-        domain_group_id = domain_group_id.split("/")[1]
-
-    if "_" in domain_group_id:
-        domain_group_id = domain_group_id.split("_")[0]
-
-    if len(domain_group_id) == 0:
-        return None
-
-    return domain_group_id
-
-
 async def _emails_and_usernames_of_domain_group(
     domain_group_id, group_identities_generator
 ):
@@ -1132,6 +1136,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             self.extraction_service = None
             self.download_dir = None
+
+        self.site_group_cache = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -1325,15 +1331,21 @@ class SharepointOnlineDataSource(BaseDataSource):
         For the given site all groups and its corresponding members and owners (username and/or email) are fetched.
 
         Returns:
-            list: access control list for a given site
-            [
-                "user:spo-user",
-                "email:some.user@spo.com",
-                "group:1234-abcd-id"
-            ]
+            tuple:
+              - list: access control list for a given site
+                [
+                    "user:spo-admin",
+                    "user:spo-user",
+                    "email:some.user@spo.com",
+                    "group:1234-abcd-id"
+                ]
+            - list: subset of the former, applying only to site-admins for this site
+                [
+                  "user":spo-admin"
+                ]
         """
 
-        self._logger.debug(f"Looking at site: {site['id']}")
+        self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
         if not self._dls_enabled():
             return [], []
 
@@ -1343,34 +1355,17 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for user_information in self.client.user_information_list(site["id"]):
-            user = user_information["fields"]
+        async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
+            member = role_assignment["Member"]
+            member_access_control = set()
+            member_access_control.update(
+                await self._get_access_control_from_role_assignment(role_assignment)
+            )
 
-            user_access_control = set()
+            if _is_site_admin(member):
+                site_admins_access_control |= member_access_control
 
-            if is_domain_group(user):
-                self._logger.debug(f"It is a domain group with name: {user['Name']}")
-                domain_group_id = _domain_group_id(user["Name"])
-                self._logger.debug(f"Detected domain groupId as: {domain_group_id}")
-
-                if domain_group_id:
-                    user_access_control.add(_prefix_group(domain_group_id))
-
-            if is_person(user):
-                login_name = _get_login_name(user.get("Name"))
-
-                if login_name:
-                    user_access_control.add(_prefix_user(login_name))
-
-                email = user.get("EMail")
-
-                if email:
-                    user_access_control.add(_prefix_email(email))
-
-            if _is_site_admin(user):
-                site_admins_access_control |= user_access_control
-
-            access_control |= user_access_control
+            access_control |= member_access_control
 
         return list(access_control), list(site_admins_access_control)
 
@@ -1462,9 +1457,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_groups = set()
 
         expanded_member_groups = user.get("transitiveMemberOf", [])
-        if (
-            len(expanded_member_groups) < 100
-        ):  # $expand param has a max of 100: see: https://learn.microsoft.com/en-us/graph/known-issues#query-parameters
+        if len(expanded_member_groups) < SPO_MAX_EXPAND_SIZE:
             for group in expanded_member_groups:
                 prefixed_groups.add(_prefix_group(group.get("id", None)))
         else:
@@ -1481,7 +1474,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
-        access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
+        access_control = list(
+            {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
+        )
 
         if "createdDateTime" in user:
             created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
@@ -1547,7 +1542,41 @@ class SharepointOnlineDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
-    async def _drive_items_batch_with_permissions(self, drive_id, drive_items_batch):
+    async def site_group_users(self, site_web_url, site_group_id):
+        """
+        Fetches the users of a given site group. Checks in-memory cache before making an API call.
+
+        Parameters:
+        - site_web_url (str): The URL of the site collection.
+        - site_group_id (int): The ID of the site group.
+
+        Returns:
+        - list: List of users for the given site group.
+        """
+
+        cache_key = (site_web_url, site_group_id)
+
+        # Check cache first
+        if cache_key in self.site_group_cache:
+            self._logger.debug(
+                f"Cache hit for site_web_url: {site_web_url}, site_group_id: {site_group_id}. Returning cached sitegroup members."
+            )
+            return self.site_group_cache[cache_key]
+
+        # If not in cache, fetch the users
+        users = []
+        async for site_group_user in self.client.site_groups_users(
+            site_web_url, site_group_id
+        ):
+            users.append(site_group_user)
+
+        # Cache the result
+        self.site_group_cache[cache_key] = users
+        return users
+
+    async def _drive_items_batch_with_permissions(
+        self, drive_id, drive_items_batch, site_web_url
+    ):
         """Decorate a batch of drive items with their permissions using one API request.
 
         Args:
@@ -1577,7 +1606,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
-                yield self._with_drive_item_permissions(drive_item, permissions)
+                yield await self._with_drive_item_permissions(
+                    drive_item, permissions, site_web_url
+                )
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1614,7 +1645,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
                             async for drive_item in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch
+                                site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -1711,7 +1742,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
                             async for drive_item in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch
+                                site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -1790,7 +1821,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_drive
 
-    def _with_drive_item_permissions(self, drive_item, drive_item_permissions):
+    async def _with_drive_item_permissions(
+        self, drive_item, drive_item_permissions, site_web_url
+    ):
         """Decorates a drive item with its permissions.
 
         Args:
@@ -1835,32 +1868,63 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not self.configuration["fetch_drive_item_permissions"]:
             return drive_item
 
-        def _get_id(permissions, identity):
-            if identity not in permissions:
-                return None
+        def _get_id(permissions, label):
+            return permissions.get(label, {}).get("id")
 
-            return permissions.get(identity).get("id")
+        def _get_email(permissions, label):
+            return permissions.get(label, {}).get("email")
+
+        def _get_login_name(permissions, label):
+            identity = permissions.get(label, {})
+            login_name = identity.get("loginName", "")
+            if login_name.startswith("i:0#.f|membership|"):
+                return login_name.split("|")[-1]
 
         drive_item_id = drive_item.get("id")
         access_control = []
 
+        identities = []
         for permission in drive_item_permissions:
             granted_to_v2 = permission.get("grantedToV2")
+            if granted_to_v2:
+                identities.append(granted_to_v2)
+            granted_to_identity_v2 = permission.get("grantedToIdentitiesV2", [])
+            identities.extend(granted_to_identity_v2)
 
-            if not granted_to_v2:
-                self._logger.debug(
-                    f"'grantedToV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
-                )
-                continue
+        if not identities:
+            self._logger.debug(
+                f"'grantedToV2' and 'grantedToIdentitiesV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
+            )
+            self._logger.warning(
+                f"Drive item permissions were: {drive_item_permissions}"
+            )
+            return drive_item
 
-            user_id = _get_id(granted_to_v2, "user")
-            group_id = _get_id(granted_to_v2, "group")
+        for identity in identities:
+            user_id = _get_id(identity, "user")
+            group_id = _get_id(identity, "group")
+            site_group_id = _get_id(identity, "siteGroup")
+            site_user_email = _get_email(identity, "siteUser")
+            site_user_username = _get_login_name(identity, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
 
             if group_id:
                 access_control.append(_prefix_group(group_id))
+
+            if site_user_email:
+                access_control.append(_prefix_email(site_user_email))
+
+            if site_user_username:
+                access_control.append(_prefix_user(site_user_username))
+
+            if site_group_id:
+                users = await self.site_group_users(site_web_url, site_group_id)
+                for site_group_user in users:  # note, 'users' might contain groups.
+                    access_control.extend(
+                        self._access_control_for_member(site_group_user)
+                    )
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -2030,22 +2094,39 @@ class SharepointOnlineDataSource(BaseDataSource):
         If any role is assigned to a user this means at least "read" access.
         """
 
-        def _access_control_for_user(user_):
-            user_access_control = []
+        def _has_limited_access(role_assignment):
+            bindings = role_assignment.get("RoleDefinitionBindings", [])
 
-            user_principal_name = user_.get("UserPrincipalName")
-            login_name = _get_login_name(user_.get("LoginName"))
+            # If there is no permission information, default to restrict access
+            if not bindings:
+                self._logger.debug(
+                    f"No RoleDefinitionBindings found for '{role_assignment.get('odata.id')}'"
+                )
+                return True
 
-            if user_principal_name:
-                user_access_control.append(_prefix_user(user_principal_name))
+            # if any binding grants view access, this role assignment's member has view access
+            for binding in bindings:
+                # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
+                # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
+                base_permission_low = int(
+                    binding.get("BasePermissions", {}).get("Low", "0")
+                )
+                role_type_kind = binding.get("RoleTypeKind", 0)
+                if (
+                    (base_permission_low & VIEW_ITEM_MASK)
+                    or (base_permission_low & VIEW_PAGE_MASK)
+                    or (role_type_kind in VIEW_ROLE_TYPES)
+                ):
+                    return False
 
-            if login_name:
-                user_access_control.append(_prefix_user(login_name))
+            return (
+                True  # no evidence of view access was found, so assuming limited access
+            )
 
-            return user_access_control
+        if _has_limited_access(role_assignment):
+            return []
 
         access_control = []
-
         identity_type = role_assignment.get("Member", {}).get("odata.type", "")
         is_group = identity_type == "SP.Group"
         is_user = identity_type == "SP.User"
@@ -2054,24 +2135,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             users = role_assignment.get("Member", {}).get("Users", [])
 
             for user in users:
-                access_control.extend(_access_control_for_user(user))
+                access_control.extend(self._access_control_for_member(user))
         elif is_user:
-            user = role_assignment.get("Member", {})
-            login_name = user.get("LoginName")
-
-            # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a dynamic group
-            is_dynamic_group = (
-                login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
-                if login_name
-                else False
-            )
-
-            if is_dynamic_group:
-                self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
-                dynamic_group_id = _get_login_name(login_name)
-                access_control.append(_prefix_group(dynamic_group_id))
-            else:
-                access_control = _access_control_for_user(user)
+            member = role_assignment.get("Member", {})
+            access_control.extend(self._access_control_for_member(member))
         else:
             self._logger.debug(
                 f"Skipping unique page permissions for identity type '{identity_type}'."
@@ -2351,3 +2418,38 @@ class SharepointOnlineDataSource(BaseDataSource):
             return True
 
         return False
+
+    def _access_control_for_member(self, member):
+        login_name = member.get("LoginName")
+
+        # 'LoginName' looking like a group indicates a group
+        is_group = (
+            login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+            if login_name
+            else False
+        )
+
+        if is_group:
+            self._logger.debug(f"Detected group '{member.get('Title')}'.")
+            dynamic_group_id = _get_login_name(login_name)
+            return [_prefix_group(dynamic_group_id)]
+        else:
+            return self._access_control_for_user(member)
+
+    def _access_control_for_user(self, user):
+        user_access_control = []
+
+        user_principal_name = user.get("UserPrincipalName")
+        login_name = _get_login_name(user.get("LoginName"))
+        email = user.get("Email")
+
+        if user_principal_name:
+            user_access_control.append(_prefix_user(user_principal_name))
+
+        if login_name:
+            user_access_control.append(_prefix_user(login_name))
+
+        if email:
+            user_access_control.append(_prefix_email(email))
+
+        return user_access_control
