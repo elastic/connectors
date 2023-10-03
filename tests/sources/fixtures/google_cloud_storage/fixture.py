@@ -6,11 +6,10 @@
 """Google Cloud Storage module responsible to generate blob(s) on the fake Google Cloud Storage server.
 """
 import os
-import random
-import string
 
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import storage
+
 from tests.commons import WeightedFakeProvider
 
 client_connection = None
@@ -46,7 +45,11 @@ class PrerequisiteException(Exception):
 
 
 def get_num_docs():
-    print(FIRST_BUCKET_FILE_COUNT + SECOND_BUCKET_FILE_COUNT - NUMBER_OF_BLOBS_TO_BE_DELETED)
+    print(
+        FIRST_BUCKET_FILE_COUNT
+        + SECOND_BUCKET_FILE_COUNT
+        - NUMBER_OF_BLOBS_TO_BE_DELETED
+    )
 
 
 def verify():
@@ -104,9 +107,7 @@ def load():
 def remove():
     """Method for removing random blobs from the fake Google Cloud Storage server"""
     create_connection()
-    print(
-        "Started removing random blobs from the fake Google Cloud Storage server...."
-    )
+    print("Started removing random blobs from the fake Google Cloud Storage server....")
 
     bucket = client_connection.bucket("first-bucket")
     for number in range(NUMBER_OF_BLOBS_TO_BE_DELETED):
