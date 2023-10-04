@@ -31,7 +31,7 @@ def generate_random_base64_string(length):
 
 DOCS_COUNT = {"small": 750, "medium": 1500, "large": 3000}
 
-DATA_SIZE = os.environ.get("DATA_SIZE")
+DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 
 MESSAGE_ONE_ID = "1"
 MESSAGE_TWO_ID = "2"
@@ -53,7 +53,7 @@ def distribute_list_uniformly_across_keys(keys, input_list):
 
 USER_IDS = ["1", "2", "3"]
 USER_TO_MESSAGE_IDS = distribute_list_uniformly_across_keys(
-    USER_IDS, [message_id for message_id in range(DOCS_COUNT.get(DATA_SIZE, "small"))]
+    USER_IDS, [message_id for message_id in range(DOCS_COUNT[DATA_SIZE])]
 )
 
 SAMPLE_MESSAGE = {
