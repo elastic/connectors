@@ -12,11 +12,11 @@ The native Netowrk Drive connector will offer DLS support for Windows Network Dr
 
 Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
 
-**Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to search data from Network Drive with DLS enabled, when building a search application.
+**Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to search data on a network drive with DLS enabled, when building a search application.
 
 ## Additional Pre-requisite
 
-In order to fetch users and groups in a Windows Network Drive, the account credentials added in the connector configuration should have access to the Powershell of the Windows Server where the Network Drive is hosted.
+To fetch users and groups in a Windows network drive, account credentials added in the connector configuration should have access to the Powershell of the Windows Server where the network drive is hosted.
 
 #### Additional Configuration
 
