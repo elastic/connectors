@@ -5,9 +5,9 @@
 #
 import os
 import random
-import string
 
 import pytds
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
@@ -19,8 +19,9 @@ USER = "admin"
 PASSWORD = "Password_123"
 
 
-
-fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0]) # SQL does not like huge blobs
+fake_provider = WeightedFakeProvider(
+    weights=[0.65, 0.3, 0.05, 0]
+)  # SQL does not like huge blobs
 
 BATCH_SIZE = 1000
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
@@ -54,9 +55,7 @@ def inject_lines(table, cursor, lines):
         batch_size = min(BATCH_SIZE, lines - inserted)
         for row_id in range(batch_size):
             rows.append((fake_provider.fake.name(), row_id, fake_provider.get_text()))
-        sql_query = (
-            f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
-        )
+        sql_query = f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
         cursor.executemany(sql_query, rows)
         inserted += batch_size
         print(f"Inserting batch #{batch} of {batch_size} documents.")
