@@ -6,6 +6,9 @@ import string
 from flask import Flask, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
 
 app = Flask(__name__)
 
@@ -39,34 +42,7 @@ SIZES = {
     "large": 1000000,
 }
 
-DATA_SIZE = os.environ.get("DATA_SIZE")
 DOC_ID_SIZE = 36
-
-# if DATA_SIZE is passed then use only one file size
-if DATA_SIZE and DATA_SIZE in SIZES:
-    FILE_SIZES_DISTRIBUTION = {DATA_SIZE: 100}
-else:
-    FILE_SIZES_DISTRIBUTION = {
-        "small": 70,
-        "medium": 25,
-        "large": 5,
-    }  # sum has to be 100
-
-
-GENERATED_DATA = {}
-
-# Generate range distribution (e.g. [range(0,2), range(2, 15), ...])
-DISTRIBUTION_RANGES = {}
-i = 0
-for file_size_key, file_size_value in FILE_SIZES_DISTRIBUTION.items():
-    DISTRIBUTION_RANGES[file_size_key] = range(i, i + file_size_value)
-    i = i + file_size_value
-
-# Generate data for different sizes
-for file_size_key in FILE_SIZES_DISTRIBUTION.keys():
-    GENERATED_DATA[file_size_key] = "".join(
-        [random.choice(string.ascii_letters) for _ in range(SIZES[file_size_key])]
-    )
 
 
 def adjust_document_id_size(doc_id):
@@ -82,13 +58,51 @@ def adjust_document_id_size(doc_id):
     addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
     return f"{doc_id}-{addition}"
 
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
-MESSAGES = 50
-EVENTS = 50
-CHANNEL = 3
-FILES = 50
-CHANNEL_MESSAGE = 500
+match DATA_SIZE:
+    case "small":
+        MESSAGES = 25
+        EVENTS = 50
+        CHANNEL = 3
+        FILES = 10
+        CHANNEL_MESSAGE = 50
+    case "medium":
+        MESSAGES = 50
+        EVENTS = 50
+        CHANNEL = 3
+        FILES = 50
+        CHANNEL_MESSAGE = 500
+    case "large":
+        MESSAGES = 250
+        EVENTS = 150
+        CHANNEL = 5
+        FILES = 150
+        CHANNEL_MESSAGE = 1000
+    case _:
+        raise Exception(
+            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        )
+
+MESSAGES_TO_DELETE = 10
+EVENTS_TO_DELETE = 1
+
 ROOT = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
+
+def get_num_docs():
+    # I tried to do the maths, but it's not possible without diving too deep into the connector
+    # Therefore, doing naive way - just ran connector and took the number from the test
+    expected_count = 0
+    match DATA_SIZE:
+        case "small":
+            expected_count = 508
+        case "medium":
+            expected_count = 4613
+        case "large":
+            expected_count = 15435
+
+    
+    print(expected_count)
 
 
 class MicrosoftTeamsAPI:
@@ -190,7 +204,7 @@ class MicrosoftTeamsAPI:
 
         if len(message_data) == top:
             response["@odata.nextLink"] = f"{ROOT}/chats/{chat_id}/messages?$top=50"
-            MESSAGES -= 10  # performs deletion and pagination
+            MESSAGES -= MESSAGES_TO_DELETE  # performs deletion and pagination
         return response
 
     def get_user_chat_tabs(self, chat_id):
@@ -268,7 +282,7 @@ class MicrosoftTeamsAPI:
 
         if len(event_data) == top:
             response["@odata.nextLink"] = f"{ROOT}/users/{user_id}/events?$top=50"
-            EVENTS -= 1
+            EVENTS -= EVENTS_TO_DELETE
         return response
 
     def get_teams(self):
@@ -392,7 +406,7 @@ class MicrosoftTeamsAPI:
                     "lastModifiedDateTime": "2023-08-16T04:47:29Z",
                     "name": "list.txt",
                     "size": 45441,
-                    "webUrl": f"{ROOT}/sites/list.txt",
+                    "webUrl": f"{ROOT}/sites/list.html",
                     "file": {
                         "mimeType": "text/plain",
                     },
@@ -400,20 +414,8 @@ class MicrosoftTeamsAPI:
             )
         return {"value": files_list}
 
-    def generate_attachment_data(self):
-        rnd = random.randrange(100)
-
-        for file_size_key, file_size_value in DISTRIBUTION_RANGES.items():
-            if rnd in file_size_value:
-                return io.BytesIO(
-                    bytes(GENERATED_DATA[file_size_key], encoding="utf-8")
-                )
-
-        # fallback to small
-        return io.BytesIO(bytes(GENERATED_DATA["small"], encoding="utf-8"))
-
     def download_file(self):
-        return self.generate_attachment_data()
+        return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 
 if __name__ == "__main__":
