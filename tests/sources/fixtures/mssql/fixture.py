@@ -47,9 +47,9 @@ def inject_lines(table, cursor, lines):
         start (int): Starting row
         lines (int): Number of rows
     """
-    batch_count = int(lines / BATCH_SIZE)
+    batch_count = max(int(lines / BATCH_SIZE), 1)
     inserted = 0
-    print(f"Inserting {lines} lines")
+    print(f"Inserting {lines} lines in total {batch_count} batches")
     for batch in range(batch_count):
         rows = []
         batch_size = min(BATCH_SIZE, lines - inserted)
@@ -58,7 +58,7 @@ def inject_lines(table, cursor, lines):
         sql_query = f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
         cursor.executemany(sql_query, rows)
         inserted += batch_size
-        print(f"Inserting batch #{batch} of {batch_size} documents.")
+        print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
 def load():
