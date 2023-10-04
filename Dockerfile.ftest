@@ -1,5 +1,4 @@
 FROM python:3.10
-
 COPY . /connectors
 WORKDIR /connectors
 RUN make clean install
