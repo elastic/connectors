@@ -141,6 +141,10 @@ def get_size(ob):
     return asizeof.asizeof(ob)
 
 
+def get_file_extension(filename):
+    return os.path.splitext(filename)[-1]
+
+
 def get_base64_value(content):
     """
     Returns the converted file passed into a base64 encoded value

@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """ServiceNow source module responsible to fetch documents from ServiceNow."""
-import asyncio
 import base64
 import json
 import os
@@ -13,12 +12,9 @@ from enum import Enum
 from functools import cached_property, partial
 from urllib.parse import urlencode
 
-import aiofiles
 import aiohttp
 import dateutil.parser as parser
 import fastjsonschema
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -27,21 +23,17 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
-    convert_to_b64,
     iso_utc,
     retryable,
 )
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
-FILE_SIZE_LIMIT = 10485760  # Size in Bytes
 CONCURRENT_TASKS = 1000  # Depends on total number of services and size of each service
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
@@ -278,6 +270,10 @@ class ServiceNowClient:
             url=url, params=params, json=actions
         )
 
+    async def download_func(self, url):
+        response = await self._api_call(url, {}, {}, "get")
+        yield response
+
     async def filter_services(self, configured_service):
         """Filter services based on service mappings.
 
@@ -317,78 +313,6 @@ class ServiceNowClient:
                 f"Error while filtering services. Exception: {exception}."
             )
             raise
-
-    async def fetch_attachment_content(self, metadata, timestamp=None, doit=False):
-        """Fetch attachment content via metadata.
-
-        Args:
-            metadata (dict): Attachment metadata.
-            timestamp (timestamp, None): Attachment last modified timestamp. Defaults to None.
-            doit (bool, False): Whether to get content or not. Defaults to False.
-
-        Returns:
-            dict: Document with id, timestamp & content.
-        """
-
-        attachment_size = int(metadata["size_bytes"])
-        if not (doit and attachment_size > 0):
-            return
-
-        attachment_name = metadata["file_name"]
-        attachment_extension = os.path.splitext(attachment_name)[-1]
-        if attachment_extension == "":
-            self._logger.warning(
-                f"Files without extension are not supported by TIKA, skipping {attachment_name}."
-            )
-            return
-        elif attachment_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"Files with the extension {attachment_extension} are not supported by TIKA, skipping {attachment_name}."
-            )
-            return
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
-            )
-            return
-
-        document = {"_id": metadata["id"], "_timestamp": metadata["_timestamp"]}
-
-        temp_filename = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            temp_filename = str(async_buffer.name)
-
-            try:
-                response = await self._api_call(
-                    url=ENDPOINTS["DOWNLOAD"].format(sys_id=metadata["id"]),
-                    params={},
-                    actions={},
-                    method="get",
-                )
-                async for data in response.content.iter_chunked(CHUNK_SIZE):
-                    await async_buffer.write(data)
-
-            except Exception as exception:
-                self._logger.warning(
-                    f"Skipping content for {attachment_name}. Exception: {exception}."
-                )
-                return
-
-        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}.")
-        await asyncio.to_thread(convert_to_b64, source=temp_filename)
-
-        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-            document["_attachment"] = (await async_buffer.read()).strip()
-
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Error while deleting the file: {temp_filename} from disk. Error: {exception}"
-            )
-
-        return document
 
     async def ping(self):
         await self.get_table_length(table_name="sys_db_object")
@@ -539,6 +463,15 @@ class ServiceNowDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 7,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
         }
 
     async def _remote_validation(self):
@@ -614,7 +547,7 @@ class ServiceNowDataSource(BaseDataSource):
                         (  # pyright: ignore
                             serialized_attachment_metadata,
                             partial(
-                                self.servicenow_client.fetch_attachment_content,
+                                self.get_content,
                                 serialized_attachment_metadata,
                             ),
                         )
@@ -769,3 +702,27 @@ class ServiceNowDataSource(BaseDataSource):
             yield item
 
         await self.fetchers.join()
+
+    async def get_content(self, metadata, timestamp=None, doit=False):
+        file_size = int(metadata["size_bytes"])
+        if not (doit and file_size > 0):
+            return
+
+        filename = metadata["file_name"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        document = {"_id": metadata["id"], "_timestamp": metadata["_timestamp"]}
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.servicenow_client.download_func,
+                    ENDPOINTS["DOWNLOAD"].format(sys_id=metadata["id"]),
+                ),
+            ),
+        )

@@ -1,0 +1,4 @@
+connectors:
+  -
+    connector_id: 'microsoft_teams'
+    service_type: 'microsoft_teams'
