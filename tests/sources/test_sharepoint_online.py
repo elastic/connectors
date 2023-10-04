@@ -1855,6 +1855,7 @@ class TestSharepointOnlineDataSource:
             {
                 "siteCollection": {"hostname": "test.sharepoint.com"},
                 "webUrl": "https://test.sharepoint.com",
+                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
             }
         ]
 
@@ -1866,12 +1867,13 @@ class TestSharepointOnlineDataSource:
                 "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
+                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
             }
         ]
 
     @property
     def site_drives(self):
-        return [{"id": "2"}]
+        return [{"id": "2", "lastModifiedDateTime": "2023-10-04T08:58:33Z"}]
 
     @property
     def drive_items(self):
@@ -1895,7 +1897,13 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_lists(self):
-        return [{"id": SITE_LIST_ONE_ID, "name": SITE_LIST_ONE_NAME}]
+        return [
+            {
+                "id": SITE_LIST_ONE_ID,
+                "name": SITE_LIST_ONE_NAME,
+                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
+            }
+        ]
 
     @property
     def site_list_has_unique_role_assignments(self):
@@ -1908,17 +1916,19 @@ class TestSharepointOnlineDataSource:
                 "id": "6",
                 "contentType": {"name": "Item"},
                 "fields": {"Attachments": ""},
-                "lastModifiedDateTime": self.month_ago,
+                "lastModifiedDateTime": self.month_ago.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
             {
                 "id": "7",
                 "contentType": {"name": "Web Template Extensions"},
                 "fields": {},
+                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
             },  # Will be ignored!!!
             {
                 "id": "8",
                 "contentType": {"name": "Something without attachments"},
                 "fields": {},
+                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
             },
         ]
 
@@ -1931,7 +1941,14 @@ class TestSharepointOnlineDataSource:
 
     @property
     def site_pages(self):
-        return [{"Id": "4", "odata.id": "11", "GUID": "thats-not-a-guid"}]
+        return [
+            {
+                "Id": "4",
+                "odata.id": "11",
+                "GUID": "thats-not-a-guid",
+                "Modified": "2023-10-04T08:58:33Z",
+            }
+        ]
 
     @property
     def site_role_assignments(self):
@@ -2314,7 +2331,7 @@ class TestSharepointOnlineDataSource:
             # mock cache lookup
             source.site_group_users = AsyncMock(return_value=self.site_group_users)
 
-        sync_cursor = {"site_drives": {}}
+        sync_cursor = {"site_drives": {}, "cursor_timestamp": source.epoch_timestamp()}
         for site_drive in self.site_drives:
             sync_cursor["site_drives"][
                 site_drive["id"]
