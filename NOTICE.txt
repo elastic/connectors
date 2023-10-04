@@ -1,2 +1,4 @@
-connectors-py
+Elastic Python connectors
 Copyright 2022 Elasticsearch B.V.
+
+The software uses 3rd-party library certifi, transitively, which is under Mozilla Public License 2.0 (MPL 2.0). The source code to this library is https://github.com/certifi/python-certifi.

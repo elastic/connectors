@@ -25,6 +25,7 @@ steps:
           - path: 
             - "connectors/sources/mysql.py"
             - "tests/sources/fixtures/mysql/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 MySQL"
               command:
@@ -35,6 +36,7 @@ steps:
           - path: 
             - "connectors/sources/network_drive.py"
             - "tests/sources/fixtures/network_drive/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Network Drive"
               command:
@@ -45,6 +47,7 @@ steps:
           - path: 
             - "connectors/sources/s3.py"
             - "tests/sources/fixtures/s3/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Amazon S3"
               command:
@@ -55,15 +58,18 @@ steps:
           - path: 
             - "connectors/sources/google_cloud_storage.py"
             - "tests/sources/fixtures/google_cloud_storage/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Google Cloud Storage"
               command:
                 - ".buildkite/run_nigthly.sh google_cloud_storage small"
               artifact_paths:
                 - "perf8-report-*/**/*"
+
           - path: 
             - "connectors/sources/azure_blob_storage.py"
             - "tests/sources/fixtures/azure_blob_storage/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Azure Blob Storage"
               command:
@@ -74,6 +80,7 @@ steps:
           - path: 
             - "connectors/sources/postgresql.py"
             - "tests/sources/fixtures/postgresql/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Postgresql"
               command:
@@ -84,6 +91,7 @@ steps:
           - path: 
             - "connectors/sources/directory.py"
             - "tests/sources/fixtures/dir/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 System Directory"
               command:
@@ -94,6 +102,7 @@ steps:
           - path: 
             - "connectors/sources/oracle.py"
             - "tests/sources/fixtures/oracle/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Oracle Database"
               command:
@@ -104,6 +113,7 @@ steps:
           - path: 
             - "connectors/sources/sharepoint_server.py"
             - "tests/sources/fixtures/sharepoint_server/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Sharepoint Server"
               command:
@@ -114,6 +124,7 @@ steps:
           - path: 
             - "connectors/sources/sharepoint_online.py"
             - "tests/sources/fixtures/sharepoint_online/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Sharepoint Online"
               command:
@@ -124,6 +135,7 @@ steps:
           - path: 
             - "connectors/sources/mssql.py"
             - "tests/sources/fixtures/mssql/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Microsoft SQL"
               command:
@@ -135,6 +147,7 @@ steps:
             - "connectors/sources/jira.py"
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/jira/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Jira"
               command:
@@ -146,6 +159,7 @@ steps:
             - "connectors/sources/confluence.py"
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/confluence/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Confluence"
               command:
@@ -156,6 +170,7 @@ steps:
           - path: 
             - "connectors/sources/servicenow.py"
             - "tests/sources/fixtures/servicenow/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 ServiceNow"
               command:
@@ -166,6 +181,7 @@ steps:
           - path: 
             - "connectors/sources/mongo.py"
             - "tests/sources/fixtures/mongodb/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 MongoDB"
               command:
@@ -176,6 +192,7 @@ steps:
           - path: 
             - "connectors/sources/github.py"
             - "tests/sources/fixtures/github/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 GitHub"
               command:
@@ -186,6 +203,7 @@ steps:
           - path: 
             - "connectors/sources/google_drive.py"
             - "tests/sources/fixtures/google_drive/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Google Drive"
               command:
@@ -206,6 +224,7 @@ steps:
           - path: 
             - "connectors/sources/dropbox.py"
             - "tests/sources/fixtures/dropbox/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Dropbox"
               command:
@@ -216,10 +235,21 @@ steps:
           - path: 
             - "connectors/sources/onedrive.py"
             - "tests/sources/fixtures/onedrive/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 OneDrive"
               command:
                 - ".buildkite/run_nigthly.sh onedrive small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path:
+              - "connectors/sources/salesforce.py"
+              - "tests/sources/fixtures/salesforce/**"
+            config:
+              label: "🔨 Salesforce"
+              command:
+                - ".buildkite/run_nigthly.sh salesforce small"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -230,5 +260,25 @@ steps:
               label: "🔨 Zoom"
               command:
                 - ".buildkite/run_nigthly.sh zoom small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/box.py"
+            - "tests/sources/fixtures/box/**"
+            config:
+              label: "🔨 Box"
+              command:
+                - ".buildkite/run_nigthly.sh box small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+          
+          - path: 
+            - "connectors/sources/microsoft_teams.py"
+            - "tests/sources/fixtures/microsoft_teams/**"
+            config:
+              label: "🔨 Microsoft Teams"
+              command:
+                - ".buildkite/run_nigthly.sh microsoft_teams small"
               artifact_paths:
                 - "perf8-report-*/**/*"

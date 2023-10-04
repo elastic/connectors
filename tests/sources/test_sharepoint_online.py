@@ -15,15 +15,17 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 import pytest_asyncio
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 
 from connectors.logger import logger
 from connectors.protocol import Features
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_online import (
     ACCESS_CONTROL,
+    DEFAULT_BACKOFF_MULTIPLIER,
     DEFAULT_RETRY_SECONDS,
     WILDCARD,
+    BadRequestError,
     DriveItemsPage,
     GraphAPIToken,
     InternalServerError,
@@ -37,16 +39,14 @@ from connectors.sources.sharepoint_online import (
     SharepointOnlineDataSource,
     SharepointRestAPIToken,
     SyncCursorEmpty,
+    ThrottledError,
     TokenFetchFailed,
-    _domain_group_id,
     _emails_and_usernames_of_domain_group,
     _get_login_name,
     _prefix_email,
     _prefix_group,
     _prefix_user,
     _prefix_user_id,
-    is_domain_group,
-    is_person,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -85,6 +85,8 @@ GROUP_ONE = "Group 1"
 
 GROUP_TWO = "Group 2"
 
+GROUP_TWO_ID = "group-id-2"
+
 USER_ONE_ID = "user-id-1"
 
 USER_ONE_EMAIL = "user1@spo.com"
@@ -93,10 +95,135 @@ USER_TWO_EMAIL = "user2@spo.com"
 
 USER_TWO_NAME = "user2"
 
+SITEGROUP_USER_ONE_EMAIL = "sitegroup.user1@spo.com"
+
+SITEGROUP_USER_ONE_ID = "sitegroup.user1"
+
 NUMBER_OF_DEFAULT_GROUPS = 3
 
 ALLOW_ACCESS_CONTROL_PATCHED = "access_control"
 DEFAULT_GROUPS_PATCHED = ["some default group"]
+
+READ_BINDING = [
+    {
+        "BasePermissions": {"High": "176", "Low": "138612833"},
+        "Description": "Can view pages and list items and download documents.",
+        "Hidden": False,
+        "Id": 1073741826,
+        "Name": "Read",
+        "Order": 128,
+        "RoleTypeKind": 2,
+    }
+]
+
+LIMITED_ACCESS_BINDING = [
+    {
+        "BasePermissions": {"High": "16", "Low": "134283264"},
+        "Description": "Can view specific lists, document libraries, list items, folders, or documents when given permissions.",
+        "Hidden": True,
+        "Id": 1073741825,
+        "Name": "Limited Access",
+        "Order": 160,
+        "RoleTypeKind": 1,
+    }
+]
+
+WEB_ONLY_BINDING = [
+    {
+        "BasePermissions": {"High": "560", "Low": "134221824"},
+        "Description": "Can only view the web when given permissions.",
+        "Hidden": True,
+        "Id": 1073741833,
+        "Name": "Web-Only Limited Access",
+        "Order": 176,
+        "RoleTypeKind": 9,
+    }
+]
+
+SAMPLE_DRIVE_PERMISSIONS = [
+    {
+        "id": "3",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+        },
+    },
+    {
+        "id": "4",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+        },
+    },
+    {
+        "id": "5",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+        },
+    },
+    {
+        "id": "6",
+        "grantedToV2": {
+            "user": {
+                "id": USER_ONE_ID,
+            },
+            "group": {
+                "id": GROUP_ONE_ID,
+            },
+            "siteGroup": {"id": "2", "displayName": "Some site group"},
+        },
+    },
+]
+
+SAMPLE_SITE_GROUP_USERS = [
+    {
+        "UserPrincipalName": SITEGROUP_USER_ONE_ID,
+        "Email": SITEGROUP_USER_ONE_EMAIL,
+    }
+]
+
+BATCH_THROTTLED_RESPONSE = {
+    "responses": [
+        {
+            "id": "014DQHDVKA25ZKRFXRQBDKQS2ZMJ3C442M",
+            "status": 429,
+            "headers": {
+                "Link": '<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html",<https://developer.microsoft-tst.com/en-us/graph/changes?$filterby=v1.0,Removal&from=2021-09-01&to=2021-10-01>;rel="deprecation";type="text/html"',
+                "Deprecation": "Fri, 03 Sep 2021 23:59:59 GMT",
+                "Sunset": "Sun, 01 Oct 2023 23:59:59 GMT",
+                "Retry-After": "28",
+                "Cache-Control": "private",
+                "Content-Type": "application/json",
+            },
+            "body": {
+                "error": {
+                    "code": "activityLimitReached",
+                    "message": "The request has been throttled",
+                    "innerError": {
+                        "code": "throttledRequest",
+                        "innerError": {"code": "quota"},
+                        "date": "2023-09-29T14:31:03",
+                        "request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                        "client-request-id": "b4e31937-edce-43cc-a32b-dcf664ddc754",
+                    },
+                }
+            },
+        }
+    ]
+}
 
 
 @asynccontextmanager
@@ -107,6 +234,7 @@ async def create_spo_source(
     use_text_extraction_service=False,
     fetch_drive_item_permissions=True,
     fetch_unique_list_permissions=True,
+    enumerate_all_sites=False,
 ):
     async with create_source(
         SharepointOnlineDataSource,
@@ -119,6 +247,7 @@ async def create_spo_source(
         use_text_extraction_service=use_text_extraction_service,
         fetch_drive_item_permissions=fetch_drive_item_permissions,
         fetch_unique_list_permissions=fetch_unique_list_permissions,
+        enumerate_all_sites=enumerate_all_sites,
     ) as source:
         source.set_features(
             Features(
@@ -406,6 +535,38 @@ class TestMicrosoftAPISession:
         assert response == expected_response
 
     @pytest.mark.asyncio
+    async def test_post_with_batch_failures(
+        self, microsoft_api_session, mock_responses, patch_cancellable_sleeps
+    ):
+        url = "https://graph.microsoft.com/v1.0/$batch"
+        first_response = BATCH_THROTTLED_RESPONSE
+        second_response = {"responses": [{"key": "value"}]}
+        payload = {"key": "value"}
+
+        mock_responses.post(url, payload=first_response)
+        mock_responses.post(url, payload=second_response)
+
+        response = await microsoft_api_session.post(url, payload)
+
+        assert response == second_response
+
+    @pytest.mark.asyncio
+    async def test_post_with_consecutive_batch_failures(
+        self, microsoft_api_session, mock_responses, patch_cancellable_sleeps
+    ):
+        url = "https://graph.microsoft.com/v1.0/$batch"
+        payload = {"key": "value"}
+
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+        mock_responses.post(url, payload=BATCH_THROTTLED_RESPONSE)
+
+        with pytest.raises(ThrottledError):
+            await microsoft_api_session.post(url, payload)
+
+    @pytest.mark.asyncio
     async def test_fetch_with_retry(
         self, microsoft_api_session, mock_responses, patch_sleep
     ):
@@ -536,6 +697,30 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(retry_after)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_client_payload_error(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+        retry_after = DEFAULT_RETRY_SECONDS
+
+        # First throttle, then do not throttle
+        first_request_error = ClientPayloadError(None, None)
+
+        mock_responses.get(url, exception=first_request_error)
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(retry_after)
+
+    @pytest.mark.asyncio
     async def test_call_api_with_429_without_retry_after(
         self,
         microsoft_api_session,
@@ -561,6 +746,36 @@ class TestMicrosoftAPISession:
         patch_cancellable_sleeps.assert_awaited_with(DEFAULT_RETRY_SECONDS)
 
     @pytest.mark.asyncio
+    async def test_call_api_with_429_with_retry_after_and_backoff(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+        payload = {"hello": "world"}
+
+        # First throttle, then do not throttle
+        first_request_error = ClientResponseError(None, None)
+        first_request_error.status = 429
+        first_request_error.message = "Something went wrong"
+
+        retry_count = 3
+        for _i in range(retry_count):
+            mock_responses.get(url, exception=first_request_error)
+
+        mock_responses.get(url, payload=payload)
+
+        async with microsoft_api_session._get(url) as response:
+            actual_payload = await response.json()
+            assert actual_payload == payload
+
+        patch_cancellable_sleeps.assert_awaited_with(
+            DEFAULT_RETRY_SECONDS + DEFAULT_BACKOFF_MULTIPLIER * retry_count
+        )
+
+    @pytest.mark.asyncio
     async def test_call_api_with_403(
         self,
         microsoft_api_session,
@@ -575,6 +790,8 @@ class TestMicrosoftAPISession:
         unauthorized_error.status = 403
         unauthorized_error.message = "Something went wrong"
 
+        mock_responses.get(url, exception=unauthorized_error)
+        mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
         mock_responses.get(url, exception=unauthorized_error)
@@ -630,8 +847,33 @@ class TestMicrosoftAPISession:
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
 
         with pytest.raises(NotFound) as e:
+            async with microsoft_api_session._get(url) as _:
+                pass
+
+        assert e is not None
+
+    @pytest.mark.asyncio
+    async def test_call_api_with_400_without_retry_after_header(
+        self,
+        microsoft_api_session,
+        mock_responses,
+        patch_sleep,
+        patch_cancellable_sleeps,
+    ):
+        url = "http://localhost:1234/download-some-sample-file"
+
+        # First throttle, then do not throttle
+        bad_request_error = ClientResponseError(None, None)
+        bad_request_error.status = 400
+        bad_request_error.message = "You did something wrong"
+
+        mock_responses.get(url, exception=bad_request_error)
+
+        with pytest.raises(BadRequestError) as e:
             async with microsoft_api_session._get(url) as _:
                 pass
 
@@ -654,6 +896,8 @@ class TestMicrosoftAPISession:
         not_found_error.status = 420
         not_found_error.message = error_message
 
+        mock_responses.get(url, exception=not_found_error)
+        mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
         mock_responses.get(url, exception=not_found_error)
@@ -803,7 +1047,7 @@ class TestSharepointOnlineClient:
         ]
 
         returned_items = await self._execute_scrolling_method(
-            partial(client.sites, root_site, WILDCARD), patch_scroll, actual_items
+            partial(client.sites, root_site, [WILDCARD]), patch_scroll, actual_items
         )
 
         assert len(returned_items) == len(actual_items)
@@ -827,6 +1071,59 @@ class TestSharepointOnlineClient:
         assert len(returned_items) == len(filter_)
         assert actual_items[0] in returned_items
         assert actual_items[2] in returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually(self, client, patch_fetch):
+        root_site = "root"
+        actual_items = [
+            {"name": "First"},
+            {"name": "Third"},
+        ]
+        filter_ = ["First", "Third"]
+        patch_fetch.side_effect = actual_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=False
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == len(filter_)
+        assert actual_items == returned_items
+
+    @pytest.mark.asyncio
+    async def test_sites_filter_individually_plus_subsites(
+        self, client, patch_fetch, patch_scroll
+    ):
+        root_site = "root"
+        root_item = {
+            "name": "First",
+            "id": "first",
+            "sites": [{"name": "Second"}],
+        }
+        sub_items = [
+            AsyncIterator(
+                [[{"name": "Second", "id": "second", "sites": [{"name": "Third"}]}]]
+            ),
+            AsyncIterator([[{"name": "Third", "id": "third"}]]),
+        ]
+        expected_items = [
+            {"name": "First", "id": "first"},
+            {"name": "Second", "id": "second"},
+            {"name": "Third", "id": "third"},
+        ]
+        filter_ = ["First"]
+        patch_fetch.side_effect = [root_item]
+        patch_scroll.side_effect = sub_items
+
+        returned_items = []
+        async for site in client.sites(
+            root_site, filter_, enumerate_all_sites=False, fetch_subsites=True
+        ):
+            returned_items.append(site)
+
+        assert len(returned_items) == 3
+        assert returned_items == expected_items
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
@@ -1079,6 +1376,43 @@ class TestSharepointOnlineClient:
         assert http_call_result == actual_result
 
     @pytest.mark.asyncio
+    async def test_site_group_users(self, client, patch_scroll):
+        site_group_id = 42
+        site_groups_url = f"https://{self.tenant_name}.sharepoint.com/_api/web/sitegroups/getbyid({site_group_id})/users"
+        users = [
+            {
+                "odata.type": "SP.User",
+                "UserPrincipalName": SITEGROUP_USER_ONE_ID,
+                "Email": SITEGROUP_USER_ONE_EMAIL,
+            }
+        ]
+
+        patch_scroll.return_value = users
+
+        actual_group = await self._execute_scrolling_method(
+            client.site_groups_users,
+            patch_scroll,
+            users,
+            site_groups_url,
+            site_group_id,
+        )
+
+        assert actual_group == users
+
+    @pytest.mark.asyncio
+    async def test_site_group_not_found(self, client, patch_scroll):
+        site_group_id = 42
+        site_groups_url = f"https://{self.tenant_name}.sharepoint.com/_api/web/sitegroups/getbyid({site_group_id})/users"
+
+        patch_scroll.side_effect = NotFound()
+
+        returned_items = []
+        async for item in client.site_groups_users(site_groups_url, site_group_id):
+            returned_items.append(item)
+
+        assert len(returned_items) == 0
+
+    @pytest.mark.asyncio
     async def test_site_users(self, client, patch_scroll):
         site_users_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/siteusers"
         users = ["user1", "user2"]
@@ -1099,37 +1433,6 @@ class TestSharepointOnlineClient:
             returned_items.append(item)
 
         assert len(returned_items) == 0
-
-    @pytest.mark.asyncio
-    async def test_drive_item_permissions(self, client, patch_scroll):
-        drive_id = 1
-        drive_item = {"id": 1}
-
-        permissions = ["permission"]
-        actual_permissions = await self._execute_scrolling_method(
-            client.drive_item_permissions,
-            patch_scroll,
-            permissions,
-            drive_id,
-            drive_item,
-        )
-
-        patch_scroll.return_value = permissions
-
-        assert actual_permissions == permissions
-
-    @pytest.mark.asyncio
-    async def test_drive_item_permissions_not_found(self, client, patch_scroll):
-        drive_id = 1
-        drive_item = {"id": 1}
-
-        patch_scroll.side_effect = NotFound()
-        returned_permissions = []
-
-        async for permission in client.drive_item_permissions(drive_id, drive_item):
-            returned_permissions.append(permission)
-
-        assert len(returned_permissions) == 0
 
     @pytest.mark.asyncio
     async def test_drive_items_permissions_batch(self, client, patch_post):
@@ -1170,6 +1473,25 @@ class TestSharepointOnlineClient:
             responses.append(response)
 
         assert len(responses) == 0
+
+    @pytest.mark.asyncio
+    async def test_site_role_assignments(self, client, patch_scroll):
+        site_role_assignments_url = (
+            f"https://{self.tenant_name}.sharepoint.com/sites/test"
+        )
+
+        role_assignments = [{"value": ["role"]}]
+
+        actual_role_assignments = await self._execute_scrolling_method(
+            partial(
+                client.site_role_assignments,
+                site_role_assignments_url,
+            ),
+            patch_scroll,
+            role_assignments,
+        )
+
+        assert actual_role_assignments == role_assignments
 
     @pytest.mark.asyncio
     async def test_site_list_has_unique_role_assignments(self, client, patch_fetch):
@@ -1252,6 +1574,20 @@ class TestSharepointOnlineClient:
         list_item_id = 1
 
         patch_fetch.side_effect = NotFound()
+
+        assert not await client.site_list_item_has_unique_role_assignments(
+            site_list_item_role_assignments_url, list_title, list_item_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_site_list_item_has_unique_role_assignments_bad_request(
+        self, client, patch_fetch
+    ):
+        site_list_item_role_assignments_url = f"https://{self.tenant_name}.sharepoint.com/random/totally/made/up/roleassignments"
+        list_title = "list_title"
+        list_item_id = 1
+
+        patch_fetch.side_effect = BadRequestError()
 
         assert not await client.site_list_item_has_unique_role_assignments(
             site_list_item_role_assignments_url, list_title, list_item_id
@@ -1396,36 +1732,6 @@ class TestSharepointOnlineClient:
         assert len(actual_users_and_groups) == 0
 
     @pytest.mark.asyncio
-    async def test_user_information_lst(self, client, patch_scroll):
-        site_id = "12345"
-        user_info_one = {"name": "some user"}
-        user_info_two = {"name": "some other user"}
-
-        expected_user_infos = [user_info_one, user_info_two]
-
-        actual_user_infos = await self._execute_scrolling_method(
-            partial(client.user_information_list, site_id),
-            patch_scroll,
-            expected_user_infos,
-        )
-
-        assert len(actual_user_infos) == len(expected_user_infos)
-        assert actual_user_infos == expected_user_infos
-
-    @pytest.mark.asyncio
-    async def test_user_information_list_with_not_found_raised(
-        self, client, patch_scroll
-    ):
-        site_id = "12345"
-        patch_scroll.side_effect = NotFound()
-
-        returned_items = []
-        async for user_info in client.user_information_list(site_id):
-            returned_items.append(user_info)
-
-        assert len(returned_items) == 0
-
-    @pytest.mark.asyncio
     async def test_groups_user_transitive_member_of(self, client, patch_scroll):
         user_id = "12345"
         group_one = {"name": "some group"}
@@ -1557,7 +1863,7 @@ class TestSharepointOnlineDataSource:
         return [
             {
                 "id": "1",
-                "webUrl": "https://test.sharepoint.com/site-1",
+                "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
             }
@@ -1628,27 +1934,38 @@ class TestSharepointOnlineDataSource:
         return [{"Id": "4", "odata.id": "11", "GUID": "thats-not-a-guid"}]
 
     @property
-    def user_information_list(self):
+    def site_role_assignments(self):
         return [
             {
-                "fields": {
-                    "ContentType": "DomainGroup",
-                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE}",
-                }
-            },
-            {
-                "fields": {
-                    "ContentType": "DomainGroup",
-                    "Name": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_TWO}_o",
-                }
-            },
-            {
-                "fields": {
-                    "ContentType": "Person",
-                    "Name": f"i:0#.f|membership|{USER_ONE_EMAIL}",
-                }
-            },
-            {"fields": {"ContentType": "Person", "EMail": USER_TWO_EMAIL}},
+                "Member": {
+                    "odata.type": "SP.Group",
+                    "Users": [
+                        {
+                            "odata.type": "SP.User",
+                            "UserPrincipalName": USER_ONE_EMAIL,
+                        },
+                        {
+                            "odata.type": "SP.User",
+                            "Email": USER_TWO_EMAIL,
+                        },
+                        {
+                            "odata.type": "SP.User",
+                            "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}",
+                            "Title": GROUP_ONE,
+                            "Email": f"{GROUP_ONE}@foobar.onmicrosoft.com",
+                        },
+                        {
+                            "odata.type": "SP.User",
+                            "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_TWO_ID}",
+                            "Title": GROUP_TWO,
+                            "Email": f"{GROUP_TWO}@foobar.onmicrosoft.com",
+                        },
+                    ],
+                    "LoginName": "Site Members",
+                    "Title": "Site Members",
+                },
+                "RoleDefinitionBindings": READ_BINDING,
+            }
         ]
 
     @property
@@ -1683,6 +2000,10 @@ class TestSharepointOnlineDataSource:
     @property
     def site_list_role_assignments(self):
         return {"value": ["role"]}
+
+    @property
+    def site_group_users(self):
+        return SAMPLE_SITE_GROUP_USERS
 
     @property
     def users_and_groups_for_role_assignments(self):
@@ -1736,52 +2057,7 @@ class TestSharepointOnlineDataSource:
 
     @property
     def drive_item_permissions(self):
-        return [
-            {
-                "id": "3",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-            {
-                "id": "4",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-            {
-                "id": "5",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-            {
-                "id": "6",
-                "grantedToV2": {
-                    "user": {
-                        "id": USER_ONE_ID,
-                    },
-                    "group": {
-                        "id": GROUP_ONE_ID,
-                    },
-                },
-            },
-        ]
+        return SAMPLE_DRIVE_PERMISSIONS
 
     @property
     def drive_items_permissions_batch(self):
@@ -1804,12 +2080,12 @@ class TestSharepointOnlineDataSource:
             client = new_mock.return_value
             client.site_collections = AsyncIterator(self.site_collections)
             client.sites = AsyncIterator(self.sites)
-            client.user_information_list = AsyncIterator(self.user_information_list)
+            client.site_group_users = AsyncIterator(self.site_group_users)
+            client.site_role_assignments = AsyncIterator(self.site_role_assignments)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
             client.group_owners = AsyncIterator(self.group_owners)
             client.site_users = AsyncIterator(self.site_users)
-            client.drive_item_permissions = AsyncIterator(self.drive_item_permissions)
             client.drive_items_permissions_batch = AsyncIterator(
                 self.drive_items_permissions_batch
             )
@@ -2035,6 +2311,8 @@ class TestSharepointOnlineDataSource:
     async def test_get_docs_incrementally(self, patch_sharepoint_client):
         async with create_spo_source() as source:
             source._site_access_control = AsyncMock(return_value=([], []))
+            # mock cache lookup
+            source.site_group_users = AsyncMock(return_value=self.site_group_users)
 
         sync_cursor = {"site_drives": {}}
         for site_drive in self.site_drives:
@@ -2141,22 +2419,122 @@ class TestSharepointOnlineDataSource:
 
             assert download_result is None
 
+    @pytest.mark.parametrize(
+        "drive_item_permissions, site_group_users, expected_access_control",
+        [
+            (
+                SAMPLE_DRIVE_PERMISSIONS,
+                SAMPLE_SITE_GROUP_USERS,
+                [
+                    "user_id:user-id-1",
+                    "email:sitegroup.user1@spo.com",
+                    "group:group-id-1",
+                    "user:sitegroup.user1",
+                ],
+            ),
+            (
+                # grantedToIdentitiesV2 gets parsed
+                [
+                    {
+                        "grantedToIdentitiesV2": [
+                            {
+                                "user": {
+                                    "displayName": "Generic User",
+                                    "id": "75e1766a-f83d-48f8-aac3-8422f5cea411",
+                                },
+                                "siteUser": {
+                                    "displayName": "Generic User",
+                                    "loginName": "i:0#.f|membership|generic.user@enterprisesearch.onmicrosoft.com",
+                                },
+                            }
+                        ],
+                    }
+                ],
+                [],
+                [
+                    "user:generic.user@enterprisesearch.onmicrosoft.com",
+                    "user_id:75e1766a-f83d-48f8-aac3-8422f5cea411",
+                ],
+            ),
+            (
+                # grantedToIdentitiesV2 parsed alongside grantedToV2
+                [
+                    {
+                        "grantedToIdentitiesV2": [
+                            {
+                                "user": {
+                                    "displayName": "Generic User",
+                                    "id": "75e1766a-f83d-48f8-aac3-8422f5cea411",
+                                },
+                                "siteUser": {
+                                    "displayName": "Generic User",
+                                    "loginName": "i:0#.f|membership|generic.user@enterprisesearch.onmicrosoft.com",
+                                },
+                            }
+                        ],
+                        "grantedToV2": {
+                            "user": {
+                                "displayName": "Enterprise Search",
+                                "email": "demo@enterprisesearch.onmicrosoft.com",
+                                "id": "baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                            },
+                            "siteUser": {
+                                "displayName": "Enterprise Search",
+                                "email": "demo@enterprisesearch.onmicrosoft.com",
+                                "id": "6",
+                                "loginName": "i:0#.f|membership|demo@enterprisesearch.onmicrosoft.com",
+                            },
+                        },
+                    }
+                ],
+                [],
+                [
+                    "user:generic.user@enterprisesearch.onmicrosoft.com",
+                    "user_id:75e1766a-f83d-48f8-aac3-8422f5cea411",
+                    "email:demo@enterprisesearch.onmicrosoft.com",
+                    "user_id:baa37bda-0dd1-4799-ae22-f3476c2cf58d",
+                    "user:demo@enterprisesearch.onmicrosoft.com",
+                ],
+            ),
+            (
+                # site groups get expanded
+                [
+                    {
+                        "grantedToV2": {"siteGroup": {"id": "3"}},
+                    }
+                ],
+                SAMPLE_SITE_GROUP_USERS,
+                [f"user:{SITEGROUP_USER_ONE_ID}", f"email:{SITEGROUP_USER_ONE_EMAIL}"],
+            ),
+            (
+                # groups of groups
+                [{"grantedToV2": {"siteGroup": {"id": "3"}}}],
+                [
+                    {
+                        "LoginName": "c:0o.c|federateddirectoryclaimprovider|abc123",
+                        "Title": "Nested group",
+                    }
+                ],
+                ["group:abc123"],
+            ),
+        ],
+    )
     @pytest.mark.asyncio
-    async def test_with_drive_item_permissions(self, patch_sharepoint_client):
+    async def test_with_drive_item_permissions(
+        self, drive_item_permissions, site_group_users, expected_access_control
+    ):
         async with create_spo_source(use_document_level_security=True) as source:
-            drive_item = {"id": 2}
-            patch_sharepoint_client.drive_item_permissions = AsyncIterator(
-                self.drive_item_permissions
-            )
+            drive_item = {"id": 1}
 
-            drive_item_with_access_control = source._with_drive_item_permissions(
-                drive_item, self.drive_item_permissions
+            # mock cache lookup
+            source.site_group_users = AsyncMock(return_value=site_group_users)
+
+            drive_item_with_access_control = await source._with_drive_item_permissions(
+                drive_item, drive_item_permissions, "dummy_site_web_url"
             )
             drive_item_access_control = drive_item_with_access_control[ACCESS_CONTROL]
 
-            assert len(drive_item_access_control) == 2
-            assert _prefix_user_id(USER_ONE_ID) in drive_item_access_control
-            assert _prefix_group(GROUP_ONE_ID) in drive_item_access_control
+            assert set(drive_item_access_control) == set(expected_access_control)
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_fetch_drive_item_permissions_enabled(
@@ -2186,7 +2564,7 @@ class TestSharepointOnlineDataSource:
             drive_items_with_permissions = []
 
             async for drive_item_with_permission in source._drive_items_batch_with_permissions(
-                drive_id, drive_items_batch
+                drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_with_permissions.append(drive_item_with_permission)
 
@@ -2207,7 +2585,7 @@ class TestSharepointOnlineDataSource:
             drive_items_without_permissions = []
 
             async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
-                drive_id, drive_items_batch
+                drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
 
@@ -2406,6 +2784,28 @@ class TestSharepointOnlineDataSource:
             assert e.match(another_non_existing_site)
 
     @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_all_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site-1"
+
+        async with create_spo_source(
+            site_collections=[existing_site], enumerate_all_sites=True
+        ) as source:
+            await source.validate_config()
+
+    @pytest.mark.asyncio
+    async def test_validate_config_with_existing_collection_fetching_individual_sites(
+        self, patch_sharepoint_client
+    ):
+        existing_site = "site_1"
+
+        async with create_spo_source(
+            site_collections=[existing_site], enumerate_all_sites=False
+        ) as source:
+            await source.validate_config()
+
+    @pytest.mark.asyncio
     async def test_get_attachment_content(self, patch_sharepoint_client):
         attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = b"This is content of attachment"
@@ -2447,7 +2847,10 @@ class TestSharepointOnlineDataSource:
             )
 
     @pytest.mark.asyncio
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_attachment_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client
     ):
@@ -2455,9 +2858,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2475,7 +2879,10 @@ class TestSharepointOnlineDataSource:
                 assert "_attachment" not in download_result
 
     @pytest.mark.asyncio
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: False,
+    )
     async def test_get_attachment_with_text_extraction_enabled_but_not_configured_adds_empty_string(
         self, patch_sharepoint_client
     ):
@@ -2483,9 +2890,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2506,7 +2914,10 @@ class TestSharepointOnlineDataSource:
     @pytest.mark.parametrize(
         "filesize, expect_download", [(15, True), (10485761, False)]
     )
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_drive_item_content(
         self, patch_sharepoint_client, filesize, expect_download
     ):
@@ -2536,7 +2947,10 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: True)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: True,
+    )
     async def test_get_content_with_text_extraction_enabled_adds_body(
         self, patch_sharepoint_client, filesize
     ):
@@ -2550,9 +2964,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2571,7 +2986,10 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("filesize", [(15), (10485761)])
-    @patch("connectors.utils.ExtractionService._check_configured", lambda *_: False)
+    @patch(
+        "connectors.content_extraction.ContentExtraction._check_configured",
+        lambda *_: False,
+    )
     async def test_get_content_with_text_extraction_enabled_but_not_configured_adds_empty_string(
         self, patch_sharepoint_client, filesize
     ):
@@ -2585,9 +3003,10 @@ class TestSharepointOnlineDataSource:
         message = "This is the text content of drive item"
 
         with patch(
-            "connectors.utils.ExtractionService.extract_text", return_value=message
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=message,
         ) as extraction_service_mock, patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
             return_value={"host": "http://localhost:8090"},
         ):
 
@@ -2613,13 +3032,13 @@ class TestSharepointOnlineDataSource:
 
             access_control, _ = await source._site_access_control(site)
 
-            two_other_users = 2
+            two_users = 2
             two_groups = 2
 
-            assert len(access_control) == two_groups + two_other_users
+            assert len(access_control) == two_groups + two_users
 
-            assert _prefix_group(GROUP_ONE) in access_control
-            assert _prefix_group(GROUP_TWO) in access_control
+            assert _prefix_group(GROUP_ONE_ID) in access_control
+            assert _prefix_group(GROUP_TWO_ID) in access_control
 
             assert _prefix_user(USER_ONE_EMAIL) in access_control
             assert _prefix_email(USER_TWO_EMAIL) in access_control
@@ -2840,23 +3259,6 @@ class TestSharepointOnlineDataSource:
             assert len(user_access_control_docs) == 2
 
     @pytest.mark.parametrize(
-        "user_info_name, expected_domain_group_id",
-        [
-            (None, None),
-            ("", None),
-            ("abc|", None),
-            ("abc|def|", None),
-            ("abc|def|_o", None),
-            (f"abc|def|{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
-            (f"abc|def|{DOMAIN_GROUP_ID}_o", DOMAIN_GROUP_ID),
-            (f"abc|def|ghi/{DOMAIN_GROUP_ID}", DOMAIN_GROUP_ID),
-            (f"abc|def|ghi/{DOMAIN_GROUP_ID}_o", DOMAIN_GROUP_ID),
-        ],
-    )
-    def test_domain_group_id(self, user_info_name, expected_domain_group_id):
-        assert _domain_group_id(user_info_name) == expected_domain_group_id
-
-    @pytest.mark.parametrize(
         "group_identities_generator, expected_emails_and_usernames",
         [
             (AsyncIterator([]), []),
@@ -2912,30 +3314,6 @@ class TestSharepointOnlineDataSource:
 
         assert _prefix_user_id(user_id) == "user_id:user id"
 
-    def test_is_domain_group(self):
-        assert is_domain_group(
-            {
-                "ContentType": "DomainGroup",
-                "Name": "c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d",
-            }
-        )
-
-    def test_is_not_domain_group(self):
-        assert not is_domain_group({"ContentType": "Person"})
-        assert not is_domain_group({"ContentType": "DomainGroup"})
-        assert not is_domain_group(
-            {
-                "ContentType": "DomainGroup",
-                "Name": "c:0u.c|tenant|67f8dab3bb7a912bc3da51b94b6bc5d23edef0e83056056f1a3929b4e04b8624",
-            }
-        )
-
-    def test_is_person(self):
-        assert is_person({"ContentType": "Person"})
-
-    def test_is_not_person(self):
-        assert not is_person({"ContentType": "DomainGroup"})
-
     @pytest.mark.parametrize(
         "role_assignment, expected_access_control",
         [
@@ -2954,11 +3332,34 @@ class TestSharepointOnlineDataSource:
                                 "odata.type": "SP.User",
                                 "LoginName": f"i:0#.f|membership|{USER_TWO_EMAIL}",
                                 "UserPrincipalName": None,
+                                "Email": USER_TWO_EMAIL,
                             },
                         ],
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
-                [_prefix_user(USER_ONE_EMAIL), _prefix_user(USER_TWO_EMAIL)],
+                [
+                    _prefix_user(USER_ONE_EMAIL),
+                    _prefix_user(USER_TWO_EMAIL),
+                    _prefix_email(USER_TWO_EMAIL),
+                ],
+            ),
+            (
+                # Group of groups (access control: group Id)
+                {
+                    "Member": {
+                        "odata.type": "SP.Group",
+                        "Users": [
+                            {
+                                "odata.type": "SP.User",
+                                "LoginName": "c:0o.c|federateddirectoryclaimprovider|abc123",
+                                "Title": "Nested Group",
+                            }
+                        ],
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                },
+                [_prefix_group("abc123")],
             ),
             (
                 # User (access control: only principal name)
@@ -2968,6 +3369,7 @@ class TestSharepointOnlineDataSource:
                         "LoginName": None,
                         "UserPrincipalName": USER_ONE_EMAIL,
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_user(USER_ONE_EMAIL)],
             ),
@@ -2979,6 +3381,7 @@ class TestSharepointOnlineDataSource:
                         "LoginName": f"i:0#.f|membership|{USER_TWO_EMAIL}",
                         "UserPrincipalName": USER_TWO_NAME,
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_user(USER_TWO_EMAIL), _prefix_user(USER_TWO_NAME)],
             ),
@@ -2989,6 +3392,7 @@ class TestSharepointOnlineDataSource:
                         "odata.type": "SP.User",
                         "LoginName": f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}",
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_group(GROUP_ONE_ID)],
             ),
@@ -3000,8 +3404,141 @@ class TestSharepointOnlineDataSource:
                         "LoginName": None,
                         "UserPrincipalName": USER_ONE_EMAIL,
                     },
+                    "RoleDefinitionBindings": READ_BINDING,
                 },
                 [],
+            ),
+            (
+                # User with limited access has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": LIMITED_ACCESS_BINDING,
+                },
+                [],
+            ),
+            (
+                # User with web-only limited access has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": WEB_ONLY_BINDING,
+                },
+                [],
+            ),
+            (
+                # User with mixed access
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": READ_BINDING + LIMITED_ACCESS_BINDING,
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with empty mask (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "0"}}],
+                },
+                [],
+            ),
+            (
+                # User with non-read mask (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "2"}}],
+                },
+                [],
+            ),
+            (
+                # User with view item mask (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "1"}}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with view page mask (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"BasePermissions": {"Low": "131072"}}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with "None" role type (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 0}],
+                },
+                [],
+            ),
+            (
+                # User with "Guest" role type (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 1}],
+                },
+                [],
+            ),
+            (
+                # User with "Restricted Guest" role type (custom binding) has no ACLs
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 9}],
+                },
+                [],
+            ),
+            (
+                # User with "Reader" role type (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 2}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
+            ),
+            (
+                # User with "System" role type (custom binding)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "UserPrincipalName": USER_ONE_EMAIL,
+                    },
+                    "RoleDefinitionBindings": [{"RoleTypeKind": 255}],
+                },
+                [_prefix_user(USER_ONE_EMAIL)],
             ),
         ],
     )

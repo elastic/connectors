@@ -60,6 +60,36 @@
         "value": false,
         "order": 4,
         "ui_restrictions": []
+      },
+      "recording_age": {
+        "depends_on": [],
+        "display": "numeric",
+        "tooltip": "How far back in time to request recordings from zoom. Recordings older than this will not be indexed.",
+        "default_value": null,
+        "label": "Recording Age Limit (Months)",
+        "sensitive": false,
+        "type": "int",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": 4,
+        "order": 5,
+        "ui_restrictions": []
+      },
+      "use_text_extraction_service": {
+        "default_value": null,
+        "depends_on": [],
+        "display": "toggle",
+        "label": "Use text extraction service",
+        "options": [],
+        "order": 6,
+        "required": true,
+        "sensitive": false,
+        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+        "type": "bool",
+        "ui_restrictions": [],
+        "validations": [],
+        "value": false
       }
     },
     "custom_scheduling": {},

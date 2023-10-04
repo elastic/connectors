@@ -6,17 +6,13 @@
 """Jira source module responsible to fetch documents from Jira on-prem or cloud server.
 """
 import asyncio
-import os
 from copy import copy
 from datetime import datetime
 from functools import partial
 from urllib import parse
 
-import aiofiles
 import aiohttp
 import pytz
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 
 from connectors.access_control import ACCESS_CONTROL
@@ -30,12 +26,10 @@ from connectors.sources.atlassian import (
     prefix_group_id,
 )
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
-    convert_to_b64,
     iso_utc,
     retryable,
     ssl_context,
@@ -44,10 +38,8 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
-FILE_SIZE_LIMIT = 10485760
 
 FETCH_SIZE = 100
-CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
@@ -400,6 +392,15 @@ class JiraDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 13,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
         }
 
     def _dls_enabled(self):
@@ -622,57 +623,41 @@ class JiraDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size > 0):
+        file_size = int(attachment["size"])
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = attachment["filename"]
-        if (
-            os.path.splitext(attachment_name)[-1]
-        ).lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"{attachment_name} is not supported by TIKA, skipping"
-            )
+        filename = attachment["filename"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(
+            file_extension,
+            filename,
+            file_size,
+        ):
             return
 
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-
-        self._logger.debug(f"Downloading {attachment_name}")
+        download_url = (
+            ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
+        )
 
         document = {
             "_id": f"{issue_key}-{attachment['id']}",
             "_timestamp": attachment["created"],
         }
-        temp_filename = ""
-        attachment_url = (
-            ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.jira_client.api_call,
+                    url_name=download_url,
+                    attachment_id=attachment["id"],
+                    attachment_name=attachment["filename"],
+                ),
+            ),
         )
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.jira_client.api_call(
-                url_name=attachment_url,
-                attachment_id=attachment["id"],
-                attachment_name=attachment["filename"],
-            ):
-                async for data in response.content.iter_chunked(CHUNK_SIZE):
-                    await async_buffer.write(data)
-                temp_filename = str(async_buffer.name)
-
-        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
-        await asyncio.to_thread(convert_to_b64, source=temp_filename)
-        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await async_buffer.read()).strip()
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file from: {temp_filename}. Error: {exception}"
-            )
-        return document
 
     async def ping(self):
         """Verify the connection with Jira"""

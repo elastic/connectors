@@ -4,14 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
-import asyncio
-from functools import cached_property
+import os
+from functools import cached_property, partial
 from itertools import groupby
 
-import aiofiles
 import aiohttp
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
@@ -19,13 +16,16 @@ from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
-    convert_to_b64,
     retryable,
 )
 
+SALESFORCE_EMULATOR_HOST = os.environ.get("SALESFORCE_EMULATOR_HOST")
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
+
 RETRIES = 3
 RETRY_INTERVAL = 1
-CHUNK_SIZE = 1024
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
@@ -267,10 +267,12 @@ class SalesforceClient:
                 case_feeds = await self.get_case_feeds(case_ids)
 
                 # groupby requires pre-sorting apparently
-                case_feeds.sort(key=lambda x: x["ParentId"])
+                case_feeds.sort(key=lambda x: x.get("ParentId", ""))
                 case_feeds_by_case_id = {
                     k: list(feeds)
-                    for k, feeds in groupby(case_feeds, key=lambda x: x["ParentId"])
+                    for k, feeds in groupby(
+                        case_feeds, key=lambda x: x.get("ParentId", "")
+                    )
                 }
 
             for record in records:
@@ -284,15 +286,6 @@ class SalesforceClient:
             all_case_feeds.extend(case_feeds)
 
         return all_case_feeds
-
-    async def download_content_documents(self, content_documents):
-        for content_document in content_documents:
-            content_version = content_document.get("LatestPublishedVersion", {}) or {}
-            download_url = content_version.get("VersionDataUrl")
-            if download_url:
-                content_document["_attachment"] = await self._download(download_url)
-
-            yield content_document
 
     async def queryable_sobjects(self):
         """Cached async property"""
@@ -417,34 +410,6 @@ class SalesforceClient:
         )
         return response.get("records")
 
-    async def _download(self, download_url):
-        attachment = None
-        source_file_name = ""
-
-        try:
-            async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-                resp = await self._get(download_url)
-                async for data in resp.content.iter_chunked(CHUNK_SIZE):
-                    await async_buffer.write(data)
-                source_file_name = async_buffer.name
-
-            await asyncio.to_thread(
-                convert_to_b64,
-                source=source_file_name,
-            )
-
-            async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-                attachment = (await target_file.read()).strip()
-        except Exception as e:
-            self._logger.error(
-                f"Exception encountered when processing file: {source_file_name}. Exception: {e}"
-            )
-        finally:
-            if source_file_name:
-                await remove(str(source_file_name))
-
-        return attachment
-
     async def _auth_headers(self):
         token = await self.api_token.token()
         return {"authorization": f"Bearer {token}"}
@@ -475,6 +440,10 @@ class SalesforceClient:
             headers=headers,
             params=params,
         )
+
+    async def _download(self, url):
+        response = await self._get(url)
+        yield response
 
     async def _handle_client_response_error(self, response_body, e):
         exception_details = f"status: {e.status}, message: {e.message}"
@@ -1193,7 +1162,6 @@ class SalesforceDocMapper:
 
         return {
             "_id": content_document.get("Id"),
-            "_attachment": content_document.get("_attachment"),
             "content_size": content_document.get("ContentSize"),
             "created_at": content_document.get("CreatedDate"),
             "created_by": created_by.get("Name"),
@@ -1329,11 +1297,16 @@ class SalesforceDataSource(BaseDataSource):
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
-        self.base_url = BASE_URL.replace("<domain>", configuration["domain"])
-        self.salesforce_client = SalesforceClient(
-            configuration=configuration, base_url=self.base_url
+
+        base_url = (
+            SALESFORCE_EMULATOR_HOST
+            if (RUNNING_FTEST and SALESFORCE_EMULATOR_HOST)
+            else BASE_URL.replace("<domain>", configuration["domain"])
         )
-        self.doc_mapper = SalesforceDocMapper(self.base_url)
+        self.salesforce_client = SalesforceClient(
+            configuration=configuration, base_url=base_url
+        )
+        self.doc_mapper = SalesforceDocMapper(base_url)
 
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
@@ -1360,6 +1333,15 @@ class SalesforceDataSource(BaseDataSource):
                 "sensitive": True,
                 "tooltip": "The client secret for your OAuth2-enabled connected app. Also called 'consumer secret'",
                 "type": "str",
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 7,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
 
@@ -1407,10 +1389,41 @@ class SalesforceDataSource(BaseDataSource):
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
-        async for content_doc in self.salesforce_client.download_content_documents(
-            content_docs
-        ):
-            yield self.doc_mapper.map_content_document(content_doc), None
+        for content_doc in content_docs:
+            download_url = (content_doc.get("LatestPublishedVersion", {}) or {}).get(
+                "VersionDataUrl"
+            )
+            if not download_url:
+                self._logger.debug(
+                    f"No download URL found for {content_doc.get('title')}, skipping."
+                )
+                continue
+
+            doc = self.doc_mapper.map_content_document(content_doc)
+            doc = await self.get_content(doc, download_url)
+
+            yield doc, None
+
+    async def get_content(self, doc, download_url):
+        file_size = doc["content_size"]
+        filename = doc["title"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
+            return
+
+        return await self.download_and_extract_file(
+            doc,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.salesforce_client._download,
+                    download_url,
+                ),
+            ),
+            return_doc_if_failed=True,  # we still ingest on download failure for Salesforce
+        )
 
     def _parse_content_documents(self, record):
         content_docs = []

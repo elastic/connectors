@@ -66,7 +66,6 @@ def test_main(patch_logger, mock_responses):
         )
         == 0
     )
-    patch_logger.assert_present("Done")
 
 
 @pytest.mark.asyncio

@@ -138,6 +138,12 @@ EXPECTED_CONTENT = {
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
 
+EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "att3637249",
+    "_timestamp": "2023-01-03T09:24:50.633Z",
+    "body": RESPONSE_CONTENT,
+}
+
 EXPECTED_BLOG = {
     "_id": 4779,
     "type": "blogpost",
@@ -313,7 +319,7 @@ PAGE_RESTRICTION_RESPONSE = {
 
 
 @asynccontextmanager
-async def create_confluence_source():
+async def create_confluence_source(use_text_extraction_service=False):
     async with create_source(
         ConfluenceDataSource,
         data_source=CONFLUENCE_SERVER,
@@ -323,6 +329,7 @@ async def create_confluence_source():
         spaces="*",
         ssl_enabled=False,
         use_document_level_security=False,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -755,6 +762,37 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
                     doit=True,
                 )
                 assert response is None
+
+
+@pytest.mark.asyncio
+@patch(
+    "connectors.content_extraction.ContentExtraction._check_configured",
+    lambda *_: True,
+)
+async def test_download_attachment_with_text_extraction_enabled_adds_body():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=RESPONSE_CONTENT,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_confluence_source(use_text_extraction_service=True) as source:
+            async_response = AsyncMock()
+            async_response.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
+
+            # Execute
+            with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+                with mock.patch(
+                    "aiohttp.StreamReader.iter_chunked",
+                    return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+                ):
+                    response = await source.download_attachment(
+                        url="download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
+                        attachment=EXPECTED_ATTACHMENT,
+                        doit=True,
+                    )
+                    assert response == EXPECTED_CONTENT_EXTRACTED
 
 
 @pytest.mark.asyncio
