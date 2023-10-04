@@ -111,3 +111,8 @@ steps:
       - ".buildkite/run_nigthly.sh zoom"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Box"
+    command:
+      - ".buildkite/run_nigthly.sh box"
+    artifact_paths:
+      - "perf8-report-*/**/*"

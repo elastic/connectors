@@ -1,0 +1,119 @@
+{
+    "api_key_id": "",
+    "configuration": {
+      "tenant_id": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Tenant ID",
+        "sensitive": false,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "00000000-0000-0000-0000-000000000000",
+        "order": 1,
+        "ui_restrictions": []
+      },
+      "client_id": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Client ID",
+        "sensitive": true,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
+        "order": 4,
+        "ui_restrictions": []
+      },
+      "secret_value": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Secret value",
+        "sensitive": true,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "00000000-0000-0000-0000-000000000000",
+        "order": 3,
+        "ui_restrictions": []
+      },
+      "username": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Username",
+        "sensitive": true,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "dummy",
+        "order": 4,
+        "ui_restrictions": []
+      },
+      "password": {
+        "depends_on": [],
+        "display": "text",
+        "tooltip": null,
+        "default_value": null,
+        "label": "Password",
+        "sensitive": true,
+        "type": "str",
+        "required": true,
+        "options": [],
+        "validations": [],
+        "value": "changeme",
+        "order": 5,
+        "ui_restrictions": []
+      }
+    },
+    "custom_scheduling": {},
+    "description": null,
+    "error": "Cannot connect to host enterprisesearchasd.microsoft.com:443 ssl:default [nodename nor servname provided, or not known]",
+    "features": {
+      "filtering_advanced_config": false,
+      "filtering_rules": false,
+      "sync_rules": {
+        "advanced": {
+          "enabled": true
+        },
+        "basic": {
+          "enabled": true
+        }
+      }
+    },
+    "index_name": "search-microsoft_teams",
+    "is_native": false,
+    "language": null,
+    "last_seen": "2023-06-02T16:05:43.247794+00:00",
+    "last_sync_error": "Cannot connect to host enterprisesearchasd.microsoft.com:443 ssl:default [nodename nor servname provided, or not known]",
+    "last_sync_scheduled_at": null,
+    "last_sync_status": null,
+    "last_synced": "2023-06-02T16:08:30.745527+00:00",
+    "name": "microsoft_teams-connector",
+    "pipeline": {
+      "extract_binary_content": true,
+      "name": "ent-search-generic-ingestion",
+      "reduce_whitespace": true,
+      "run_ml_inference": true
+    },
+    "scheduling": {
+      "full": {
+        "enabled": true,
+        "interval": "0 * * * * ?"
+      }
+    },
+    "service_type": "microsoft_teams",
+    "status": "connected",
+    "sync_now": false
+  }

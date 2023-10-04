@@ -104,7 +104,9 @@ def _default_config():
             "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
             "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
             "slack": "connectors.sources.slack:SlackDataSource",
+            "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "zoom": "connectors.sources.zoom:ZoomDataSource",
+            "box": "connectors.sources.box:BoxDataSource",
         },
     }
 
