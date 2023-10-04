@@ -6,9 +6,9 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
 Document Level Security (DLS) enables you to restrict access to documents based on a user's permissions.
 This feature is available by default for the Network Drive connector.
-Network drive DLS supports folder & file permissions that are shared with individuals or groups.
+DLS in the Network drive connector facilitates the syncing of folder & file permissions, including both user and group level permissions.
 
-The native Netowrk Drive connector will offer DLS support for Windows Network Drive only.
+The native Network Drive connector will offer DLS support for Windows Network Drive only. DLS support for Linux network drive will be available via self-managed connector client.
 
 Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
 
