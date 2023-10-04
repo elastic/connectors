@@ -1,11 +1,10 @@
 import io
 import os
-import random
-import string
 
 from flask import Flask, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
@@ -58,6 +57,7 @@ def adjust_document_id_size(doc_id):
     addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
     return f"{doc_id}-{addition}"
 
+
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
@@ -89,6 +89,7 @@ EVENTS_TO_DELETE = 1
 
 ROOT = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
 
+
 def get_num_docs():
     # I tried to do the maths, but it's not possible without diving too deep into the connector
     # Therefore, doing naive way - just ran connector and took the number from the test
@@ -101,7 +102,6 @@ def get_num_docs():
         case "large":
             expected_count = 15435
 
-    
     print(expected_count)
 
 
