@@ -171,8 +171,8 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _try_schedule_sync(self, connector, job_type):
-        last_wake_up_time = self.last_wake_up_time
         this_wake_up_time = datetime.utcnow()
+        last_wake_up_time = self.last_wake_up_time
 
         logger.debug(
             f"Scheduler woke up at {this_wake_up_time}. Previously woke up at {last_wake_up_time}."
