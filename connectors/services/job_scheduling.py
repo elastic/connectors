@@ -174,8 +174,8 @@ class JobSchedulingService(BaseService):
         last_wake_up_time = self.last_wake_up_time
         this_wake_up_time = datetime.utcnow()
 
-        print(
-            f"Last time woke up at {last_wake_up_time}, woke up at {this_wake_up_time}"
+        logger.debug(
+            f"Scheduler woke up at {this_wake_up_time}. Previously woke up at {last_wake_up_time}."
         )
 
         @with_concurrency_control()
@@ -203,7 +203,7 @@ class JobSchedulingService(BaseService):
 
             try:
                 next_sync = connector.next_sync(job_type, last_wake_up_time)
-                print(f"Next sync is at {next_sync}")
+                connector.log_debug(f"Next sync is at {next_sync}")
             except Exception as e:
                 connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))
