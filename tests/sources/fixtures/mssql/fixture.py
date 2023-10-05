@@ -29,14 +29,19 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 match DATA_SIZE:
     case "small":
         NUM_TABLES = 1
-        RECORD_COUNT = 500
+        RECORD_COUNT = 800
     case "medium":
         NUM_TABLES = 3
-        RECORD_COUNT = 3000
+        RECORD_COUNT = 5000
     case "large":
         NUM_TABLES = 5
-        RECORD_COUNT = 7000
+        RECORD_COUNT = 10000
 
+RECORDS_TO_DELETE = 10
+
+
+def get_num_docs():
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 def inject_lines(table, cursor, lines):
     """Ingest rows in table
@@ -95,7 +100,7 @@ def remove():
     cursor = database.cursor()
     cursor.execute(f"USE {DATABASE_NAME}")
     for table in range(NUM_TABLES):
-        rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
-        sql_query = f"DELETE from customers_{table} where name=%s"
+        rows = [(row_id,) for row_id in random.sample(range(1, RECORD_COUNT), 10)]
+        sql_query = f"DELETE from customers_{table} where id in (%s)"
         cursor.executemany(sql_query, rows)
     database.commit()
