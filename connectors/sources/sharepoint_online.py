@@ -9,7 +9,7 @@ import re
 import time
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial, wraps
 from time import strftime
 
@@ -1784,7 +1784,8 @@ class SharepointOnlineDataSource(BaseDataSource):
             fetch_subsites=self.configuration["fetch_subsites"],
         ):  # TODO: simplify and eliminate root call
             if not check_timestamp or (
-                check_timestamp and site["lastModifiedDateTime"] > self.last_sync_time()
+                check_timestamp
+                and site["lastModifiedDateTime"] >= self.last_sync_time()
             ):
                 site["_id"] = site["id"]
                 site["object_type"] = "site"
@@ -1795,7 +1796,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_drive in self.client.site_drives(site["id"]):
             if not check_timestamp or (
                 check_timestamp
-                and site_drive["lastModifiedDateTime"] > self.last_sync_time()
+                and site_drive["lastModifiedDateTime"] >= self.last_sync_time()
             ):
                 site_drive["_id"] = site_drive["id"]
                 site_drive["object_type"] = "site_drive"
@@ -1932,7 +1933,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             if not check_timestamp or (
                 check_timestamp
-                and list_item["lastModifiedDateTime"] > self.last_sync_time()
+                and list_item["lastModifiedDateTime"] >= self.last_sync_time()
             ):
                 # List Item IDs are unique within list.
                 # Therefore we mix in site_list id to it to make sure they are
@@ -2029,7 +2030,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         async for site_list in self.client.site_lists(site["id"]):
             if not check_timestamp or (
                 check_timestamp
-                and site_list["lastModifiedDateTime"] > self.last_sync_time()
+                and site_list["lastModifiedDateTime"] >= self.last_sync_time()
             ):
                 site_list["_id"] = site_list["id"]
                 site_list["object_type"] = "site_list"
@@ -2145,7 +2146,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
             if not check_timestamp or (
-                check_timestamp and site_page["Modified"] > self.last_sync_time()
+                check_timestamp and site_page["Modified"] >= self.last_sync_time()
             ):
                 # site page object has multiple ids:
                 # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
@@ -2228,7 +2229,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, self.epoch_timestamp())
 
     def current_timestamp(self):
-        return datetime.now().strftime(TIMESTAMP_FORMAT)
+        return datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
 
     def epoch_timestamp(self):
         return strftime(TIMESTAMP_FORMAT, time.gmtime(0))

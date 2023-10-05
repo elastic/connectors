@@ -16,6 +16,7 @@ import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
+from freezegun import freeze_time
 
 from connectors.logger import logger
 from connectors.protocol import Features
@@ -48,6 +49,7 @@ from connectors.sources.sharepoint_online import (
     _prefix_user,
     _prefix_user_id,
 )
+from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -1842,12 +1844,26 @@ class TestSharepointOnlineAdvancedRulesValidator:
 
 class TestSharepointOnlineDataSource:
     @property
-    def month_ago(self):
-        return datetime.now(timezone.utc) - timedelta(days=30)
+    def today(self):
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @property
     def day_ago(self):
-        return datetime.now(timezone.utc) - timedelta(days=1)
+        return (datetime.now(timezone.utc) - timedelta(days=1)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    @property
+    def month_ago(self):
+        return (datetime.now(timezone.utc) - timedelta(days=30)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    @property
+    def two_months_ago(selfself):
+        return (datetime.now(timezone.utc) - timedelta(days=60)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
 
     @property
     def site_collections(self):
@@ -1855,7 +1871,7 @@ class TestSharepointOnlineDataSource:
             {
                 "siteCollection": {"hostname": "test.sharepoint.com"},
                 "webUrl": "https://test.sharepoint.com",
-                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
+                "lastModifiedDateTime": self.day_ago,
             }
         ]
 
@@ -1867,13 +1883,13 @@ class TestSharepointOnlineDataSource:
                 "webUrl": "https://test.sharepoint.com/sites/site_1",
                 "name": "site-1",
                 "siteCollection": self.site_collections[0]["siteCollection"],
-                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
+                "lastModifiedDateTime": self.day_ago,
             }
         ]
 
     @property
     def site_drives(self):
-        return [{"id": "2", "lastModifiedDateTime": "2023-10-04T08:58:33Z"}]
+        return [{"id": "2", "lastModifiedDateTime": self.day_ago}]
 
     @property
     def drive_items(self):
@@ -1901,7 +1917,7 @@ class TestSharepointOnlineDataSource:
             {
                 "id": SITE_LIST_ONE_ID,
                 "name": SITE_LIST_ONE_NAME,
-                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
+                "lastModifiedDateTime": self.day_ago,
             }
         ]
 
@@ -1916,19 +1932,19 @@ class TestSharepointOnlineDataSource:
                 "id": "6",
                 "contentType": {"name": "Item"},
                 "fields": {"Attachments": ""},
-                "lastModifiedDateTime": self.month_ago.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "lastModifiedDateTime": self.month_ago,
             },
             {
                 "id": "7",
                 "contentType": {"name": "Web Template Extensions"},
                 "fields": {},
-                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
+                "lastModifiedDateTime": self.day_ago,
             },  # Will be ignored!!!
             {
                 "id": "8",
                 "contentType": {"name": "Something without attachments"},
                 "fields": {},
-                "lastModifiedDateTime": "2023-10-04T08:58:33Z",
+                "lastModifiedDateTime": self.two_months_ago,
             },
         ]
 
@@ -2200,6 +2216,7 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
+    @freeze_time(iso_utc())
     async def test_get_docs_with_access_control(self, patch_sharepoint_client):
         group = "group"
         email = "email"
@@ -2312,6 +2329,8 @@ class TestSharepointOnlineDataSource:
                 ]
             )
 
+            assert source.sync_cursor()["cursor_timestamp"] == self.today
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("sync_cursor", [None, {}])
     async def test_get_docs_incrementally_with_empty_cursor(
@@ -2325,13 +2344,14 @@ class TestSharepointOnlineDataSource:
                     pass
 
     @pytest.mark.asyncio
+    @freeze_time(iso_utc())
     async def test_get_docs_incrementally(self, patch_sharepoint_client):
         async with create_spo_source() as source:
             source._site_access_control = AsyncMock(return_value=([], []))
             # mock cache lookup
             source.site_group_users = AsyncMock(return_value=self.site_group_users)
 
-        sync_cursor = {"site_drives": {}, "cursor_timestamp": source.epoch_timestamp()}
+        sync_cursor = {"site_drives": {}, "cursor_timestamp": self.month_ago}
         for site_drive in self.site_drives:
             sync_cursor["site_drives"][
                 site_drive["id"]
@@ -2362,10 +2382,11 @@ class TestSharepointOnlineDataSource:
                 len(self.site_drives),
                 len(self.site_pages),
                 len(self.site_lists),
-                len(self.site_list_items),
+                len(self.site_list_items) - 1,  # one is too old
                 len(self.site_list_item_attachments),
             ]
         )
+        assert sync_cursor["cursor_timestamp"] == self.today  # cursor was updated
 
         assert (operations["delete"]) == deleted
 
