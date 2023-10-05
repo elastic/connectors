@@ -16,7 +16,7 @@ import aiohttp
 import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
 from fastjsonschema import JsonSchemaValueException
 
@@ -422,6 +422,8 @@ class MicrosoftAPISession:
             raise
         except ClientResponseError as e:
             await self._handle_client_response_error(absolute_url, e, retry_count)
+        except ClientPayloadError as e:
+            await self._handle_client_payload_error(e, retry_count)
 
     async def _check_batch_items_for_errors(self, url, batch_resp):
         body = await batch_resp.json()
@@ -460,6 +462,17 @@ class MicrosoftAPISession:
             raise
         except ClientResponseError as e:
             await self._handle_client_response_error(absolute_url, e, retry_count)
+        except ClientPayloadError as e:
+            await self._handle_client_payload_error(e, retry_count)
+
+    async def _handle_client_payload_error(self, e, retry_count):
+        await self._sleeps.sleep(
+            self._compute_retry_after(
+                DEFAULT_RETRY_SECONDS, retry_count, DEFAULT_BACKOFF_MULTIPLIER
+            )
+        )
+
+        raise e
 
     async def _handle_client_response_error(self, absolute_url, e, retry_count):
         if e.status == 429 or e.status == 503:
