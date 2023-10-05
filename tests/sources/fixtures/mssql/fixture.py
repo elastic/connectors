@@ -101,7 +101,10 @@ def remove():
     cursor = database.cursor()
     cursor.execute(f"USE {DATABASE_NAME}")
     for table in range(NUM_TABLES):
-        rows = [(row_id,) for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)]
+        rows = [
+            (row_id,)
+            for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+        ]
         sql_query = f"DELETE from customers_{table} where id in (%s)"
         cursor.executemany(sql_query, rows)
     database.commit()
