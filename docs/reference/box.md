@@ -20,15 +20,15 @@ For additional operations, see [Usage](https://www.elastic.co/guide/en/enterpris
 
 #### Create Box User Authentication (OAuth 2.0) Custom App
 
-You'll need to create an User Authentication (OAuth 2.0) app in the Box developer console by following these steps:
+You'll need to create an OAuth app in the Box developer console by following these steps:
 
 1. Register a new app in the [Box dev console](https://app.box.com/developers/console) with custom App and select User authentication (OAuth 2.0).
 
-2. Add elasticsearch index URL in Redirect URIs
+2. Add your Elasticsearch endpoint URL to **Redirect URIs**.
 
 3. Check "Write all files and folders stored in Box" in Application Scopes.
 
-4. Once the app is created, users can have Client ID and Client secret on the configuration tab.
+4. Once the app is created, **Client ID** and **Client secret** values are available in the configuration tab. Keep these handy.
 
 #### Generate a refresh Token
 
@@ -36,14 +36,14 @@ To generate a refresh token, follow these steps:
 
 1. Go to the following URL, replacing `<CLIENT_ID>` with the **Client ID** value saved earlier.
     ```shell
-    "https://account.box.com/api/oauth2/authorize?response_type=code&client_id=<CLIENT_ID>"
+    https://account.box.com/api/oauth2/authorize?response_type=code&client_id=<CLIENT_ID>
     ```
     
 The HTTP response should contain an **authorization code** that you'll use to generate a refresh token.
 
-**Note:** Authorization code can only be used once to create a refresh token and itâ€™s valid for 30 seconds only.
+**Note:** Authorization codes to generate refresh tokens can only be used once and are only valid for 30 seconds.
 
-2. In your terminal, run the following `cURL` command, replacing `<AUTHORIZATION_CODE>`, `<CLIENT_ID> and <CLIENT_SECRET>` with the values you saved earlier:
+2. In your terminal, run the following `curl` command, replacing `<AUTHORIZATION_CODE>`, `<CLIENT_ID> and <CLIENT_SECRET>` with the values you saved earlier:
     ```shell
     curl -i -X POST "https://api.box.com/oauth2/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
@@ -52,7 +52,7 @@ The HTTP response should contain an **authorization code** that you'll use to ge
         -d "code=<AUTHORIZATION_CODE>" \
         -d "grant_type=authorization_code"
     ```
-Store the refresh token from the response and use it in the connector configuration.
+Save the refresh token from the response. You'll need this for the connector configuration.
 
 ### Box Enterprise Account
 
@@ -66,9 +66,9 @@ Store the refresh token from the response and use it in the connector configurat
 
 3. Select `App + Enterprise Access` in App Access Level.
 
-4. Then authorized your application by admin console.
+4. Authorize your application from the admin console.
 
-Store the Client Credentials and Enterprise ID and use it in the connector configuration.
+Save the **Client Credentials** and **Enterprise ID**. You'll need these to configure the connector.
 
 ## Configuration
 
@@ -90,7 +90,7 @@ The Client Secret to authenticate with Box instance.
 
 The Refresh Token to generate Access Token. 
 
-**NOTE:** If the process terminates, then user needs to generate a new refresh token and configure
+**NOTE:** If the process terminates, you'll need to generate a new refresh token.
 
 #### `Enterprise ID`  (required if Box Account is Box Enterprise)
 
