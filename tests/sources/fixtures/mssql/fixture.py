@@ -43,6 +43,7 @@ RECORDS_TO_DELETE = 10
 def get_num_docs():
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
+
 def inject_lines(table, cursor, lines):
     """Ingest rows in table
 
