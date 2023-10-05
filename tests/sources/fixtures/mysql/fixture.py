@@ -5,9 +5,9 @@
 #
 import os
 import random
-import string
 
 from mysql.connector import connect
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
@@ -30,7 +30,6 @@ BATCH_SIZE = 100
 DATABASE_NAME = "customerinfo"
 
 
-
 def get_num_docs():
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
@@ -45,9 +44,7 @@ def inject_lines(table, cursor, lines):
         batch_size = min(BATCH_SIZE, lines - inserted)
         for row_id in range(batch_size):
             rows.append((fake_provider.fake.name(), row_id, fake_provider.get_text()))
-        sql_query = (
-            f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
-        )
+        sql_query = f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
         cursor.executemany(sql_query, rows)
         inserted += batch_size
         print(f"Inserting batch #{batch} of {batch_size} documents.")
@@ -76,7 +73,9 @@ def remove():
     cursor.execute(f"USE {DATABASE_NAME}")
     for table in range(NUM_TABLES):
         print(f"Working on table {table}...")
-        rows = [(row_id,) for row_id in random.sample(range(1, 1000), RECORDS_TO_DELETE)]
+        rows = [
+            (row_id,) for row_id in random.sample(range(1, 1000), RECORDS_TO_DELETE)
+        ]
         print(rows)
         sql_query = f"DELETE from customers_{table} WHERE id IN (%s)"
         cursor.executemany(sql_query, rows)
