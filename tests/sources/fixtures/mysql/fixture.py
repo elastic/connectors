@@ -39,7 +39,7 @@ def inject_lines(table, cursor, lines):
     batch_count = max(int(lines / BATCH_SIZE), 1)
 
     inserted = 0
-    print(f"Inserting {lines} lines")
+    print(f"Inserting {lines} lines in {batch_count} batches")
     for batch in range(batch_count):
         rows = []
         batch_size = min(BATCH_SIZE, lines - inserted)
