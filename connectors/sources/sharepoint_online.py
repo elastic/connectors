@@ -6,12 +6,10 @@
 import asyncio
 import os
 import re
-import time
 from collections.abc import Iterable, Sized
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import partial, wraps
-from time import strftime
 
 import aiofiles
 import aiohttp
@@ -33,7 +31,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
@@ -41,6 +39,7 @@ from connectors.utils import (
     convert_to_b64,
     html_to_text,
     iso_utc,
+    iso_zulu,
     iterable_batches_generator,
     retryable,
     url_encode,
@@ -78,7 +77,6 @@ WILDCARD = "*"
 DRIVE_ITEMS_FIELDS = "id,content.downloadUrl,lastModifiedDateTime,lastModifiedBy,root,deleted,file,folder,package,name,webUrl,createdBy,createdDateTime,size,parentReference"
 
 CURSOR_SITE_DRIVE_KEY = "site_drives"
-CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
 
 # Microsoft Graph API Delta constants
 # https://learn.microsoft.com/en-us/graph/delta-query-overview
@@ -1665,7 +1663,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
-        timestamp = self.current_timestamp()
+        timestamp = iso_zulu()
 
         if not self._sync_cursor:
             raise SyncCursorEmpty(
@@ -2211,7 +2209,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not self._sync_cursor:
             self._sync_cursor = {
                 CURSOR_SITE_DRIVE_KEY: {},
-                CURSOR_SYNC_TIMESTAMP: self.current_timestamp(),
+                CURSOR_SYNC_TIMESTAMP: iso_zulu(),
             }
 
         return self._sync_cursor
@@ -2224,18 +2222,6 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     def get_drive_delta_link(self, drive_id):
         return self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY, {}).get(drive_id)
-
-    def last_sync_time(self):
-        return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, self.epoch_timestamp())
-
-    def current_timestamp(self):
-        return datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
-
-    def epoch_timestamp(self):
-        return strftime(TIMESTAMP_FORMAT, time.gmtime(0))
-
-    def update_sync_timestamp_cursor(self, timestamp):
-        self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
 
     def drive_item_operation(self, item):
         if "deleted" in item:
