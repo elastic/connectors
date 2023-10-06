@@ -56,12 +56,17 @@ from connectors.utils import (
 
 @freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
+    now = datetime.utcnow()
     # can run within two minutes
-    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
-    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    assert (
+        next_run("1 * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+    )
+    assert (
+        next_run("* * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    )
 
     # this should get parsed
-    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
+    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030", now)
 
 
 def test_invalid_names():
