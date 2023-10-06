@@ -30,12 +30,13 @@ HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 JOB_TYPES = [JobType.FULL, JobType.ACCESS_CONTROL]
+IDLING = 0.05
 
 
 def create_service(config_file):
     config = load_config(config_file)
     service = JobSchedulingService(config)
-    service.idling = 0.05
+    service.idling = IDLING
 
     return service
 

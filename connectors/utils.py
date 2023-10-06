@@ -93,9 +93,9 @@ def epoch_timestamp():
     return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
 
 
-def next_run(quartz_definition):
+def next_run(quartz_definition, now):
     """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
+    cron_obj = QuartzCron(quartz_definition, now)
     return cron_obj.next_trigger()
 
 
