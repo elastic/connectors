@@ -22,7 +22,12 @@ from connectors.filtering.validation import (
     FilteringValidator,
 )
 from connectors.logger import logger
-from connectors.utils import hash_id
+from connectors.utils import (
+    epoch_timestamp_zulu,
+    hash_id,
+)
+
+CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
 
 DEFAULT_CONFIGURATION = {
     "default_value": None,
@@ -646,6 +651,17 @@ class BaseDataSource:
         NOTE modifying license key logic violates the Elastic License 2.0 that this code is licensed under
         """
         return False
+
+    def last_sync_time(self):
+        default_time = epoch_timestamp_zulu()
+        if not self._sync_cursor:
+            return default_time
+        return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)
+
+    def update_sync_timestamp_cursor(self, timestamp):
+        if self._sync_cursor is None:
+            self._sync_cursor = {}
+        self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
 
 
 @cache
