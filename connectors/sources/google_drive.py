@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import os
 from functools import cached_property, partial
 
 from aiogoogle import HTTPError
@@ -49,11 +48,6 @@ GOOGLE_MIME_TYPES_MAPPING = {
     "application/vnd.google-apps.presentation": "text/plain",
     "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
-
-GOOGLE_DRIVE_EMULATOR_HOST = os.environ.get("GOOGLE_DRIVE_EMULATOR_HOST")
-RUNNING_FTEST = (
-    "RUNNING_FTEST" in os.environ
-)  # Flag to check if a connector is run for ftest or not.
 
 
 class GoogleDriveClient(GoogleServiceAccountClient):
