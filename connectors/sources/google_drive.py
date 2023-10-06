@@ -7,26 +7,23 @@ import asyncio
 import os
 from functools import cached_property, partial
 
-from aiogoogle import Aiogoogle, HTTPError
-from aiogoogle.auth.creds import ServiceAccountCreds
-from aiogoogle.sessions.aiohttp_session import AiohttpSession
+from aiogoogle import HTTPError
 
 from connectors.access_control import (
     ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
-from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.google import (
+    GoogleServiceAccountClient,
     UserFields,
     load_service_account_json,
+    remove_universe_domain,
     validate_service_account_json,
 )
 from connectors.utils import (
     EMAIL_REGEX_PATTERN,
-    RetryStrategy,
-    retryable,
     validate_email_address,
 )
 
@@ -59,172 +56,7 @@ RUNNING_FTEST = (
 )  # Flag to check if a connector is run for ftest or not.
 
 
-class RetryableAiohttpSession(AiohttpSession):
-    """A modified version of AiohttpSession from the aiogoogle library:
-    (https://github.com/omarryhan/aiogoogle/blob/master/aiogoogle/sessions/aiohttp_session.py)
-
-    The low-level send() method is wrapped with @retryable decorator that allows for retries
-    with exponential backoff before failing the request.
-    """
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def send(self, *args, **kwargs):
-        return await super().send(*args, **kwargs)
-
-
-class GoogleAPIClient:
-    """A google client to handle api calls made to Google API."""
-
-    def __init__(self, json_credentials, api_name, api_version, scopes, subject=None):
-        """Initialize the ServiceAccountCreds class using which api calls will be made.
-
-        Args:
-            json_credentials (dict): Service account credentials json.
-            api_name (str): Google API name.
-            api_version (str): Google API version.
-            scopes (list): Credential scopes.
-            subject (str): For service accounts with domain-wide delegation enabled. A user
-                           account to impersonate - e.g "admin@your-organization.com"
-        """
-
-        self._remove_universe_domain(json_credentials=json_credentials)
-
-        self.service_account_credentials = ServiceAccountCreds(
-            scopes=scopes,
-            subject=subject,
-            **json_credentials,
-        )
-        self.api_name = api_name
-        self.api_version = api_version
-        self._logger = logger
-
-    def set_logger(self, logger_):
-        self._logger = logger_
-
-    def _remove_universe_domain(self, json_credentials):
-        """Remove the "universe_domain" key from the Google Service Account JSON.
-
-        The "universe_domain" key is not supported in the aiogoogle library, so this method is used
-        to remove it from the provided JSON credentials payload.
-
-        Args:
-            json_credentials (dict): The Google Service Account JSON credentials.
-
-        """
-        if "universe_domain" in json_credentials:
-            json_credentials.pop("universe_domain")
-
-    async def api_call_paged(
-        self,
-        resource,
-        method,
-        **kwargs,
-    ):
-        """Make a paged GET call to Google Drive API.
-
-        Args:
-            resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
-            method (aiogoogle.resource.Method): Method available for the resource.
-
-        Raises:
-            exception: An instance of an exception class.
-
-        Yields:
-            async generator: Paginated response returned by the resource method.
-        """
-
-        async def _call_api(google_client, method_object, kwargs):
-            page_with_next_attached = await google_client.as_service_account(
-                method_object(**kwargs),
-                full_res=True,
-                timeout=DRIVE_API_TIMEOUT,
-            )
-            async for page_items in page_with_next_attached:
-                yield page_items
-
-        async for item in self._execute_api_call(resource, method, _call_api, kwargs):
-            yield item
-
-    async def api_call(
-        self,
-        resource,
-        method,
-        **kwargs,
-    ):
-        """Make a non-paged GET call to Google Drive API.
-
-        Args:
-            resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
-            method (aiogoogle.resource.Method): Method available for the resource.
-
-        Raises:
-            exception: An instance of an exception class.
-
-        Yields:
-            dict: Response returned by the resource method.
-        """
-
-        async def _call_api(google_client, method_object, kwargs):
-            yield await google_client.as_service_account(
-                method_object(**kwargs), timeout=DRIVE_API_TIMEOUT
-            )
-
-        return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
-
-    async def _execute_api_call(self, resource, method, call_api_func, kwargs):
-        """Execute the API call with common try/except logic.
-
-        Args:
-            resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
-            method (aiogoogle.resource.Method): Method available for the resource.
-            call_api_func (function): Function to call the API with specific logic.
-            kwargs: Additional arguments for the API call.
-
-        Raises:
-            exception: An instance of an exception class.
-
-        Yields:
-            async generator: Response returned by the resource method.
-        """
-        try:
-            async with Aiogoogle(
-                service_account_creds=self.service_account_credentials,
-                session_factory=RetryableAiohttpSession,
-            ) as google_client:
-                drive_client = await google_client.discover(
-                    api_name=self.api_name, api_version=self.api_version
-                )
-                if RUNNING_FTEST and GOOGLE_DRIVE_EMULATOR_HOST:
-                    drive_client.discovery_document["rootUrl"] = (
-                        GOOGLE_DRIVE_EMULATOR_HOST + "/"
-                    )
-
-                resource_object = getattr(drive_client, resource)
-                method_object = getattr(resource_object, method)
-
-                async for item in call_api_func(google_client, method_object, kwargs):
-                    yield item
-
-        except AttributeError as exception:
-            self._logger.error(
-                f"Error occurred while generating the resource/method object for an API call. Error: {exception}"
-            )
-            raise
-        except HTTPError as exception:
-            self._logger.warning(
-                f"Response code: {exception.res.status_code} Exception: {exception}."
-            )
-            raise
-        except Exception as exception:
-            self._logger.warning(f"Exception: {exception}.")
-            raise
-
-
-class GoogleDriveClient(GoogleAPIClient):
+class GoogleDriveClient(GoogleServiceAccountClient):
     """A google drive client to handle api calls made to Google Drive API."""
 
     def __init__(self, json_credentials, subject=None):
@@ -234,15 +66,19 @@ class GoogleDriveClient(GoogleAPIClient):
             json_credentials (dict): Service account credentials json.
         """
 
+        remove_universe_domain(json_credentials)
+        if subject:
+            json_credentials["subject"] = subject
+
         super().__init__(
             json_credentials=json_credentials,
-            api_name="drive",
+            api="drive",
             api_version="v3",
             scopes=[
                 "https://www.googleapis.com/auth/drive.readonly",
                 "https://www.googleapis.com/auth/drive.metadata.readonly",
             ],
-            subject=subject,
+            api_timeout=DRIVE_API_TIMEOUT,
         )
 
     async def ping(self):
@@ -390,7 +226,7 @@ class GoogleDriveClient(GoogleAPIClient):
             yield permission
 
 
-class GoogleAdminDirectoryClient(GoogleAPIClient):
+class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
     """A google admin directory client to handle api calls made to Google Admin API."""
 
     def __init__(self, json_credentials, subject):
@@ -401,15 +237,20 @@ class GoogleAdminDirectoryClient(GoogleAPIClient):
             subject (str): For service accounts with domain-wide delegation enabled. A user
                            account to impersonate - e.g "admin@your-organization.com"
         """
+
+        remove_universe_domain(json_credentials)
+        if subject:
+            json_credentials["subject"] = subject
+
         super().__init__(
             json_credentials=json_credentials,
-            api_name="admin",
+            api="admin",
             api_version="directory_v1",
             scopes=[
                 "https://www.googleapis.com/auth/admin.directory.group.readonly",
                 "https://www.googleapis.com/auth/admin.directory.user.readonly",
             ],
-            subject=subject,
+            api_timeout=DRIVE_API_TIMEOUT,
         )
         self.domain = _get_domain_from_email(subject)
 

@@ -8,6 +8,7 @@ from enum import Enum
 
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
+from aiogoogle.sessions.aiohttp_session import AiohttpSession
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
@@ -35,6 +36,23 @@ class MessageFields(Enum):
     ID = "id"
     CREATION_DATE = "internalDate"
     FULL_MESSAGE = "raw"
+
+
+class RetryableAiohttpSession(AiohttpSession):
+    """A modified version of AiohttpSession from the aiogoogle library:
+    (https://github.com/omarryhan/aiogoogle/blob/master/aiogoogle/sessions/aiohttp_session.py)
+
+    The low-level send() method is wrapped with @retryable decorator that allows for retries
+    with exponential backoff before failing the request.
+    """
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def send(self, *args, **kwargs):
+        return await super().send(*args, **kwargs)
 
 
 def load_service_account_json(service_account_credentials_json, google_service):
@@ -169,11 +187,6 @@ class GoogleServiceAccountClient:
 
         return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def _execute_api_call(self, resource, method, call_api_func, kwargs):
         """Execute the API call with common try/except logic.
         Args:
@@ -188,7 +201,8 @@ class GoogleServiceAccountClient:
         """
         try:
             async with Aiogoogle(
-                service_account_creds=self.service_account_credentials
+                service_account_creds=self.service_account_credentials,
+                session_factory=RetryableAiohttpSession,
             ) as google_client:
                 workspace_client = await google_client.discover(
                     api_name=self.api, api_version=self.api_version
