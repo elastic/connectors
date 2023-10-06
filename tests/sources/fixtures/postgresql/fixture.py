@@ -5,8 +5,10 @@
 #
 import asyncio
 import os
+import random
 
 import asyncpg
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
@@ -25,6 +27,7 @@ match DATA_SIZE:
     case "large":
         NUM_TABLES = 5
         RECORD_COUNT = 7000
+
 
 def load():
     """Generate tables and loads table data in the microsoft server."""
@@ -45,7 +48,9 @@ def load():
             rows = []
             batch_size = min(BATCH_SIZE, lines - inserted)
             for row_id in range(batch_size):
-                rows.append((fake_provider.fake.name(), row_id, fake_provider.get_text()))
+                rows.append(
+                    (fake_provider.fake.name(), row_id, fake_provider.get_text())
+                )
             sql_query = (
                 f"INSERT INTO customers_{table}"
                 + "(name, age, description) VALUES ($1, $2, $3)"
