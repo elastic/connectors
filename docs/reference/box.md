@@ -24,11 +24,9 @@ You'll need to create an OAuth app in the Box developer console by following the
 
 1. Register a new app in the [Box dev console](https://app.box.com/developers/console) with custom App and select User authentication (OAuth 2.0).
 
-2. Add your Elasticsearch endpoint URL to **Redirect URIs**.
+2. Check "Write all files and folders stored in Box" in Application Scopes.
 
-3. Check "Write all files and folders stored in Box" in Application Scopes.
-
-4. Once the app is created, **Client ID** and **Client secret** values are available in the configuration tab. Keep these handy.
+3. Once the app is created, **Client ID** and **Client secret** values are available in the configuration tab. Keep these handy.
 
 #### Generate a refresh Token
 
