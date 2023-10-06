@@ -3645,6 +3645,7 @@ class TestSharepointOnlineDataSource:
             (f"i:0#.f|membership|{USER_ONE_EMAIL}", USER_ONE_EMAIL),
             (f"membership|{USER_ONE_EMAIL}", None),
             (f"c:0o.c|federateddirectoryclaimprovider|{GROUP_ONE_ID}", GROUP_ONE_ID),
+            (f"c:0t.c|tenant|{GROUP_ONE_ID}", GROUP_ONE_ID),
             (USER_ONE_EMAIL, None),
             ("", None),
             (None, None),
