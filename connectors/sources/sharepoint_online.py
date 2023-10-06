@@ -1116,6 +1116,7 @@ def _get_login_name(raw_login_name):
     if raw_login_name and (
         raw_login_name.startswith("i:0#.f|membership|")
         or raw_login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+        or raw_login_name.startswith("c:0t.c|tenant|")
     ):
         parts = raw_login_name.split("|")
 
@@ -2428,14 +2429,15 @@ class SharepointOnlineDataSource(BaseDataSource):
         # 'LoginName' looking like a group indicates a group
         is_group = (
             login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+            or login_name.startswith("c:0t.c|tenant|")
             if login_name
             else False
         )
 
         if is_group:
             self._logger.debug(f"Detected group '{member.get('Title')}'.")
-            dynamic_group_id = _get_login_name(login_name)
-            return [_prefix_group(dynamic_group_id)]
+            group_id = _get_login_name(login_name)
+            return [_prefix_group(group_id)]
         else:
             return self._access_control_for_user(member)
 
