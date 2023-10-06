@@ -32,7 +32,7 @@ from connectors.logger import logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     convert_to_b64,
-    epoch_timestamp,
+    epoch_timestamp_zulu,
     get_file_extension,
     hash_id,
 )
@@ -836,7 +836,7 @@ class BaseDataSource:
             )
 
     def last_sync_time(self):
-        default_time = epoch_timestamp()
+        default_time = epoch_timestamp_zulu()
         if not self._sync_cursor:
             return default_time
         return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)

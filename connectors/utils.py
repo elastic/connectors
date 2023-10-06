@@ -88,7 +88,7 @@ def iso_zulu():
     return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
 
 
-def epoch_timestamp():
+def epoch_timestamp_zulu():
     """Returns the timestamp of the start of the epoch, in ISO Zulu format"""
     return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
 
