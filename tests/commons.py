@@ -95,6 +95,10 @@ class WeightedFakeProvider:
         ]
 
     @cached_property
+    def fake(self):
+        return self.fake_provider.fake
+
+    @cached_property
     def _htmls(self):
         return [
             self.fake_provider.small_html(),
