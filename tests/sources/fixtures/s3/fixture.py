@@ -1,6 +1,7 @@
 import os
-import string
+
 import boto3
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
@@ -27,6 +28,7 @@ else:
     OBJECT_TO_DELETE_COUNT = 15
 
 fake_provider = WeightedFakeProvider()
+
 
 def get_num_docs():
     print(FOLDER_COUNT + FILE_COUNT - OBJECT_TO_DELETE_COUNT)
@@ -85,6 +87,4 @@ def remove():
     )
     print("Removing data from aws-moto server.")
     for object_id in range(OBJECT_TO_DELETE_COUNT):
-        s3_client.delete_object(
-            Bucket=BUCKET_NAME, Key=f"{BUCKET_NAME}/{object_id}/"
-        )
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=f"{BUCKET_NAME}/{object_id}/")
