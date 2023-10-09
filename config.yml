@@ -10,10 +10,10 @@
 ##  The list of connector clients/customized connectors configurations.
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
-##    connectors:
-##      - connector_id: changeme # the ID of the connector.
-##        service_type: changeme # The service type of the connector.
-##        api_key: changeme # The Elasticsearch API key used to write data into the content index.
+   connectors:
+     - connector_id: "n9PVFYsBIS1udyclS1Yk"
+       service_type: "mongodb"
+       api_key: "b05QV0ZZc0JJUzF1ZHljbHNGYmc6TW9TMWJ3OXZRVFdVdEpVeWJfSDFTQQ=="
 #connectors: []
 #
 #
@@ -30,12 +30,12 @@
 ## ------------------------------- Elasticsearch -------------------------------
 #
 ## The host of the Elasticsearch deployment.
-#elasticsearch.host: http://localhost:9200
+elasticsearch.host: http://localhost:9200
 #
 #
 ## The API key for Elasticsearch connection.
 ##    Using `api_key` is recommended instead of `username`/`password`.
-#elasticsearch.api_key: null
+elasticsearch.api_key: "b05QV0ZZc0JJUzF1ZHljbHNGYmc6TW9TMWJ3OXZRVFdVdEpVeWJfSDFTQQ=="
 #
 #
 ##  The username for the Elasticsearch connection.
