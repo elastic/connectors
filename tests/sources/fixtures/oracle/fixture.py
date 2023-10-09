@@ -38,6 +38,12 @@ match DATA_SIZE:
         NUM_TABLES = 5
         RECORD_COUNT = 7000
 
+RECORDS_TO_DELETE = 10
+
+
+def get_num_docs():
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
+
 
 def inject_lines(table, cursor, lines):
     batch_count = max(int(lines / BATCH_SIZE), 1)
@@ -87,7 +93,10 @@ def remove():
     cursor = connection.cursor()
 
     for table in range(NUM_TABLES):
-        rows = [(row_id,) for row_id in random.sample(range(1, RECORD_COUNT), 10)]
+        rows = [
+            (row_id,)
+            for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+        ]
         sql_query = f"DELETE FROM customers_{table} WHERE id IN(:1)"
         cursor.executemany(sql_query, rows)
     connection.commit()
