@@ -28,6 +28,12 @@ match DATA_SIZE:
         NUM_TABLES = 5
         RECORD_COUNT = 7000
 
+RECORDS_TO_DELETE = 10
+
+
+def get_num_docs():
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
+
 
 def load():
     """Generate tables and loads table data in the microsoft server."""
@@ -79,8 +85,11 @@ def remove():
         """Removes 10 random items per table"""
         connect = await asyncpg.connect(CONNECTION_STRING)
         for table in range(NUM_TABLES):
-            rows = [(row_id,) for row_id in random.sample(range(1, RECORD_COUNT), 10)]
-            sql_query = f"DELETE from customers_{table} where name=$1"
+            rows = [
+                (row_id,)
+                for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+            ]
+            sql_query = f"DELETE FROM customers_{table} WHERE id IN ($1)"
             await connect.executemany(sql_query, rows)
         await connect.close()
 
