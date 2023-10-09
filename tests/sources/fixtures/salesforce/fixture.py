@@ -9,9 +9,9 @@ import io
 import os
 import random
 import re
-import string
 
 from flask import Flask, request
+
 from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
@@ -110,7 +110,7 @@ OBJECTS_WITH_CONTENT_DOCUMENTS = [
 
 
 def generate_string(size):
-    return fake.text(size) 
+    return fake.text(size)
 
 
 # We pre-generate 50 content document ids so we can randomly link them to multiple objects
