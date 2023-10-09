@@ -617,8 +617,8 @@ class SharepointOnlineClient:
 
     async def site_admins(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
-        filter = url_encode("isSiteAdmin eq true")
-        url = f"{site_web_url}/_api/web/SiteUsers?$filter={filter}"
+        filter_param = url_encode("isSiteAdmin eq true")
+        url = f"{site_web_url}/_api/web/SiteUsers?$filter={filter_param}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
@@ -1380,7 +1380,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             access_control |= member_access_control
 
         async for member in self.client.site_admins(site["webUrl"]):
-            site_admins_access_control.update(await self._access_control_for_member(member))
+            site_admins_access_control.update(
+                await self._access_control_for_member(member)
+            )
 
         return list(access_control), list(site_admins_access_control)
 
@@ -2461,10 +2463,14 @@ class SharepointOnlineDataSource(BaseDataSource):
     def _access_control_for_user(self, user):
         user_access_control = []
 
-        user_principal_name = user.get("UserPrincipalName", user.get("userPrincipalName"))
+        user_principal_name = user.get(
+            "UserPrincipalName", user.get("userPrincipalName")
+        )
         login_name = _get_login_name(user.get("LoginName", user.get("loginName")))
         email = user.get("Email", user.get("mail"))
-        id = user.get("id") # not captial "Id", Sharepoint REST uses this for non-unique IDs like `1`
+        user_id = user.get(
+            "id"
+        )  # not captial "Id", Sharepoint REST uses this for non-unique IDs like `1`
 
         if user_principal_name:
             user_access_control.append(_prefix_user(user_principal_name))
@@ -2475,8 +2481,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         if email:
             user_access_control.append(_prefix_email(email))
 
-        if id:
-            user_access_control.append(_prefix_user_id(id))
+        if user_id:
+            user_access_control.append(_prefix_user_id(user_id))
 
         return user_access_control
 

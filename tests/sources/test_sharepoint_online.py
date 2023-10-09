@@ -2010,7 +2010,7 @@ class TestSharepointOnlineDataSource:
             },
             {
                 "LoginName": "c:0t.c|tenant|78b2fb13-4ef2-4132-96c6-84c1a58e2bdf",
-            }
+            },
         ]
 
     @property
