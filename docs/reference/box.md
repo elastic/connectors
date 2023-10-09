@@ -24,9 +24,11 @@ You'll need to create an OAuth app in the Box developer console by following the
 
 1. Register a new app in the [Box dev console](https://app.box.com/developers/console) with custom App and select User authentication (OAuth 2.0).
 
-2. Check "Write all files and folders stored in Box" in Application Scopes.
+2. Add the URL of the web page in **Redirect URIs**, which is accessible by you.
 
-3. Once the app is created, **Client ID** and **Client secret** values are available in the configuration tab. Keep these handy.
+3. Check "Write all files and folders stored in Box" in Application Scopes.
+
+4. Once the app is created, **Client ID** and **Client secret** values are available in the configuration tab. Keep these handy.
 
 #### Generate a refresh Token
 
@@ -36,8 +38,10 @@ To generate a refresh token, follow these steps:
     ```shell
     https://account.box.com/api/oauth2/authorize?response_type=code&client_id=<CLIENT_ID>
     ```
-    
-The HTTP response should contain an **authorization code** that you'll use to generate a refresh token.
+
+2. Grant access to your application.
+
+3. Now you will redirect to the web page that you configured in **Redirect URIs**, and the HTTP response should contain an **authorization code** that you'll use to generate a refresh token.
 
 **Note:** Authorization codes to generate refresh tokens can only be used once and are only valid for 30 seconds.
 
