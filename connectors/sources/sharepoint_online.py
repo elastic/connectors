@@ -1375,10 +1375,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
 
             if _is_site_admin(member):
+                # These are likely in the "Owners" group for the site
                 site_admins_access_control |= member_access_control
 
             access_control |= member_access_control
 
+        # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
+        # however, both should have access to everything in the site, regardless of unique role assignments
         async for member in self.client.site_admins(site["webUrl"]):
             site_admins_access_control.update(
                 await self._access_control_for_member(member)
@@ -2443,6 +2446,14 @@ class SharepointOnlineDataSource(BaseDataSource):
         return False
 
     async def _access_control_for_member(self, member):
+        """
+        Helper function for converting a generic "member" into an access control list.
+        "Member" here is loose, and intended to work with multiple SPO API responses.
+        This function will asses if the referenced entity is actually a group,
+        a reference to a group's owners, or an individual, and will act accordingly.
+        :param member: The dict representing a generic SPO entity. May be a group or an individual
+        :return: the access control list (ACL) for this "member"
+        """
         login_name = member.get("LoginName")
 
         # 'LoginName' looking like a group indicates a group
@@ -2487,12 +2498,24 @@ class SharepointOnlineDataSource(BaseDataSource):
         return user_access_control
 
     async def _access_control_for_group_id(self, group_id):
-        if group_id.endswith("_o"):
-            # this isn't the group id, it's a reference to the _owners_ of this ID
+        def is_group_owners_reference(potential_group_id):
+            """
+            Some group ids aren't actually group IDs, but are references to the _owners_ of a group.
+            These special ids are suffixed with a `_o`.
+            For example, `c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o` is not actually
+            a reference to the group `97d055cf-5cdf-4e5e-b383-f01ed3a8844d`, but a reference to that group's owners.
+            In fact, `97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o` is not a valid group ID, and will return a 400 if requested
+            in the groups API.
+            :param potential_group_id: the identifier that may or may not be a valid group id
+            :return: True if this is actually a reference to a group's owners.
+            """
+            return potential_group_id.endswith("_o")
+
+        if is_group_owners_reference(group_id):
             real_group_id = group_id[0:-2]
             access_control = []
             async for owner in self.client.group_owners(real_group_id):
-                access_control.extend(await self._access_control_for_member(owner))
+                access_control.extend(self._access_control_for_user(owner))
             return access_control
         else:
             return [_prefix_group(group_id)]
