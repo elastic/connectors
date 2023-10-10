@@ -401,6 +401,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     alt="media",
                     userProject=self._google_storage_client.user_project_id,
                     pipe_to=async_buffer,
+                    path_params_safe_chars={"object": "'"},
                 )
             )
             await async_buffer.close()
