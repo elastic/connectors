@@ -41,7 +41,7 @@ To generate a refresh token, follow these steps:
 
 2. Grant access to your application.
 
-3. Now you will redirect to the web page that you configured in **Redirect URIs**, and the HTTP response should contain an **authorization code** that you'll use to generate a refresh token.
+3. You will now be redirected to the web page that you configured in **Redirect URIs**, and the HTTP response should contain an **authorization code** that you'll use to generate a refresh token.
 
 **Note:** Authorization codes to generate refresh tokens can only be used once and are only valid for 30 seconds.
 
