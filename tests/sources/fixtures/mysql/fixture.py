@@ -11,10 +11,8 @@ from mysql.connector import connect
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
 DATABASE_NAME = "customerinfo"
-_SIZES = {"small": 5, "medium": 10, "large": 30}
+_SIZES = {"small": 5, "medium": 10, "large": 300}
 NUM_TABLES = _SIZES[DATA_SIZE]
-
- 
 
 
 def random_text(k=1024 * 20):
