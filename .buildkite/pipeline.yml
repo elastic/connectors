@@ -6,7 +6,7 @@ agents:
 
 steps:
   - label: "DEBUG"
-    command: "echo '$BUILDKITE_PULL_REQUEST_BASE_BRANCH'"
+    command: ".buildkite/diff ${BUILDKITE_COMMIT}"
 
   - label: ":face_with_peeking_eye: Lint"
     command: "make lint"
