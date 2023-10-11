@@ -14,6 +14,8 @@ DATABASE_NAME = "customerinfo"
 _SIZES = {"small": 5, "medium": 10, "large": 30}
 NUM_TABLES = _SIZES[DATA_SIZE]
 
+ 
+
 
 def random_text(k=1024 * 20):
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
