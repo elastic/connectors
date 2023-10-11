@@ -5,6 +5,9 @@ agents:
   image: family/enterprise-search-ubuntu-2204-connectors-py
 
 steps:
+  - label: "DEBUG"
+    command: "echo '$BUILDKITE_PULL_REQUEST_BASE_BRANCH'"
+
   - label: ":face_with_peeking_eye: Lint"
     command: "make lint"
 
