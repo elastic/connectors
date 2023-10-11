@@ -11,6 +11,10 @@ COMMIT=$1
 HEAD_BRANCH=${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-FETCH_HEAD~1}
 BRANCH_POINT_COMMIT=$(git merge-base "$HEAD_BRANCH" "$COMMIT")
 
+echo $HEAD_BRANCH
+echo $BUILDKITE_BRANCH
+echo $BUILDKITE_PULL_REQUEST_BASE_BRANCH
+
 if [ "$BUILDKITE_BRANCH" == "$HEAD_BRANCH" ]; then
 	echo "diff between $COMMIT and HEAD~1"
         git diff --raw HEAD~1 | awk '{print $6; if($7) {print $7}}'
