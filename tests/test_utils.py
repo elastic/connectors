@@ -185,8 +185,8 @@ async def test_mem_queue():
         await queue.get()  # removes the 2kb
         assert not queue.full()
 
-    await asyncio.gather(remove_data(), add_data())
-    assert when[1] - when[0] > 0.1
+    await asyncio.gather(add_data(), remove_data())
+    assert when[1] - when[0] < queue.refresh_timeout
 
 
 @pytest.mark.asyncio
