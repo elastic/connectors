@@ -39,6 +39,7 @@ class JobSchedulingService(BaseService):
         self.source_list = config["sources"]
         self.connector_index = None
         self.sync_job_index = None
+        self.last_wake_up_time = datetime.utcnow()
 
     async def _schedule(self, connector):
         if self.running is False:
@@ -107,7 +108,7 @@ class JobSchedulingService(BaseService):
             )  # pyright: ignore
 
             if is_platinum_license_enabled:
-                await self._scheduled_sync(connector, JobType.ACCESS_CONTROL)
+                await self._try_schedule_sync(connector, JobType.ACCESS_CONTROL)
             else:
                 connector.log_error(
                     f"Minimum required Elasticsearch license: '{License.PLATINUM.value}'. Actual license: '{license_enabled.value}'. Skipping access control sync scheduling..."
@@ -117,9 +118,9 @@ class JobSchedulingService(BaseService):
             connector.features.incremental_sync_enabled()
             and source_klass.incremental_sync_enabled
         ):
-            await self._scheduled_sync(connector, JobType.INCREMENTAL)
+            await self._try_schedule_sync(connector, JobType.INCREMENTAL)
 
-        await self._scheduled_sync(connector, JobType.FULL)
+        await self._try_schedule_sync(connector, JobType.FULL)
 
     async def _run(self):
         """Main event loop."""
@@ -150,6 +151,7 @@ class JobSchedulingService(BaseService):
                         connector_ids=connector_ids,
                     ):
                         await self._schedule(connector)
+
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
@@ -157,6 +159,7 @@ class JobSchedulingService(BaseService):
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
+                self.last_wake_up_time = datetime.utcnow()
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
@@ -167,9 +170,16 @@ class JobSchedulingService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _scheduled_sync(self, connector, job_type):
+    async def _try_schedule_sync(self, connector, job_type):
+        this_wake_up_time = datetime.utcnow()
+        last_wake_up_time = self.last_wake_up_time
+
+        logger.debug(
+            f"Scheduler woke up at {this_wake_up_time}. Previously woke up at {last_wake_up_time}."
+        )
+
         @with_concurrency_control()
-        async def _should_schedule_scheduled_sync(job_type):
+        async def _should_schedule(job_type):
             try:
                 await connector.reload()
             except DocumentNotFoundError:
@@ -177,19 +187,23 @@ class JobSchedulingService(BaseService):
                 return False
 
             job_type_value = job_type.value
-            now = datetime.utcnow()
+
             last_sync_scheduled_at = connector.last_sync_scheduled_at_by_job_type(
                 job_type
             )
 
-            if last_sync_scheduled_at is not None and last_sync_scheduled_at > now:
+            if (
+                last_sync_scheduled_at is not None
+                and last_sync_scheduled_at > this_wake_up_time
+            ):
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
                 )
                 return False
 
             try:
-                next_sync = connector.next_sync(job_type)
+                next_sync = connector.next_sync(job_type, last_wake_up_time)
+                connector.log_debug(f"Next sync is at {next_sync}")
             except Exception as e:
                 connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))
@@ -199,8 +213,8 @@ class JobSchedulingService(BaseService):
                 connector.log_debug(f"'{job_type_value}' sync scheduling is disabled")
                 return False
 
-            next_sync_due = (next_sync - now).total_seconds()
-            if next_sync_due - self.idling > 0:
+            if this_wake_up_time < next_sync:
+                next_sync_due = (next_sync - datetime.utcnow()).total_seconds()
                 connector.log_debug(
                     f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
@@ -212,7 +226,7 @@ class JobSchedulingService(BaseService):
 
             return True
 
-        if await _should_schedule_scheduled_sync(job_type):
+        if await _should_schedule(job_type):
             connector.log_info(f"Creating a scheduled '{job_type.value}' sync...")
             await self.sync_job_index.create(
                 connector=connector,
