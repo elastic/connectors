@@ -2002,6 +2002,18 @@ class TestSharepointOnlineDataSource:
         ]
 
     @property
+    def site_admins(self):
+        return [
+            {
+                "LoginName": "c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o",
+                "Email": "Sean'sTeamSite@enterprisesearch.onmicrosoft.com",
+            },
+            {
+                "LoginName": "c:0t.c|tenant|78b2fb13-4ef2-4132-96c6-84c1a58e2bdf",
+            },
+        ]
+
+    @property
     def group_members(self):
         return [
             {
@@ -2115,6 +2127,7 @@ class TestSharepointOnlineDataSource:
             client.sites = AsyncIterator(self.sites)
             client.site_group_users = AsyncIterator(self.site_group_users)
             client.site_role_assignments = AsyncIterator(self.site_role_assignments)
+            client.site_admins = AsyncIterator(self.site_admins)
             client.group = AsyncMock(return_value=self.group)
             client.group_members = AsyncIterator(self.group_members)
             client.group_owners = AsyncIterator(self.group_owners)
