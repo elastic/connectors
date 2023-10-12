@@ -52,9 +52,8 @@ from connectors.utils import (
 )
 
 
-@freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
-    now = datetime.utcnow()
+    now = datetime(2023, 1, 18, 17, 18, 56, 814)
     # can run within two minutes
     assert (
         next_run("1 * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:19:01"
@@ -151,6 +150,10 @@ async def test_mem_queue_race():
 
 @pytest.mark.asyncio
 async def test_mem_queue():
+    # Initial timeout is really small so that the test is fast.
+    # The part of the test before timeout increase will take at least refresh_timeout
+    # seconds to execute, so if timeout is 60 seconds, then it'll take 60+ seconds.
+    # Thus we make timeout small and increase it later
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
@@ -163,6 +166,8 @@ async def test_mem_queue():
         while True:
             await queue.put("x" * 100)
 
+    # We increase the timeout to not be so flaky
+    queue.refresh_timeout = 2
     when = []
 
     async def add_data():
@@ -179,8 +184,8 @@ async def test_mem_queue():
         await queue.get()  # removes the 2kb
         assert not queue.full()
 
-    await asyncio.gather(remove_data(), add_data())
-    assert when[1] - when[0] > 0.1
+    await asyncio.gather(add_data(), remove_data())
+    assert when[1] - when[0] < queue.refresh_timeout
 
 
 @pytest.mark.asyncio
