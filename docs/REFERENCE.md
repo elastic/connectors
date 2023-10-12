@@ -22,3 +22,4 @@
 - [Outlook](./reference/outlook.md)
 - [Zoom](./reference/zoom.md)
 - [Microsoft Teams](./reference/microsoft_teams.md)
+- [Box](./reference/box.md)
