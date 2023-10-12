@@ -19,7 +19,7 @@ echo "$TARGET"
 if [ -n $BUILDKITE_PULL_REQUEST_BASE_BRANCH ]; then
   echo "Using base branch"      
   git fetch origin $BUILDKITE_PULL_REQUEST_BASE_BRANCH --depth=100
-  HEAD_BRANCH=$BUILDKITE_PULL_REQUEST_BASE_BRANCH
+  HEAD_BRANCH="origin/$BUILDKITE_PULL_REQUEST_BASE_BRANCH"
 else
   echo "Using head of current branch"      
   HEAD_BRANCH=FETCH_HEAD~1
