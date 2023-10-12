@@ -4,10 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import json
+import os
 from enum import Enum
 
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
+from aiogoogle.sessions.aiohttp_session import AiohttpSession
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
@@ -19,6 +21,11 @@ from connectors.utils import RetryStrategy, retryable
 SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
     "universe_domain"
 }
+
+GOOGLE_API_FTEST_HOST = os.environ.get("GOOGLE_API_FTEST_HOST")
+RUNNING_FTEST = (
+    "RUNNING_FTEST" in os.environ
+)  # Flag to check if a connector is run for ftest or not.
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -35,6 +42,23 @@ class MessageFields(Enum):
     ID = "id"
     CREATION_DATE = "internalDate"
     FULL_MESSAGE = "raw"
+
+
+class RetryableAiohttpSession(AiohttpSession):
+    """A modified version of AiohttpSession from the aiogoogle library:
+    (https://github.com/omarryhan/aiogoogle/blob/master/aiogoogle/sessions/aiohttp_session.py)
+
+    The low-level send() method is wrapped with @retryable decorator that allows for retries
+    with exponential backoff before failing the request.
+    """
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def send(self, *args, **kwargs):
+        return await super().send(*args, **kwargs)
 
 
 def load_service_account_json(service_account_credentials_json, google_service):
@@ -169,11 +193,6 @@ class GoogleServiceAccountClient:
 
         return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
     async def _execute_api_call(self, resource, method, call_api_func, kwargs):
         """Execute the API call with common try/except logic.
         Args:
@@ -188,11 +207,17 @@ class GoogleServiceAccountClient:
         """
         try:
             async with Aiogoogle(
-                service_account_creds=self.service_account_credentials
+                service_account_creds=self.service_account_credentials,
+                session_factory=RetryableAiohttpSession,
             ) as google_client:
                 workspace_client = await google_client.discover(
                     api_name=self.api, api_version=self.api_version
                 )
+
+                if RUNNING_FTEST and GOOGLE_API_FTEST_HOST:
+                    workspace_client.discovery_document["rootUrl"] = (
+                        GOOGLE_API_FTEST_HOST + "/"
+                    )
 
                 if isinstance(resource, list):
                     resource_object = getattr(workspace_client, resource[0])
