@@ -14,12 +14,12 @@ if [ -n $BUILDKITE_PULL_REQUEST_BASE_BRANCH ]; then
   # We fetch last 100 commits of the branch, probably smaller will be fine
   # but for now this costs nothing.
   # We might reconsider this code later if problems happen.
-  echo "Checking against a base branch: $BUILDKITE_PULL_REQUEST_BASE_BRANCH"
   git fetch origin $BUILDKITE_PULL_REQUEST_BASE_BRANCH --depth=100
   HEAD_BRANCH="origin/$BUILDKITE_PULL_REQUEST_BASE_BRANCH"
   MERGE_BASE=$(git merge-base "$HEAD_BRANCH" "$COMMIT")
+  echo "Checking against a base branch: $BUILDKITE_PULL_REQUEST_BASE_BRANCH with merge base at $MERGE_BASE"
   git diff --raw "$COMMIT".."$MERGE_BASE" | awk '{print $6; if($7) {print $7}}'
 else
-  echo "Checking against the head of the current branch" 
+  echo "Checking against the head of the current branch"
   git diff --raw HEAD~1 | awk '{print $6; if($7) {print $7}}'
 fi
