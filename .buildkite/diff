@@ -8,19 +8,17 @@
 
 COMMIT=$1
 
-echo 'Base branch:'
-echo "$BUILDKITE_PULL_REQUEST_BASE_BRANCH"
-
 if [ -n $BUILDKITE_PULL_REQUEST_BASE_BRANCH ]; then
-  echo "Using base branch"      
+  # git repository here is a shallow clone. Because of it, we need to fetch
+  # the base branch before doing the diff.
+  # We fetch last 100 commits of the branch, probably smaller will be fine
+  # but for now this costs nothing.
+  # We might reconsider this code later if problems happen.
+  echo "Checking against a base branch: $BUILDKITE_PULL_REQUEST_BASE_BRANCH"
   git fetch origin $BUILDKITE_PULL_REQUEST_BASE_BRANCH --depth=100
   HEAD_BRANCH="origin/$BUILDKITE_PULL_REQUEST_BASE_BRANCH"
+  git diff --raw "$COMMIT".."$HEAD_BRANCH" | awk '{print $6; if($7) {print $7}}'
 else
-  echo "Using head of current branch"      
-  HEAD_BRANCH=FETCH_HEAD~1
+  echo "Checking against the head of the current branch" 
+  git diff --raw HEAD~1 | awk '{print $6; if($7) {print $7}}'
 fi
-
-echo 'Head branch:'
-echo "$HEAD_BRANCH"
-
-git diff --raw "$COMMIT".."$HEAD_BRANCH" | awk '{print $6; if($7) {print $7}}'
