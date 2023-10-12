@@ -52,9 +52,8 @@ from connectors.utils import (
 )
 
 
-@freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
-    now = datetime.utcnow()
+    now = datetime(2023, 1, 18, 17, 18, 56, 814)
     # can run within two minutes
     assert (
         next_run("1 * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:19:01"
