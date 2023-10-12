@@ -6,6 +6,7 @@
 """Tests the Network Drive source class methods.
 """
 import asyncio
+import csv
 import datetime
 from io import BytesIO
 from unittest import mock
@@ -878,3 +879,61 @@ async def test_get_docs_with_dls_enabled(
         assert len(documents) == 2
 
         assert len(downloads) == 1
+
+
+@pytest.mark.asyncio
+async def test_read_csv_with_valid_data():
+    async with create_source(NASDataSource) as source:
+        with mock.patch(
+            "builtins.open", mock.mock_open(read_data="user1;S-1;S-11,S-22\nuser2;S-2;S-22")
+        ):
+            user_info = source.read_user_info_csv()
+            expected_user_info = [
+                {"username": "user1", "user_id": "S-1", "groups": ["S-11", "S-22"]},
+                {"username": "user2", "user_id": "S-2", "groups": ["S-22"]},
+            ]
+            assert user_info == expected_user_info
+
+
+@pytest.mark.asyncio
+async def test_read_csv_file_erroneous():
+    async with create_source(NASDataSource) as source:
+        with mock.patch("builtins.open", mock.mock_open(read_data="0I`00�^")):
+            with mock.patch("csv.reader", side_effect = csv.Error):
+                user_info = source.read_user_info_csv()
+                assert user_info == []
+
+
+@pytest.mark.asyncio
+async def test_read_csv_with_empty_groups():
+    async with create_source(NASDataSource) as source:
+        with mock.patch(
+            "builtins.open", mock.mock_open(read_data="user1;1;\nuser2;2;")
+        ):
+            user_info = source.read_user_info_csv()
+            expected_user_info = [
+                {"username": "user1", "user_id": "1", "groups": []},
+                {"username": "user2", "user_id": "2", "groups": []},
+            ]
+            assert user_info == expected_user_info
+
+
+@pytest.mark.asyncio
+@mock.patch.object(SecurityInfo, "get_descriptor")
+async def test_list_file_permissions(mock_get_descriptor):
+    with mock.patch("smbclient.open_file", return_value=MagicMock()) as mock_file:
+        mock_file.fd.return_value = 2
+        mock_descriptor = mock.Mock()
+        mock_get_descriptor.return_value = mock_descriptor
+        mock_dacl = {"aces": ["ace1", "ace2"]}
+        mock_descriptor.get_dacl.return_value = mock_dacl
+
+        async with create_source(NASDataSource) as source:
+            result = source.list_file_permission(
+                file_path="/path/to/file.txt",
+                file_type="file",
+                mode="rb",
+                access="read",
+            )
+
+            assert result == mock_dacl["aces"]
