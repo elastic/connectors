@@ -32,12 +32,14 @@ from connectors.logger import logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     convert_to_b64,
+    epoch_timestamp_zulu,
     get_file_extension,
     hash_id,
 )
 
 CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
+CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
 
 DEFAULT_CONFIGURATION = {
     "default_value": None,
@@ -832,6 +834,17 @@ class BaseDataSource:
             self._logger.warning(
                 f"Could not remove downloaded temp file: {temp_filename}. Error: {e}"
             )
+
+    def last_sync_time(self):
+        default_time = epoch_timestamp_zulu()
+        if not self._sync_cursor:
+            return default_time
+        return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)
+
+    def update_sync_timestamp_cursor(self, timestamp):
+        if self._sync_cursor is None:
+            self._sync_cursor = {}
+        self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
 
 
 @cache
