@@ -885,7 +885,8 @@ async def test_get_docs_with_dls_enabled(
 async def test_read_csv_with_valid_data():
     async with create_source(NASDataSource) as source:
         with mock.patch(
-            "builtins.open", mock.mock_open(read_data="user1;S-1;S-11,S-22\nuser2;S-2;S-22")
+            "builtins.open",
+            mock.mock_open(read_data="user1;S-1;S-11,S-22\nuser2;S-2;S-22"),
         ):
             user_info = source.read_user_info_csv()
             expected_user_info = [
@@ -899,7 +900,7 @@ async def test_read_csv_with_valid_data():
 async def test_read_csv_file_erroneous():
     async with create_source(NASDataSource) as source:
         with mock.patch("builtins.open", mock.mock_open(read_data="0I`00�^")):
-            with mock.patch("csv.reader", side_effect = csv.Error):
+            with mock.patch("csv.reader", side_effect=csv.Error):
                 user_info = source.read_user_info_csv()
                 assert user_info == []
 
