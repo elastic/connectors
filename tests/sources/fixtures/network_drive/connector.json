@@ -47,6 +47,21 @@
                         "order": 5,
                         "type": "str",
                         "value": "Folder1"
+                },
+                "use_document_level_security": {
+                    "depends_on": [],
+                    "display": "toggle",
+                    "tooltip": null,
+                    "default_value": false,
+                    "label": "Enable document level security",
+                    "sensitive": false,
+                    "type": "bool",
+                    "required": false,
+                    "options": [],
+                    "validations": [],
+                    "value": false,
+                    "order": 6,
+                    "ui_restrictions": []
                 }
         },
         "filtering": [
