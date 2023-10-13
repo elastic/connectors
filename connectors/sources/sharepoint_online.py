@@ -615,6 +615,19 @@ class SharepointOnlineClient:
             self._logger.debug(f"No role assignments found for site: '{site_web_url}'")
             return
 
+    async def site_admins(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+        filter_param = url_encode("isSiteAdmin eq true")
+        url = f"{site_web_url}/_api/web/SiteUsers?$filter={filter_param}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for member in page:
+                    yield member
+        except NotFound:
+            self._logger.debug(f"No site admins found for site: '${site_web_url}'")
+            return
+
     async def site_groups_users(self, site_web_url, site_group_id):
         self._validate_sharepoint_rest_url(site_web_url)
 
@@ -656,7 +669,8 @@ class SharepointOnlineClient:
             return
 
     async def group_owners(self, group_id):
-        url = f"{GRAPH_API_URL}/groups/{group_id}/owners"
+        select = "id,mail,userPrincipalName"
+        url = f"{GRAPH_API_URL}/groups/{group_id}/owners?$select={select}"
 
         try:
             async for page in self._graph_api_client.scroll(url):
@@ -1361,9 +1375,17 @@ class SharepointOnlineDataSource(BaseDataSource):
             )
 
             if _is_site_admin(member):
+                # These are likely in the "Owners" group for the site
                 site_admins_access_control |= member_access_control
 
             access_control |= member_access_control
+
+        # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
+        # however, both should have access to everything in the site, regardless of unique role assignments
+        async for member in self.client.site_admins(site["webUrl"]):
+            site_admins_access_control.update(
+                await self._access_control_for_member(member)
+            )
 
         return list(access_control), list(site_admins_access_control)
 
@@ -1904,7 +1926,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 users = await self.site_group_users(site_web_url, site_group_id)
                 for site_group_user in users:  # note, 'users' might contain groups.
                     access_control.extend(
-                        self._access_control_for_member(site_group_user)
+                        await self._access_control_for_member(site_group_user)
                     )
 
         return self._decorate_with_access_control(drive_item, access_control)
@@ -2129,10 +2151,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             users = role_assignment.get("Member", {}).get("Users", [])
 
             for user in users:
-                access_control.extend(self._access_control_for_member(user))
+                access_control.extend(await self._access_control_for_member(user))
         elif is_user:
             member = role_assignment.get("Member", {})
-            access_control.extend(self._access_control_for_member(member))
+            access_control.extend(await self._access_control_for_member(member))
         else:
             self._logger.debug(
                 f"Skipping unique page permissions for identity type '{identity_type}'."
@@ -2423,7 +2445,15 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return False
 
-    def _access_control_for_member(self, member):
+    async def _access_control_for_member(self, member):
+        """
+        Helper function for converting a generic "member" into an access control list.
+        "Member" here is loose, and intended to work with multiple SPO API responses.
+        This function will asses if the referenced entity is actually a group,
+        a reference to a group's owners, or an individual, and will act accordingly.
+        :param member: The dict representing a generic SPO entity. May be a group or an individual
+        :return: the access control list (ACL) for this "member"
+        """
         login_name = member.get("LoginName")
 
         # 'LoginName' looking like a group indicates a group
@@ -2437,16 +2467,21 @@ class SharepointOnlineDataSource(BaseDataSource):
         if is_group:
             self._logger.debug(f"Detected group '{member.get('Title')}'.")
             group_id = _get_login_name(login_name)
-            return [_prefix_group(group_id)]
+            return await self._access_control_for_group_id(group_id)
         else:
             return self._access_control_for_user(member)
 
     def _access_control_for_user(self, user):
         user_access_control = []
 
-        user_principal_name = user.get("UserPrincipalName")
-        login_name = _get_login_name(user.get("LoginName"))
-        email = user.get("Email")
+        user_principal_name = user.get(
+            "UserPrincipalName", user.get("userPrincipalName")
+        )
+        login_name = _get_login_name(user.get("LoginName", user.get("loginName")))
+        email = user.get("Email", user.get("mail"))
+        user_id = user.get(
+            "id"
+        )  # not captial "Id", Sharepoint REST uses this for non-unique IDs like `1`
 
         if user_principal_name:
             user_access_control.append(_prefix_user(user_principal_name))
@@ -2457,4 +2492,30 @@ class SharepointOnlineDataSource(BaseDataSource):
         if email:
             user_access_control.append(_prefix_email(email))
 
+        if user_id:
+            user_access_control.append(_prefix_user_id(user_id))
+
         return user_access_control
+
+    async def _access_control_for_group_id(self, group_id):
+        def is_group_owners_reference(potential_group_id):
+            """
+            Some group ids aren't actually group IDs, but are references to the _owners_ of a group.
+            These special ids are suffixed with a `_o`.
+            For example, `c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o` is not actually
+            a reference to the group `97d055cf-5cdf-4e5e-b383-f01ed3a8844d`, but a reference to that group's owners.
+            In fact, `97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o` is not a valid group ID, and will return a 400 if requested
+            in the groups API.
+            :param potential_group_id: the identifier that may or may not be a valid group id
+            :return: True if this is actually a reference to a group's owners.
+            """
+            return potential_group_id.endswith("_o")
+
+        if is_group_owners_reference(group_id):
+            real_group_id = group_id[0:-2]
+            access_control = []
+            async for owner in self.client.group_owners(real_group_id):
+                access_control.extend(self._access_control_for_user(owner))
+            return access_control
+        else:
+            return [_prefix_group(group_id)]
