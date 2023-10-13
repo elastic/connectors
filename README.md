@@ -1,4 +1,4 @@
-# Elastic Python connectors
+# Elastic connectors
 
 <img width="250" alt="search-icon" src="https://github.com/elastic/connectors/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
 
