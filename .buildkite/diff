@@ -14,7 +14,6 @@ if [ -n $BUILDKITE_PULL_REQUEST_BASE_BRANCH ]; then
   # We fetch last 100 commits of the branch, probably smaller will be fine
   # but for now this costs nothing.
   # We might reconsider this code later if problems happen.
-  git fetch origin $BUILDKITE_PULL_REQUEST_BASE_BRANCH --depth=100
   HEAD_BRANCH="origin/$BUILDKITE_PULL_REQUEST_BASE_BRANCH"
   MERGE_BASE=$(git merge-base "$HEAD_BRANCH" "$COMMIT")
   echo "Checking against a base branch: $BUILDKITE_PULL_REQUEST_BASE_BRANCH with merge base at $MERGE_BASE"
