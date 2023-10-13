@@ -1,6 +1,6 @@
-# Elastic Python connectors
+# Elastic connectors
 
-<img width="250" alt="search-icon" src="https://github.com/elastic/connectors-python/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
+<img width="250" alt="search-icon" src="https://github.com/elastic/connectors/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
 
 ## Connectors
 
@@ -32,9 +32,9 @@ For everything to do with _developing_ connectors, you'll find that here in this
 In addition to the source code for individual connectors, this repo also contains the connector service code, which is used for tasks like running connectors, and managing scheduling, syncs, and cleanup.
 This is shared code that is not used by individual connectors, but helps to coordinate and run a deployed instance/process.
 
-## Python connector framework
+## Connector framework
 
-This repo is also the home of the Elastic Python connector framework. This framework enables developers to build Elastic-supported connector clients.
+This repo is also the home of the Elastic connector framework. This framework enables developers to build Elastic-supported connector clients.
 The framework implements common functionalities out of the box, so developers can focus on the logic specific to integrating their chosen data source.
 
 The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
