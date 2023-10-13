@@ -767,7 +767,7 @@ class OutlookDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 7,
+                "order": 12,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -777,7 +777,8 @@ class OutlookDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENCY,
                 "display": "numeric",
                 "label": "Maximum concurrent tasks",
-                "order": 8,
+                "tooltip": "This value denotes the number of tasks that run in parallel. It depends on the number of accounts in the Azure AD.",
+                "order": 13,
                 "required": False,
                 "type": "int",
             },
