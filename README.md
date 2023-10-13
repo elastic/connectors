@@ -1,6 +1,6 @@
 # Elastic Python connectors
 
-<img width="250" alt="search-icon" src="https://github.com/elastic/connectors-python/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
+<img width="250" alt="search-icon" src="https://github.com/elastic/connectors/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
 
 ## Connectors
 
