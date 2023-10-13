@@ -1,6 +1,6 @@
 # Releasing the Connectors project
 
-The version scheme we use is **MAJOR.MINOR.PATCH.BUILD** and stored in the [VERSION](https://github.com/elastic/connectors-python/blob/main/connectors/VERSION) file at the root of this repository.
+The version scheme we use is **MAJOR.MINOR.PATCH.BUILD** and stored in the [VERSION](https://github.com/elastic/connectors/blob/main/connectors/VERSION) file at the root of this repository.
 
 ## Unified release
 
@@ -25,7 +25,7 @@ Take care of the branching (minor releases only):
 
 After the Elastic unified release is complete
 
-- Update the **BUILD** version ([example PR](https://github.com/elastic/connectors-python/pull/122)). Note that the Connectors project does not immediately bump to the next **PATCH** version. That won't happen until that patch release's FF date.
+- Update the **BUILD** version ([example PR](https://github.com/elastic/connectors/pull/122)). Note that the Connectors project does not immediately bump to the next **PATCH** version. That won't happen until that patch release's FF date.
 
 ## Releasing docker images
 
