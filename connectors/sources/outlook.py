@@ -45,7 +45,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
-MAX_CONCURRENCY = 10
+MAX_CONCURRENCY = 2000
 
 OUTLOOK_SERVER = "outlook_server"
 OUTLOOK_CLOUD = "outlook_cloud"
@@ -664,7 +664,9 @@ class OutlookDataSource(BaseDataSource):
 
         self.tasks = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
-        self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
+        self.fetchers = ConcurrentTasks(
+            max_concurrency=self.configuration["max_concurrent_tasks"]
+        )
 
     @cached_property
     def client(self):
@@ -770,6 +772,14 @@ class OutlookDataSource(BaseDataSource):
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
                 "value": False,
+            },
+            "max_concurrent_tasks": {
+                "default_value": MAX_CONCURRENCY,
+                "display": "numeric",
+                "label": "Maximum concurrent tasks",
+                "order": 8,
+                "required": False,
+                "type": "int",
             },
         }
 
