@@ -7,16 +7,24 @@
 """
 import io
 import os
-import random
-import string
 
 from flask import Flask, request
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
-projects_count = 1000
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+PROJECT_TO_DELETE_COUNT = 100
+
+match DATA_SIZE:
+    case "small":
+        projects_count = 500
+    case "medium":
+        projects_count = 2000
+    case "large":
+        projects_count = 10000
 
 
 app = Flask(__name__)
@@ -46,7 +54,9 @@ def get_projects():
         projects.append(
             {"id": f"project {i}", "key": f"DP-{i}", "name": f"Demo Project {i}"}
         )
-    projects_count = 900  # to delete 100 projects from Jira in next sync
+    projects_count -= (
+        PROJECT_TO_DELETE_COUNT  # to delete 100 projects from Jira in next sync
+    )
     return projects
 
 
@@ -135,7 +145,7 @@ def get_attachment_content(attachment_id):
     Returns:
         data_reader (io.BytesIO): Dummy attachment content
     """
-    return io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
+    return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 
 if __name__ == "__main__":
