@@ -1,6 +1,6 @@
 # Upgrading
 
-The `connectors-python` project is intentionally de-coupled from the Elasticsearch release cycle.
+The `connectors` project is intentionally de-coupled from the Elasticsearch release cycle.
 It can be forked, modified, and connected to an Elasticsearch deployment, and continue to be modified while the Elasticsearch version stays static.
 
 This gives the product a great capability to adapt to bugs or sudden 3rd-party API changes flexibly and without delay.
@@ -20,7 +20,7 @@ Do not tell yourself it is overkill.
 Always. 👏 Snapshot. 👏 First 👏.
 
 ### Always read release notes
-The `connectors-python` repository is part of Elastic Enterprise Search's connectors framework.
+The `connectors` repository is part of Elastic Enterprise Search's connectors framework.
 You can find the [release notes for Enterprise Search here](https://www.elastic.co/guide/en/enterprise-search/current/changelog.html).
 You can find the list of [known issues for connectors here](https://www.elastic.co/guide/en/enterprise-search/current/connectors-known-issues.html).
 
@@ -34,11 +34,11 @@ Periodically, the [connector protocol](./CONNECTOR_PROTOCOL.md) changes.
 If you find a change that needs to be made at the framework level, [submit a PR](./CONTRIBUTING.md#pull-request-etiquette) for the fix, so that your branch does not differ from the Elastic-maintained remote.
 
 ### Upgrade all stack components beforehand
-Before upgrading `connectors-python`, you should first stop your running connectors services, upgrade-and-start Elasticsearch, upgrade-and-start Enterprise Search, upgrade-and-start Kibana, and only then upgrade-and-start `connectors-python`.
+Before upgrading `connectors`, you should first stop your running connectors services, upgrade-and-start Elasticsearch, upgrade-and-start Enterprise Search, upgrade-and-start Kibana, and only then upgrade-and-start `connectors`.
 As a part of Enterprise Search, the connectors framework's data migrations live inside Enterprise Search.
 The user experience for configuring and running the connectors framework lives inside Kibana.
 Both of these store their state in Elasticsearch.
-Upgrading-and-starting your `connectors-python` _before_ any of these stack components can lead to unexplained behavior, and may result in data corruption.
+Upgrading-and-starting your `connectors` _before_ any of these stack components can lead to unexplained behavior, and may result in data corruption.
 
 If anything goes wrong here, hopefully you [took a snapshot](#always-take-an-elasticsearch-snapshothttpswwwelasticcoguideenelasticsearchreferencecurrentsnapshot-restorehtml), and you can roll back, trying again with the correct order.
 
