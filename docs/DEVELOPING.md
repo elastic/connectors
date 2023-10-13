@@ -26,7 +26,7 @@
 
 ## General Configuration
 
-The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
+The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/master/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/master/docs/CONFIG.md).
 
 ## Installation
 
