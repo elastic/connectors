@@ -7,14 +7,15 @@
 
 import io
 import os
-import random
-import string
 import time
 
-from faker import Faker
 from flask import Flask, make_response, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
+
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
 
 app = Flask(__name__)
 
@@ -56,23 +57,9 @@ if THROTTLING:
 
     limiter.init_app(app)
 
-SMALL = 100000
-MEDIUM = 500000
-LARGE = 1000000
-
-
-def _create_data(size):
-    return "".join([random.choice(string.ascii_letters) for _ in range(size)])
-
-
-FILE_DATA = {
-    SMALL: _create_data(size=SMALL),
-    MEDIUM: _create_data(size=MEDIUM),
-    LARGE: _create_data(size=LARGE),
-}
 
 TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
-fake = Faker()
+fake = fake_provider.fake
 DRIVE_ID = fake.uuid4()
 ROOT = os.environ.get("ROOT_HOST_URL", "http://127.0.0.1:10972")
 
@@ -85,6 +72,7 @@ class DataGenerator:
     def __init__(self):
         self.users = []
         self.files_per_user = {}
+        self.files_by_id = {}
 
     def generate(self):
         # Generate users in Azure AD
@@ -100,8 +88,9 @@ class DataGenerator:
             # Generate files and folders in the OneDrive for each user
 
             for file_id in range(1, FILE_COUNT_PER_USER + 1):
+                item_id = f"{user_id}-{file_id}"
                 item = {
-                    "id": f"{user_id}-{file_id}",
+                    "id": item_id,
                 }
 
                 if file_id % 11 == 0:  # Every 11th is a folder
@@ -109,19 +98,13 @@ class DataGenerator:
                     item["name"] = fake.word()
                     item["size"] = 0
                 else:
+                    file_content = fake_provider.get_html()
+                    item["size"] = len(file_content.encode("UTF-8"))
                     item["file"] = {
                         "mimeType": "text/plain",
                     }
-                    item["name"] = fake.file_name(extension="txt")
-
-                    if file_id % 5 == 0:  # Every 5th is a large file
-                        item["size"] = LARGE
-
-                    elif file_id % 3 == 0:  # Every 3rd is a medium file
-                        item["size"] = MEDIUM
-
-                    else:  # Rest are small files
-                        item["size"] = SMALL
+                    item["name"] = fake.file_name(extension="html")
+                    self.files_by_id[item_id] = file_content
 
                 self.files_per_user[user["id"]].append(item)
 
@@ -171,7 +154,7 @@ class DataGenerator:
 
         for file in files_list:
             if file.get("id") == item_id:
-                return FILE_DATA[file["size"]]
+                return self.files_by_id[item_id]
 
 
 class OneDriveAPI:
