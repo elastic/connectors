@@ -1,7 +1,7 @@
 # How to contribute connectors
 
-The `connectors-python` repository is a free and open project, and we love to receive contributions from our community — you!
-There are many ways to contribute, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests or writing code which can be incorporated into `connectors-python` itself.
+The `connectors` repository is a free and open project, and we love to receive contributions from our community — you!
+There are many ways to contribute, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests or writing code which can be incorporated into `connectors` itself.
 
 If you want to be rewarded for your contributions, sign up for the [Elastic Contributor Program](https://www.elastic.co/community/contributor).
 Each time you make a valid contribution, you’ll earn points that increase your chances of winning prizes and being recognized as a top contributor.
@@ -32,7 +32,7 @@ Each time you make a valid contribution, you’ll earn points that increase your
   - [Don't add to the PR as a reviewer](#dont-add-to-the-pr-as-a-reviewer)
 
 ## Reporting issues
-If something is not working as expected, please open an [issue](https://github.com/elastic/connectors-python/issues/new).
+If something is not working as expected, please open an [issue](https://github.com/elastic/connectors/issues/new).
 
 ## Getting help
 The Ingestion team at Elastic maintains this repository and is happy to help.
