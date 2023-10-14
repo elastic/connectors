@@ -7,15 +7,26 @@
 """
 import base64
 import os
-import random
-import string
 
 from flask import Flask, make_response, request
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+# TODO: change number of files based on DATA_SIZE
+match DATA_SIZE:
+    case "small":
+        FILE_COUNT = 500
+        ISSUE_COUNT = 100
+    case "medium":
+        FILE_COUNT = 3500
+        ISSUE_COUNT = 1000
+    case "large":
+        FILE_COUNT = 35000
+        ISSUE_COUNT = 5000
 
 
 app = Flask(__name__)
@@ -28,19 +39,20 @@ def encode_data(content):
 class GitHubAPI:
     def __init__(self):
         self.app = Flask(__name__)
-        self.file_count = 3500
-        self.issue_count = 1000
+        self.file_count = FILE_COUNT
+        self.issue_count = ISSUE_COUNT
         self.app.route(
             "/api/v3/repos/demo_user/demo_repo/git/trees/main", methods=["GET"]
         )(self.get_tree)
         self.app.route(
-            "/api/v3/repos/demo_user/demo_repo/git/blobs/<string:commit_id>",
+            "/api/v3/repos/demo_user/demo_repo/git/blobs/<string:file_id>",
             methods=["GET"],
         )(self.get_content)
         self.app.route("/api/v3/repos/demo_user/demo_repo/commits", methods=["GET"])(
             self.get_commits
         )
         self.app.route("/api/graphql", methods=["POST"])(self.mock_graphql_response)
+        self.files = {}
 
     def encode_cursor(self, value):
         return base64.b64encode(str(value).encode()).decode()
@@ -282,29 +294,33 @@ class GitHubAPI:
 
     def get_tree(self):
         args = request.args
+        tree_list = []
         if args.get("recursive") == "1":
-            tree_list = [
-                {
-                    "path": f"dummy_file_{file_number}.md",
-                    "mode": "100644",
-                    "type": "blob",
-                    "sha": file_number,
-                    "size": FILE_SIZE,
-                    "url": f"http://127.0.0.1:9091/api/v3/repos/demo_user/demo_repo/git/blobs/{file_number}",
-                }
-                for file_number in range(self.file_count)
-            ]
+            for file_number in range(self.file_count):
+                file = fake_provider.get_html()
+                self.files[str(file_number)] = file
+                tree_list.append(
+                    {
+                        "path": f"dummy_file_{file_number}.md",
+                        "mode": "100644",
+                        "type": "blob",
+                        "sha": file_number,
+                        "size": len(file.encode("utf-8")),
+                        "url": f"http://127.0.0.1:9091/api/v3/repos/demo_user/demo_repo/git/blobs/{file_number}",
+                    }
+                )
         self.file_count = 2000
         return {"tree": tree_list}
 
-    def get_content(self, commit_id):
+    def get_content(self, file_id):
+        file = self.files[file_id]
         return {
-            "name": f"dummy_file_{commit_id}.md",
-            "path": f"dummy_file_{commit_id}.md",
-            "sha": commit_id,
-            "size": FILE_SIZE,
+            "name": f"dummy_file_{file_id}.md",
+            "path": f"dummy_file_{file_id}.md",
+            "sha": file_id,
+            "size": len(file.encode("utf-8")),
             "type": "file",
-            "content": encode_data(LARGE_DATA),
+            "content": encode_data(file),
             "encoding": "base64",
         }
 
