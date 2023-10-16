@@ -9,14 +9,27 @@ import io
 import os
 import random
 import re
-import string
 
 from flask import Flask, request
 
-RANDOMISER_CHARSET = string.ascii_letters + string.digits
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
+fake = fake_provider.fake
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+match DATA_SIZE:
+    case "small":
+        RECORD_COUNT = 500
+    case "medium":
+        RECORD_COUNT = 2000
+    case "large":
+        RECORD_COUNT = 10000
+    case _:
+        raise Exception(
+            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        )
 
 SOBJECTS = [
     "Account",
@@ -97,18 +110,17 @@ OBJECTS_WITH_CONTENT_DOCUMENTS = [
 
 
 def generate_string(size):
-    return "".join([random.choice(RANDOMISER_CHARSET) for _ in range(size)])
+    return fake.text(size)
 
 
 # We pre-generate 50 content document ids so we can randomly link them to multiple objects
 # This will allow us to simulate the memory/CPU demand of objects having duplicate files attached
 CONTENT_DOCUMENT_IDS = [generate_string(18) for _ in range(50)]
-FILE_DATA = generate_string(FILE_SIZE)
 
 
 def generate_records(table_name):
     records = []
-    for _ in range(2000):
+    for _ in range(RECORD_COUNT):
         record = {"Id": generate_string(18)}
         if table_name in OBJECTS_WITH_CONTENT_DOCUMENTS:
             record["ContentDocumentLinks"] = {
@@ -120,8 +132,8 @@ def generate_records(table_name):
 
 
 def generate_content_document_records():
-    # 1 in every 6 docs gets 1 attached file
-    # 1 in every 6 docs gets 2 attached files
+    # 1 in every 12 docs gets 1 attached file
+    # 1 in every 12 docs gets 2 attached files
     d6 = random.choice(range(6))
     if d6 > 1:
         return []
@@ -191,7 +203,7 @@ def describe_sobject(_version, _sobject):
 
 @app.route("/sfc/servlet.shepherd/version/download/<_download_id>", methods=["GET"])
 def download(_download_id):
-    return io.BytesIO(bytes(FILE_DATA, encoding="utf-8"))
+    return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 
 if __name__ == "__main__":
