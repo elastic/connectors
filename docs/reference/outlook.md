@@ -99,6 +99,10 @@ MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
 
 **Note:** This configuration is applicable for `Outlook Server` only.
 
+#### `Max concurrent tasks`
+
+This value denotes the number of tasks that run in parallel. It depends on the number of accounts in the Azure AD. Default value is 2000.
+
 ### Content Extraction
 
 Refer to [content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html) in the official docs.
