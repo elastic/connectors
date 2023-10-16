@@ -5,36 +5,46 @@
 #
 import os
 import random
-import string
 
 import pytds
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
+
 DATABASE_NAME = "xe"
-_SIZES = {"small": 5, "medium": 10, "large": 30}
-NUM_TABLES = _SIZES[DATA_SIZE]
 HOST = "127.0.0.1"
 PORT = 9090
 USER = "admin"
 PASSWORD = "Password_123"
 
 
-def random_text(k=1024 * 20):
-    """Function to generate random text
+fake_provider = WeightedFakeProvider(
+    weights=[0.65, 0.3, 0.05, 0]
+)  # SQL does not like huge blobs
 
-    Args:
-        k (int, optional): size of data in bytes. Defaults to 1024*20.
+BATCH_SIZE = 1000
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
-    Returns:
-        string: random text
-    """
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+match DATA_SIZE:
+    case "small":
+        NUM_TABLES = 1
+        RECORD_COUNT = 800
+    case "medium":
+        NUM_TABLES = 3
+        RECORD_COUNT = 5000
+    case "large":
+        NUM_TABLES = 5
+        RECORD_COUNT = 10000
+
+RECORDS_TO_DELETE = 10
 
 
-BIG_TEXT = random_text()
+def get_num_docs():
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-def inject_lines(table, cursor, start, lines):
+def inject_lines(table, cursor, lines):
     """Ingest rows in table
 
     Args:
@@ -43,14 +53,18 @@ def inject_lines(table, cursor, start, lines):
         start (int): Starting row
         lines (int): Number of rows
     """
-    rows = []
-    for row_id in range(lines):
-        row_id += start
-        rows.append((f"user_{row_id}", row_id, BIG_TEXT))
-    sql_query = (
-        f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
-    )
-    cursor.executemany(sql_query, rows)
+    batch_count = max(int(lines / BATCH_SIZE), 1)
+    inserted = 0
+    print(f"Inserting {lines} lines in total {batch_count} batches")
+    for batch in range(batch_count):
+        rows = []
+        batch_size = min(BATCH_SIZE, lines - inserted)
+        for row_id in range(batch_size):
+            rows.append((fake_provider.fake.name(), row_id, fake_provider.get_text()))
+        sql_query = f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
+        cursor.executemany(sql_query, rows)
+        inserted += batch_size
+        print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
 def load():
@@ -73,11 +87,10 @@ def load():
     database.autocommit = False
 
     for table in range(NUM_TABLES):
-        print(f"Adding data from table #{table}...")
-        sql_query = f"CREATE TABLE customers_{table} (name VARCHAR(255), age int, description TEXT, PRIMARY KEY (name))"
+        print(f"Adding data to table customers_{table}...")
+        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age int, description TEXT, PRIMARY KEY (id))"
         cursor.execute(sql_query)
-        for i in range(10):
-            inject_lines(table, cursor, i * 1000, 1000)
+        inject_lines(table, cursor, RECORD_COUNT)
     database.commit()
 
 
@@ -88,7 +101,10 @@ def remove():
     cursor = database.cursor()
     cursor.execute(f"USE {DATABASE_NAME}")
     for table in range(NUM_TABLES):
-        rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
-        sql_query = f"DELETE from customers_{table} where name=%s"
+        rows = [
+            (row_id,)
+            for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+        ]
+        sql_query = f"DELETE from customers_{table} where id in (%s)"
         cursor.executemany(sql_query, rows)
     database.commit()
