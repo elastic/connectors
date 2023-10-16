@@ -321,32 +321,63 @@ async def test_get_docs_when_no_buckets_present():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+@pytest.mark.parametrize(
+    "blob_document, expected_blob_document",
+    [
+        (
+            {
+                "id": "bucket_1/blob_1/123123123",
+                "component_count": None,
+                "content_encoding": None,
+                "content_language": None,
+                "created_at": None,
+                "last_updated": "2011-10-12T00:01:00Z",
+                "metadata": None,
+                "name": "blob_1.txt",
+                "size": "15",
+                "storage_class": None,
+                "_timestamp": "2011-10-12T00:01:00Z",
+                "type": None,
+                "url": "https://console.cloud.google.com/storage/browser/_details/bucket_1/blob_1;tab=live_object?project=dummy123",
+                "version": None,
+                "bucket_name": "bucket_1",
+            },
+            {
+                "_id": "bucket_1/blob_1/123123123",
+                "_timestamp": "2011-10-12T00:01:00Z",
+                "_attachment": "",
+            },
+        ),
+        (
+            {
+                "id": "bucket_1/demo_folder/blob_2/321321321",
+                "component_count": None,
+                "content_encoding": None,
+                "content_language": None,
+                "created_at": None,
+                "last_updated": "2011-10-12T00:01:00Z",
+                "metadata": None,
+                "name": "demo_folder/blob_2.txt",
+                "size": "15",
+                "storage_class": None,
+                "_timestamp": "2011-10-12T00:01:00Z",
+                "type": None,
+                "url": "https://console.cloud.google.com/storage/browser/_details/bucket_1/blob_1;tab=live_object?project=dummy123",
+                "version": None,
+                "bucket_name": "bucket_1",
+            },
+            {
+                "_id": "bucket_1/demo_folder/blob_2/321321321",
+                "_timestamp": "2011-10-12T00:01:00Z",
+                "_attachment": "",
+            },
+        ),
+    ],
+)
+async def test_get_content(blob_document, expected_blob_document):
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     async with create_gcs_source() as source:
-        blob_document = {
-            "id": "bucket_1/blob_1/123123123",
-            "component_count": None,
-            "content_encoding": None,
-            "content_language": None,
-            "created_at": None,
-            "last_updated": "2011-10-12T00:01:00Z",
-            "metadata": None,
-            "name": "blob_1.txt",
-            "size": "15",
-            "storage_class": None,
-            "_timestamp": "2011-10-12T00:01:00Z",
-            "type": None,
-            "url": "https://console.cloud.google.com/storage/browser/_details/bucket_1/blob_1;tab=live_object?project=dummy123",
-            "version": None,
-            "bucket_name": "bucket_1",
-        }
-        expected_blob_document = {
-            "_id": "bucket_1/blob_1/123123123",
-            "_timestamp": "2011-10-12T00:01:00Z",
-            "_attachment": "",
-        }
         blob_content_response = ""
 
         with mock.patch.object(

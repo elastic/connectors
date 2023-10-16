@@ -6,35 +6,39 @@
 import asyncio
 import os
 import random
-import string
 
 import asyncpg
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
+
 CONNECTION_STRING = "postgresql://admin:Password_123@127.0.0.1:9090/xe"
-_SIZES = {"small": 5, "medium": 10, "large": 30}
-NUM_TABLES = _SIZES[DATA_SIZE]
+BATCH_SIZE = 100
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+match DATA_SIZE:
+    case "small":
+        NUM_TABLES = 1
+        RECORD_COUNT = 500
+    case "medium":
+        NUM_TABLES = 3
+        RECORD_COUNT = 3000
+    case "large":
+        NUM_TABLES = 5
+        RECORD_COUNT = 7000
+
+RECORDS_TO_DELETE = 10
 
 
-def random_text(k=1024 * 20):
-    """Function to generate random text
-
-    Args:
-        k (int, optional): size of data in bytes. Defaults to 1024*20.
-
-    Returns:
-        string: random text
-    """
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-
-
-BIG_TEXT = random_text()
+def get_num_docs():
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
 def load():
     """Generate tables and loads table data in the microsoft server."""
 
-    async def inject_lines(table, connect, start, lines):
+    async def inject_lines(table, connect, lines):
         """Ingest rows in table
 
         Args:
@@ -43,25 +47,32 @@ def load():
             start (int): Starting row
             lines (int): Number of rows
         """
-        rows = []
-        for row_id in range(lines):
-            row_id += start
-            rows.append((f"user_{row_id}", row_id, BIG_TEXT))
-        sql_query = (
-            f"INSERT INTO customers_{table}"
-            + "(name, age, description) VALUES ($1, $2, $3)"
-        )
-        await connect.executemany(sql_query, rows)
+        batch_count = int(lines / BATCH_SIZE)
+        inserted = 0
+        print(f"Inserting {lines} lines")
+        for batch in range(batch_count):
+            rows = []
+            batch_size = min(BATCH_SIZE, lines - inserted)
+            for row_id in range(batch_size):
+                rows.append(
+                    (fake_provider.fake.name(), row_id, fake_provider.get_text())
+                )
+            sql_query = (
+                f"INSERT INTO customers_{table}"
+                + "(name, age, description) VALUES ($1, $2, $3)"
+            )
+            await connect.executemany(sql_query, rows)
+            inserted += batch_size
+            print(f"Inserting batch #{batch} of {batch_size} documents.")
 
     async def load_rows():
         """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
         connect = await asyncpg.connect(CONNECTION_STRING)
         for table in range(NUM_TABLES):
             print(f"Adding data from table #{table}...")
-            sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (name VARCHAR(255), age int, description TEXT, PRIMARY KEY (name))"
+            sql_query = f"CREATE TABLE IF NOT EXISTS customers_{table} (id SERIAL PRIMARY KEY, name VARCHAR(255), age int, description TEXT)"
             await connect.execute(sql_query)
-            for i in range(10):
-                await inject_lines(table, connect, i * 1000, 1000)
+            await inject_lines(table, connect, RECORD_COUNT)
         await connect.close()
 
     asyncio.get_event_loop().run_until_complete(load_rows())
@@ -74,8 +85,11 @@ def remove():
         """Removes 10 random items per table"""
         connect = await asyncpg.connect(CONNECTION_STRING)
         for table in range(NUM_TABLES):
-            rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
-            sql_query = f"DELETE from customers_{table} where name=$1"
+            rows = [
+                (row_id,)
+                for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+            ]
+            sql_query = f"DELETE FROM customers_{table} WHERE id IN ($1)"
             await connect.executemany(sql_query, rows)
         await connect.close()
 
