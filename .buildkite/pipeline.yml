@@ -117,7 +117,7 @@ steps:
             config:
               label: "🔨 Sharepoint Server"
               command:
-                - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
+                - ".buildkite/run_nigthly.sh sharepoint_server small"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
