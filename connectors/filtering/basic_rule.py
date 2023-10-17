@@ -11,6 +11,7 @@ from enum import Enum
 from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
+from connectors.utils import Format, shorten_str
 
 IS_BOOL_FALSE = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
@@ -252,6 +253,7 @@ class BasicRule:
     """A BasicRule is used to match documents based on different comparisons (see `matches` method)."""
 
     DEFAULT_RULE_ID = "DEFAULT"
+    SHORTEN_UUID_BY = 26  # UUID: 32 random chars + 4 hyphens; keep 10 characters
 
     def __init__(self, id_, order, policy, field, rule, value):
         self.id_ = id_
@@ -371,3 +373,9 @@ class BasicRule:
             _format_field(key, value) for key, value in self.__dict__.items()
         ]
         return "Basic rule: " + ", ".join(formatted_fields)
+
+    def __format__(self, format_spec):
+        if format_spec == Format.SHORT.value:
+            # order uses a 0 based index
+            return f"Basic rule {self.order + 1} (id: {shorten_str(self.id_, BasicRule.SHORTEN_UUID_BY)})"
+        return str(self)

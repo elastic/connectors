@@ -77,6 +77,11 @@ TIKA_SUPPORTED_FILETYPES = [
 ISO_ZULU_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
+class Format(Enum):
+    VERBOSE = "verbose"
+    SHORT = "short"
+
+
 def iso_utc(when=None):
     if when is None:
         when = datetime.now(timezone.utc)
@@ -810,3 +815,46 @@ def validate_email_address(email_address):
 
     # non None values indicate a match
     return re.fullmatch(EMAIL_REGEX_PATTERN, email_address) is not None
+
+
+def shorten_str(string, shorten_by):
+    """
+    Shorten a string by removing characters from the middle, replacing them with '...'.
+
+    If balanced shortening is not possible, retains an extra character at the beginning.
+
+    Args:
+        string (str): The string to be shortened.
+        shorten_by (int): The number of characters to remove from the string.
+
+    Returns:
+        str: The shortened string.
+
+    Examples:
+        >>> shorten_str("abcdefgh", 1)
+        'abcdefgh'
+        >>> shorten_str("abcdefgh", 4)
+        'ab...gh'
+        >>> shorten_str("abcdefgh", 5)
+        'ab...h'
+        >>> shorten_str("abcdefgh", 1000)
+        'a...h'
+    """
+
+    if string is None or string == "":
+        return ""
+
+    if not string or shorten_by < 3:
+        return string
+
+    length = len(string)
+    shorten_by = min(length - 2, shorten_by)
+
+    keep = (length - shorten_by) // 2
+    balanced_shortening = (shorten_by + length) % 2 == 0
+
+    if balanced_shortening:
+        return f"{string[:keep]}...{string[-keep:]}"
+    else:
+        # keep one more at the front
+        return f"{string[:keep + 1]}...{string[-keep:]}"
