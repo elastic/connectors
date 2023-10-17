@@ -30,8 +30,9 @@ from connectors.sources.salesforce import (
 from tests.sources.support import create_source
 
 TEST_DOMAIN = "fake"
+CONTENT_FILE_ID = "content_version_id"
 TEST_BASE_URL = f"https://{TEST_DOMAIN}.my.salesforce.com"
-TEST_FILE_DOWNLOAD_URL = f"https://{TEST_DOMAIN}.file.force.com"
+TEST_FILE_DOWNLOAD_URL = f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects/ContentVersion/{CONTENT_FILE_ID}/VersionData"
 TEST_QUERY_MATCH_URL = re.compile(f"{TEST_BASE_URL}/services/data/{API_VERSION}/query*")
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
@@ -379,8 +380,7 @@ CONTENT_DOCUMENT_LINKS_PAYLOAD = {
                         "type": "ContentVersion",
                         "url": f"/services/data/{API_VERSION}/sobjects/ContentVersion/content_version_id",
                     },
-                    "Id": "content_version_id",
-                    "VersionDataUrl": f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+                    "Id": CONTENT_FILE_ID,
                     "CreatedDate": "",
                     "VersionNumber": "2",
                 },
@@ -1051,7 +1051,7 @@ async def test_get_all_with_content_docs_when_success(
             expected_doc["_attachment"] = expected_attachment
 
         mock_responses.get(
-            f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+            TEST_FILE_DOWNLOAD_URL,
             status=response_status,
             body=response_body,
         )
@@ -1105,7 +1105,7 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
             }
 
             mock_responses.get(
-                f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+                TEST_FILE_DOWNLOAD_URL,
                 status=200,
                 body=b"chunk1",
             )

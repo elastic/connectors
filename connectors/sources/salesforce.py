@@ -33,6 +33,9 @@ TOKEN_ENDPOINT = "/services/oauth2/token"
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
+DOWNLOAD_ENDPOINT = (
+    f"/services/data/{API_VERSION}/sobjects/ContentVersion/<file_id>/VersionData"
+)
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -441,8 +444,9 @@ class SalesforceClient:
             params=params,
         )
 
-    async def _download(self, url):
-        response = await self._get(url)
+    async def _download(self, file_id):
+        endpoint = DOWNLOAD_ENDPOINT.replace("<file_id>", file_id)
+        response = await self._get(f"{self.base_url}{endpoint}")
         yield response
 
     async def _handle_client_response_error(self, response_body, e):
@@ -1390,21 +1394,19 @@ class SalesforceDataSource(BaseDataSource):
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
         for content_doc in content_docs:
-            download_url = (content_doc.get("LatestPublishedVersion", {}) or {}).get(
-                "VersionDataUrl"
-            )
-            if not download_url:
+            file_id = (content_doc.get("LatestPublishedVersion", {}) or {}).get("Id")
+            if not file_id:
                 self._logger.debug(
-                    f"No download URL found for {content_doc.get('title')}, skipping."
+                    f"No file id found for {content_doc.get('Title')}, skipping."
                 )
                 continue
 
             doc = self.doc_mapper.map_content_document(content_doc)
-            doc = await self.get_content(doc, download_url)
+            doc = await self.get_content(doc, file_id)
 
             yield doc, None
 
-    async def get_content(self, doc, download_url):
+    async def get_content(self, doc, file_id):
         file_size = doc["content_size"]
         filename = doc["title"]
         file_extension = self.get_file_extension(filename)
@@ -1419,7 +1421,7 @@ class SalesforceDataSource(BaseDataSource):
                 self.generic_chunked_download_func,
                 partial(
                     self.salesforce_client._download,
-                    download_url,
+                    file_id,
                 ),
             ),
             return_doc_if_failed=True,  # we still ingest on download failure for Salesforce
