@@ -266,7 +266,12 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
 
     @classmethod
     def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
-        semantic_duplicate_msg = f"{format(basic_rule, Format.SHORT.value)} is semantically equal to {format(semantic_duplicate, Format.SHORT.value)}."
+        # lower order rule should come first in the error message
+        rules_ordered = sorted(
+            [basic_rule, semantic_duplicate], key=lambda rule: rule.order
+        )
+
+        semantic_duplicate_msg = f"{format(rules_ordered[0], Format.SHORT.value)} is semantically equal to {format(rules_ordered[1], Format.SHORT.value)}."
 
         return [
             SyncRuleValidationResult(
