@@ -44,6 +44,7 @@ from connectors.utils import (
     iterable_batches_generator,
     next_run,
     retryable,
+    shorten_str,
     ssl_context,
     truncate_id,
     url_encode,
@@ -806,3 +807,27 @@ def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
 )
 def test_validate_email_address(email_address, is_valid):
     assert validate_email_address(email_address) == is_valid
+
+
+@pytest.mark.parametrize(
+    "original, shorten_by, shortened",
+    [
+        ("", 0, ""),
+        ("", 1000, ""),
+        (None, 0, ""),
+        (None, 1000, ""),
+        # introducing '...' would increase the string length -> no shortening
+        ("abcdefgh", 0, "abcdefgh"),
+        ("abcdefgh", 1, "abcdefgh"),
+        ("abcdefgh", 2, "abcdefgh"),
+        # valid shortening
+        ("abcdefgh", 4, "ab...gh"),
+        ("abcdefgh", 5, "ab...h"),
+        ("abcdefg", 4, "ab...g"),
+        ("abcdefg", 5, "a...g"),
+        # shortens to the max, if shorten_by is bigger than the actual string
+        ("abcdefgh", 1000, "a...h"),
+    ],
+)
+def test_shorten_str(original, shorten_by, shortened):
+    assert shorten_str(original, shorten_by) == shortened

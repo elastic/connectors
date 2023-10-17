@@ -6,26 +6,49 @@
 """Module to responsible to generate Zoom documents using the Flask framework."""
 
 import os
-import random
-import string
 from datetime import datetime, timedelta
 
-from faker import Faker
 from flask import Flask, request
 
-override_url = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
-fake = Faker()
+from tests.commons import WeightedFakeProvider
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-DOC_COUNT = 50
+fake_provider = WeightedFakeProvider()
+
+override_url = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
+fake = fake_provider.fake
+
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+match DATA_SIZE:
+    case "small":
+        RECORDING_COUNT = 10
+        CHANNEL_COUNT = 15
+        MESSAGE_COUNT = 50
+        FILE_MESSAGE_COUNT = 15
+    case "medium":
+        RECORDING_COUNT = 10
+        CHANNEL_COUNT = 15
+        MESSAGE_COUNT = 50
+        FILE_MESSAGE_COUNT = 15
+    case "large":
+        RECORDING_COUNT = 10
+        CHANNEL_COUNT = 15
+        MESSAGE_COUNT = 50
+        FILE_MESSAGE_COUNT = 15
+    case _:
+        raise Exception(
+            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        )
+
+USER_COUNT = 10
+USERS_TO_DELETE = 2
 
 
 class ZoomAPI:
     def __init__(self):
         self.app = Flask(__name__)
-        self.total_user = 10
+        self.files = {}
+        self.total_user = USER_COUNT
 
         self.app.route("/oauth/token", methods=["POST"])(self.get_access_token)
         self.app.route("/users", methods=["GET"])(self.get_users)
@@ -41,7 +64,7 @@ class ZoomAPI:
         self.app.route("/chat/users/<string:user>/messages", methods=["GET"])(
             self.get_messages
         )
-        self.app.route("/download", methods=["GET"])(self.get_content)
+        self.app.route("/download/<string:file_id>", methods=["GET"])(self.get_content)
 
     def get_access_token(self):
         return {"access_token": "123456789", "expires_in": 3599}
@@ -49,7 +72,9 @@ class ZoomAPI:
     def get_users(self):
         args = request.args
         if args.get("next_page_token") == "page1":
-            self.total_user = 8  # to eliminate documents belonging to 2 users in preparation for the next sync.
+            self.total_user = (
+                USER_COUNT - USERS_TO_DELETE
+            )  # to eliminate documents belonging to 2 users in preparation for the next sync.
             res = {
                 "next_page_token": None,
                 "users": [],
@@ -102,7 +127,7 @@ class ZoomAPI:
                         "user": user,
                         "created_at": _format_date(current_date + timedelta(days=-15)),
                     }
-                    for recording_id in range(DOC_COUNT)
+                    for recording_id in range(RECORDING_COUNT)
                 ],
             }
         elif args.get("to") == _format_recording_date(
@@ -120,7 +145,7 @@ class ZoomAPI:
                         "user": user,
                         "created_at": _format_date(current_date + timedelta(days=-45)),
                     }
-                    for recording_id in range(DOC_COUNT)
+                    for recording_id in range(RECORDING_COUNT)
                 ],
             }
         else:
@@ -138,7 +163,7 @@ class ZoomAPI:
                     "user": user,
                     "date_time": "2023-03-09T00:00:00Z",
                 }
-                for channel_id in range(DOC_COUNT)
+                for channel_id in range(CHANNEL_COUNT)
             ],
         }
 
@@ -155,30 +180,33 @@ class ZoomAPI:
                         "user": user,
                         "date_time": "2023-03-09T00:00:00Z",
                     }
-                    for message_id in range(DOC_COUNT)
+                    for message_id in range(MESSAGE_COUNT)
                 ],
             }
         elif message_type == "file":
-            res = {
-                "next_page_token": None,
-                "messages": [
+            messages = []
+            for message_id in range(FILE_MESSAGE_COUNT):
+                file_id = f"{user}:{message_type}-{message_id}"
+                file_content = fake_provider.get_html()
+                self.files[file_id] = file_content
+                messages.append(
                     {
-                        "file_id": f"{user}:{message_type}-{message_id}",
+                        "file_id": file_id,
                         "type": message_type,
                         "date_time": "2023-03-09T00:00:00Z",
-                        "file_size": FILE_SIZE,
-                        "file_name": f"{fake.word()}.txt",
-                        "download_url": f"{override_url}/download?{fake.uuid4()}",
+                        "file_size": len(file_content.encode("utf-8")),
+                        "file_name": f"{fake.word()}.html",
+                        "download_url": f"{override_url}/download/{file_id}",
                     }
-                    for message_id in range(DOC_COUNT)
-                ],
-            }
+                )
+            res = {"next_page_token": None, "messages": messages}
         else:
             res = {}
         return res
 
-    def get_content(self):
-        return "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+    def get_content(self, file_id):
+        file = self.files[file_id]
+        return file.encode("utf-8")
 
 
 if __name__ == "__main__":
