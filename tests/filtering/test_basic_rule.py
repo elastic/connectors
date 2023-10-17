@@ -5,6 +5,7 @@
 #
 
 import datetime
+import uuid
 
 import pytest
 
@@ -17,6 +18,7 @@ from connectors.filtering.basic_rule import (
     parse,
     try_coerce,
 )
+from connectors.utils import Format
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
@@ -1466,3 +1468,19 @@ def test_basic_rule_str():
         str(basic_rule)
         == f"Basic rule: id_: 1, order: 1, policy: exclude, field: {DESCRIPTION_KEY}, rule: less_than, value: something"
     )
+
+
+def test_basic_rule_format():
+    basic_rule = BasicRule(
+        id_=str(uuid.UUID.bytes),
+        order=1,
+        policy=Policy.EXCLUDE,
+        field=DESCRIPTION_KEY,
+        rule=Rule.LESS_THAN,
+        value="something",
+    )
+
+    verbose_format_str = format(basic_rule, Format.VERBOSE.value)
+    short_format_str = format(basic_rule, Format.SHORT.value)
+
+    assert len(verbose_format_str) > len(short_format_str)
