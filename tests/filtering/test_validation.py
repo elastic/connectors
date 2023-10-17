@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-
+from itertools import chain
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -287,7 +287,7 @@ def test_filter_validation_error_eq(error_one, error_two, should_be_equal):
 def test_valid_result_sync_rule():
     result = SyncRuleValidationResult.valid_result(RULE_ONE_ID)
 
-    assert result.rule_id == RULE_ONE_ID
+    assert result.rule_ids == [RULE_ONE_ID]
     assert result.is_valid
 
 
@@ -298,7 +298,7 @@ def test_valid_result_sync_rule():
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 )
@@ -308,7 +308,7 @@ def test_valid_result_sync_rule():
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 )
@@ -326,12 +326,12 @@ def test_valid_result_sync_rule():
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
@@ -349,12 +349,12 @@ def test_valid_result_sync_rule():
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_THREE_ID,
+                    rule_ids=RULE_THREE_ID,
                     is_valid=True,
                     validation_message=RULE_THREE_VALIDATION_MESSAGE,
                 ),
@@ -365,12 +365,12 @@ def test_valid_result_sync_rule():
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_FOUR_ID,
+                    rule_ids=RULE_FOUR_ID,
                     is_valid=False,
                     validation_message=RULE_FOUR_VALIDATION_MESSAGE,
                 ),
@@ -407,7 +407,7 @@ def test_filtering_validation_result(
             # one basic rule validator (valid) -> overall valid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 )
@@ -419,7 +419,7 @@ def test_filtering_validation_result(
             # one basic rule validator (invalid) -> overall invalid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
@@ -438,12 +438,12 @@ def test_filtering_validation_result(
             # two basic rule validators (valid, invalid) -> overall invalid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
@@ -462,12 +462,12 @@ def test_filtering_validation_result(
             # two basic rule validators (valid, valid) -> overall valid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_THREE_ID,
+                    rule_ids=RULE_THREE_ID,
                     is_valid=True,
                     validation_message=RULE_THREE_VALIDATION_MESSAGE,
                 ),
@@ -479,12 +479,12 @@ def test_filtering_validation_result(
             # two basic rule validators (invalid, invalid) -> overall invalid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_FOUR_ID,
+                    rule_ids=RULE_FOUR_ID,
                     is_valid=False,
                     validation_message=RULE_FOUR_VALIDATION_MESSAGE,
                 ),
@@ -507,7 +507,7 @@ def test_filtering_validation_result(
             [],
             [
                 SyncRuleValidationResult(
-                    rule_id=ADVANCED_RULE_ONE_ID,
+                    rule_ids=ADVANCED_RULE_ONE_ID,
                     is_valid=True,
                     validation_message=ADVANCED_RULE_ONE_VALIDATION_MESSAGE,
                 )
@@ -519,7 +519,7 @@ def test_filtering_validation_result(
             [],
             [
                 SyncRuleValidationResult(
-                    rule_id=ADVANCED_RULE_TWO_ID,
+                    rule_ids=ADVANCED_RULE_TWO_ID,
                     is_valid=False,
                     validation_message=ADVANCED_RULE_TWO_VALIDATION_MESSAGE,
                 )
@@ -538,14 +538,14 @@ def test_filtering_validation_result(
             # one basic rule and one advanced rule validator (valid, valid) -> overall valid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 )
             ],
             [
                 SyncRuleValidationResult(
-                    rule_id=ADVANCED_RULE_ONE_ID,
+                    rule_ids=ADVANCED_RULE_ONE_ID,
                     is_valid=True,
                     validation_message=ADVANCED_RULE_ONE_VALIDATION_MESSAGE,
                 )
@@ -556,14 +556,14 @@ def test_filtering_validation_result(
             # one basic rule and one advanced rule validator (invalid, valid) -> overall invalid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 )
             ],
             [
                 SyncRuleValidationResult(
-                    rule_id=ADVANCED_RULE_ONE_ID,
+                    rule_ids=ADVANCED_RULE_ONE_ID,
                     is_valid=True,
                     validation_message=ADVANCED_RULE_ONE_VALIDATION_MESSAGE,
                 )
@@ -581,14 +581,14 @@ def test_filtering_validation_result(
             # one basic rule and one advanced rule validator (invalid, valid) -> overall invalid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 )
             ],
             [
                 SyncRuleValidationResult(
-                    rule_id=ADVANCED_RULE_TWO_ID,
+                    rule_ids=ADVANCED_RULE_TWO_ID,
                     is_valid=False,
                     validation_message=ADVANCED_RULE_TWO_VALIDATION_MESSAGE,
                 )
@@ -607,14 +607,14 @@ def test_filtering_validation_result(
             # one basic rule and one advanced rule validator (invalid, invalid) -> overall invalid
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 )
             ],
             [
                 SyncRuleValidationResult(
-                    rule_id=ADVANCED_RULE_TWO_ID,
+                    rule_ids=ADVANCED_RULE_TWO_ID,
                     is_valid=False,
                     validation_message=ADVANCED_RULE_TWO_VALIDATION_MESSAGE,
                 )
@@ -645,12 +645,12 @@ def test_filtering_validation_result(
                 # results from one set validator
                 [
                     SyncRuleValidationResult(
-                        rule_id=RULE_TWO_ID,
+                        rule_ids=RULE_TWO_ID,
                         is_valid=False,
                         validation_message=RULE_TWO_VALIDATION_MESSAGE,
                     ),
                     SyncRuleValidationResult(
-                        rule_id=ADVANCED_RULE_TWO_ID,
+                        rule_ids=ADVANCED_RULE_TWO_ID,
                         is_valid=False,
                         validation_message=ADVANCED_RULE_TWO_VALIDATION_MESSAGE,
                     ),
@@ -704,7 +704,7 @@ async def test_filtering_validator(
 @pytest.mark.asyncio
 async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_validation():
     invalid_validation_result = SyncRuleValidationResult(
-        rule_id=RULE_TWO_ID,
+        rule_ids=RULE_TWO_ID,
         is_valid=False,
         validation_message=RULE_TWO_VALIDATION_MESSAGE,
     )
@@ -770,12 +770,12 @@ def assert_validators_called_with(validators, payload):
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_THREE_ID,
+                    rule_ids=RULE_THREE_ID,
                     is_valid=True,
                     validation_message=RULE_THREE_VALIDATION_MESSAGE,
                 ),
@@ -785,12 +785,12 @@ def assert_validators_called_with(validators, payload):
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_ONE_ID,
+                    rule_ids=RULE_ONE_ID,
                     is_valid=True,
                     validation_message=RULE_ONE_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
@@ -807,12 +807,12 @@ def assert_validators_called_with(validators, payload):
         (
             [
                 SyncRuleValidationResult(
-                    rule_id=RULE_TWO_ID,
+                    rule_ids=RULE_TWO_ID,
                     is_valid=False,
                     validation_message=RULE_TWO_VALIDATION_MESSAGE,
                 ),
                 SyncRuleValidationResult(
-                    rule_id=RULE_FOUR_ID,
+                    rule_ids=RULE_FOUR_ID,
                     is_valid=False,
                     validation_message=RULE_FOUR_VALIDATION_MESSAGE,
                 ),
@@ -1010,7 +1010,7 @@ def test_basic_rules_set_no_conflicting_policies_validation(
         assert not any(result.is_valid for result in validation_results)
 
     validation_results_rule_ids = set(
-        map(lambda result: result.rule_id, validation_results)
+        chain.from_iterable(result.rule_ids for result in validation_results)
     )
     basic_rule_ids = set(map(lambda rule: rule["id"], basic_rules))
 
@@ -1032,7 +1032,7 @@ def test_filtering_validation_state_from_string(string, expected_state):
 @pytest.mark.asyncio
 async def test_filtering_validator_validate_single_advanced_rules_validator():
     invalid_validation_result = SyncRuleValidationResult(
-        rule_id=RULE_TWO_ID,
+        rule_ids=RULE_TWO_ID,
         is_valid=False,
         validation_message=RULE_TWO_VALIDATION_MESSAGE,
     )
