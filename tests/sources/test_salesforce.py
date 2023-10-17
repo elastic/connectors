@@ -30,9 +30,9 @@ from connectors.sources.salesforce import (
 from tests.sources.support import create_source
 
 TEST_DOMAIN = "fake"
-CONTENT_FILE_ID = "content_version_id"
+CONTENT_VERSION_ID = "content_version_id"
 TEST_BASE_URL = f"https://{TEST_DOMAIN}.my.salesforce.com"
-TEST_FILE_DOWNLOAD_URL = f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects/ContentVersion/{CONTENT_FILE_ID}/VersionData"
+TEST_FILE_DOWNLOAD_URL = f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects/ContentVersion/{CONTENT_VERSION_ID}/VersionData"
 TEST_QUERY_MATCH_URL = re.compile(f"{TEST_BASE_URL}/services/data/{API_VERSION}/query*")
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
@@ -380,7 +380,7 @@ CONTENT_DOCUMENT_LINKS_PAYLOAD = {
                         "type": "ContentVersion",
                         "url": f"/services/data/{API_VERSION}/sobjects/ContentVersion/content_version_id",
                     },
-                    "Id": CONTENT_FILE_ID,
+                    "Id": CONTENT_VERSION_ID,
                     "CreatedDate": "",
                     "VersionNumber": "2",
                 },

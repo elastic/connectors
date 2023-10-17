@@ -33,9 +33,8 @@ TOKEN_ENDPOINT = "/services/oauth2/token"
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
-DOWNLOAD_ENDPOINT = (
-    f"/services/data/{API_VERSION}/sobjects/ContentVersion/<file_id>/VersionData"
-)
+# https://developer.salesforce.com/docs/atlas.en-us.244.0.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
+CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -444,8 +443,10 @@ class SalesforceClient:
             params=params,
         )
 
-    async def _download(self, file_id):
-        endpoint = DOWNLOAD_ENDPOINT.replace("<file_id>", file_id)
+    async def _download(self, content_version_id):
+        endpoint = CONTENT_VERSION_DOWNLOAD_ENDPOINT.replace(
+            "<content_version_id>", content_version_id
+        )
         response = await self._get(f"{self.base_url}{endpoint}")
         yield response
 
@@ -1394,19 +1395,21 @@ class SalesforceDataSource(BaseDataSource):
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
         for content_doc in content_docs:
-            file_id = (content_doc.get("LatestPublishedVersion", {}) or {}).get("Id")
-            if not file_id:
+            content_version_id = (
+                content_doc.get("LatestPublishedVersion", {}) or {}
+            ).get("Id")
+            if not content_version_id:
                 self._logger.debug(
-                    f"No file id found for {content_doc.get('Title')}, skipping."
+                    f"Couldn't find the latest content version for {content_doc.get('Title')}, skipping."
                 )
                 continue
 
             doc = self.doc_mapper.map_content_document(content_doc)
-            doc = await self.get_content(doc, file_id)
+            doc = await self.get_content(doc, content_version_id)
 
             yield doc, None
 
-    async def get_content(self, doc, file_id):
+    async def get_content(self, doc, content_version_id):
         file_size = doc["content_size"]
         filename = doc["title"]
         file_extension = self.get_file_extension(filename)
@@ -1421,7 +1424,7 @@ class SalesforceDataSource(BaseDataSource):
                 self.generic_chunked_download_func,
                 partial(
                     self.salesforce_client._download,
-                    file_id,
+                    content_version_id,
                 ),
             ),
             return_doc_if_failed=True,  # we still ingest on download failure for Salesforce
