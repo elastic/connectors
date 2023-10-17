@@ -145,7 +145,7 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
             OneDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
             return SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                rule_ids=SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
                 validation_message=e.message,
             )
