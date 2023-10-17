@@ -377,5 +377,5 @@ class BasicRule:
     def __format__(self, format_spec):
         if format_spec == Format.SHORT.value:
             # order uses a 0 based index
-            return f"Basic rule {self.order + 1} (id: {shorten_str(self.id_, BasicRule.SHORTEN_UUID_BY)})"
+            return f"Basic rule {self.order + 1} (id: '{shorten_str(self.id_, BasicRule.SHORTEN_UUID_BY)}')"
         return str(self)
