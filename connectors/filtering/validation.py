@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from collections.abc import Iterable
 from copy import deepcopy
 from enum import Enum
 
@@ -29,8 +30,11 @@ class SyncRuleValidationResult:
     ADVANCED_RULES = "advanced_snippet"
 
     def __init__(self, rule_ids, is_valid, validation_message):
-        if not isinstance(rule_ids, list):
+        # `str` and `bytes` are also iterable
+        if not isinstance(rule_ids, Iterable) or isinstance(rule_ids, (str, bytes)):
             rule_ids = [rule_ids]
+        else:
+            rule_ids = list(rule_ids)
 
         self.rule_ids = rule_ids
         self.is_valid = is_valid
