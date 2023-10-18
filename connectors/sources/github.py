@@ -641,6 +641,8 @@ class GitHubClient:
                 raise UnauthorizedException(
                     "Your Github token is either expired or revoked. Please check again."
                 ) from exception
+            else:
+                raise
         except Exception:
             raise
 
