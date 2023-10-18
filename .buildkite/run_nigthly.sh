@@ -27,7 +27,7 @@ $PIP install py-spy
 DATA_SIZE="${2:-small}"
 
 # If we run on buildkite, we connect to docker so we can pull private images
-# !!! WARNING be cautious about the following lines, to avoid leaking the secrets in the CI logs
+# !!! WARNING be cautious about the following lines to avoid leaking the secrets in the CI logs
 set +x  # Do not remove so we don't leak passwords
 if [ -v BUILDKITE ]; then
   echo "Connecting to Vault"
