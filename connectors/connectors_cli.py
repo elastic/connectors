@@ -243,12 +243,10 @@ job.add_command(start)
 
 @click.command(help="List of jobs sorted by date.")
 @click.pass_obj
-@click.option('-i', help='Connector ID')
-@click.option('-n', help='Index name')
-@click.option('-j', help='Job id')
-def list(obj, i, n, j):
+@click.argument("connector_id", nargs=1)
+def list(obj, connector_id):
     job_cli = Job(config=obj['config']['elasticsearch'])
-    jobs = job_cli.list_jobs(connector_id=i, index_name=n, job_id=j)
+    jobs = job_cli.list_jobs(connector_id=connector_id)
 
     if len(jobs) == 0:
         click.echo("No jobs found")
