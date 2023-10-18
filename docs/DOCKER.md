@@ -25,7 +25,7 @@ docker network create elastic
 This directory will contain the configuration file used to run the Connector Service. The examples in this guide will use the user's home directory (`~`).
 
 ```sh
-cd ~ && mkdir connectors-python-config
+cd ~ && mkdir connectors-config
 ```
 
 ## 3. Download sample configuration file from this repository into newly created directory.
@@ -33,7 +33,7 @@ cd ~ && mkdir connectors-python-config
 You can download the file manually, or simply run the command below. Make sure to update the `--output` argument value if your directory name is different, or you want to use a different config file name.
 
 ```sh
-curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
+curl https://raw.githubusercontent.com/elastic/connectors/main/config.yml --output ~/connectors-config/config.yml
 ```
 
 ## 4. Update the configuration file for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
@@ -76,7 +76,7 @@ Now you can run the Docker image with the Connector Service. Here's an example c
 
 ```sh
 docker run \
--v ~/connectors-python-config:/config \
+-v ~/connectors-config:/config \
 --network "elastic" \
 --tty \
 --rm \
@@ -87,7 +87,7 @@ docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT \
 
 You might need to adjust some details here:
 
-- `-v ~/connectors-python-config:/config \` - replace `~/connectors-python-config` with the directory that you've created in step 2 if you've chosen a different name for it.
+- `-v ~/connectors-config:/config \` - replace `~/connectors-config` with the directory that you've created in step 2 if you've chosen a different name for it.
 - `--network "elastic"` - replace `elastic` with the network that you've created in step 1 if you've chosen a different name for it.
 - `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
   - For Elasticsearch of version `<VERSION>` you can use `elastic-connectors:<VERSION>`for a stable revision of the connectors, or `elastic-connectors:<VERSION>-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).

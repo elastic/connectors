@@ -6,16 +6,22 @@
 """ Helpers to build sources + FQN-based Registry
 """
 
+import asyncio
 import importlib
 import re
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from functools import cache
 from pydoc import locate
 
+import aiofiles
+from aiofiles.os import remove
+from aiofiles.tempfile import NamedTemporaryFile
 from bson import Decimal128
 
+from connectors.content_extraction import ContentExtraction
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
@@ -23,7 +29,17 @@ from connectors.filtering.validation import (
     FilteringValidator,
 )
 from connectors.logger import logger
-from connectors.utils import hash_id
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    convert_to_b64,
+    epoch_timestamp_zulu,
+    get_file_extension,
+    hash_id,
+)
+
+CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
+FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
+CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
 
 DEFAULT_CONFIGURATION = {
     "default_value": None,
@@ -386,6 +402,13 @@ class BaseDataSource:
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
 
+        if self.configuration.get("use_text_extraction_service"):
+            self.extraction_service = ContentExtraction()
+            self.download_dir = self.extraction_service.get_volume_dir()
+        else:
+            self.extraction_service = None
+            self.download_dir = None
+
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
 
@@ -667,6 +690,161 @@ class BaseDataSource:
         NOTE modifying license key logic violates the Elastic License 2.0 that this code is licensed under
         """
         return False
+
+    def get_file_extension(self, filename):
+        return get_file_extension(filename)
+
+    def can_file_be_downloaded(self, file_extension, filename, file_size):
+        return self.is_valid_file_type(
+            file_extension, filename
+        ) and self.is_file_size_within_limit(file_size, filename)
+
+    def is_valid_file_type(self, file_extension, filename):
+        if file_extension == "":
+            self._logger.debug(
+                f"Files without extension are not supported, skipping {filename}."
+            )
+            return False
+
+        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
+            self._logger.debug(
+                f"Files with the extension {file_extension} are not supported, skipping {filename}."
+            )
+            return False
+
+        return True
+
+    def is_file_size_within_limit(self, file_size, filename):
+        if file_size > FILE_SIZE_LIMIT and not self.configuration.get(
+            "use_text_extraction_service"
+        ):
+            self._logger.warning(
+                f"File size {file_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
+            )
+            return False
+
+        return True
+
+    async def download_and_extract_file(
+        self,
+        doc,
+        source_filename,
+        file_extension,
+        download_func,
+        return_doc_if_failed=False,
+    ):
+        """
+        Performs all the steps required for handling binary content:
+        1. Make temp file
+        2. Download content to temp file
+        3. Extract using local service or convert to b64
+
+        Will return the doc with either `_attachment` or `body` added.
+        Returns `None` if any step fails.
+
+        If the optional arg `return_doc_if_failed` is `True`,
+        will return the original doc upon failure
+        """
+        try:
+            async with self.create_temp_file(file_extension) as async_buffer:
+                temp_filename = async_buffer.name
+
+                await self.download_to_temp_file(
+                    temp_filename,
+                    source_filename,
+                    async_buffer,
+                    download_func,
+                )
+
+                doc = await self.handle_file_content_extraction(
+                    doc, source_filename, temp_filename
+                )
+            return doc
+        except Exception as e:
+            self._logger.warning(
+                f"File download and extraction or conversion for file {source_filename} failed: {e}",
+                exc_info=True,
+            )
+            if return_doc_if_failed:
+                return doc
+            else:
+                return
+
+    @asynccontextmanager
+    async def create_temp_file(self, file_extension):
+        temp_filename = ""
+        try:
+            async with NamedTemporaryFile(
+                mode="wb", delete=False, suffix=file_extension, dir=self.download_dir
+            ) as async_buffer:
+                temp_filename = async_buffer.name
+                yield async_buffer
+        finally:
+            await async_buffer.close()
+            await self.remove_temp_file(temp_filename)
+
+    async def download_to_temp_file(
+        self, temp_filename, source_filename, async_buffer, chunked_download_func
+    ):
+        self._logger.debug(f"Download beginning for file: {source_filename}.")
+        async for data in chunked_download_func():
+            await async_buffer.write(data)
+
+        self._logger.debug(f"Download completed for file: {source_filename}.")
+        # close tempfile here so file content is accessible within async context
+        await async_buffer.close()
+
+    async def generic_chunked_download_func(self, download_func):
+        """
+        This provides a wrapper for chunked download funcs that
+        use `response.content.iterchunked`.
+        This should not be used for downloads that use other methods.
+        """
+        async for response in download_func():
+            async for data in response.content.iter_chunked(CHUNK_SIZE):
+                yield data
+
+    async def handle_file_content_extraction(self, doc, source_filename, temp_filename):
+        """
+        Determines if file content should be extracted locally,
+        or converted to b64 for pipeline extraction.
+
+        Returns the `doc` arg with a new field:
+            - `body` if local content extraction was used
+            - `_attachment` if pipeline extraction will be used
+        """
+        if self.configuration.get("use_text_extraction_service"):
+            if self.extraction_service._check_configured():
+                doc["body"] = await self.extraction_service.extract_text(
+                    temp_filename, source_filename
+                )
+        else:
+            self._logger.debug(f"Calling convert_to_b64 for file : {source_filename}")
+            await asyncio.to_thread(convert_to_b64, source=temp_filename)
+            async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
+                # base64 on macOS will add a EOL, so we strip() here
+                doc["_attachment"] = (await async_buffer.read()).strip()
+
+        return doc
+
+    async def remove_temp_file(self, temp_filename):
+        try:
+            await remove(temp_filename)
+        except Exception as e:
+            self._logger.warning(
+                f"Could not remove downloaded temp file: {temp_filename}. Error: {e}"
+            )
+
+    def last_sync_time(self):
+        default_time = epoch_timestamp_zulu()
+        if not self._sync_cursor:
+            return default_time
+        return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)
+
+    def update_sync_timestamp_cursor(self, timestamp):
+        if self._sync_cursor is None:
+            self._sync_cursor = {}
+        self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
 
 
 @cache

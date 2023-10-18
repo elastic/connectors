@@ -43,12 +43,12 @@ steps:
       - "perf8-report-*/**/*"
   - label: "🔨 Sharepoint Server"
     command:
-      - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
+      - ".buildkite/run_nigthly.sh sharepoint_server"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Sharepoint Online"
     command:
-      - ".buildkite/run_nigthly.sh sharepoint_online medium"
+      - ".buildkite/run_nigthly.sh sharepoint_online"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Microsoft SQL"
@@ -109,5 +109,10 @@ steps:
   - label: "🔨 Zoom"
     command:
       - ".buildkite/run_nigthly.sh zoom"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+  - label: "🔨 Box"
+    command:
+      - ".buildkite/run_nigthly.sh box"
     artifact_paths:
       - "perf8-report-*/**/*"

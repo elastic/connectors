@@ -25,7 +25,9 @@ HOST_URL = "http://127.0.0.1:8491"
 
 
 @asynccontextmanager
-async def create_sps_source(ssl_enabled=False, ssl_ca="", retry_count=3):
+async def create_sps_source(
+    ssl_enabled=False, ssl_ca="", retry_count=3, use_text_extraction_service=False
+):
     async with create_source(
         SharepointServerDataSource,
         username="admin",
@@ -35,6 +37,7 @@ async def create_sps_source(ssl_enabled=False, ssl_ca="", retry_count=3):
         ssl_enabled=ssl_enabled,
         ssl_ca=ssl_ca,
         retry_count=retry_count,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -678,7 +681,7 @@ async def test_get_content():
             "aiohttp.StreamReader.iter_chunked",
             return_value=AsyncIterator([bytes(response_content, "utf-8")]),
         ):
-            response_content = await source.sharepoint_client.get_content(
+            response_content = await source.get_content(
                 document=expected_attachment,
                 file_relative_url="abc.com",
                 site_url="/site",
@@ -686,6 +689,46 @@ async def test_get_content():
             )
 
         assert response_content == expected_content
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_content_extraction():
+    response_content = "This is a dummy sharepoint body response"
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=response_content,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async_response = MockObjectResponse()
+        expected_attachment = {
+            "id": 1,
+            "server_relative_url": "/url",
+            "_timestamp": "2022-06-20T10:37:44Z",
+            "size": 11,
+            "type": "sites",
+            "file_name": "dummy.pdf",
+        }
+        expected_content = {
+            "_id": 1,
+            "body": response_content,
+            "_timestamp": "2022-06-20T10:37:44Z",
+        }
+        async with create_sps_source(use_text_extraction_service=True) as source:
+            source.sharepoint_client._api_call = AsyncIterator([async_response])
+            with mock.patch(
+                "aiohttp.StreamReader.iter_chunked",
+                return_value=AsyncIterator([bytes(response_content, "utf-8")]),
+            ):
+                response_content = await source.get_content(
+                    document=expected_attachment,
+                    file_relative_url="abc.com",
+                    site_url="/site",
+                    doit=True,
+                )
+
+            assert response_content == expected_content
 
 
 class ContentResponse:
@@ -705,7 +748,7 @@ async def test_get_content_when_size_is_bigger():
         "file_name": "dummy.pdf",
     }
     async with create_sps_source() as source:
-        response_content = await source.sharepoint_client.get_content(
+        response_content = await source.get_content(
             document=document, file_relative_url="abc.com", site_url="/site", doit=True
         )
 
@@ -723,7 +766,7 @@ async def test_get_content_when_doit_is_none():
         "file_name": "dummy.pdf",
     }
     async with create_sps_source() as source:
-        response_content = await source.sharepoint_client.get_content(
+        response_content = await source.get_content(
             document=document, file_relative_url="abc.com", site_url="/site"
         )
 
@@ -1009,7 +1052,7 @@ async def test_get_site_pages_content():
         "_timestamp": "2022-06-20T10:37:44Z",
     }
     async with create_sps_source() as source:
-        response_content = await source.sharepoint_client.get_site_pages_content(
+        response_content = await source.get_site_pages_content(
             document=EXPECTED_ATTACHMENT,
             list_response=RESPONSE_DATA,
             doit=True,
@@ -1029,7 +1072,7 @@ async def coroutine_generator(item):
 async def test_get_site_pages_content_when_doit_is_none():
     document = {"title": "Home.aspx", "type": "File", "size": 1000000}
     async with create_sps_source() as source:
-        response_content = await source.sharepoint_client.get_site_pages_content(
+        response_content = await source.get_site_pages_content(
             document=document,
             list_response={},
             doit=None,
@@ -1042,7 +1085,7 @@ async def test_get_site_pages_content_when_doit_is_none():
 async def test_get_site_pages_content_for_wikifiled_none():
     async with create_sps_source() as source:
         EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": "1000000"}
-        response_content = await source.sharepoint_client.get_site_pages_content(
+        response_content = await source.get_site_pages_content(
             document=EXPECTED_ATTACHMENT,
             list_response={"WikiField": None},
             doit=True,

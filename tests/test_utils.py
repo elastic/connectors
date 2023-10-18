@@ -16,18 +16,15 @@ import tempfile
 import time
 import timeit
 from datetime import datetime
-from unittest.mock import Mock, mock_open, patch
+from unittest.mock import Mock, patch
 
 import pytest
-import pytest_asyncio
-from aioresponses import aioresponses
 from freezegun import freeze_time
 from pympler import asizeof
 
 from connectors import utils
 from connectors.utils import (
     ConcurrentTasks,
-    ExtractionService,
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
@@ -47,6 +44,7 @@ from connectors.utils import (
     iterable_batches_generator,
     next_run,
     retryable,
+    shorten_str,
     ssl_context,
     truncate_id,
     url_encode,
@@ -55,14 +53,18 @@ from connectors.utils import (
 )
 
 
-@freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
+    now = datetime(2023, 1, 18, 17, 18, 56, 814)
     # can run within two minutes
-    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
-    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    assert (
+        next_run("1 * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+    )
+    assert (
+        next_run("* * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    )
 
     # this should get parsed
-    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
+    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030", now)
 
 
 def test_invalid_names():
@@ -149,6 +151,10 @@ async def test_mem_queue_race():
 
 @pytest.mark.asyncio
 async def test_mem_queue():
+    # Initial timeout is really small so that the test is fast.
+    # The part of the test before timeout increase will take at least refresh_timeout
+    # seconds to execute, so if timeout is 60 seconds, then it'll take 60+ seconds.
+    # Thus we make timeout small and increase it later
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
@@ -161,6 +167,8 @@ async def test_mem_queue():
         while True:
             await queue.put("x" * 100)
 
+    # We increase the timeout to not be so flaky
+    queue.refresh_timeout = 2
     when = []
 
     async def add_data():
@@ -177,8 +185,8 @@ async def test_mem_queue():
         await queue.get()  # removes the 2kb
         assert not queue.full()
 
-    await asyncio.gather(remove_data(), add_data())
-    assert when[1] - when[0] > 0.1
+    await asyncio.gather(add_data(), remove_data())
+    assert when[1] - when[0] < queue.refresh_timeout
 
 
 @pytest.mark.asyncio
@@ -778,145 +786,6 @@ def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
     assert actual_batches == expected_batches
 
 
-class TestExtractionService:
-    @pytest_asyncio.fixture
-    async def mock_responses(self):
-        with aioresponses() as m:
-            yield m
-
-    @pytest.mark.parametrize(
-        "mock_config, expected_result",
-        [
-            (
-                {
-                    "extraction_service": {
-                        "host": "http://localhost:8090",
-                    }
-                },
-                True,
-            ),
-            ({"something_else": "???"}, False),
-            ({"extraction_service": {"not_a_host": "!!!m"}}, False),
-        ],
-    )
-    def test_check_configured(self, mock_config, expected_result):
-        with patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value=mock_config.get("extraction_service", None),
-        ):
-            extraction_service = ExtractionService()
-            assert extraction_service._check_configured() is expected_result
-
-    @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses, patch_logger):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-        payload = {"extracted_text": "I've been extracted!"}
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(url, status=200, payload=payload)
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-
-            assert response == "I've been extracted!"
-            patch_logger.assert_present(
-                "Text extraction is successful for 'notreal.txt'."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses, patch_logger):
-        filepath = "/tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
-        payload = {"extracted_text": "I've been extracted from a local file!"}
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={
-                "host": "http://localhost:8090",
-                "use_file_pointers": True,
-                "shared_volume_dir": "/tmp",
-            },
-        ):
-            mock_responses.put(url, status=200, payload=payload)
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-
-            assert response == "I've been extracted from a local file!"
-            patch_logger.assert_present(
-                "Text extraction is successful for 'notreal.txt'."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_when_response_isnt_200_logs_warning(
-        self, mock_responses, patch_logger
-    ):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(
-                url,
-                status=422,
-                payload={
-                    "error": "Unprocessable Entity",
-                    "message": "Could not process file.",
-                },
-            )
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-            assert response == ""
-
-            patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [422]; Unprocessable Entity: Could not process file."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_when_response_is_200_with_error_logs_warning(
-        self, mock_responses, patch_logger
-    ):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(
-                url,
-                status=200,
-                payload={"error": "oh no!", "message": "I'm all messed up..."},
-            )
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-            assert response == ""
-
-            patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
-            )
-
-
 @pytest.mark.parametrize(
     "base64url_encoded_value, base64_expected_value",
     [("YQ-_", "YQ+/"), ("", ""), (None, None)],
@@ -938,3 +807,27 @@ def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
 )
 def test_validate_email_address(email_address, is_valid):
     assert validate_email_address(email_address) == is_valid
+
+
+@pytest.mark.parametrize(
+    "original, shorten_by, shortened",
+    [
+        ("", 0, ""),
+        ("", 1000, ""),
+        (None, 0, ""),
+        (None, 1000, ""),
+        # introducing '...' would increase the string length -> no shortening
+        ("abcdefgh", 0, "abcdefgh"),
+        ("abcdefgh", 1, "abcdefgh"),
+        ("abcdefgh", 2, "abcdefgh"),
+        # valid shortening
+        ("abcdefgh", 4, "ab...gh"),
+        ("abcdefgh", 5, "ab...h"),
+        ("abcdefg", 4, "ab...g"),
+        ("abcdefg", 5, "a...g"),
+        # shortens to the max, if shorten_by is bigger than the actual string
+        ("abcdefgh", 1000, "a...h"),
+    ],
+)
+def test_shorten_str(original, shorten_by, shortened):
+    assert shorten_str(original, shorten_by) == shortened

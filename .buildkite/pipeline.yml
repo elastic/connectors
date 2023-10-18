@@ -117,7 +117,7 @@ steps:
             config:
               label: "🔨 Sharepoint Server"
               command:
-                - ".buildkite/run_nigthly.sh sharepoint_server extra_small"
+                - ".buildkite/run_nigthly.sh sharepoint_server small"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -250,5 +250,25 @@ steps:
               label: "🔨 Zoom"
               command:
                 - ".buildkite/run_nigthly.sh zoom small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+
+          - path: 
+            - "connectors/sources/box.py"
+            - "tests/sources/fixtures/box/**"
+            config:
+              label: "🔨 Box"
+              command:
+                - ".buildkite/run_nigthly.sh box small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
+          
+          - path: 
+            - "connectors/sources/microsoft_teams.py"
+            - "tests/sources/fixtures/microsoft_teams/**"
+            config:
+              label: "🔨 Microsoft Teams"
+              command:
+                - ".buildkite/run_nigthly.sh microsoft_teams small"
               artifact_paths:
                 - "perf8-report-*/**/*"

@@ -1,0 +1,130 @@
+{
+  "name": "box",
+  "index_name": "search-box",
+  "service_type": "box",
+  "sync_cursor": null,
+  "is_native": false,
+  "api_key_id": null,
+  "status": "configured",
+  "language": "en",
+  "last_access_control_sync_error": null,
+  "last_access_control_sync_status": null,
+  "last_sync_status": "canceled",
+  "last_sync_error": null,
+  "last_synced": null,
+  "last_seen": null,
+  "created_at": null,
+  "updated_at": null,
+  "configuration": {
+    "is_enterprise": {
+        "display": "dropdown",
+        "label": "Box data source",
+        "options": [
+            {"label": "Box Free", "value": "box_free"},
+            {"label": "Box Enterprise", "value": "box_enterprise"}
+        ],
+        "order": 1,
+        "type": "str",
+        "value": "box_free"
+    },
+    "client_id": {
+        "label": "Client ID",
+        "order": 2,
+        "type": "str",
+        "value": "0000000000000000000000000000"
+    },
+    "client_secret": {
+        "label": "Client Secret",
+        "order": 3,
+        "sensitive": true,
+        "type": "str",
+        "value": "0000000000000000000000000"
+    },
+    "refresh_token": {
+        "depends_on": [{"field": "is_enterprise", "value": "box_free"}],
+        "label": "Refresh Token",
+        "order": 4,
+        "sensitive": true,
+        "type": "str",
+        "value": "xxxxxxxxxxxxxxxxxxxx"
+    },
+    "enterprise_id": {
+        "depends_on": [{"field": "is_enterprise", "value": "box_enterprise"}],
+        "label": "Enterprise ID",
+        "order": 5,
+        "type": "int",
+        "value": 999999
+    },
+    "concurrent_downloads": {
+        "default_value": 15,
+        "display": "numeric",
+        "label": "Maximum concurrent downloads",
+        "order": 6,
+        "required": false,
+        "type": "int",
+        "ui_restrictions": ["advanced"],
+        "validations": [
+            {"type": "less_than", "constraint": 16}
+        ]
+    }
+  },
+  "filtering": [
+          {
+                  "domain": "DEFAULT",
+                  "draft": {
+                      "advanced_snippet": {
+                          "updated_at": "2023-01-31T16:41:27.341Z",
+                          "created_at": "2023-01-31T16:38:49.244Z",
+                          "value": {}
+                      },
+                      "rules": [
+                          {
+                              "field": "_",
+                              "updated_at": "2023-01-31T16:41:27.341Z",
+                              "created_at": "2023-01-31T16:38:49.244Z",
+                              "rule": "regex",
+                              "id": "DEFAULT",
+                              "value": ".*",
+                              "order": 1,
+                              "policy": "include"
+                          }
+                      ],
+                      "validation": {
+                          "state": "valid",
+                          "errors": []
+                      }
+                  },
+                  "active": {
+                      "advanced_snippet": {
+                          "updated_at": "2023-01-31T16:41:27.341Z",
+                          "created_at": "2023-01-31T16:38:49.244Z",
+                          "value": {}
+                      },
+                      "rules": [
+                          {
+                              "field": "_",
+                              "updated_at": "2023-01-31T16:41:27.341Z",
+                              "created_at": "2023-01-31T16:38:49.244Z",
+                              "rule": "regex",
+                              "id": "DEFAULT",
+                              "value": ".*",
+                              "order": 1,
+                              "policy": "include"
+                          }
+                      ],
+                      "validation": {
+                          "state": "valid",
+                          "errors": []
+                      }
+                  }
+          }
+
+  ],
+  "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+  "pipeline": {
+          "extract_binary_content": true,
+          "name": "ent-search-generic-ingestion",
+          "reduce_whitespace": true,
+          "run_ml_inference": true
+  }
+}

@@ -8,6 +8,7 @@ import re
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from unittest import TestCase, mock
+from unittest.mock import patch
 
 import pytest
 from aiohttp.client_exceptions import ClientConnectionError
@@ -15,6 +16,7 @@ from aioresponses import CallbackResult
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
+    API_VERSION,
     RELEVANT_SOBJECT_FIELDS,
     ConnectorRequestError,
     InvalidCredentialsException,
@@ -30,7 +32,7 @@ from tests.sources.support import create_source
 TEST_DOMAIN = "fake"
 TEST_BASE_URL = f"https://{TEST_DOMAIN}.my.salesforce.com"
 TEST_FILE_DOWNLOAD_URL = f"https://{TEST_DOMAIN}.file.force.com"
-TEST_QUERY_MATCH_URL = re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*")
+TEST_QUERY_MATCH_URL = re.compile(f"{TEST_BASE_URL}/services/data/{API_VERSION}/query*")
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
 
@@ -41,13 +43,13 @@ ACCOUNT_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "Account",
-                "url": "/services/data/v58.0/sobjects/Account/account_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/Account/account_id",
             },
             "Type": "Customer - Direct",
             "Owner": {
                 "attributes": {
                     "type": "User",
-                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                 },
                 "Id": "user_id",
                 "Name": "Frodo",
@@ -65,7 +67,7 @@ ACCOUNT_RESPONSE_PAYLOAD = {
                     {
                         "attributes": {
                             "type": "Opportunity",
-                            "url": "/services/data/v58.0/sobjects/Opportunity/opportunity_id",
+                            "url": f"/services/data/{API_VERSION}/sobjects/Opportunity/opportunity_id",
                         },
                         "Id": "opportunity_id",
                         "Name": "The Fellowship",
@@ -93,13 +95,13 @@ OPPORTUNITY_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "Opportunity",
-                "url": "/services/data/v58.0/sobjects/Opportunity/opportunity_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/Opportunity/opportunity_id",
             },
             "Description": "A fellowship of the races of Middle Earth",
             "Owner": {
                 "attributes": {
                     "type": "User",
-                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                 },
                 "Id": "user_id",
                 "Email": "frodo@tlotr.com",
@@ -119,7 +121,7 @@ CONTACT_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "Contact",
-                "url": "/services/data/v58.0/sobjects/Contact/contact_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/Contact/contact_id",
             },
             "OwnerId": "user_id",
             "Phone": "12345678",
@@ -142,7 +144,7 @@ LEAD_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "Lead",
-                "url": "/services/data/v58.0/sobjects/Lead/lead_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/Lead/lead_id",
             },
             "Name": "Sauron",
             "Status": "Working - Contacted",
@@ -170,7 +172,7 @@ CAMPAIGN_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "Campaign",
-                "url": "/services/data/v58.0/sobjects/Campaign/campaign_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/Campaign/campaign_id",
             },
             "Name": "Defend the Gap",
             "IsActive": True,
@@ -181,7 +183,7 @@ CAMPAIGN_RESPONSE_PAYLOAD = {
             "Parent": {
                 "attributes": {
                     "type": "User",
-                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                 },
                 "Id": "user_id",
                 "Name": "Théoden",
@@ -189,7 +191,7 @@ CAMPAIGN_RESPONSE_PAYLOAD = {
             "Owner": {
                 "attributes": {
                     "type": "User",
-                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                 },
                 "Id": "user_id",
                 "Name": "Saruman",
@@ -206,7 +208,7 @@ CASE_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "Case",
-                "url": "/services/data/v58.0/sobjects/Case/case_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/Case/case_id",
             },
             "Status": "New",
             "AccountId": "account_id",
@@ -215,7 +217,7 @@ CASE_RESPONSE_PAYLOAD = {
             "Owner": {
                 "attributes": {
                     "type": "Name",
-                    "url": "/services/data/v58.0/sobjects/User/user_id",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                 },
                 "Email": "frodo@tlotr.com",
                 "Name": "Frodo",
@@ -224,7 +226,7 @@ CASE_RESPONSE_PAYLOAD = {
             "CreatedBy": {
                 "attributes": {
                     "type": "User",
-                    "url": "/services/data/v58.0/sobjects/User/user_id_2",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id_2",
                 },
                 "Id": "user_id_2",
                 "Email": "gandalf@tlotr.com",
@@ -236,7 +238,7 @@ CASE_RESPONSE_PAYLOAD = {
                     {
                         "attributes": {
                             "type": "EmailMessage",
-                            "url": "/services/data/v58.0/sobjects/EmailMessage/email_message_id",
+                            "url": f"/services/data/{API_VERSION}/sobjects/EmailMessage/email_message_id",
                         },
                         "CreatedDate": "2023-08-11T00:00:00.000+0000",
                         "LastModifiedById": "user_id",
@@ -255,7 +257,7 @@ CASE_RESPONSE_PAYLOAD = {
                         "CreatedBy": {
                             "attributes": {
                                 "type": "Name",
-                                "url": "/services/data/v58.0/sobjects/User/user_id",
+                                "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                             },
                             "Name": "Frodo",
                             "Id": "user_id",
@@ -269,7 +271,7 @@ CASE_RESPONSE_PAYLOAD = {
                     {
                         "attributes": {
                             "type": "CaseComment",
-                            "url": "/services/data/v58.0/sobjects/CaseComment/case_comment_id",
+                            "url": f"/services/data/{API_VERSION}/sobjects/CaseComment/case_comment_id",
                         },
                         "CreatedDate": "2023-08-03T00:00:00.000+0000",
                         "LastModifiedById": "user_id_3",
@@ -278,7 +280,7 @@ CASE_RESPONSE_PAYLOAD = {
                         "CreatedBy": {
                             "attributes": {
                                 "type": "Name",
-                                "url": "/services/data/v58.0/sobjects/User/user_id_3",
+                                "url": f"/services/data/{API_VERSION}/sobjects/User/user_id_3",
                             },
                             "Name": "Gimli",
                             "Id": "user_id_3",
@@ -304,12 +306,12 @@ CASE_FEED_RESPONSE_PAYLOAD = {
         {
             "attributes": {
                 "type": "CaseFeed",
-                "url": "/services/data/v58.0/sobjects/CaseFeed/case_feed_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/CaseFeed/case_feed_id",
             },
             "CreatedBy": {
                 "attributes": {
                     "type": "Name",
-                    "url": "/services/data/v58.0/sobjects/User/user_id_4",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id_4",
                 },
                 "Id": "user_id_4",
                 "Email": "galadriel@tlotr.com",
@@ -328,12 +330,12 @@ CASE_FEED_RESPONSE_PAYLOAD = {
                     {
                         "attributes": {
                             "type": "FeedComment",
-                            "url": "/services/data/v58.0/sobjects/FeedComment/feed_comment_id",
+                            "url": f"/services/data/{API_VERSION}/sobjects/FeedComment/feed_comment_id",
                         },
                         "CreatedBy": {
                             "attributes": {
                                 "type": "Name",
-                                "url": "/services/data/v58.0/sobjects/User/user_id_4",
+                                "url": f"/services/data/{API_VERSION}/sobjects/User/user_id_4",
                             },
                             "Id": "user_id_4",
                             "Email": "galadriel@tlotr.com",
@@ -358,13 +360,13 @@ CONTENT_DOCUMENT_LINKS_PAYLOAD = {
         {
             "attributes": {
                 "type": "ContentDocumentLink",
-                "url": "/services/data/v58.0/sobjects/ContentDocumentLink/content_document_link_id",
+                "url": f"/services/data/{API_VERSION}/sobjects/ContentDocumentLink/content_document_link_id",
             },
             "Id": "content_document_link_id",
             "ContentDocument": {
                 "attributes": {
                     "type": "ContentDocument",
-                    "url": "/services/data/v58.0/sobjects/ContentDocument/content_document_id",
+                    "url": f"/services/data/{API_VERSION}/sobjects/ContentDocument/content_document_id",
                 },
                 "Id": "content_document_id",
                 "Description": "A file about a ring.",
@@ -375,7 +377,7 @@ CONTENT_DOCUMENT_LINKS_PAYLOAD = {
                 "LatestPublishedVersion": {
                     "attributes": {
                         "type": "ContentVersion",
-                        "url": "/services/data/v58.0/sobjects/ContentVersion/content_version_id",
+                        "url": f"/services/data/{API_VERSION}/sobjects/ContentVersion/content_version_id",
                     },
                     "Id": "content_version_id",
                     "VersionDataUrl": f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
@@ -385,7 +387,7 @@ CONTENT_DOCUMENT_LINKS_PAYLOAD = {
                 "Owner": {
                     "attributes": {
                         "type": "User",
-                        "url": "/services/data/v58.0/sobjects/User/user_id",
+                        "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                     },
                     "Id": "user_id",
                     "Name": "Frodo",
@@ -394,7 +396,7 @@ CONTENT_DOCUMENT_LINKS_PAYLOAD = {
                 "CreatedBy": {
                     "attributes": {
                         "type": "User",
-                        "url": "/services/data/v58.0/sobjects/User/user_id",
+                        "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
                     },
                     "Id": "user_id",
                     "Name": "Frodo",
@@ -421,12 +423,15 @@ CACHED_SOBJECTS = {
 
 
 @asynccontextmanager
-async def create_salesforce_source(mock_token=True, mock_queryables=True):
+async def create_salesforce_source(
+    use_text_extraction_service=False, mock_token=True, mock_queryables=True
+):
     async with create_source(
         SalesforceDataSource,
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         if mock_token is True:
             source.salesforce_client.api_token.token = mock.AsyncMock(
@@ -646,7 +651,7 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
         }
 
         mock_responses.get(
-            f"{TEST_BASE_URL}/services/data/v58.0/sobjects",
+            f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects",
             status=200,
             payload=response_payload,
         )
@@ -676,7 +681,7 @@ async def test_get_queryable_fields(mock_responses):
             "fields": expected_fields,
         }
         mock_responses.get(
-            f"{TEST_BASE_URL}/services/data/v58.0/sobjects/Account/describe",
+            f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects/Account/describe",
             status=200,
             payload=response_payload,
         )
@@ -1041,12 +1046,13 @@ async def test_get_all_with_content_docs_when_success(
             "url": f"{TEST_BASE_URL}/content_document_id",
             "version_number": "2",
             "version_url": f"{TEST_BASE_URL}/content_version_id",
-            "_attachment": expected_attachment,
         }
+        if expected_attachment is not None:
+            expected_doc["_attachment"] = expected_attachment
 
         mock_responses.get(
             f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
-            status=response_body,
+            status=response_status,
             body=response_body,
         )
         mock_responses.get(
@@ -1059,6 +1065,60 @@ async def test_get_all_with_content_docs_when_success(
                 content_document_records.append(record)
 
         TestCase().assertCountEqual(content_document_records, [expected_doc])
+
+
+@pytest.mark.asyncio
+async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="chunk1",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_salesforce_source(use_text_extraction_service=True) as source:
+            expected_doc = {
+                "_id": "content_document_id",
+                "content_size": 1000,
+                "created_at": "",
+                "created_by": "Frodo",
+                "created_by_email": "frodo@tlotr.com",
+                "body": "chunk1",
+                "description": "A file about a ring.",
+                "file_extension": "txt",
+                "last_updated": "",
+                "linked_ids": [
+                    "account_id",
+                    "campaign_id",
+                    "case_id",
+                    "contact_id",
+                    "lead_id",
+                    "opportunity_id",
+                ],  # contains every SObject that is connected to this doc
+                "owner": "Frodo",
+                "owner_email": "frodo@tlotr.com",
+                "title": "the_ring.txt",
+                "type": "content_document",
+                "url": f"{TEST_BASE_URL}/content_document_id",
+                "version_number": "2",
+                "version_url": f"{TEST_BASE_URL}/content_version_id",
+            }
+
+            mock_responses.get(
+                f"{TEST_FILE_DOWNLOAD_URL}/sfc/servlet.shepherd/version/download/download_id",
+                status=200,
+                body=b"chunk1",
+            )
+            mock_responses.get(
+                TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+            )
+
+            content_document_records = []
+            async for record, _ in source.get_docs():
+                if record["type"] == "content_document":
+                    content_document_records.append(record)
+
+            TestCase().assertCountEqual(content_document_records, [expected_doc])
 
 
 @pytest.mark.asyncio
@@ -1134,7 +1194,7 @@ async def test_request_when_rate_limited_raises_error_no_retries(mock_responses)
             }
         ]
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            re.compile(f"{TEST_BASE_URL}/services/data/{API_VERSION}/query*"),
             status=403,
             payload=response_payload,
         )
@@ -1164,7 +1224,7 @@ async def test_request_when_invalid_query_raises_error_no_retries(
             }
         ]
         mock_responses.get(
-            re.compile(f"{TEST_BASE_URL}/services/data/v58.0/query*"),
+            re.compile(f"{TEST_BASE_URL}/services/data/{API_VERSION}/query*"),
             status=400,
             payload=response_payload,
         )

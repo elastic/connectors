@@ -20,11 +20,12 @@ from argparse import ArgumentParser
 
 from connectors import __version__
 from connectors.config import load_config
+from connectors.content_extraction import ContentExtraction
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.source import get_source_klass, get_source_klasses
-from connectors.utils import ExtractionService, get_event_loop
+from connectors.utils import get_event_loop
 
 __all__ = ["main"]
 
@@ -140,7 +141,7 @@ def run(args):
     config = {}
     try:
         config = load_config(args.config_file)
-        ExtractionService.set_extraction_config(
+        ContentExtraction.set_extraction_config(
             config.get("extraction_service", None)
         )  # Not perfect, let's revisit
     except Exception as e:

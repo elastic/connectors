@@ -413,13 +413,14 @@ MOCK_COMMITS = [
 
 
 @asynccontextmanager
-async def create_github_source():
+async def create_github_source(use_text_extraction_service=False):
     async with create_source(
         GitHubDataSource,
         data_source="github-server",
         token="changeme",
         repositories="*",
         ssl_enabled=False,
+        use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
 
@@ -606,6 +607,25 @@ async def test_post_with_unauthorized():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_post_with_error_not_found():
+    async with create_github_source() as source:
+        source.github_client._get_session.post = Mock(
+            side_effect=ClientResponseError(
+                status=404,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+            )
+        )
+        with pytest.raises(Exception):
+            await source.github_client.post(
+                {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+            )
+
+
+@pytest.mark.asyncio
 async def test_paginated_api_call():
     expected_response = MOCK_RESPONSE_REPO
     async with create_github_source() as source:
@@ -671,6 +691,32 @@ async def test_get_content_with_md_file():
                 attachment=MOCK_ATTACHMENT, doit=True
             )
             assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_get_content_with_md_file_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value="Test File !!! U+1F602",
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        expected_response = {
+            "_id": "demo_repo/source.md",
+            "_timestamp": "2023-04-17T12:55:01Z",
+            "body": "Test File !!! U+1F602",
+        }
+        async with create_github_source(use_text_extraction_service=True) as source:
+            with patch.object(
+                source.github_client._get_client,
+                "getitem",
+                side_effect=[MOCK_RESPONSE_ATTACHMENTS[1]],
+            ):
+                actual_response = await source.get_content(
+                    attachment=MOCK_ATTACHMENT, doit=True
+                )
+                assert actual_response == expected_response
 
 
 @pytest.mark.asyncio

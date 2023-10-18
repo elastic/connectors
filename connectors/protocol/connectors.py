@@ -604,7 +604,7 @@ class Connector(ESDocument):
             self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self, job_type):
+    def next_sync(self, job_type, now):
         """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
@@ -619,7 +619,7 @@ class Connector(ESDocument):
 
         if not scheduling_property.get("enabled", False):
             return None
-        return next_run(scheduling_property.get("interval"))
+        return next_run(scheduling_property.get("interval"), now)
 
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
@@ -784,11 +784,19 @@ class Connector(ESDocument):
             doc["service_type"] = configured_service_type
             self.log_debug(f"Populated service type {configured_service_type}")
 
+        simple_config = source_klass.get_simple_configuration()
+        current_config = self.configuration.to_dict()
+        missing_keys = simple_config.keys() - current_config.keys()
         if self.configuration.is_empty():
             # sets the defaults and the flag to NEEDS_CONFIGURATION
-            doc["configuration"] = source_klass.get_simple_configuration()
+            doc["configuration"] = simple_config
             doc["status"] = Status.NEEDS_CONFIGURATION.value
             self.log_debug("Populated configuration")
+        elif missing_keys:
+            doc["configuration"] = self.updated_configuration(
+                missing_keys, current_config, simple_config
+            )
+            # doc["status"] = Status.NEEDS_CONFIGURATION.value # not setting status, because it may be that default values are sufficient
 
         if self.features.features != source_klass.features():
             doc["features"] = source_klass.features()
@@ -804,6 +812,27 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
         await self.reload()
+
+    def updated_configuration(
+        self, missing_keys, current_config, simple_default_config
+    ):
+        self.log_warning(
+            f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade."
+        )
+        draft_config = {
+            k: simple_default_config[k] for k in missing_keys
+        }  # add missing configs as they exist in the simple default
+
+        # copy any differences (excluding differences in "value") to the draft
+        # the contents of simple_default_config are used unless they are missing
+        for config_name, config_obj in current_config.items():
+            for k, v in config_obj.items():
+                simple_default_value = simple_default_config.get(config_name, {}).get(k)
+                if k != "value" and simple_default_value != v:
+                    draft_config_obj = draft_config.get(config_name, {})
+                    draft_config_obj[k] = simple_default_value or v
+                    draft_config[config_name] = draft_config_obj
+        return draft_config
 
     @with_concurrency_control()
     async def validate_filtering(self, validator):
