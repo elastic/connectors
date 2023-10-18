@@ -272,15 +272,13 @@ job.add_command(list)
 
 @click.command(help="Cancel a job")
 @click.pass_obj
-@click.option('-i', help='Connector ID')
-@click.option('-n', help='Index name')
-@click.option('-j', help='Job id', required=True)
-def cancel(obj, i, n, j):
+@click.argument('job_id')
+def cancel(obj, job_id):
     job_cli = Job(config=obj['config']['elasticsearch'])
     click.confirm(click.style('Are you sure you want to cancel jobs?', fg='yellow'), abort=True)
     click.echo('Canceling jobs...')
-    if job_cli.cancel(connector_id=i, index_name=n, job_id=j):
-        click.echo(click.style("All jobs have been cancelled.", fg='green'))
+    if job_cli.cancel(job_id=job_id):
+        click.echo(click.style("The jobs is cancelling.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
