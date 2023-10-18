@@ -66,10 +66,6 @@ def cli(ctx, config):
         # todo raise an exception
         pass
 
-    # ctx = click.get_current_context()
-    # click.echo(ctx.get_help())
-    # ctx.exit()
-
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option('--host', prompt="Elastic host")
 @click.option('--username', prompt="Username")
@@ -78,9 +74,9 @@ def cli(ctx, config):
 def login(host, username, password):
     auth = Auth(host, username, password)
     if auth.is_config_present():
-        click.confirm(click.style('Config is already present. Are you sure you want to override it?😱', fg='yellow'), abort=True)
+        click.confirm(click.style('Config is already present. Are you sure you want to override it?', fg='yellow'), abort=True)
     if auth.authenticate():
-        click.echo(click.style("Authentication successful. You're breathtaking.", fg='green'))
+        click.echo(click.style("Authentication successful", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Authentication failed. Please check your credentials.", fg='red'), err=True)
@@ -198,9 +194,9 @@ index.add_command(list)
 @click.argument('index', nargs=1)
 def clean(obj, index):
     index_cli = Index(config=obj['config']['elasticsearch'])
-    click.confirm(click.style('Are you sure you want to clean ' + index + '?😱', fg='yellow'), abort=True)
+    click.confirm(click.style('Are you sure you want to clean ' + index + '?', fg='yellow'), abort=True)
     if index_cli.clean(index):
-        click.echo(click.style("The index has been cleaned. You're awesome.", fg='green'))
+        click.echo(click.style("The index has been cleaned.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
@@ -212,9 +208,9 @@ index.add_command(clean)
 @click.argument('index', nargs=1)
 def delete(obj, index):
     index_cli = Index(config=obj['config']['elasticsearch'])
-    click.confirm(click.style('Are you sure you want to delete ' + index + '?😱', fg='yellow'), abort=True)
+    click.confirm(click.style('Are you sure you want to delete ' + index + '?', fg='yellow'), abort=True)
     if index_cli.delete(index):
-        click.echo(click.style("The index has been deleted. You're amazing.", fg='green'))
+        click.echo(click.style("The index has been deleted.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
@@ -238,7 +234,7 @@ def start(obj, i, t):
     job_cli = Job(config=obj['config']['elasticsearch'])
     click.echo('Starting a job...')
     if job_cli.start(connector_id=i, job_type=t):
-        click.echo(click.style("The job has been started. You're phenomenous!", fg='green'))
+        click.echo(click.style("The job has been started.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
@@ -283,10 +279,10 @@ job.add_command(list)
 @click.option('-j', help='Job id', required=True)
 def cancel(obj, i, n, j):
     job_cli = Job(config=obj['config']['elasticsearch'])
-    click.confirm(click.style('Are you sure you want to cancel jobs?😱', fg='yellow'), abort=True)
+    click.confirm(click.style('Are you sure you want to cancel jobs?', fg='yellow'), abort=True)
     click.echo('Canceling jobs...')
     if job_cli.cancel(connector_id=i, index_name=n, job_id=j):
-        click.echo(click.style("All jobs have been cancelled. You're incredible!", fg='green'))
+        click.echo(click.style("All jobs have been cancelled.", fg='green'))
     else:
         click.echo('')
         click.echo(click.style("Something went wrong. Please try again later or check your credentials", fg='red'), err=True)
