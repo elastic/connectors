@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 import json
 import logging
 import time
@@ -84,7 +85,7 @@ async def test_async_tracer():
 
         @tracer.start_as_current_span("trace me", "special")
         async def traceable():
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
 
         await traceable()
         ecs_log = logs[0]
@@ -107,14 +108,14 @@ async def test_async_tracer_slow():
 
         @tracer.start_as_current_span("trace me", "special", slow_log=10)
         async def traceable():
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
 
         await traceable()
         assert (len(logs)) == 0
 
         @tracer.start_as_current_span("trace me", "special", slow_log=0.01)
         async def traceable_slow():
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
 
         await traceable_slow()
         assert (len(logs)) == 1
