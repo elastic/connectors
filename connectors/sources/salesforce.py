@@ -28,7 +28,7 @@ RETRIES = 3
 RETRY_INTERVAL = 1
 
 BASE_URL = "https://<domain>.my.salesforce.com"
-API_VERSION = "v59.0"
+API_VERSION = "v58.0"
 TOKEN_ENDPOINT = "/services/oauth2/token"
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
