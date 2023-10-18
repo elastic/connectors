@@ -33,7 +33,7 @@ TOKEN_ENDPOINT = "/services/oauth2/token"
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
-# https://developer.salesforce.com/docs/atlas.en-us.244.0.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
+# https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
 CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
 
 RELEVANT_SOBJECTS = [
