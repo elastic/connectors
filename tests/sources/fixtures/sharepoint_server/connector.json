@@ -1,0 +1,162 @@
+{
+    "api_key_id": "clvIfIgBFjJwEZQV7bda",
+    "configuration": {
+      "username": {
+        "label": "SharePoint Server username",
+        "order": 1,
+        "type": "str",
+        "value": "demo_user"
+      },
+      "password": {
+        "label": "SharePoint Server password",
+        "sensitive": true,
+        "order": 2,
+        "type": "str",
+        "value": "abc@123"
+      },
+      "host_url": {
+        "label": "SharePoint host",
+        "order": 3,
+        "type": "str",
+        "value": "http://127.0.0.1:8491"
+      },
+      "site_collections": {
+        "display": "textarea",
+        "label": "Comma-separated list of SharePoint site collections to index",
+        "order": 4,
+        "type": "list",
+        "value": "collection1"
+      },
+      "ssl_enabled": {
+        "display": "toggle",
+        "label": "Enable SSL",
+        "order": 5,
+        "type": "bool",
+        "value": false
+      },
+      "ssl_ca": {
+        "depends_on": [{"field": "ssl_enabled", "value": true}],
+        "label": "SSL certificate",
+        "order": 6,
+        "type": "str",
+        "value": ""
+      },
+      "retry_count": {
+        "default_value": 3,
+        "display": "numeric",
+        "label": "Retries per request",
+        "order": 7,
+        "required": false,
+        "type": "int",
+        "ui_restrictions": ["advanced"],
+        "value": null
+      },
+      "use_text_extraction_service": {
+        "default_value": null,
+        "depends_on": [],
+        "display": "toggle",
+        "label": "Use text extraction service",
+        "options": [],
+        "order": 7,
+        "required": true,
+        "sensitive": false,
+        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+        "type": "bool",
+        "ui_restrictions": [],
+        "validations": [],
+        "value": false
+      }
+    },
+    "custom_scheduling": {},
+    "description": null,
+    "error": "Cannot connect to host enterprisesearchasd.sharepoint.com:443 ssl:default [nodename nor servname provided, or not known]",
+    "features": {
+      "filtering_advanced_config": false,
+      "filtering_rules": false,
+      "sync_rules": {
+        "advanced": {
+          "enabled": true
+        },
+        "basic": {
+          "enabled": true
+        }
+      }
+    },
+    "filtering": [
+      {
+        "domain": "DEFAULT",
+        "draft": {
+          "advanced_snippet": {
+            "updated_at": "2023-06-02T15:50:23.157Z",
+            "created_at": "2023-06-02T15:50:23.157Z",
+            "value": {}
+          },
+          "rules": [
+            {
+              "field": "_",
+              "updated_at": "2023-06-02T15:50:23.157Z",
+              "created_at": "2023-06-02T15:44:59.416Z",
+              "rule": "regex",
+              "id": "DEFAULT",
+              "value": ".*",
+              "order": 0,
+              "policy": "include"
+            }
+          ],
+          "validation": {
+            "state": "valid",
+            "errors": []
+          }
+        },
+        "active": {
+          "advanced_snippet": {
+            "updated_at": "2023-06-02T15:50:23.157Z",
+            "created_at": "2023-06-02T15:50:23.157Z",
+            "value": {}
+          },
+          "rules": [
+            {
+              "field": "_",
+              "updated_at": "2023-06-02T15:50:23.157Z",
+              "created_at": "2023-06-02T15:44:59.416Z",
+              "rule": "regex",
+              "id": "DEFAULT",
+              "value": ".*",
+              "order": 0,
+              "policy": "include"
+            }
+          ],
+          "validation": {
+            "state": "valid",
+            "errors": []
+          }
+        }
+      }
+    ],
+    "index_name": "search-sharepoint_server",
+    "is_native": false,
+    "language": null,
+    "last_seen": "2023-06-02T16:05:43.247794+00:00",
+    "last_sync_error": null,
+    "last_sync_scheduled_at": null,
+    "last_sync_status": null,
+    "last_synced": "2023-06-02T16:08:30.745527+00:00",
+    "name": "sharepoint-online-adv",
+    "pipeline": {
+      "extract_binary_content": true,
+      "name": "ent-search-generic-ingestion",
+      "reduce_whitespace": true,
+      "run_ml_inference": true
+    },
+    "scheduling": {
+      "full": {
+        "enabled": true,
+        "interval": "0 * * * * ?"
+      }
+    },
+    "service_type": "sharepoint_server",
+    "status": "connected",
+    "id": "sharepoint_server",
+    "last_indexed_document_count": 0,
+    "last_deleted_document_count": 0
+  }

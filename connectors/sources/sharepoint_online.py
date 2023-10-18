@@ -16,24 +16,30 @@ import aiohttp
 import fastjsonschema
 from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
+from aiohttp.client_reqrep import RequestInfo
 from fastjsonschema import JsonSchemaValueException
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
-    ExtractionService,
     convert_to_b64,
     html_to_text,
     iso_utc,
+    iso_zulu,
     iterable_batches_generator,
     retryable,
     url_encode,
@@ -42,8 +48,6 @@ from connectors.utils import (
 SPO_API_MAX_BATCH_SIZE = 20
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
-ACCESS_CONTROL = "_allow_access_control"
 
 DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
 
@@ -63,9 +67,10 @@ else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
     REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
 
-DEFAULT_RETRY_COUNT = 3
+DEFAULT_RETRY_COUNT = 5
 DEFAULT_RETRY_SECONDS = 30
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
+DEFAULT_BACKOFF_MULTIPLIER = 5
 FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
@@ -79,6 +84,34 @@ CURSOR_SITE_DRIVE_KEY = "site_drives"
 DELTA_NEXT_LINK_KEY = "@odata.nextLink"
 DELTA_LINK_KEY = "@odata.deltaLink"
 
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/PermissionKind.cs
+# See also: https://learn.microsoft.com/en-us/previous-versions/office/sharepoint-csom/ee536458(v=office.15)
+VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
+VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
+
+# See https://github.com/pnp/pnpcore/blob/dev/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
+# See also: https://learn.microsoft.com/en-us/dotnet/api/microsoft.sharepoint.client.roletype?view=sharepoint-csom
+READER = 2
+CONTRIBUTOR = 3
+WEB_DESIGNER = 4
+ADMINISTRATOR = 5
+EDITOR = 6
+REVIEWER = 7
+SYSTEM = 0xFF
+# Note the exclusion of NONE(0), GUEST(1), RESTRICTED_READER(8), and RESTRICTED_GUEST(9)
+VIEW_ROLE_TYPES = [
+    READER,
+    CONTRIBUTOR,
+    WEB_DESIGNER,
+    ADMINISTRATOR,
+    EDITOR,
+    REVIEWER,
+    SYSTEM,
+]
+
+# $expand param has a max of 20: see: https://developer.microsoft.com/en-us/graph/known-issues/?search=expand
+SPO_MAX_EXPAND_SIZE = 20
+
 
 class NotFound(Exception):
     """Internal exception class to handle 404s from the API that has a meaning, that collection
@@ -88,6 +121,15 @@ class NotFound(Exception):
 
     It's not an exception for us, we just want to return [], and this exception class facilitates it.
     """
+
+    pass
+
+
+class BadRequestError(Exception):
+    """Internal exception class to handle 400's from the API.
+
+    Similar to the NotFound exception, this allows us to catch edge-case responses that should
+    be translated as empty resutls, and let us return []."""
 
     pass
 
@@ -180,7 +222,7 @@ class MicrosoftSecurityToken:
         Returns:
             str: bearer token for one of Microsoft services"""
 
-        cached_value = self._token_cache.get()
+        cached_value = self._token_cache.get_value()
 
         if cached_value:
             return cached_value
@@ -206,7 +248,7 @@ class MicrosoftSecurityToken:
                         f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
                     ) from e
 
-        self._token_cache.set(access_token, now + timedelta(seconds=expires_in))
+        self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
 
         return access_token
 
@@ -283,10 +325,10 @@ def retryable_aiohttp_call(retries):
             retry = 1
             while retry <= retries:
                 try:
-                    async for item in func(*args, **kwargs):
+                    async for item in func(*args, **kwargs, retry_count=retry):
                         yield item
                     break
-                except NotFound:
+                except (NotFound, BadRequestError):
                     raise
                 except Exception:
                     if retry >= retries:
@@ -322,7 +364,7 @@ class MicrosoftAPISession:
         return await self._get_json(url)
 
     async def post(self, url, payload):
-        self._logger.debug(f"Post to url: {url}")
+        self._logger.debug(f"Post to url: '{url}' with body: {payload}")
         async with self._post(url, payload) as resp:
             return await resp.json()
 
@@ -364,7 +406,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _post(self, absolute_url, payload=None):
+    async def _post(self, absolute_url, payload=None, retry_count=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -373,6 +415,8 @@ class MicrosoftAPISession:
             async with self._http_session.post(
                 absolute_url, headers=headers, json=payload
             ) as resp:
+                if absolute_url.endswith("/$batch"):  # response code of $batch lies
+                    await self._check_batch_items_for_errors(absolute_url, resp)
                 yield resp
         except aiohttp.client_exceptions.ClientOSError:
             self._logger.warning(
@@ -380,11 +424,30 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            await self._handle_client_response_error(absolute_url, e, retry_count)
+        except ClientPayloadError as e:
+            await self._handle_client_payload_error(e, retry_count)
+
+    async def _check_batch_items_for_errors(self, url, batch_resp):
+        body = await batch_resp.json()
+        responses = body.get("responses", [])
+        for response in responses:
+            status = response.get("status", 200)
+            if status != 200:
+                self._logger.warning(f"Batch request item failed with: {response}")
+                headers = response.get("headers", {})
+                req_info = RequestInfo(url=url, method="POST", headers=headers)
+                raise ClientResponseError(
+                    request_info=req_info,
+                    headers=headers,
+                    status=status,
+                    message=response.get("body", {}).get("error", {}).get("message"),
+                    history=(batch_resp),
+                )
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _get(self, absolute_url):
+    async def _get(self, absolute_url, retry_count=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -401,20 +464,37 @@ class MicrosoftAPISession:
             )
             raise
         except ClientResponseError as e:
-            await self._handle_client_response_error(absolute_url, e)
+            await self._handle_client_response_error(absolute_url, e, retry_count)
+        except ClientPayloadError as e:
+            await self._handle_client_payload_error(e, retry_count)
 
-    async def _handle_client_response_error(self, absolute_url, e):
+    async def _handle_client_payload_error(self, e, retry_count):
+        await self._sleeps.sleep(
+            self._compute_retry_after(
+                DEFAULT_RETRY_SECONDS, retry_count, DEFAULT_BACKOFF_MULTIPLIER
+            )
+        )
+
+        raise e
+
+    async def _handle_client_response_error(self, absolute_url, e, retry_count):
         if e.status == 429 or e.status == 503:
             response_headers = e.headers or {}
+
             if "Retry-After" in response_headers:
-                retry_seconds = int(response_headers["Retry-After"])
+                retry_after = int(response_headers["Retry-After"])
             else:
                 self._logger.warning(
-                    f"Response Code from Sharepoint Server is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    f"Response Code from Sharepoint Online is {e.status} but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
-                retry_seconds = DEFAULT_RETRY_SECONDS
-            self._logger.debug(
-                f"Rate Limited by Sharepoint: retry in {retry_seconds} seconds"
+                retry_after = DEFAULT_RETRY_SECONDS
+
+            retry_seconds = self._compute_retry_after(
+                retry_after, retry_count, DEFAULT_BACKOFF_MULTIPLIER
+            )
+
+            self._logger.warning(
+                f"Rate Limited by Sharepoint: a new attempt will be performed in {retry_seconds} seconds (retry-after header: {retry_after}, retry_count: {retry_count}, backoff: {DEFAULT_BACKOFF_MULTIPLIER})"
             )
 
             await self._sleeps.sleep(retry_seconds)
@@ -429,8 +509,19 @@ class MicrosoftAPISession:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
         elif e.status == 500:
             raise InternalServerError from e
+        elif e.status == 400:
+            self._logger.warning(f"Received 400 response from {absolute_url}")
+            raise BadRequestError from e
         else:
             raise
+
+    def _compute_retry_after(self, retry_after, retry_count, backoff):
+        # Wait for what Sharepoint API asks after the first failure.
+        # Apply backoff if API is still not available.
+        if retry_count <= 1:
+            return retry_after
+        else:
+            return retry_after + retry_count * backoff
 
 
 class SharepointOnlineClient:
@@ -510,34 +601,48 @@ class SharepointOnlineClient:
             for site_collection in page:
                 yield site_collection
 
-    async def site_group(self, site_web_url, group_principal_id):
+    async def site_role_assignments(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
+        expand = "Member/users,RoleDefinitionBindings"
 
-        url = f"{site_web_url}/_api/web/sitegroups/getbyid({group_principal_id})"
-
-        try:
-            return await self._rest_api_client.fetch(url)
-        except NotFound:
-            return {}
-
-    async def user_information_list(self, site_id):
-        expand = "fields"
-        url = f"{GRAPH_API_URL}/sites/{site_id}/lists/User Information List/items?expand={expand}"
+        url = f"{site_web_url}/_api/web/roleassignments?$expand={expand}"
 
         try:
-            async for page in self._graph_api_client.scroll(url):
-                for user_information in page:
-                    yield user_information
+            async for page in self._rest_api_client.scroll(url):
+                for role_assignment in page:
+                    yield role_assignment
         except NotFound:
+            self._logger.debug(f"No role assignments found for site: '{site_web_url}'")
             return
 
-    async def user(self, user_principal_name):
-        url = f"{GRAPH_API_URL}/users/{user_principal_name}"
+    async def site_admins(self, site_web_url):
+        self._validate_sharepoint_rest_url(site_web_url)
+        filter_param = url_encode("isSiteAdmin eq true")
+        url = f"{site_web_url}/_api/web/SiteUsers?$filter={filter_param}"
 
         try:
-            return await self._graph_api_client.fetch(url)
+            async for page in self._rest_api_client.scroll(url):
+                for member in page:
+                    yield member
         except NotFound:
-            return {}
+            self._logger.debug(f"No site admins found for site: '${site_web_url}'")
+            return
+
+    async def site_groups_users(self, site_web_url, site_group_id):
+        self._validate_sharepoint_rest_url(site_web_url)
+
+        select_ = "Email,Id,UserPrincipalName,LoginName,Title"
+        url = f"{site_web_url}/_api/web/sitegroups/getbyid({site_group_id})/users?$select={select_}"
+
+        try:
+            async for page in self._rest_api_client.scroll(url):
+                for site_group_user in page:
+                    yield site_group_user
+        except NotFound:
+            self._logger.warning(
+                f"NotFound error when fetching users for sitegroup '{site_group_id}' at '{site_web_url}'."
+            )
+            return
 
     async def active_users_with_groups(self):
         expand = "transitiveMemberOf($select=id)"
@@ -564,7 +669,8 @@ class SharepointOnlineClient:
             return
 
     async def group_owners(self, group_id):
-        url = f"{GRAPH_API_URL}/groups/{group_id}/owners"
+        select = "id,mail,userPrincipalName"
+        url = f"{GRAPH_API_URL}/groups/{group_id}/owners?$select={select}"
 
         try:
             async for page in self._graph_api_client.scroll(url):
@@ -585,20 +691,82 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def sites(self, parent_site_id, allowed_root_sites):
-        select = ""
+    async def sites(
+        self,
+        sharepoint_host,
+        allowed_root_sites,
+        enumerate_all_sites=True,
+        fetch_subsites=False,
+    ):
+        if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
+            self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
+            async for site in self._all_sites(sharepoint_host, allowed_root_sites):
+                yield site
+        else:
+            self._logger.debug(f"Looking up individual sites: {allowed_root_sites}")
+            for allowed_site in allowed_root_sites:
+                try:
+                    if fetch_subsites:
+                        async for site in self._fetch_site_and_subsites_by_path(
+                            sharepoint_host, allowed_site
+                        ):
+                            yield site
+                    else:
+                        yield await self._fetch_site(sharepoint_host, allowed_site)
 
+                except NotFound:
+                    self._logger.warning(
+                        f"Could not look up site '{allowed_site}' by relative path in parent site: {sharepoint_host}"
+                    )
+
+    async def _all_sites(self, sharepoint_host, allowed_root_sites):
+        select = ""
         async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?search=*&$select={select}"
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
         ):
             for site in page:
                 # Filter out site collections that are not needed
-                if (
-                    WILDCARD not in allowed_root_sites
-                    and site["name"] not in allowed_root_sites
-                ):
+                if [WILDCARD] != allowed_root_sites and site[
+                    "name"
+                ] not in allowed_root_sites:
                     continue
+                yield site
 
+    async def _fetch_site_and_subsites_by_path(self, sharepoint_host, allowed_site):
+        self._logger.debug(
+            f"Requesting site '{allowed_site}' and subsites by relative path in host: {sharepoint_host}"
+        )
+        site_with_subsites = await self._graph_api_client.fetch(
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}?expand=sites"
+        )
+        async for site in self._recurse_sites(site_with_subsites):
+            yield site
+
+    async def _fetch_site(self, sharepoint_host, allowed_site):
+        self._logger.debug(
+            f"Requesting site '{allowed_site}' by relative path in parent site: {sharepoint_host}"
+        )
+        return await self._graph_api_client.fetch(
+            f"{GRAPH_API_URL}/sites/{sharepoint_host}:/sites/{allowed_site}"
+        )
+
+    async def _scroll_subsites_by_parent_id(self, parent_site_id):
+        self._logger.debug(f"Scrolling subsites of {parent_site_id}")
+        async for page in self._graph_api_client.scroll(
+            f"{GRAPH_API_URL}/sites/{parent_site_id}/sites?expand=sites"
+        ):
+            for site in page:
+                async for subsite in self._recurse_sites(site):  # pyright: ignore
+                    yield subsite
+
+    async def _recurse_sites(self, site_with_subsites):
+        subsites = site_with_subsites.pop("sites", [])
+        site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
+        yield site_with_subsites
+        if subsites:
+            async for site in self._scroll_subsites_by_parent_id(
+                site_with_subsites["id"]
+            ):
                 yield site
 
     async def site_drives(self, site_id):
@@ -629,16 +797,6 @@ class SharepointOnlineClient:
 
         async for page in self.drive_items_delta(url):
             yield page
-
-    async def drive_item_permissions(self, drive_id, item_id):
-        try:
-            async for page in self._graph_api_client.scroll(
-                f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/permissions"
-            ):
-                for permission in page:
-                    yield permission
-        except NotFound:
-            return
 
     async def drive_items_permissions_batch(self, drive_id, drive_item_ids):
         requests = []
@@ -711,6 +869,11 @@ class SharepointOnlineClient:
             return response.get("value", False)
         except NotFound:
             return False
+        except BadRequestError:
+            self._logger.warning(
+                f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
+            )
+            return False
 
     async def site_list_item_role_assignments(
         self, site_web_url, site_list_name, list_item_id
@@ -764,27 +927,25 @@ class SharepointOnlineClient:
         self._validate_sharepoint_rest_url(site_web_url)
 
         # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
-        select = ""  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
+        select = "*,EncodedAbsUrl"  # ^ is what we want, but site pages don't have consistent schemas, and this causes errors. Better to fetch all and slice
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site%20Pages')/items?$select={select}"
 
         try:
             async for page in self._rest_api_client.scroll(url):
                 for site_page in page:
                     yield {
-                        k: site_page.get(k, None)
-                        for k in (
-                            "Id",
-                            "Title",
-                            "LayoutWebpartsContent",
-                            "CanvasContent1",
-                            "WikiField",
-                            "Description",
-                            "Created",
-                            "AuthorId",
-                            "Modified",
-                            "EditorId",
-                            "odata.id",
-                        )
+                        "Id": site_page.get("Id"),
+                        "Title": site_page.get("Title"),
+                        "webUrl": site_page.get("EncodedAbsUrl"),
+                        "LayoutWebpartsContent": site_page.get("LayoutWebpartsContent"),
+                        "CanvasContent1": site_page.get("CanvasContent1"),
+                        "WikiField": site_page.get("WikiField"),
+                        "Description": site_page.get("Description"),
+                        "Created": site_page.get("Created"),
+                        "AuthorId": site_page.get("AuthorId"),
+                        "Modified": site_page.get("Modified"),
+                        "EditorId": site_page.get("EditorId"),
+                        "odata.id": site_page.get("odata.id"),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
@@ -925,35 +1086,20 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _prefix_identity(prefix, identity):
-    if prefix is None or identity is None:
-        return None
-
-    return f"{prefix}:{identity}"
-
-
 def _prefix_group(group):
-    return _prefix_identity("group", group)
-
-
-def _prefix_site_group(site_group):
-    return _prefix_identity("site_group", site_group)
+    return prefix_identity("group", group)
 
 
 def _prefix_user(user):
-    return _prefix_identity("user", user)
-
-
-def _prefix_site_user_id(site_user_id):
-    return _prefix_identity("site_user_id", site_user_id)
+    return prefix_identity("user", user)
 
 
 def _prefix_user_id(user_id):
-    return _prefix_identity("user_id", user_id)
+    return prefix_identity("user_id", user_id)
 
 
 def _prefix_email(email):
-    return _prefix_identity("email", email)
+    return prefix_identity("email", email)
 
 
 def _postfix_group(group):
@@ -961,51 +1107,6 @@ def _postfix_group(group):
         return None
 
     return f"{group} Members"
-
-
-def is_domain_group(user_fields):
-    return user_fields.get(
-        "ContentType"
-    ) == "DomainGroup" and "federateddirectoryclaimprovider" in user_fields.get(
-        "Name", ""
-    )
-
-
-def is_person(user_fields):
-    return user_fields["ContentType"] == "Person"
-
-
-def _domain_group_id(user_info_name):
-    """Extracts the domain group id.
-
-    The domain group id can have the following formats:
-    - abc|def|domain-group-id
-    - abc|def|some-prefix/domain-group-id
-
-    Returns:
-        str: domain group id
-
-    """
-    if user_info_name is None or len(user_info_name) == 0:
-        return None
-
-    name_parts = user_info_name.split("|")
-
-    if len(name_parts) <= 2:
-        return None
-
-    domain_group_id = name_parts[2]
-
-    if "/" in domain_group_id:
-        domain_group_id = domain_group_id.split("/")[1]
-
-    if "_" in domain_group_id:
-        domain_group_id = domain_group_id.split("_")[0]
-
-    if len(domain_group_id) == 0:
-        return None
-
-    return domain_group_id
 
 
 async def _emails_and_usernames_of_domain_group(
@@ -1029,6 +1130,7 @@ def _get_login_name(raw_login_name):
     if raw_login_name and (
         raw_login_name.startswith("i:0#.f|membership|")
         or raw_login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+        or raw_login_name.startswith("c:0t.c|tenant|")
     ):
         parts = raw_login_name.split("|")
 
@@ -1051,13 +1153,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
 
         self._client = None
-
-        if self.configuration["use_text_extraction_service"]:
-            self.extraction_service = ExtractionService()
-            self.download_dir = self.extraction_service.get_volume_dir()
-        else:
-            self.extraction_service = None
-            self.download_dir = None
+        self.site_group_cache = {}
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -1083,47 +1179,60 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "label": "Tenant ID",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "tenant_name": {  # TODO: when Tenant API is going out of Beta, we can remove this field
                 "label": "Tenant name",
                 "order": 2,
                 "type": "str",
-                "value": "",
             },
             "client_id": {
                 "label": "Client ID",
                 "order": 3,
                 "type": "str",
-                "value": "",
             },
             "secret_value": {
                 "label": "Secret value",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of sites",
-                "tooltip": "A comma-separated list of sites to ingest data from. Use * to include all available sites.",
+                "tooltip": "A comma-separated list of sites to ingest data from. If enumerating all sites, use * to include all available sites, or specify a list of site names. Otherwise, specify a list of site paths.",
                 "order": 5,
                 "type": "list",
-                "value": "",
+            },
+            "enumerate_all_sites": {
+                "display": "toggle",
+                "label": "Enumerate all sites?",
+                "tooltip": "If enabled, sites will be fetched in bulk, then filtered down to the configured list of sites. This is efficient when syncing many sites. If disabled, each configured site will be fetched with an individual request. This is efficient when syncing fewer sites.",
+                "order": 6,
+                "type": "bool",
+                "value": True,
+            },
+            "fetch_subsites": {
+                "display": "toggle",
+                "label": "Fetch sub-sites of configured sites?",
+                "tooltip": "Whether subsites of the configured site(s) should be automatically fetched.",
+                "order": 7,
+                "type": "bool",
+                "value": True,
+                "depends_on": [{"field": "enumerate_all_sites", "value": False}],
             },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 6,
+                "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
+                "ui_restrictions": ["advanced"],
                 "value": False,
             },
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 7,
+                "order": 9,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1132,7 +1241,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
-                "order": 8,
+                "order": 10,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
                 "value": True,
@@ -1141,7 +1250,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 9,
+                "order": 11,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1150,7 +1259,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list permissions",
-                "order": 10,
+                "order": 12,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1159,7 +1268,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
-                "order": 11,
+                "order": 13,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1167,7 +1276,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         }
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
 
         # Check that we can log in into Graph API
         await self.client.graph_api_token.get()
@@ -1190,24 +1299,35 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
-
-        remote_sites = []
-
-        async for site_collection in self.client.site_collections():
-            async for site in self.client.sites(
-                site_collection["siteCollection"]["hostname"], [WILDCARD]
-            ):
-                remote_sites.append(site["name"])
-
         if WILDCARD in configured_root_sites:
             return
 
-        missing = [x for x in configured_root_sites if x not in remote_sites]
+        retrieved_sites = []
+
+        async for site_collection in self.client.site_collections():
+            async for site in self.client.sites(
+                site_collection["siteCollection"]["hostname"],
+                configured_root_sites,
+                self.configuration["enumerate_all_sites"],
+            ):
+                if self.configuration["enumerate_all_sites"]:
+                    retrieved_sites.append(site["name"])
+                else:
+                    retrieved_sites.append(self._site_path_from_web_url(site["webUrl"]))
+
+        missing = [x for x in configured_root_sites if x not in retrieved_sites]
 
         if missing:
             raise Exception(
-                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(remote_sites[:5])}]."
+                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
             )
+
+    def _site_path_from_web_url(self, web_url):
+        url_parts = web_url.split("/sites/")
+        site_path_parts = url_parts[1:]
+        return "/sites/".join(
+            site_path_parts
+        )  # just in case there was a /sites/ in the site path
 
     def _decorate_with_access_control(self, document, access_control):
         if self._dls_enabled():
@@ -1223,15 +1343,21 @@ class SharepointOnlineDataSource(BaseDataSource):
         For the given site all groups and its corresponding members and owners (username and/or email) are fetched.
 
         Returns:
-            list: access control list for a given site
-            [
-                "user:spo-user",
-                "email:some.user@spo.com",
-                "group:1234-abcd-id"
-            ]
+            tuple:
+              - list: access control list for a given site
+                [
+                    "user:spo-admin",
+                    "user:spo-user",
+                    "email:some.user@spo.com",
+                    "group:1234-abcd-id"
+                ]
+            - list: subset of the former, applying only to site-admins for this site
+                [
+                  "user":spo-admin"
+                ]
         """
 
-        self._logger.debug(f"Looking at site: {site['id']}")
+        self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
         if not self._dls_enabled():
             return [], []
 
@@ -1241,34 +1367,25 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = set()
         site_admins_access_control = set()
 
-        async for user_information in self.client.user_information_list(site["id"]):
-            user = user_information["fields"]
+        async for role_assignment in self.client.site_role_assignments(site["webUrl"]):
+            member = role_assignment["Member"]
+            member_access_control = set()
+            member_access_control.update(
+                await self._get_access_control_from_role_assignment(role_assignment)
+            )
 
-            user_access_control = set()
+            if _is_site_admin(member):
+                # These are likely in the "Owners" group for the site
+                site_admins_access_control |= member_access_control
 
-            if is_domain_group(user):
-                self._logger.debug(f"It is a domain group with name: {user['Name']}")
-                domain_group_id = _domain_group_id(user["Name"])
-                self._logger.debug(f"Detected domain groupId as: {domain_group_id}")
+            access_control |= member_access_control
 
-                if domain_group_id:
-                    user_access_control.add(_prefix_group(domain_group_id))
-
-            if is_person(user):
-                login_name = _get_login_name(user.get("Name"))
-
-                if login_name:
-                    user_access_control.add(_prefix_user(login_name))
-
-                email = user.get("EMail")
-
-                if email:
-                    user_access_control.add(_prefix_email(email))
-
-            if _is_site_admin(user):
-                site_admins_access_control |= user_access_control
-
-            access_control |= user_access_control
+        # This fetches the "Site Collection Administrators", which is distinct from the "Owners" group of the site
+        # however, both should have access to everything in the site, regardless of unique role assignments
+        async for member in self.client.site_admins(site["webUrl"]):
+            site_admins_access_control.update(
+                await self._access_control_for_member(member)
+            )
 
         return list(access_control), list(site_admins_access_control)
 
@@ -1282,41 +1399,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     def access_control_query(self, access_control):
-        # filter out 'None' values
-        filtered_access_control = list(
-            filter(
-                lambda access_control_entity: access_control_entity is not None,
-                access_control,
-            )
-        )
-
-        return {
-            "query": {
-                "template": {"params": {"access_control": filtered_access_control}},
-                "source": {
-                    "bool": {
-                        "filter": {
-                            "bool": {
-                                "should": [
-                                    {
-                                        "bool": {
-                                            "must_not": {
-                                                "exists": {"field": ACCESS_CONTROL}
-                                            }
-                                        }
-                                    },
-                                    {
-                                        "terms": {
-                                            f"{ACCESS_CONTROL}.enum": filtered_access_control
-                                        }
-                                    },
-                                ]
-                            }
-                        }
-                    }
-                },
-            }
-        }
+        return es_access_control_query(access_control)
 
     async def _user_access_control_doc(self, user):
         """Constructs a user access control document, which will be synced to the corresponding access control index.
@@ -1360,9 +1443,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_groups = set()
 
         expanded_member_groups = user.get("transitiveMemberOf", [])
-        if (
-            len(expanded_member_groups) < 100
-        ):  # $expand param has a max of 100: see: https://learn.microsoft.com/en-us/graph/known-issues#query-parameters
+        if len(expanded_member_groups) < SPO_MAX_EXPAND_SIZE:
             for group in expanded_member_groups:
                 prefixed_groups.add(_prefix_group(group.get("id", None)))
         else:
@@ -1379,7 +1460,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         prefixed_user_id = _prefix_user_id(user.get("id"))
         id_ = email if email else username
 
-        access_control = list({prefixed_mail, prefixed_username}.union(prefixed_groups))
+        access_control = list(
+            {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
+        )
 
         if "createdDateTime" in user:
             created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
@@ -1445,7 +1528,41 @@ class SharepointOnlineDataSource(BaseDataSource):
             if user_doc:
                 yield user_doc
 
-    async def _drive_items_batch_with_permissions(self, drive_id, drive_items_batch):
+    async def site_group_users(self, site_web_url, site_group_id):
+        """
+        Fetches the users of a given site group. Checks in-memory cache before making an API call.
+
+        Parameters:
+        - site_web_url (str): The URL of the site collection.
+        - site_group_id (int): The ID of the site group.
+
+        Returns:
+        - list: List of users for the given site group.
+        """
+
+        cache_key = (site_web_url, site_group_id)
+
+        # Check cache first
+        if cache_key in self.site_group_cache:
+            self._logger.debug(
+                f"Cache hit for site_web_url: {site_web_url}, site_group_id: {site_group_id}. Returning cached sitegroup members."
+            )
+            return self.site_group_cache[cache_key]
+
+        # If not in cache, fetch the users
+        users = []
+        async for site_group_user in self.client.site_groups_users(
+            site_web_url, site_group_id
+        ):
+            users.append(site_group_user)
+
+        # Cache the result
+        self.site_group_cache[cache_key] = users
+        return users
+
+    async def _drive_items_batch_with_permissions(
+        self, drive_id, drive_items_batch, site_web_url
+    ):
         """Decorate a batch of drive items with their permissions using one API request.
 
         Args:
@@ -1475,7 +1592,9 @@ class SharepointOnlineDataSource(BaseDataSource):
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
-                yield self._with_drive_item_permissions(drive_item, permissions)
+                yield await self._with_drive_item_permissions(
+                    drive_item, permissions, site_web_url
+                )
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
@@ -1512,7 +1631,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
                             async for drive_item in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch
+                                site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -1546,9 +1665,8 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield site_list, None
 
                     async for list_item, download_func in self.site_list_items(
-                        site_id=site["id"],
+                        site=site,
                         site_list_id=site_list["id"],
-                        site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                         site_access_control=site_access_control,
                     ):
@@ -1568,6 +1686,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
         self._sync_cursor = sync_cursor
+        timestamp = iso_zulu()
 
         if not self._sync_cursor:
             raise SyncCursorEmpty(
@@ -1586,6 +1705,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             async for site in self.sites(
                 site_collection["siteCollection"]["hostname"],
                 self.configuration["site_collections"],
+                check_timestamp=True,
             ):
                 (
                     site_access_control,
@@ -1596,7 +1716,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site, site_access_control
                 ), None, OP_INDEX
 
-                async for site_drive in self.site_drives(site):
+                async for site_drive in self.site_drives(site, check_timestamp=True):
                     yield self._decorate_with_access_control(
                         site_drive, site_access_control
                     ), None, OP_INDEX
@@ -1610,7 +1730,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
                             async for drive_item in self._drive_items_batch_with_permissions(
-                                site_drive["id"], drive_items_batch
+                                site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
                                 drive_item["object_type"] = "drive_item"
@@ -1636,7 +1756,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         )
 
                 # Sync site list and site list items
-                async for site_list in self.site_lists(site, site_access_control):
+                async for site_list in self.site_lists(
+                    site, site_access_control, check_timestamp=True
+                ):
                     # Always include site admins in site list access controls
                     site_list = self._decorate_with_access_control(
                         site_list, site_admin_access_control
@@ -1644,11 +1766,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                     yield site_list, None, OP_INDEX
 
                     async for list_item, download_func in self.site_list_items(
-                        site_id=site["id"],
+                        site=site,
                         site_list_id=site_list["id"],
-                        site_web_url=site["webUrl"],
                         site_list_name=site_list["name"],
                         site_access_control=site_access_control,
+                        check_timestamp=True,
                     ):
                         # Always include site admins in list item access controls
                         list_item = self._decorate_with_access_control(
@@ -1657,12 +1779,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         yield list_item, download_func, OP_INDEX
 
                 # Sync site pages
-                async for site_page in self.site_pages(site, site_access_control):
+                async for site_page in self.site_pages(
+                    site, site_access_control, check_timestamp=True
+                ):
                     # Always include site admins in site page access controls
                     site_page = self._decorate_with_access_control(
                         site_page, site_admin_access_control
                     )
                     yield site_page, None, OP_INDEX
+
+        self.update_sync_timestamp_cursor(timestamp)
 
     async def site_collections(self):
         async for site_collection in self.client.site_collections():
@@ -1671,24 +1797,36 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_collection
 
-    async def sites(self, hostname, collections):
+    async def sites(self, hostname, collections, check_timestamp=False):
         async for site in self.client.sites(
             hostname,
             collections,
+            enumerate_all_sites=self.configuration["enumerate_all_sites"],
+            fetch_subsites=self.configuration["fetch_subsites"],
         ):  # TODO: simplify and eliminate root call
-            site["_id"] = site["id"]
-            site["object_type"] = "site"
+            if not check_timestamp or (
+                check_timestamp
+                and site["lastModifiedDateTime"] >= self.last_sync_time()
+            ):
+                site["_id"] = site["id"]
+                site["object_type"] = "site"
 
-            yield site
+                yield site
 
-    async def site_drives(self, site):
+    async def site_drives(self, site, check_timestamp=False):
         async for site_drive in self.client.site_drives(site["id"]):
-            site_drive["_id"] = site_drive["id"]
-            site_drive["object_type"] = "site_drive"
+            if not check_timestamp or (
+                check_timestamp
+                and site_drive["lastModifiedDateTime"] >= self.last_sync_time()
+            ):
+                site_drive["_id"] = site_drive["id"]
+                site_drive["object_type"] = "site_drive"
 
-            yield site_drive
+                yield site_drive
 
-    def _with_drive_item_permissions(self, drive_item, drive_item_permissions):
+    async def _with_drive_item_permissions(
+        self, drive_item, drive_item_permissions, site_web_url
+    ):
         """Decorates a drive item with its permissions.
 
         Args:
@@ -1733,28 +1871,44 @@ class SharepointOnlineDataSource(BaseDataSource):
         if not self.configuration["fetch_drive_item_permissions"]:
             return drive_item
 
-        def _get_id(permissions, identity):
-            if identity not in permissions:
-                return None
+        def _get_id(permissions, label):
+            return permissions.get(label, {}).get("id")
 
-            return permissions.get(identity).get("id")
+        def _get_email(permissions, label):
+            return permissions.get(label, {}).get("email")
+
+        def _get_login_name(permissions, label):
+            identity = permissions.get(label, {})
+            login_name = identity.get("loginName", "")
+            if login_name.startswith("i:0#.f|membership|"):
+                return login_name.split("|")[-1]
 
         drive_item_id = drive_item.get("id")
         access_control = []
 
+        identities = []
         for permission in drive_item_permissions:
             granted_to_v2 = permission.get("grantedToV2")
+            if granted_to_v2:
+                identities.append(granted_to_v2)
+            granted_to_identity_v2 = permission.get("grantedToIdentitiesV2", [])
+            identities.extend(granted_to_identity_v2)
 
-            if not granted_to_v2:
-                self._logger.debug(
-                    f"'grantedToV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
-                )
-                continue
+        if not identities:
+            self._logger.debug(
+                f"'grantedToV2' and 'grantedToIdentitiesV2' missing for drive item (id: '{drive_item_id}'). Skipping permissions..."
+            )
+            self._logger.warning(
+                f"Drive item permissions were: {drive_item_permissions}"
+            )
+            return drive_item
 
-            user_id = _get_id(granted_to_v2, "user")
-            group_id = _get_id(granted_to_v2, "group")
-            site_group_id = _get_id(granted_to_v2, "siteGroup")
-            site_user_id = _get_id(granted_to_v2, "siteUser")
+        for identity in identities:
+            user_id = _get_id(identity, "user")
+            group_id = _get_id(identity, "group")
+            site_group_id = _get_id(identity, "siteGroup")
+            site_user_email = _get_email(identity, "siteUser")
+            site_user_username = _get_login_name(identity, "siteUser")
 
             if user_id:
                 access_control.append(_prefix_user_id(user_id))
@@ -1762,11 +1916,18 @@ class SharepointOnlineDataSource(BaseDataSource):
             if group_id:
                 access_control.append(_prefix_group(group_id))
 
-            if site_group_id:
-                access_control.append(_prefix_site_group(site_group_id))
+            if site_user_email:
+                access_control.append(_prefix_email(site_user_email))
 
-            if site_user_id:
-                access_control.append(_prefix_site_user_id(site_user_id))
+            if site_user_username:
+                access_control.append(_prefix_user(site_user_username))
+
+            if site_group_id:
+                users = await self.site_group_users(site_web_url, site_group_id)
+                for site_group_user in users:  # note, 'users' might contain groups.
+                    access_control.extend(
+                        await self._access_control_for_member(site_group_user)
+                    )
 
         return self._decorate_with_access_control(drive_item, access_control)
 
@@ -1780,125 +1941,161 @@ class SharepointOnlineDataSource(BaseDataSource):
                 yield drive_item, self.download_function(drive_item, max_drive_item_age)
 
     async def site_list_items(
-        self, site_id, site_list_id, site_web_url, site_list_name, site_access_control
+        self,
+        site,
+        site_list_id,
+        site_list_name,
+        site_access_control,
+        check_timestamp=False,
     ):
+        site_id = site.get("id")
+        site_web_url = site.get("webUrl")
+        site_collection = site.get("siteCollection", {}).get("hostname")
         async for list_item in self.client.site_list_items(site_id, site_list_id):
-            # List Item IDs are unique within list.
-            # Therefore we mix in site_list id to it to make sure they are
-            # globally unique.
-            # Also we need to remember original ID because when a document
-            # is yielded, its "id" field is overwritten with content of "_id" field
-            list_item_natural_id = list_item["id"]
-            list_item["_id"] = f"{site_list_id}-{list_item['id']}"
-            list_item["object_type"] = "list_item"
+            if not check_timestamp or (
+                check_timestamp
+                and list_item["lastModifiedDateTime"] >= self.last_sync_time()
+            ):
+                # List Item IDs are unique within list.
+                # Therefore we mix in site_list id to it to make sure they are
+                # globally unique.
+                # Also we need to remember original ID because when a document
+                # is yielded, its "id" field is overwritten with content of "_id" field
+                list_item_natural_id = list_item["id"]
+                list_item["_id"] = f"{site_list_id}-{list_item['id']}"
+                list_item["object_type"] = "list_item"
 
-            content_type = list_item["contentType"]["name"]
+                content_type = list_item["contentType"]["name"]
 
-            if content_type in [
-                "Web Template Extensions",
-                "Client Side Component Manifests",
-            ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
-                continue
+                if content_type in [
+                    "Web Template Extensions",
+                    "Client Side Component Manifests",
+                ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
+                    continue
 
-            has_unique_role_assignments = False
+                has_unique_role_assignments = False
 
-            if self.configuration["fetch_unique_list_item_permissions"]:
-                has_unique_role_assignments = (
-                    await self.client.site_list_item_has_unique_role_assignments(
-                        site_web_url, site_list_name, list_item_natural_id
-                    )
-                )
-
-                if has_unique_role_assignments:
-                    self._logger.debug(
-                        f"Fetching unique permissions for list item with id '{list_item_natural_id}'. Ignoring parent site permissions."
-                    )
-
-                    list_item_access_control = []
-
-                    async for role_assignment in self.client.site_list_item_role_assignments(
-                        site_web_url, site_list_name, list_item_natural_id
-                    ):
-                        list_item_access_control.extend(
-                            await self._get_access_control_from_role_assignment(
-                                role_assignment
-                            )
-                        )
-
-                    list_item = self._decorate_with_access_control(
-                        list_item, list_item_access_control
-                    )
-
-            if not has_unique_role_assignments:
-                list_item = self._decorate_with_access_control(
-                    list_item, site_access_control
-                )
-
-            if "Attachments" in list_item["fields"]:
-                async for list_item_attachment in self.client.site_list_item_attachments(
-                    site_web_url, site_list_name, list_item_natural_id
+                if (
+                    self._dls_enabled()
+                    and self.configuration["fetch_unique_list_item_permissions"]
                 ):
-                    list_item_attachment["_id"] = list_item_attachment["odata.id"]
-                    list_item_attachment["object_type"] = "list_item_attachment"
-                    list_item_attachment["_timestamp"] = list_item[
-                        "lastModifiedDateTime"
-                    ]
-                    list_item_attachment[
-                        "_original_filename"
-                    ] = list_item_attachment.get("FileName", "")
-                    list_item_attachment[ACCESS_CONTROL] = list_item.get(
-                        ACCESS_CONTROL, []
+                    has_unique_role_assignments = (
+                        await self.client.site_list_item_has_unique_role_assignments(
+                            site_web_url, site_list_name, list_item_natural_id
+                        )
                     )
 
-                    attachment_download_func = partial(
-                        self.get_attachment_content, list_item_attachment
-                    )
-                    yield list_item_attachment, attachment_download_func
-
-            yield list_item, None
-
-    async def site_lists(self, site, site_access_control):
-        async for site_list in self.client.site_lists(site["id"]):
-            site_list["_id"] = site_list["id"]
-            site_list["object_type"] = "site_list"
-            site_url = site["webUrl"]
-            site_list_name = site_list["name"]
-
-            has_unique_role_assignments = False
-
-            if self.configuration["fetch_unique_list_permissions"]:
-                has_unique_role_assignments = (
-                    await self.client.site_list_has_unique_role_assignments(
-                        site_url, site_list_name
-                    )
-                )
-
-                if has_unique_role_assignments:
-                    self._logger.debug(
-                        f"Fetching unique list permissions for list with id '{site_list['_id']}'. Ignoring parent site permissions."
-                    )
-
-                    site_list_access_control = []
-
-                    async for role_assignment in self.client.site_list_role_assignments(
-                        site_url, site_list_name
-                    ):
-                        site_list_access_control.extend(
-                            await self._get_access_control_from_role_assignment(
-                                role_assignment
-                            )
+                    if has_unique_role_assignments:
+                        self._logger.debug(
+                            f"Fetching unique permissions for list item with id '{list_item_natural_id}'. Ignoring parent site permissions."
                         )
 
-                    site_list = self._decorate_with_access_control(
-                        site_list, site_list_access_control
+                        list_item_access_control = []
+
+                        async for role_assignment in self.client.site_list_item_role_assignments(
+                            site_web_url, site_list_name, list_item_natural_id
+                        ):
+                            list_item_access_control.extend(
+                                await self._get_access_control_from_role_assignment(
+                                    role_assignment
+                                )
+                            )
+
+                        list_item = self._decorate_with_access_control(
+                            list_item, list_item_access_control
+                        )
+
+                if not has_unique_role_assignments:
+                    list_item = self._decorate_with_access_control(
+                        list_item, site_access_control
                     )
 
-            if not has_unique_role_assignments:
-                site_list = self._decorate_with_access_control(
-                    site_list, site_access_control
-                )
+                if "Attachments" in list_item["fields"]:
+                    async for list_item_attachment in self.client.site_list_item_attachments(
+                        site_web_url, site_list_name, list_item_natural_id
+                    ):
+                        list_item_attachment["_id"] = list_item_attachment["odata.id"]
+                        list_item_attachment["object_type"] = "list_item_attachment"
+                        list_item_attachment["_timestamp"] = list_item[
+                            "lastModifiedDateTime"
+                        ]
+                        list_item_attachment[
+                            "_original_filename"
+                        ] = list_item_attachment.get("FileName", "")
+                        if (
+                            "ServerRelativePath" in list_item_attachment
+                            and "DecodedUrl"
+                            in list_item_attachment.get("ServerRelativePath", {})
+                        ):
+                            list_item_attachment[
+                                "webUrl"
+                            ] = f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                        else:
+                            self._logger.debug(
+                                f"Unable to populate webUrl for list item attachment {list_item_attachment['_id']}"
+                            )
 
-            yield site_list
+                        if self._dls_enabled():
+                            list_item_attachment[ACCESS_CONTROL] = list_item.get(
+                                ACCESS_CONTROL, []
+                            )
+
+                        attachment_download_func = partial(
+                            self.get_attachment_content, list_item_attachment
+                        )
+                        yield list_item_attachment, attachment_download_func
+
+                yield list_item, None
+
+    async def site_lists(self, site, site_access_control, check_timestamp=False):
+        async for site_list in self.client.site_lists(site["id"]):
+            if not check_timestamp or (
+                check_timestamp
+                and site_list["lastModifiedDateTime"] >= self.last_sync_time()
+            ):
+                site_list["_id"] = site_list["id"]
+                site_list["object_type"] = "site_list"
+                site_url = site["webUrl"]
+                site_list_name = site_list["name"]
+
+                has_unique_role_assignments = False
+
+                if (
+                    self._dls_enabled()
+                    and self.configuration["fetch_unique_list_permissions"]
+                ):
+                    has_unique_role_assignments = (
+                        await self.client.site_list_has_unique_role_assignments(
+                            site_url, site_list_name
+                        )
+                    )
+
+                    if has_unique_role_assignments:
+                        self._logger.debug(
+                            f"Fetching unique list permissions for list with id '{site_list['_id']}'. Ignoring parent site permissions."
+                        )
+
+                        site_list_access_control = []
+
+                        async for role_assignment in self.client.site_list_role_assignments(
+                            site_url, site_list_name
+                        ):
+                            site_list_access_control.extend(
+                                await self._get_access_control_from_role_assignment(
+                                    role_assignment
+                                )
+                            )
+
+                        site_list = self._decorate_with_access_control(
+                            site_list, site_list_access_control
+                        )
+
+                if not has_unique_role_assignments:
+                    site_list = self._decorate_with_access_control(
+                        site_list, site_access_control
+                    )
+
+                yield site_list
 
     async def _get_access_control_from_role_assignment(self, role_assignment):
         """Extracts access control from a role assignment.
@@ -1913,22 +2110,39 @@ class SharepointOnlineDataSource(BaseDataSource):
         If any role is assigned to a user this means at least "read" access.
         """
 
-        def _access_control_for_user(user_):
-            user_access_control = []
+        def _has_limited_access(role_assignment):
+            bindings = role_assignment.get("RoleDefinitionBindings", [])
 
-            user_principal_name = user_.get("UserPrincipalName")
-            login_name = _get_login_name(user_.get("LoginName"))
+            # If there is no permission information, default to restrict access
+            if not bindings:
+                self._logger.debug(
+                    f"No RoleDefinitionBindings found for '{role_assignment.get('odata.id')}'"
+                )
+                return True
 
-            if user_principal_name:
-                user_access_control.append(_prefix_user(user_principal_name))
+            # if any binding grants view access, this role assignment's member has view access
+            for binding in bindings:
+                # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
+                # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
+                base_permission_low = int(
+                    binding.get("BasePermissions", {}).get("Low", "0")
+                )
+                role_type_kind = binding.get("RoleTypeKind", 0)
+                if (
+                    (base_permission_low & VIEW_ITEM_MASK)
+                    or (base_permission_low & VIEW_PAGE_MASK)
+                    or (role_type_kind in VIEW_ROLE_TYPES)
+                ):
+                    return False
 
-            if login_name:
-                user_access_control.append(_prefix_user(login_name))
+            return (
+                True  # no evidence of view access was found, so assuming limited access
+            )
 
-            return user_access_control
+        if _has_limited_access(role_assignment):
+            return []
 
         access_control = []
-
         identity_type = role_assignment.get("Member", {}).get("odata.type", "")
         is_group = identity_type == "SP.Group"
         is_user = identity_type == "SP.User"
@@ -1937,24 +2151,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             users = role_assignment.get("Member", {}).get("Users", [])
 
             for user in users:
-                access_control.extend(_access_control_for_user(user))
+                access_control.extend(await self._access_control_for_member(user))
         elif is_user:
-            user = role_assignment.get("Member", {})
-            login_name = user.get("LoginName")
-
-            # in this context the 'odata.type' being 'SP.User' and the 'LoginName' looking like a group indicates a dynamic group
-            is_dynamic_group = (
-                login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
-                if login_name
-                else False
-            )
-
-            if is_dynamic_group:
-                self._logger.debug(f"Detected dynamic group '{user.get('Title')}'.")
-                dynamic_group_id = _get_login_name(login_name)
-                access_control.append(_prefix_group(dynamic_group_id))
-            else:
-                access_control = _access_control_for_user(user)
+            member = role_assignment.get("Member", {})
+            access_control.extend(await self._access_control_for_member(member))
         else:
             self._logger.debug(
                 f"Skipping unique page permissions for identity type '{identity_type}'."
@@ -1962,65 +2162,78 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, site, site_access_control):
+    async def site_pages(self, site, site_access_control, check_timestamp=False):
         site_id = site["id"]
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
-            # site page object has multiple ids:
-            # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
-            # - GUID - not globally unique, though it's a real guid
-            # - odata.id - not even sure what this id is
-            # Therefore, we generate id combining unique site id with site page id that is unique within this site
-            # Careful with format - changing other ids can overlap with this one if they follow the format of:
-            # {site_id}-{some_name_or_string_id}-{autoincremented_id}
-            site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
-            site_page["object_type"] = "site_page"
+            if not check_timestamp or (
+                check_timestamp and site_page["Modified"] >= self.last_sync_time()
+            ):
+                # site page object has multiple ids:
+                # - Id - not globally unique, just an increment, e.g. 1, 2, 3, 4
+                # - GUID - not globally unique, though it's a real guid
+                # - odata.id - not even sure what this id is
+                # Therefore, we generate id combining unique site id with site page id that is unique within this site
+                # Careful with format - changing other ids can overlap with this one if they follow the format of:
+                # {site_id}-{some_name_or_string_id}-{autoincremented_id}
+                site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
+                site_page["object_type"] = "site_page"
 
-            has_unique_role_assignments = False
+                has_unique_role_assignments = False
 
-            # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
-            if self.configuration["fetch_unique_page_permissions"]:
-                has_unique_role_assignments = (
-                    await self.client.site_page_has_unique_role_assignments(
-                        url, site_page["Id"]
+                # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
+                if (
+                    self._dls_enabled()
+                    and self.configuration["fetch_unique_page_permissions"]
+                ):
+                    has_unique_role_assignments = (
+                        await self.client.site_page_has_unique_role_assignments(
+                            url, site_page["Id"]
+                        )
                     )
-                )
 
-                if has_unique_role_assignments:
-                    self._logger.debug(
-                        f"Fetching unique page permissions for page with id '{site_page['_id']}'. Ignoring parent site permissions."
-                    )
-
-                    page_access_control = []
-
-                    async for role_assignment in self.client.site_page_role_assignments(
-                        url, site_page["Id"]
-                    ):
-                        page_access_control.extend(
-                            await self._get_access_control_from_role_assignment(
-                                role_assignment
-                            )
+                    if has_unique_role_assignments:
+                        self._logger.debug(
+                            f"Fetching unique page permissions for page with id '{site_page['_id']}'. Ignoring parent site permissions."
                         )
 
+                        page_access_control = []
+
+                        async for role_assignment in self.client.site_page_role_assignments(
+                            url, site_page["Id"]
+                        ):
+                            page_access_control.extend(
+                                await self._get_access_control_from_role_assignment(
+                                    role_assignment
+                                )
+                            )
+
+                        site_page = self._decorate_with_access_control(
+                            site_page, page_access_control
+                        )
+
+                # set parent site access control
+                if not has_unique_role_assignments:
                     site_page = self._decorate_with_access_control(
-                        site_page, page_access_control
+                        site_page, site_access_control
                     )
 
-            # set parent site access control
-            if not has_unique_role_assignments:
-                site_page = self._decorate_with_access_control(
-                    site_page, site_access_control
-                )
+                for html_field in [
+                    "LayoutWebpartsContent",
+                    "CanvasContent1",
+                    "WikiField",
+                ]:
+                    if html_field in site_page:
+                        site_page[html_field] = html_to_text(site_page[html_field])
 
-            for html_field in ["LayoutWebpartsContent", "CanvasContent1", "WikiField"]:
-                if html_field in site_page:
-                    site_page[html_field] = html_to_text(site_page[html_field])
-
-            yield site_page
+                yield site_page
 
     def init_sync_cursor(self):
         if not self._sync_cursor:
-            self._sync_cursor = {CURSOR_SITE_DRIVE_KEY: {}}
+            self._sync_cursor = {
+                CURSOR_SITE_DRIVE_KEY: {},
+                CURSOR_SYNC_TIMESTAMP: iso_zulu(),
+            }
 
         return self._sync_cursor
 
@@ -2176,7 +2389,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         attachment = None
         body = None
         source_file_name = ""
-        file_extension = os.path.splitext(original_filename)[-1]
+        file_extension = os.path.splitext(original_filename)[-1].lower()
 
         try:
             async with NamedTemporaryFile(
@@ -2231,3 +2444,78 @@ class SharepointOnlineDataSource(BaseDataSource):
             return True
 
         return False
+
+    async def _access_control_for_member(self, member):
+        """
+        Helper function for converting a generic "member" into an access control list.
+        "Member" here is loose, and intended to work with multiple SPO API responses.
+        This function will asses if the referenced entity is actually a group,
+        a reference to a group's owners, or an individual, and will act accordingly.
+        :param member: The dict representing a generic SPO entity. May be a group or an individual
+        :return: the access control list (ACL) for this "member"
+        """
+        login_name = member.get("LoginName")
+
+        # 'LoginName' looking like a group indicates a group
+        is_group = (
+            login_name.startswith("c:0o.c|federateddirectoryclaimprovider|")
+            or login_name.startswith("c:0t.c|tenant|")
+            if login_name
+            else False
+        )
+
+        if is_group:
+            self._logger.debug(f"Detected group '{member.get('Title')}'.")
+            group_id = _get_login_name(login_name)
+            return await self._access_control_for_group_id(group_id)
+        else:
+            return self._access_control_for_user(member)
+
+    def _access_control_for_user(self, user):
+        user_access_control = []
+
+        user_principal_name = user.get(
+            "UserPrincipalName", user.get("userPrincipalName")
+        )
+        login_name = _get_login_name(user.get("LoginName", user.get("loginName")))
+        email = user.get("Email", user.get("mail"))
+        user_id = user.get(
+            "id"
+        )  # not captial "Id", Sharepoint REST uses this for non-unique IDs like `1`
+
+        if user_principal_name:
+            user_access_control.append(_prefix_user(user_principal_name))
+
+        if login_name:
+            user_access_control.append(_prefix_user(login_name))
+
+        if email:
+            user_access_control.append(_prefix_email(email))
+
+        if user_id:
+            user_access_control.append(_prefix_user_id(user_id))
+
+        return user_access_control
+
+    async def _access_control_for_group_id(self, group_id):
+        def is_group_owners_reference(potential_group_id):
+            """
+            Some group ids aren't actually group IDs, but are references to the _owners_ of a group.
+            These special ids are suffixed with a `_o`.
+            For example, `c:0o.c|federateddirectoryclaimprovider|97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o` is not actually
+            a reference to the group `97d055cf-5cdf-4e5e-b383-f01ed3a8844d`, but a reference to that group's owners.
+            In fact, `97d055cf-5cdf-4e5e-b383-f01ed3a8844d_o` is not a valid group ID, and will return a 400 if requested
+            in the groups API.
+            :param potential_group_id: the identifier that may or may not be a valid group id
+            :return: True if this is actually a reference to a group's owners.
+            """
+            return potential_group_id.endswith("_o")
+
+        if is_group_owners_reference(group_id):
+            real_group_id = group_id[0:-2]
+            access_control = []
+            async for owner in self.client.group_owners(real_group_id):
+                access_control.extend(self._access_control_for_user(owner))
+            return access_control
+        else:
+            return [_prefix_group(group_id)]

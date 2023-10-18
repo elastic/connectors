@@ -4,9 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest import mock
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from bson.decimal128 import Decimal128
@@ -16,6 +17,20 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+
+@asynccontextmanager
+async def create_mongo_source(database="db", collection="col"):
+    async with create_source(
+        MongoDataSource,
+        host="mongodb://127.0.0.1:27021",
+        user="foo",
+        password="bar",
+        direct_connection=True,
+        database=database,
+        collection=collection,
+    ) as source:
+        yield source
 
 
 @pytest.mark.asyncio
@@ -131,20 +146,11 @@ def build_resp():
 @mock.patch(
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
 async def test_get_docs(*args):
-    async with create_source(
-        MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
-        user="foo",
-        password="password",
-    ) as source:
+    async with create_mongo_source() as source:
         num = 0
         async for (doc, _) in source.get_docs():
             assert doc["id"] in ("one", "two")
@@ -157,35 +163,21 @@ async def test_get_docs(*args):
 @mock.patch(
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
-@pytest.mark.asyncio
 async def test_ping_when_called_then_does_not_raise(*args):
-    async with create_source(
-        MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
-        user="foo",
-        password="password",
-    ) as source:
+    admin_mock = Mock()
+    command_mock = AsyncMock()
+    admin_mock.command = command_mock
+    async with create_mongo_source() as source:
+        source.client.admin = admin_mock
         await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
-    async with create_source(
-        MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
-        user="foo",
-        password="password",
-    ) as source:
+    async with create_mongo_source() as source:
         collection_mock = Mock()
         collection_mock.find = AsyncIterator(items=[{"_id": 1}])
         source.collection = collection_mock
@@ -221,15 +213,7 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
-    async with create_source(
-        MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
-        user="foo",
-        password="password",
-    ) as source:
+    async with create_mongo_source() as source:
         collection_mock = Mock()
         collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
         source.collection = collection_mock
@@ -278,11 +262,7 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
         "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
         return_value=future_with_result(server_database_names),
     ):
-        async with create_source(
-            MongoDataSource,
-            host="mongodb://127.0.0.1:27021",
-            user="foo",
-            password="password",
+        async with create_mongo_source(
             database=configured_database_name,
             collection="something",
         ) as source:
@@ -309,11 +289,7 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
         "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
         return_value=future_with_result(server_collection_names),
     ):
-        async with create_source(
-            MongoDataSource,
-            host="mongodb://127.0.0.1:27021",
-            user="foo",
-            password="bar",
+        async with create_mongo_source(
             database=configured_database_name,
             collection=configured_collection_name,
         ) as source:
@@ -340,11 +316,7 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
         "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
         return_value=future_with_result(server_collection_names),
     ):
-        async with create_source(
-            MongoDataSource,
-            host="mongodb://127.0.0.1:27021",
-            user="foo",
-            password="bar",
+        async with create_mongo_source(
             database=configured_database_name,
             collection=configured_collection_name,
         ) as source:

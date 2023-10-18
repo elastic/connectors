@@ -6,7 +6,8 @@
 - [Features](#features)
 - [Syncing](#syncing)
   - [Sync Strategy](#sync-strategy)
-  - [How a sync works](#how-a-sync-works)
+  - [How a full sync works](#how-a-full-sync-works)
+  - [How an incremental sync works](#how-an-incremental-sync-works)
 - [Runtime dependencies](#runtime-dependencies)
 - [Implementing a new source](#implementing-a-new-source)
   - [Common patterns](#common-patterns)
@@ -25,7 +26,7 @@
 
 ## General Configuration
 
-The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors-python/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors-python/blob/8.6/docs/CONFIG.md).
+The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors/blob/8.6/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors/blob/8.6/docs/CONFIG.md).
 
 ## Installation
 
@@ -59,7 +60,7 @@ Users can execute `make run` command to run the elastic-ingest process in `debug
 
 The CLI runs the [ConnectorService](../connectors/runner.py) which is an asynchronous event loop. It calls Elasticsearch on a regular basis to see if some syncs need to happen.
 
-That information is provided by Kibana and follows the [connector protocol](https://github.com/elastic/connectors-python/blob/main/docs/CONNECTOR_PROTOCOL.md). That protocol defines a few structures in a couple of dedicated Elasticsearch indices, that are used by Kibana to drive sync jobs, and by the connectors to report on that work.
+That information is provided by Kibana and follows the [connector protocol](https://github.com/elastic/connectors/blob/main/docs/CONNECTOR_PROTOCOL.md). That protocol defines a few structures in a couple of dedicated Elasticsearch indices, that are used by Kibana to drive sync jobs, and by the connectors to report on that work.
 
 When a user asks for a sync of a specific source, the service instantiates a class that it uses to reach out the source and collect data.
 

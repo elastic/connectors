@@ -6,10 +6,11 @@
 """Tests the Network Drive source class methods.
 """
 import asyncio
+import csv
 import datetime
 from io import BytesIO
 from unittest import mock
-from unittest.mock import ANY
+from unittest.mock import ANY, MagicMock
 
 import pytest
 import smbclient
@@ -17,10 +18,10 @@ from smbprotocol.exceptions import LogonFailure, SMBOSError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import DataSourceConfiguration
 from connectors.sources.network_drive import (
     NASDataSource,
     NetworkDriveAdvancedRulesValidator,
+    SecurityInfo,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -28,6 +29,21 @@ from tests.sources.support import create_source
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536
 ADVANCED_SNIPPET = "advanced_snippet"
+
+
+def mock_permission(sid):
+    mock_response = {}
+
+    mock_response["ace_type"] = mock.Mock()
+    mock_response["ace_type"].value.return_value = 0
+
+    mock_response["mask"] = mock.Mock()
+    mock_response["mask"].value.return_value = 234
+
+    mock_response["sid"] = mock.Mock()
+    mock_response["sid"].return_value = sid
+
+    return mock_response
 
 
 def mock_file(name):
@@ -96,18 +112,6 @@ def side_effect_function(MAX_CHUNK_SIZE):
         return None
     READ_COUNT += 1
     return b"Mock...."
-
-
-def test_get_configuration():
-    """Tests the get configurations method of the Network Drive source class."""
-    # Setup
-    klass = NASDataSource
-
-    # Execute
-    config = DataSourceConfiguration(config=klass.get_default_configuration())
-
-    # Assert
-    assert config["server_ip"] == "127.0.0.1"
 
 
 @pytest.mark.asyncio
@@ -595,3 +599,342 @@ async def test_get_docs_with_advanced_rules(filtering):
                 "_timestamp": "1212-12-12T12:12:12",
             },
         ] == response_list
+
+
+def test_parse_output():
+    security_object = SecurityInfo("user", "password", "0.0.0.0")
+
+    raw_output = mock.Mock()
+    raw_output.std_out.decode.return_value = """
+            Header1  Value1
+            Header2  Value2
+            Key 1    Value1
+            Key 2    Value2
+            Key 3    Value3
+        """
+
+    formatted_result = security_object.parse_output(raw_output)
+
+    expected_result = {"Key 1": "Value1", "Key 2": "Value2", "Key 3": "Value3"}
+
+    assert formatted_result == expected_result
+
+
+def test_fetch_users():
+    security_object = SecurityInfo("user", "password", "0.0.0.0")
+
+    sample_data = mock.Mock()
+    sample_data.std_out.decode.return_value = """
+            Header  Value
+            ======  =====
+            User A  S-1-11-111
+            User B  S-2-22-222
+            User C  S-3-33-333
+        """
+    security_object.session.run_ps = mock.Mock(return_value=sample_data)
+
+    users = security_object.fetch_users()
+    expected_result = {
+        "User A": "S-1-11-111",
+        "User B": "S-2-22-222",
+        "User C": "S-3-33-333",
+    }
+
+    assert users == expected_result
+
+
+def test_fetch_groups():
+    security_object = SecurityInfo("user", "password", "0.0.0.0")
+
+    sample_data = mock.Mock()
+    sample_data.std_out.decode.return_value = """
+            Header  Value
+            ======  =====
+            Group 1  S-1-11-111-2222
+            Group 2  S-2-22-222-3333
+            Group 3  S-3-33-333-4444
+        """
+    security_object.session.run_ps = mock.Mock(return_value=sample_data)
+
+    users = security_object.fetch_groups()
+    expected_result = {
+        "Group 1": "S-1-11-111-2222",
+        "Group 2": "S-2-22-222-3333",
+        "Group 3": "S-3-33-333-4444",
+    }
+
+    assert users == expected_result
+
+
+def test_fetch_members():
+    security_object = SecurityInfo("user", "password", "0.0.0.0")
+
+    sample_data = mock.Mock()
+    sample_data.std_out.decode.return_value = """
+            Header  Value
+            ======  =====
+            User 1  S-1-11-111
+            User 2  S-2-22-222
+            User 3  S-3-33-333
+        """
+    security_object.session.run_ps = mock.Mock(return_value=sample_data)
+
+    users = security_object.fetch_members(group_name="abc")
+    expected_result = {
+        "User 1": "S-1-11-111",
+        "User 2": "S-2-22-222",
+        "User 3": "S-3-33-333",
+    }
+
+    assert users == expected_result
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_source(NASDataSource) as source:
+        source._features = mock.Mock()
+        source._features.document_level_security_enabled = MagicMock(return_value=False)
+
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+
+        assert len(acl) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_enabled():
+    expected_user_access_control = [
+        [
+            "sid:S-1-5-21-227823342-1368486282-703244805-500",
+            "sid:S-1-5-32-546",
+            "user:Administrator",
+        ],
+        [
+            "sid:S-1-5-21-227823342-1368486282-703244805-501",
+            "user:Guest",
+        ],
+    ]
+
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        mock_groups = {"Admins": "S-1-5-32-546"}
+        mock_group_members = {
+            "Administrator": "S-1-5-21-227823342-1368486282-703244805-500"
+        }
+        mock_users = {
+            "Administrator": "S-1-5-21-227823342-1368486282-703244805-500",
+            "Guest": "S-1-5-21-227823342-1368486282-703244805-501",
+        }
+
+        with mock.patch.object(SecurityInfo, "fetch_groups", return_value=mock_groups):
+            with mock.patch.object(
+                SecurityInfo, "fetch_members", return_value=mock_group_members
+            ):
+                with mock.patch.object(
+                    SecurityInfo, "fetch_users", return_value=mock_users
+                ):
+                    user_access_control = []
+                    async for user_doc in source.get_access_control():
+                        user_doc["query"]["template"]["params"]["access_control"].sort()
+                        user_access_control.append(
+                            user_doc["query"]["template"]["params"]["access_control"]
+                        )
+
+                assert expected_user_access_control == user_access_control
+
+
+@mock.patch(
+    "smbclient.walk",
+    return_value=iter(
+        [
+            ("\\1.2.3.4/a", ["a1.txt"], ["A"]),
+        ]
+    ),
+)
+@mock.patch.object(
+    NASDataSource,
+    "get_files",
+    side_effect=[
+        AsyncIterator(
+            [
+                {
+                    "_id": "1",
+                    "_timestamp": "2022-04-21T12:12:30",
+                    "path": "\\1.2.3.4/a/a1.txt",
+                    "title": "a1.txt",
+                    "created_at": "2022-01-11T12:12:30",
+                    "size": "30",
+                    "type": "file",
+                },
+                {
+                    "_id": "122",
+                    "_timestamp": "2022-05-21T12:12:30",
+                    "path": "\\1.2.3.4/a/A",
+                    "title": "A",
+                    "created_at": "2022-02-11T12:12:30",
+                    "size": "200",
+                    "type": "folder",
+                },
+            ]
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_without_dls_enabled(mock_get_files, mock_walk):
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        # Execute
+        documents, downloads = [], []
+        async for item, content in source.get_docs():
+            documents.append(item)
+
+            if content:
+                downloads.append(content)
+
+        assert len(documents) == 2
+
+        assert len(downloads) == 1
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "get_files",
+    side_effect=[
+        AsyncIterator(
+            [
+                {
+                    "_id": "1",
+                    "_timestamp": "2022-04-21T12:12:30",
+                    "path": "\\1.2.3.4/a/a1.txt",
+                    "title": "a1.txt",
+                    "created_at": "2022-01-11T12:12:30",
+                    "size": "30",
+                    "type": "file",
+                },
+                {
+                    "_id": "122",
+                    "_timestamp": "2022-05-21T12:12:30",
+                    "path": "\\1.2.3.4/a/A",
+                    "title": "A",
+                    "created_at": "2022-02-11T12:12:30",
+                    "size": "200",
+                    "type": "folder",
+                },
+            ]
+        ),
+    ],
+)
+@mock.patch(
+    "smbclient.walk",
+    return_value=iter(
+        [
+            ("\\1.2.3.4/a", ["a1.txt"], ["A"]),
+        ]
+    ),
+)
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    side_effect=[
+        [mock_permission("S-2-21-211-2112"), mock_permission("S-1-11-111-1111")],
+        [mock_permission("S-3-31-131-1131"), mock_permission("S-1-11-111-1111")],
+    ],
+)
+@mock.patch.object(
+    SecurityInfo,
+    "fetch_groups",
+    return_value={"Admins": "S-1-5-32-546", "IT": "S-1-12-222-4456"},
+)
+@mock.patch.object(
+    SecurityInfo,
+    "fetch_members",
+    side_effect=[{"User1": "S-1-11-111-1111"}, {"User2": "S-2-21-211-2111"}],
+)
+@mock.patch.object(
+    SecurityInfo,
+    "fetch_users",
+    return_value={
+        "User1": "S-1-11-111-1111",
+        "User2": "S-2-21-211-2111",
+        "User3": "S-3-31-311-3111",
+    },
+)
+async def test_get_docs_with_dls_enabled(
+    mock_get_files, mock_walk, mock_permissions, mock_groups, mock_members, mock_users
+):
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        # Execute
+        documents, downloads = [], []
+        async for item, content in source.get_docs():
+            documents.append(item)
+
+            if content:
+                downloads.append(content)
+
+        assert len(documents) == 2
+
+        assert len(downloads) == 1
+
+
+@pytest.mark.asyncio
+async def test_read_csv_with_valid_data():
+    async with create_source(NASDataSource) as source:
+        with mock.patch(
+            "builtins.open",
+            mock.mock_open(read_data="user1;S-1;S-11,S-22\nuser2;S-2;S-22"),
+        ):
+            user_info = source.read_user_info_csv()
+            expected_user_info = [
+                {"username": "user1", "user_id": "S-1", "groups": ["S-11", "S-22"]},
+                {"username": "user2", "user_id": "S-2", "groups": ["S-22"]},
+            ]
+            assert user_info == expected_user_info
+
+
+@pytest.mark.asyncio
+async def test_read_csv_file_erroneous():
+    async with create_source(NASDataSource) as source:
+        with mock.patch("builtins.open", mock.mock_open(read_data="0I`00�^")):
+            with mock.patch("csv.reader", side_effect=csv.Error):
+                user_info = source.read_user_info_csv()
+                assert user_info == []
+
+
+@pytest.mark.asyncio
+async def test_read_csv_with_empty_groups():
+    async with create_source(NASDataSource) as source:
+        with mock.patch(
+            "builtins.open", mock.mock_open(read_data="user1;1;\nuser2;2;")
+        ):
+            user_info = source.read_user_info_csv()
+            expected_user_info = [
+                {"username": "user1", "user_id": "1", "groups": []},
+                {"username": "user2", "user_id": "2", "groups": []},
+            ]
+            assert user_info == expected_user_info
+
+
+@pytest.mark.asyncio
+@mock.patch.object(SecurityInfo, "get_descriptor")
+async def test_list_file_permissions(mock_get_descriptor):
+    with mock.patch("smbclient.open_file", return_value=MagicMock()) as mock_file:
+        mock_file.fd.return_value = 2
+        mock_descriptor = mock.Mock()
+        mock_get_descriptor.return_value = mock_descriptor
+        mock_dacl = {"aces": ["ace1", "ace2"]}
+        mock_descriptor.get_dacl.return_value = mock_dacl
+
+        async with create_source(NASDataSource) as source:
+            result = source.list_file_permission(
+                file_path="/path/to/file.txt",
+                file_type="file",
+                mode="rb",
+                access="read",
+            )
+
+            assert result == mock_dacl["aces"]

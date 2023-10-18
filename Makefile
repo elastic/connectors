@@ -1,4 +1,4 @@
-.PHONY: test lint autoformat run ftest install dev release docker-build docker-run docker-push
+.PHONY: test lint autoformat run ftest install release docker-build docker-run docker-push
 
 PYTHON=python3.10
 ARCH=$(shell uname -m)
@@ -13,9 +13,6 @@ bin/python:
 
 install: bin/python bin/elastic-ingest
 
-dev: install
-	bin/pip install -r requirements/tests.txt
-
 bin/elastic-ingest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/python setup.py develop
@@ -28,12 +25,12 @@ bin/black: bin/python
 bin/pytest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/tests.txt
+	bin/pip install -r requirements/ftest.txt
 
 clean:
 	rm -rf bin lib include
 
 lint: bin/python bin/black bin/elastic-ingest
-	bin/isort --check . --sp .isort.cfg
 	bin/black --check connectors
 	bin/black --check tests
 	bin/black --check setup.py
@@ -46,11 +43,14 @@ lint: bin/python bin/black bin/elastic-ingest
 	bin/pyright tests
 
 autoformat: bin/python bin/black bin/elastic-ingest
-	bin/isort . --sp .isort.cfg
 	bin/black connectors
 	bin/black tests
 	bin/black setup.py
 	bin/black scripts
+	bin/ruff connectors --fix
+	bin/ruff tests --fix
+	bin/ruff setup.py --fix
+	bin/ruff scripts --fix
 
 test:	bin/pytest bin/elastic-ingest
 	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests

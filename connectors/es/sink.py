@@ -24,14 +24,18 @@ import logging
 import time
 from collections import defaultdict
 
-from elasticsearch import NotFoundError as ElasticNotFoundError
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 from elasticsearch.helpers import async_scan
 
-from connectors.es import ESClient
+from connectors.es import ESClient, Mappings
+from connectors.es.settings import Settings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
+    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -44,6 +48,7 @@ from connectors.utils import (
     aenumerate,
     get_size,
     iso_utc,
+    retryable,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -52,6 +57,7 @@ OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
 TIMESTAMP_FIELD = "_timestamp"
+CANCELATION_TIMEOUT = 5
 
 
 def get_mb_size(ob):
@@ -60,6 +66,10 @@ def get_mb_size(ob):
 
 
 class UnsupportedJobType(Exception):
+    pass
+
+
+class ForceCanceledError(Exception):
     pass
 
 
@@ -87,6 +97,7 @@ class Sink:
         pipeline,
         chunk_mem_size,
         max_concurrency,
+        max_retries,
         logger_=None,
     ):
         self.client = client
@@ -99,10 +110,12 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.max_retires = max_retries
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
         self._logger = logger_ or logger
+        self._canceled = False
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -122,6 +135,12 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
+        @retryable(retries=self.max_retires)
+        async def _bulk_api_call():
+            return await self.client.bulk(
+                operations=operations, pipeline=self.pipeline["name"]
+            )
+
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
@@ -131,10 +150,7 @@ class Sink:
             )
         start = time.time()
         try:
-            res = await self.client.bulk(
-                operations=operations, pipeline=self.pipeline["name"]
-            )
-
+            res = await _bulk_api_call()
             if res.get("errors"):
                 for item in res["items"]:
                     for op, data in item.items():
@@ -168,12 +184,25 @@ class Sink:
             f"Sink stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
         )
 
+    def force_cancel(self):
+        self._canceled = True
+
+    async def fetch_doc(self):
+        if self._canceled:
+            raise ForceCanceledError
+
+        return await self.queue.get()
+
     async def run(self):
         try:
             await self._run()
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Sink...")
             raise
+        except ForceCanceledError:
+            self._logger.error(
+                f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+            )
 
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -193,7 +222,7 @@ class Sink:
         overhead_size = None
 
         while True:
-            doc_size, doc = await self.queue.get()
+            doc_size, doc = await self.fetch_doc()
             if doc in ("END_DOCS", "FETCH_ERROR"):
                 break
             operation = doc["_op_type"]
@@ -284,14 +313,7 @@ class Extractor:
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
-
-    def __str__(self):
-        return (
-            "Extractor <"
-            f"create: {self.total_docs_created} |"
-            f"update: {self.total_docs_updated} |"
-            f"delete: {self.total_docs_deleted}>"
-        )
+        self._canceled = False
 
     async def _get_existing_ids(self):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
@@ -330,7 +352,7 @@ class Extractor:
 
         doc.pop("_original_filename", None)
 
-        await self.queue.put(
+        await self.put_doc(
             {
                 "_op_type": operation,
                 "_index": self.index,
@@ -338,6 +360,15 @@ class Extractor:
                 "doc": doc,
             }
         )
+
+    def force_cancel(self):
+        self._canceled = True
+
+    async def put_doc(self, doc):
+        if self._canceled:
+            raise ForceCanceledError
+
+        await self.queue.put(doc)
 
     async def run(self, generator, job_type):
         try:
@@ -353,6 +384,14 @@ class Extractor:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Extractor...")
             raise
+        except ForceCanceledError:
+            self._logger.error(
+                f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+            )
+        except Exception as e:
+            self._logger.critical("Document extractor failed", exc_info=True)
+            await self.put_doc("FETCH_ERROR")
+            self.fetch_error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
     async def _decorate_with_metrics_span(self, generator):
@@ -366,12 +405,12 @@ class Extractor:
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
         """
-        self._logger.info("Starting doc lookups")
         generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
 
         start = time.time()
+        self._logger.info("Collecting local document ids")
         existing_ids = {k: v async for (k, v) in self._get_existing_ids()}
         self._logger.debug(
             f"Found {len(existing_ids)} docs in {self.index} (duration "
@@ -382,12 +421,13 @@ class Extractor:
                 f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
             )
 
+        self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    self._logger.info(str(self))
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -430,7 +470,7 @@ class Extractor:
 
                 else:
                     # we can push into the queue right away
-                    await self.queue.put(
+                    await self.put_doc(
                         {
                             "_op_type": operation,
                             "_index": self.index,
@@ -440,17 +480,12 @@ class Extractor:
                     )
 
                 await asyncio.sleep(0)
-        except Exception as e:
-            self._logger.critical("The document fetcher failed", exc_info=True)
-            await self.queue.put("FETCH_ERROR")
-            self.fetch_error = e
-            return
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.queue.put("END_DOCS")
+        await self.put_doc("END_DOCS")
 
     async def get_docs_incrementally(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
@@ -458,17 +493,17 @@ class Extractor:
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
         """
-        self._logger.info("Starting doc lookups incrementally")
         generator = self._decorate_with_metrics_span(generator)
 
         self.sync_runs = True
 
+        self._logger.info("Iterating on remote documents incrementally when possible")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
-                    self._logger.info(str(self))
+                    self._log_progress()
 
                 doc_id = doc["id"] = doc.pop("_id")
 
@@ -508,19 +543,14 @@ class Extractor:
                     }
                     if operation in (OP_INDEX, OP_UPSERT):
                         item["doc"] = doc
-                    await self.queue.put(item)
+                    await self.put_doc(item)
 
                 await asyncio.sleep(0)
-        except Exception as e:
-            self._logger.critical("The document fetcher failed", exc_info=True)
-            await self.queue.put("FETCH_ERROR")
-            self.fetch_error = e
-            return
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        await self.queue.put("END_DOCS")
+        await self.put_doc("END_DOCS")
 
     async def get_access_control_docs(self, generator):
         """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
@@ -543,60 +573,53 @@ class Extractor:
             )
 
         count = 0
-        try:
-            async for doc in generator:
-                doc, _, _ = doc
-                count += 1
-                if count % self.display_every == 0:
-                    self._logger.info(str(self))
+        async for doc in generator:
+            doc, _, _ = doc
+            count += 1
+            if count % self.display_every == 0:
+                self._log_progress()
 
-                doc_id = doc["id"] = doc.pop("_id")
-                doc_exists = doc_id in existing_ids
+            doc_id = doc["id"] = doc.pop("_id")
+            doc_exists = doc_id in existing_ids
 
-                if doc_exists:
-                    last_update_timestamp = existing_ids.pop(doc_id)
-                    doc_not_updated = (
-                        TIMESTAMP_FIELD in doc
-                        and last_update_timestamp == doc[TIMESTAMP_FIELD]
-                    )
-
-                    if doc_not_updated:
-                        continue
-
-                    self.total_docs_updated += 1
-
-                    operation = OP_UPSERT
-                else:
-                    self.total_docs_created += 1
-
-                    if TIMESTAMP_FIELD not in doc:
-                        doc[TIMESTAMP_FIELD] = iso_utc()
-
-                    operation = OP_INDEX
-
-                await self.queue.put(
-                    {
-                        "_op_type": operation,
-                        "_index": self.index,
-                        "_id": doc_id,
-                        "doc": doc,
-                    }
+            if doc_exists:
+                last_update_timestamp = existing_ids.pop(doc_id)
+                doc_not_updated = (
+                    TIMESTAMP_FIELD in doc
+                    and last_update_timestamp == doc[TIMESTAMP_FIELD]
                 )
 
-                await asyncio.sleep(0)
-        except Exception as e:
-            self._logger.critical("The document fetcher failed", exc_info=True)
-            await self.queue.put("FETCH_ERROR")
-            self.fetch_error = e
-            return
+                if doc_not_updated:
+                    continue
+
+                self.total_docs_updated += 1
+
+                operation = OP_UPSERT
+            else:
+                self.total_docs_created += 1
+
+                if TIMESTAMP_FIELD not in doc:
+                    doc[TIMESTAMP_FIELD] = iso_utc()
+
+                operation = OP_INDEX
+
+            await self.put_doc(
+                {
+                    "_op_type": operation,
+                    "_index": self.index,
+                    "_id": doc_id,
+                    "doc": doc,
+                }
+            )
+            await asyncio.sleep(0)
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.queue.put("END_DOCS")
+        await self.put_doc("END_DOCS")
 
     async def enqueue_docs_to_delete(self, existing_ids):
         self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
         for doc_id in existing_ids.keys():
-            await self.queue.put(
+            await self.put_doc(
                 {
                     "_op_type": OP_DELETE,
                     "_index": self.index,
@@ -604,6 +627,14 @@ class Extractor:
                 }
             )
             self.total_docs_deleted += 1
+
+    def _log_progress(self):
+        self._logger.info(
+            "Sync progress -- "
+            f"created: {self.total_docs_created} | "
+            f"updated: {self.total_docs_updated} | "
+            f"deleted: {self.total_docs_deleted}"
+        )
 
 
 class IndexMissing(Exception):
@@ -639,7 +670,7 @@ class SyncOrchestrator(ESClient):
         self._sink = None
         self._sink_task = None
 
-    async def prepare_content_index(self, index, *, mappings=None):
+    async def prepare_content_index(self, index, language_code=None):
         """Creates the index, given a mapping if it does not exists."""
         if not index.startswith("search-"):
             raise ContentIndexNameInvalid(
@@ -652,29 +683,50 @@ class SyncOrchestrator(ESClient):
         exists = await self.client.indices.exists(
             index=index, expand_wildcards=expand_wildcards
         )
+
+        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+
         if exists:
+            # Update the index mappings if needed
             self._logger.debug(f"{index} exists")
-            response = await self.client.indices.get_mapping(
-                index=index, expand_wildcards=expand_wildcards
-            )
-            existing_mappings = response[index].get("mappings", {})
-            if len(existing_mappings) == 0 and mappings:
-                self._logger.debug(
-                    "Index %s has no mappings or it's empty. Adding mappings...", index
-                )
-                await self.client.indices.put_mapping(
-                    index=index,
-                    dynamic=mappings.get("dynamic", False),
-                    dynamic_templates=mappings.get("dynamic_templates", []),
-                    properties=mappings.get("properties", {}),
-                    expand_wildcards=expand_wildcards,
-                )
-                self._logger.debug("Index %s mappings added", index)
-            else:
-                self._logger.debug("Index %s already has mappings. Skipping...", index)
-            return
+            await self._ensure_content_index_mappings(index, mappings, expand_wildcards)
         else:
-            raise IndexMissing(f"Index {index} does not exist!")
+            # Create a new index
+            self._logger.info(f"Creating content index: {index}")
+            await self._create_content_index(
+                index=index, language_code=language_code, mappings=mappings
+            )
+            self._logger.info(f"Content index successfully created:  {index}")
+
+    async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
+        response = await self.client.indices.get_mapping(
+            index=index, expand_wildcards=expand_wildcards
+        )
+
+        existing_mappings = response[index].get("mappings", {})
+        if len(existing_mappings) == 0 and mappings:
+            self._logger.debug(
+                "Index %s has no mappings or it's empty. Adding mappings...", index
+            )
+            await self.client.indices.put_mapping(
+                index=index,
+                dynamic=mappings.get("dynamic", False),
+                dynamic_templates=mappings.get("dynamic_templates", []),
+                properties=mappings.get("properties", {}),
+                expand_wildcards=expand_wildcards,
+            )
+            self._logger.debug("Successfully added mappings for index %s", index)
+        else:
+            self._logger.debug(
+                "Index %s already has mappings, skipping mappings creation", index
+            )
+
+    async def _create_content_index(self, index, mappings, language_code=None):
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        return await self.client.indices.create(
+            index=index, mappings=mappings, settings=settings
+        )
 
     def done(self):
         if self._extractor_task is not None and not self._extractor_task.done():
@@ -683,19 +735,33 @@ class SyncOrchestrator(ESClient):
             return False
         return True
 
+    def _sink_task_running(self):
+        return self._sink_task is not None and not self._sink_task.done()
+
+    def _extractor_task_running(self):
+        return self._extractor_task is not None and not self._extractor_task.done()
+
     async def cancel(self):
-        if self._extractor_task is not None and not self._extractor_task.done():
-            self._extractor_task.cancel()
-            try:
-                await self._extractor_task
-            except asyncio.CancelledError:
-                self._logger.info("Extractor is stopped.")
-        if self._sink_task is not None and not self._sink_task.done():
+        if self._sink_task_running():
             self._sink_task.cancel()
-            try:
-                await self._sink_task
-            except asyncio.CancelledError:
-                self._logger.info("Sink is stopped.")
+        if self._extractor_task_running():
+            self._extractor_task.cancel()
+
+        cancelation_timeout = CANCELATION_TIMEOUT
+        while cancelation_timeout > 0:
+            await asyncio.sleep(1)
+            cancelation_timeout -= 1
+            if not self._sink_task_running() and not self._extractor_task_running():
+                self._logger.info(
+                    "Both Extractor and Sink tasks are successfully stopped."
+                )
+                return
+
+        self._logger.error(
+            f"Sync job did not stop within {CANCELATION_TIMEOUT} seconds of canceling. Force-canceling."
+        )
+        self._sink.force_cancel()
+        self._extractor.force_cancel()
 
     def ingestion_stats(self):
         stats = {}
@@ -763,6 +829,7 @@ class SyncOrchestrator(ESClient):
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
+        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
 
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
 
@@ -790,6 +857,7 @@ class SyncOrchestrator(ESClient):
             pipeline,
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
+            max_retries=max_bulk_retries,
             logger_=self._logger,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

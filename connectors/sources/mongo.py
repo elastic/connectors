@@ -118,29 +118,25 @@ class MongoDataSource(BaseDataSource):
                 "label": "Server hostname",
                 "order": 1,
                 "type": "str",
-                "value": "",
             },
             "user": {
                 "label": "Username",
                 "order": 2,
-                "type": "str",
-                "value": "",
                 "required": False,
+                "type": "str",
             },
             "password": {
                 "label": "Password",
                 "order": 3,
+                "required": False,
                 "sensitive": True,
                 "type": "str",
-                "value": "",
-                "required": False,
             },
-            "database": {"label": "Database", "order": 4, "type": "str", "value": ""},
+            "database": {"label": "Database", "order": 4, "type": "str"},
             "collection": {
                 "label": "Collection",
                 "order": 5,
                 "type": "str",
-                "value": "",
             },
             "direct_connection": {
                 "display": "toggle",
@@ -201,7 +197,7 @@ class MongoDataSource(BaseDataSource):
                 yield self.serialize(doc), None
 
     async def validate_config(self):
-        self.configuration.check_valid()
+        await super().validate_config()
 
         client = self.client
         configured_database_name = self.configuration["database"]

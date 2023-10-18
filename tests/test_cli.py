@@ -61,7 +61,7 @@ def test_run(mock_responses, set_env):
 
         assert "Registered connectors:" in output
         assert "- Fakey" in output
-        assert "- Phatey" in output
+        assert "- Large Fake" in output
         assert "Bye" in output
 
 

@@ -14,7 +14,7 @@ from freezegun import freeze_time
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.logger import logger
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mysql import (
     MySQLAdvancedRulesValidator,
     MySQLClient,
@@ -134,7 +134,7 @@ def patch_default_wait_multiplier():
 
 
 @pytest.fixture
-def patch_connection_pool():
+async def patch_connection_pool():
     connection_pool = Mock()
     connection_pool.close = Mock()
     connection_pool.wait_closed = AsyncMock()
@@ -145,16 +145,6 @@ def patch_connection_pool():
         return_value=future_with_result(connection_pool),
     ):
         yield connection_pool
-
-
-def test_get_configuration():
-    """Test get_configuration method of MySQL"""
-    klass = MySqlDataSource
-
-    config = DataSourceConfiguration(klass.get_default_configuration())
-
-    assert config["host"] == "127.0.0.1"
-    assert config["port"] == 3306
 
 
 class Result:
@@ -591,9 +581,7 @@ async def setup_mysql_source(source, database="", client=None):
     if client is None:
         client = MagicMock()
 
-    source.configuration.set_field(
-        name="database", label="Database", value=database, type="str"
-    )
+    source.configuration.get_field("database").value = database
 
     source.database = database
     source.mysql_client = client

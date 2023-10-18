@@ -3,8 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-
-from unittest.mock import ANY, AsyncMock, patch
+import time
+from unittest import mock
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -132,10 +133,8 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_handle_throttled_error(
-    mock_apply_retry_strategy, slack_client, mock_responses
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_handle_throttled_error(slack_client, mock_responses):
     channel = {"id": 1, "name": "test"}
     error_response_data = {"error": "rate_limited"}
     response_data = {"messages": [{"text": "message", "type": "message"}]}
@@ -171,8 +170,8 @@ async def test_ping(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.apply_retry_strategy")
-async def test_bad_ping(mock_apply_retry_strategy, slack_client, mock_responses):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_bad_ping(slack_client, mock_responses):
     response_data = {"error": "not_authed"}
     mock_responses.get(
         "https://slack.com/api/auth.test",
@@ -204,14 +203,23 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
     mock_client.close = AsyncMock()
     slack_data_source.slack_client = mock_client
 
-    docs = []
-    async for doc, _ in slack_data_source.get_docs():
-        docs.append(doc)
+    current_timestamp = time.time()
+    with mock.patch("time.time", return_value=current_timestamp):
+        old_timestamp = (
+            current_timestamp - configuration["fetch_last_n_days"] * 24 * 3600
+        )
+        docs = []
+        async for doc, _ in slack_data_source.get_docs():
+            docs.append(doc)
 
-    assert len(docs) == 3
-    assert docs[0]["type"] == "user"
-    assert docs[1]["type"] == "channel"
-    assert docs[2]["type"] == "message"
+        for channel in channels_response:
+            mock_client.list_messages.assert_called_once_with(
+                channel, old_timestamp, current_timestamp
+            )
+        assert len(docs) == 3
+        assert docs[0]["type"] == "user"
+        assert docs[1]["type"] == "channel"
+        assert docs[2]["type"] == "message"
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@
 #
 """Tests the Dropbox source class methods"""
 import json
+from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
@@ -16,7 +17,7 @@ from freezegun import freeze_time
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.dropbox import (
     DropBoxAdvancedRulesValidator,
     DropboxClient,
@@ -248,6 +249,11 @@ EXPECTED_CONTENT = {
     "_timestamp": "2023-01-01T06:06:06Z",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
+EXPECTED_CONTENT_EXTRACTED = {
+    "_id": "id:1",
+    "_timestamp": "2023-01-01T06:06:06Z",
+    "body": RESPONSE_CONTENT,
+}
 
 MOCK_SEARCH_FILE_1 = {
     "has_more": False,
@@ -344,29 +350,37 @@ def get_stream_reader():
 
 def setup_dropbox(source):
     # Set up default config with default values
-    source.configuration.set_field(name="app_key", value="abc#123")
-    source.configuration.set_field(name="app_secret", value="abc#123")
-    source.configuration.set_field(name="refresh_token", value="abc#123")
+    source.configuration.get_field("app_key").value = "abc#123"
+    source.configuration.get_field("app_secret").value = "abc#123"
+    source.configuration.get_field("refresh_token").value = "abc#123"
 
 
-@pytest.mark.asyncio
-async def test_configuration():
-    """Tests the get configurations method of the Dropbox source class."""
-    config = DataSourceConfiguration(
-        config=DropboxDataSource.get_default_configuration()
-    )
-    assert config["path"] == PATH
+@asynccontextmanager
+async def create_dropbox_source(
+    use_text_extraction_service=False,
+    mock_access_token=True,
+):
+    async with create_source(
+        DropboxDataSource,
+        app_key="abc#123",
+        app_secret="abc#123",
+        refresh_token="abc#123",
+        use_text_extraction_service=use_text_extraction_service,
+    ) as source:
+        if mock_access_token:
+            source.dropbox_client._set_access_token = AsyncMock()
+        yield source
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "field",
-    ["path", "app_key", "app_secret", "refresh_token"],
+    ["app_key", "app_secret", "refresh_token"],
 )
 async def test_validate_configuration_with_empty_fields_then_raise_exception(field):
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        source.dropbox_client.configuration.set_field(name=field, value="")
+        source.dropbox_client.configuration.get_field(field).value = ""
 
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -376,7 +390,7 @@ async def test_validate_configuration_with_empty_fields_then_raise_exception(fie
 async def test_validate_configuration_with_valid_path():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        source.dropbox_client.configuration.set_field(name="path", value="/shared")
+        source.dropbox_client.configuration.get_field("path").value = "/shared"
 
         with patch.object(
             aiohttp.ClientSession,
@@ -387,13 +401,10 @@ async def test_validate_configuration_with_valid_path():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_validate_configuration_with_invalid_path_then_raise_exception(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_validate_configuration_with_invalid_path_then_raise_exception():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
         source.dropbox_client.path = "/abc"
 
         with patch.object(
@@ -427,13 +438,10 @@ async def test_set_access_token():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_set_access_token_with_incorrect_app_key_then_raise_exception(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_set_access_token_with_incorrect_app_key_then_raise_exception():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
 
         with patch.object(
             aiohttp.ClientSession,
@@ -450,13 +458,10 @@ async def test_set_access_token_with_incorrect_app_key_then_raise_exception(
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception(
-    mock_apply_retry_strategy,
-):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
 
         with patch.object(
             aiohttp.ClientSession,
@@ -616,12 +621,10 @@ def patch_default_wait_multiplier():
 
 
 @pytest.mark.asyncio
-@mock.patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
-@mock.patch("connectors.utils.apply_retry_strategy")
-async def test_api_call_when_token_is_expired(mock_apply_retry_strategy):
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_api_call_when_token_is_expired():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
-        mock_apply_retry_strategy.return_value = mock.Mock()
 
         with patch.object(
             aiohttp.ClientSession,
@@ -746,6 +749,31 @@ async def test_get_content_when_is_downloadable_is_true(
                     doit=True,
                 )
                 assert response == expected_content
+
+
+@pytest.mark.asyncio
+async def test_get_content_when_is_downloadable_is_true_with_extraction_service():
+    with patch(
+        "connectors.content_extraction.ContentExtraction.extract_text",
+        return_value=RESPONSE_CONTENT,
+    ), patch(
+        "connectors.content_extraction.ContentExtraction.get_extraction_config",
+        return_value={"host": "http://localhost:8090"},
+    ):
+        async with create_dropbox_source(use_text_extraction_service=True) as source:
+            with mock.patch(
+                "aiohttp.ClientSession.post", return_value=get_stream_reader()
+            ):
+                with mock.patch(
+                    "aiohttp.StreamReader.iter_chunked",
+                    return_value=AsyncIterator([bytes(RESPONSE_CONTENT, "utf-8")]),
+                ):
+                    response = await source.get_content(
+                        attachment=MOCK_ATTACHMENT,
+                        is_shared=True,
+                        doit=True,
+                    )
+                    assert response == EXPECTED_CONTENT_EXTRACTED
 
 
 @pytest.mark.asyncio

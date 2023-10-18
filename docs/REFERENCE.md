@@ -18,3 +18,8 @@
 - [SharePoint Online](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint-online.html)
 - [SharePoint Server](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint.html)
 - [GitHub](./reference/github.md)
+- [OneDrive](./reference/onedrive.md)
+- [Outlook](./reference/outlook.md)
+- [Zoom](./reference/zoom.md)
+- [Microsoft Teams](./reference/microsoft_teams.md)
+- [Box](./reference/box.md)

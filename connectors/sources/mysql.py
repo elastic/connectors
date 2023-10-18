@@ -16,7 +16,6 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
-    WILDCARD,
     Queries,
     configured_tables,
     is_wildcard,
@@ -37,7 +36,6 @@ DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_SSL_ENABLED = False
-DEFAULT_SSL_CA = ""
 
 
 def parse_tables_string_to_list_of_tables(tables_string):
@@ -356,54 +354,47 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Host",
                 "order": 1,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
                 "type": "int",
-                "value": 3306,
             },
             "user": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
-                "value": "root",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "value": "customerinfo",
             },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "order": 6,
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
                 "order": 7,
                 "type": "bool",
-                "value": DEFAULT_SSL_ENABLED,
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
-                "value": DEFAULT_SSL_CA,
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -413,7 +404,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -423,7 +413,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
             },
         }
 
@@ -454,7 +443,7 @@ class MySqlDataSource(BaseDataSource):
             ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible, or a field contains an empty or wrong value
             ConfigurableFieldDependencyError: A inter-field dependency is not met
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     @retryable(

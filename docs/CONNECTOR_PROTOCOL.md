@@ -19,6 +19,28 @@ Connectors can:
 
 At this stage, our assumption is that one connector will manage one index, and one index will have only one connector associated with it. This may change in the future.
 
+### Data freshness
+
+Data from remote sources are synced via [sync jobs](DEVELOPING.md#syncing), which means there can be data discrepancy between the remote source and Elasticsearch until the next sync job runs.
+
+We don't currently support streaming options for real-time data updates. In order to achieve (near) real-time data availability, [implement incremental sync](DEVELOPING.md#how-an-incremental-sync-works) for the data source, with a frequency that matches your needs.
+
+Kibana won't allow you to configure a schedule more frequently than every hour, but you can do so via the Elasticsearch API (through Kibana Dev Tools, or cURL, etc):
+
+```
+# Update to every 5 seconds
+POST /.elastic-connectors/_update/<_id>
+{
+  "doc": {
+    "scheduling": {
+      "incremental": {
+        "interval": "0/5 * * * * ?"
+      }
+    }
+  }
+}
+```
+
 ## Communication protocol
 
 All communication will need to go through Elasticsearch. We've created a connector index called `.elastic-connectors`, where a document represents a connector. In addition, there's a connector job index called `.elastic-connectors-sync-jobs`, which holds the job history. You can find the definitions for these indices in the next section.
@@ -492,7 +514,7 @@ The connector should also sync data for connectors:
 - Sync with the data source and index resulting documents into the correct index.
 - Log jobs to `.elastic-connectors-sync-jobs`.
 
-**Sequence diagram**:
+**Sequence diagram (content syncs)**:
 ```mermaid
 sequenceDiagram
     actor User
@@ -510,8 +532,13 @@ sequenceDiagram
         User->>Kibana: Creates a connector via Use a connector
         Kibana->>Elasticsearch: Saves connector definition
     end
-    User->>Kibana: Enters necessary configuration and synchronization schedule
-    Kibana->>Elasticsearch: Writes configuration and synchronization schedule
+    alt Job type: full
+        User->>Kibana: Enters necessary configuration and full content synchronization schedule
+        Kibana->>Elasticsearch: Writes configuration and full content synchronization schedule
+    else Job type: incremental
+        User->>Kibana: Enters necessary configuration and incremental content synchronization schedule
+        Kibana->>Elasticsearch: Writes configuration and incremental content synchronization schedule
+    end
     loop Every 3 seconds (by default)
         par Heartbeat
             Connector->>Elasticsearch: Updates last_seen and status regularly
@@ -521,12 +548,13 @@ sequenceDiagram
             Connector->>Elasticsearch: Updates validation state of filtering rules
         and Job
             Connector->>Elasticsearch: Reads job schedule and filtering rules
-            opt sync_schedule requires synchronization
+            opt full content or incremental sync_schedule requires synchronization
                 Connector->>Elasticsearch: Sets last_sync_status to in_progress
                 Connector->>Data source: Queries data
                 Connector->>Elasticsearch: Indexes filtered data
                 alt Job is successfully completed
                     Connector->>Elasticsearch: Sets last_sync_status to completed
+                    Connector->>Elasticsearch: Update sync_cursor 
                 else Job error
                     Connector->>Elasticsearch: Sets status and last_sync_status to error
                     Connector->>Elasticsearch: Writes error message to error field
@@ -536,6 +564,49 @@ sequenceDiagram
     end
 ```
 
+**Sequence diagram (access control syncs)**:
+```mermaid
+sequenceDiagram
+    actor User
+    participant Kibana
+    participant Elasticsearch
+    participant Connector
+    participant Data source
+    alt Custom connector
+        User->>Kibana: Creates a connector via Build a connector
+        Kibana->>Elasticsearch: Saves connector definition
+        User->>Kibana: Generates new API key & id
+        Kibana->>Elasticsearch: Saves API key & id
+        User->>Connector: Deploys with API key, id & Elasticsearch host (for custom connector)
+    else Native connector
+        User->>Kibana: Creates a connector via Use a connector
+        Kibana->>Elasticsearch: Saves connector definition
+    end
+    User->>Kibana: Enters necessary configuration and access control synchronization schedule
+    Kibana->>Elasticsearch: Writes configuration and access control synchronization schedule
+    loop Every 3 seconds (by default)
+        par Heartbeat
+            Connector->>Elasticsearch: Updates last_seen and status regularly
+        and Configuration
+            Connector->>Elasticsearch: Updates configurable fields for custom connector
+        and Rule Validation
+            Connector->>Elasticsearch: Updates validation state of filtering rules
+        and Job
+            Connector->>Elasticsearch: Reads access control job schedule
+            opt access control sync_schedule requires synchronization
+                Connector->>Elasticsearch: Sets last_access_control_sync_status to in_progress
+                Connector->>Data source: Queries access control data
+                Connector->>Elasticsearch: Indexes access control data
+                alt Job is successfully completed
+                    Connector->>Elasticsearch: Sets last_access_control_sync_status to completed
+                else Job error
+                    Connector->>Elasticsearch: Sets status and last_access_control_sync_status to error
+                    Connector->>Elasticsearch: Writes error message to last_access_control_sync_error field
+                end
+            end
+        end
+    end
+```
 
 ### Migration concerns
 If the mapping of `.elastic-connectors` or `.elastic-connectors-sync-jobs` is updated in a future version in a way that necessitates a complete re-indexing, Enterprise Search will migrate that data on startup.

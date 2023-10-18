@@ -671,7 +671,7 @@ async def test_connector_next_sync(
     next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
 
-    assert connector.next_sync(job_type) == expected_next_sync
+    assert connector.next_sync(job_type, datetime.utcnow()) == expected_next_sync
 
 
 @pytest.mark.asyncio
@@ -1157,7 +1157,7 @@ async def test_connector_prepare():
         "_id": doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
-        "_source": {},
+        "_source": {"configuration": {}},
     }
     config = {
         "connector_id": doc_id,
@@ -1191,7 +1191,7 @@ async def test_connector_prepare_with_race_condition():
         "_id": doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
-        "_source": {},
+        "_source": {"configuration": {}},
     }
     config = {
         "connector_id": doc_id,
@@ -1386,6 +1386,21 @@ async def test_connector_validate_filtering_with_race_condition():
         if_seq_no=doc_source["_seq_no"],
         if_primary_term=doc_source["_primary_term"],
     )
+
+
+@pytest.mark.asyncio
+async def test_document_count():
+    expected_count = 20
+    index = Mock()
+    index.serverless = False
+    index.client.indices.refresh = AsyncMock()
+    index.client.count = AsyncMock(return_value={"count": expected_count})
+
+    connector = Connector(elastic_index=index, doc_source=DOC_SOURCE)
+    count = await connector.document_count()
+    index.client.indices.refresh.assert_awaited_once()
+    index.client.count.assert_awaited_once()
+    assert count == expected_count
 
 
 @pytest.mark.parametrize(
@@ -1959,3 +1974,75 @@ def test_pipeline_properties(key, value, default_value):
 )
 def test_get_advanced_rules(filtering, expected_advanced_rules):
     assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
+
+
+def test_updated_configuration():
+    current = {
+        "tenant_id": {"label": "Tenant ID", "order": 1, "type": "str", "value": "foo"},
+        "tenant_name": {
+            "label": "Tenant name",
+            "order": 2,
+            "type": "str",
+            "value": "bar",
+        },
+        "client_id": {"label": "Client ID", "order": 3, "type": "str", "value": "baz"},
+        "secret_value": {
+            "label": "Secret value",
+            "order": 4,
+            "sensitive": True,
+            "type": "str",
+            "value": "qux",
+        },
+        "some_toggle": {"label": "toggle", "order": 5, "type": "bool", "value": False},
+    }
+    simple_default = {
+        "tenant_id": {
+            "label": "Tenant Identifier",
+            "order": 1,
+            "type": "str",
+        },
+        "tenant_name": {
+            "label": "Tenant name",
+            "order": 2,
+            "type": "str",
+        },
+        "new_config": {
+            "label": "Config label",
+            "order": 3,
+            "type": "bool",
+            "value": True,
+        },
+        "client_id": {
+            "label": "Client ID",
+            "order": 4,
+            "type": "str",
+        },
+        "secret_value": {
+            "label": "Secret value",
+            "order": 5,
+            "sensitive": True,
+            "type": "str",
+        },
+        "some_toggle": {"label": "toggle", "order": 6, "type": "bool", "value": True},
+    }
+    missing_configs = ["new_config"]
+    connector = Connector(elastic_index=Mock(), doc_source={"_id": "test"})
+    result = connector.updated_configuration(missing_configs, current, simple_default)
+
+    # all keys included where there are changes (excludes 'tenant_name')
+    assert result.keys() == set(
+        ["new_config", "tenant_id", "client_id", "secret_value", "some_toggle"]
+    )
+
+    # order is adjusted
+    assert result["client_id"]["order"] == 4
+    assert result["secret_value"]["order"] == 5
+
+    # so is label
+    assert result["tenant_id"]["label"] == "Tenant Identifier"
+
+    # value is not changed for existing configs
+    assert "value" not in result["some_toggle"].keys()
+
+    # value is set for new configs
+    assert result["new_config"]["value"] is True

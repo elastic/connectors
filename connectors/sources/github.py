@@ -4,16 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
-import asyncio
 import time
 from enum import Enum
 from functools import cached_property, partial
 
-import aiofiles
 import aiohttp
 import fastjsonschema
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub.aiohttp import GitHubAPI
 
@@ -26,7 +22,6 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    convert_to_b64,
     decode_base64_value,
     retryable,
     ssl_context,
@@ -41,7 +36,6 @@ REPOSITORY_OBJECT = "repository"
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760  # ~ 10 Megabytes
 FORBIDDEN = 403
 NODE_SIZE = 100
 REVIEWS_COUNT = 45
@@ -560,15 +554,19 @@ class GitHubClient:
     def get_rate_limit_encountered(self, status_code, message):
         return status_code == FORBIDDEN and "rate limit" in str(message).lower()
 
-    async def _get_retry_after(self, type):
+    async def _get_retry_after(self, resource_type):
         current_time = time.time()
         response = await self._get_client.getitem("/rate_limit")
-        reset = response.get("resources", {}).get(type, {}).get("reset", current_time)
+        reset = (
+            response.get("resources", {})
+            .get(resource_type, {})
+            .get("reset", current_time)
+        )
         # Adding a 5 second delay to account for server delays
         return (reset - current_time) + 5
 
-    async def _put_to_sleep(self, type):
-        retry_after = await self._get_retry_after(type=type)
+    async def _put_to_sleep(self, resource_type):
+        retry_after = await self._get_retry_after(resource_type=resource_type)
         self._logger.debug(
             f"Connector will attempt to retry after {retry_after} seconds."
         )
@@ -634,7 +632,7 @@ class GitHubClient:
                         error.get("type") == "RATE_LIMITED"
                         and "api rate limit exceeded" in error.get("message").lower()
                     ):
-                        await self._put_to_sleep(type="graphql")
+                        await self._put_to_sleep(resource_type="graphql")
                 raise Exception(
                     f"Error while executing query. Exception: {json_response['errors']}"
                 )
@@ -643,6 +641,8 @@ class GitHubClient:
                 raise UnauthorizedException(
                     "Your Github token is either expired or revoked. Please check again."
                 ) from exception
+            else:
+                raise
         except Exception:
             raise
 
@@ -879,14 +879,12 @@ class GitHubDataSource(BaseDataSource):
                 "label": "GitHub URL",
                 "order": 2,
                 "type": "str",
-                "value": "http://127.0.0.1:9091",
             },
             "token": {
                 "label": "GitHub Token",
                 "order": 3,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
             },
             "repositories": {
                 "display": "textarea",
@@ -894,7 +892,6 @@ class GitHubDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -908,7 +905,6 @@ class GitHubDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 6,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "display_value": RETRIES,
@@ -919,7 +915,15 @@ class GitHubDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
                 "value": RETRIES,
-                "validations": [{"type": "less_than", "constraint": 10}],
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 8,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
 
@@ -983,7 +987,7 @@ class GitHubDataSource(BaseDataSource):
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     async def close(self):
@@ -1321,29 +1325,6 @@ class GitHubDataSource(BaseDataSource):
                 f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}"
             )
 
-    async def _get_document_with_content(self, url, attachment_name, document):
-        file_data = await self.github_client.get_github_item(resource=url)
-        temp_filename = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            await async_buffer.write(
-                decode_base64_value(content=file_data["content"])  # pyright: ignore
-            )
-            temp_filename = str(async_buffer.name)
-
-        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
-        await asyncio.to_thread(convert_to_b64, source=temp_filename)
-        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await async_buffer.read()).strip()
-
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file from: {temp_filename}. Error: {exception}"
-            )
-        return document
-
     async def get_content(self, attachment, timestamp=None, doit=False):
         """Extracts the content for Apache TIKA supported file types.
 
@@ -1355,30 +1336,35 @@ class GitHubDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size > 0):
+        file_size = int(attachment["size"])
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = attachment["name"]
-
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
+        filename = attachment["name"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
-
-        self._logger.debug(f"Downloading {attachment_name}")
 
         document = {
-            "_id": f"{attachment['repo_name']}/{attachment['name']}",
+            "_id": f"{attachment['repo_name']}/{filename}",
             "_timestamp": attachment["_timestamp"],
         }
-
-        return await self._get_document_with_content(
-            url=attachment["url"],
-            attachment_name=attachment_name,
-            document=document,
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.download_func,
+                attachment["url"],
+            ),
         )
+
+    async def download_func(self, url):
+        file_data = await self.github_client.get_github_item(resource=url)
+        if file_data:
+            yield decode_base64_value(content=file_data["content"])
+        else:
+            yield
 
     def _filter_rule_query(self, repo, query, query_type):
         """

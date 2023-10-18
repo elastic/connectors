@@ -5,42 +5,38 @@
 #
 """Module to handle api calls received from connector."""
 
-import io
 import os
-import random
-import string
+import time
 
 from flask import Flask, request
 
-DOCS_COUNT = {"small": 750, "medium": 1500, "large": 3000}
+from tests.commons import WeightedFakeProvider
 
-DATA_SIZE = os.environ.get("DATA_SIZE")
+fake_provider = WeightedFakeProvider()
 
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
-def generate_random_string(length):
-    """Function that generates random string with fixed lenght.
-
-    Args:
-        length (int): Length of generated string
-
-    Returns:
-        str: Random string
-    """
-    return "".join([random.choice(string.ascii_letters) for _ in range(length)])
-
-
-def generate_document_data():
-    """Function to generate random data content.
-
-    Returns:
-        io.BytesIO: Dummy attachment content
-    """
-    # 1KB text file
-    file_content = generate_random_string(1000)
-    return io.BytesIO(bytes(file_content, encoding="utf-8"))
+match DATA_SIZE:
+    case "small":
+        DOCS_COUNT = 250
+    case "medium":
+        DOCS_COUNT = 1000
+    case "large":
+        DOCS_COUNT = 5000
 
 
 app = Flask(__name__)
+
+PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.1"))
+
+
+def get_num_docs():
+    print(DOCS_COUNT)
+
+
+@app.before_request
+def before_request():
+    time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/drive/v3/about", methods=["GET"])
@@ -66,14 +62,14 @@ def files_list():
         {
             "kind": "drive#file",
             "mimeType": "text/plain",
-            "id": generate_random_string(length=16),
-            "name": f"file_name_{id}",
+            "id": fake_provider.fake.sha1(),
+            "name": f"file_name_{id_}",
             "fileExtension": "txt",
             "size": 12345,
             "modifiedTime": 1687860674,
             "parents": [],
         }
-        for id in range(DOCS_COUNT.get(DATA_SIZE, "small"))
+        for id_ in range(DOCS_COUNT)
     ]
     return {"nextPageToken": "dummyToken", "files": files_list}
 
@@ -84,15 +80,15 @@ def files_get(file_id):
 
     # response includes the file contents in the response body
     if req_params.get("alt", None) == "media":
-        return generate_document_data()
+        return fake_provider.get_html()
+
     # response includes file metadata
-    else:
-        return {
-            "kind": "drive#file",
-            "id": "file_0",
-            "name": "file_name_0",
-            "mimeType": "text/plain",
-        }
+    return {
+        "kind": "drive#file",
+        "id": "file_0",
+        "name": "file_name_0",
+        "mimeType": "text/html",
+    }
 
 
 @app.route("/token", methods=["POST"])

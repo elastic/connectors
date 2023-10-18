@@ -1,0 +1,227 @@
+{
+  "api_key_id": null,
+  "configuration": {
+    "data_source": {
+      "display": "dropdown",
+      "label": "Jira data source",
+      "options": [
+        {"label": "Jira Cloud", "value": "jira_cloud"},
+        {"label": "Jira Server", "value": "jira_server"}
+      ],
+      "order": 1,
+      "type": "str",
+      "value": "jira_cloud"
+    },
+    "username": {
+      "depends_on": [{"field": "data_source", "value": "jira_server"}],
+      "label": "Jira Server username",
+      "order": 2,
+      "type": "str",
+      "value": "admin"
+    },
+    "password": {
+      "depends_on": [{"field": "data_source", "value": "jira_server"}],
+      "label": "Jira Server password",
+      "sensitive": true,
+      "order": 3,
+      "type": "str",
+      "value": "changeme"
+    },
+    "account_email": {
+      "depends_on": [{"field": "data_source", "value": "jira_cloud"}],
+      "label": "Jira Cloud service account id",
+      "order": 4,
+      "type": "str",
+      "value": "me@example.com"
+    },
+    "api_token": {
+      "depends_on": [{"field": "data_source", "value": "jira_cloud"}],
+      "label": "Jira Cloud API token",
+      "order": 5,
+      "sensitive": true,
+      "type": "str",
+      "value": "abc#123"
+    },
+    "jira_url": {
+      "label": "Jira host url",
+      "order": 6,
+      "type": "str",
+      "value": "http://127.0.0.1:8080"
+    },
+    "projects": {
+      "display": "textarea",
+      "label": "Jira project keys",
+      "order": 7,
+      "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
+      "type": "list",
+      "value": "*"
+    },
+    "ssl_enabled": {
+      "display": "toggle",
+      "label": "Enable SSL",
+      "order": 8,
+      "type": "bool",
+      "value": false
+    },
+    "ssl_ca": {
+      "depends_on": [{"field": "ssl_enabled", "value": true}],
+      "label": "SSL certificate",
+      "order": 9,
+      "type": "str",
+      "value": ""
+    },
+    "retry_count": {
+      "default_value": 3,
+      "display": "numeric",
+      "label": "Retries for failed requests",
+      "order": 10,
+      "required": false,
+      "type": "int",
+      "ui_restrictions": ["advanced"],
+      "value": 3
+    },
+    "concurrent_downloads": {
+      "default_value": 100,
+      "display": "numeric",
+      "label": "Maximum concurrent downloads",
+      "order": 11,
+      "required": false,
+      "type": "int",
+      "ui_restrictions": ["advanced"],
+      "validations": [
+        {"type": "less_than", "constraint": 101}
+      ],
+      "value": 100
+    },
+    "use_document_level_security": {
+      "display": "toggle",
+      "depends_on": [{"field": "data_source", "value": "jira_cloud"}],
+      "label": "Enable document level security",
+      "order": 12,
+      "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+      "type": "bool",
+      "value": false
+    },
+    "use_text_extraction_service": {
+      "default_value": null,
+      "depends_on": [],
+      "display": "toggle",
+      "label": "Use text extraction service",
+      "options": [],
+      "order": 13,
+      "required": true,
+      "sensitive": false,
+      "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+      "type": "bool",
+      "ui_restrictions": [],
+      "validations": [],
+      "value": false
+    }
+  },
+  "custom_scheduling": {},
+  "description": null,
+  "error": null,
+  "features": {
+    "incremental_sync": {
+      "enabled": false
+    },
+    "document_level_security": {
+      "enabled": false
+    },
+    "sync_rules": {
+      "advanced": {
+        "enabled": false
+      },
+      "basic": {
+        "enabled": true
+      }
+    }
+  },
+  "filtering": [
+    {
+      "active": {
+        "advanced_snippet": {
+          "created_at": "2023-06-30T08:20:14.686Z",
+          "updated_at": "2023-06-30T08:20:14.686Z",
+          "value": {}
+        },
+        "rules": [
+          {
+            "created_at": "2023-06-30T08:20:14.686Z",
+            "field": "_",
+            "id": "DEFAULT",
+            "order": 0,
+            "policy": "include",
+            "rule": "regex",
+            "updated_at": "2023-06-30T08:20:14.686Z",
+            "value": ".*"
+          }
+        ],
+        "validation": {
+          "errors": [],
+          "state": "valid"
+        }
+      },
+      "domain": "DEFAULT",
+      "draft": {
+        "advanced_snippet": {
+          "created_at": "2023-06-30T08:20:14.686Z",
+          "updated_at": "2023-06-30T08:20:14.686Z",
+          "value": {}
+        },
+        "rules": [
+          {
+            "created_at": "2023-06-30T08:20:14.686Z",
+            "field": "_",
+            "id": "DEFAULT",
+            "order": 0,
+            "policy": "include",
+            "rule": "regex",
+            "updated_at": "2023-06-30T08:20:14.686Z",
+            "value": ".*"
+          }
+        ],
+        "validation": {
+          "errors": [],
+          "state": "valid"
+        }
+      }
+    }
+  ],
+  "index_name": "search-jira",
+  "is_native": false,
+  "language": null,
+  "last_access_control_sync_error": null,
+  "last_access_control_sync_scheduled_at": null,
+  "last_access_control_sync_status": null,
+  "last_incremental_sync_scheduled_at": null,
+  "last_seen": "2023-06-30T09:26:21.281198+00:00",
+  "last_sync_error": null,
+  "last_sync_scheduled_at": null,
+  "last_sync_status": null,
+  "last_synced": null,
+  "name": "google-drive",
+  "pipeline": {
+    "extract_binary_content": true,
+    "name": "ent-search-generic-ingestion",
+    "reduce_whitespace": true,
+    "run_ml_inference": true
+  },
+  "scheduling": {
+    "access_control": {
+      "enabled": false,
+      "interval": "0 0 0 * * ?"
+    },
+    "full": {
+      "enabled": true,
+      "interval": "* * * * * 1"
+    },
+    "incremental": {
+      "enabled": false,
+      "interval": "0 0 0 * * ?"
+    }
+  },
+  "service_type": "jira",
+  "status": "configured",
+  "sync_now": true
+}

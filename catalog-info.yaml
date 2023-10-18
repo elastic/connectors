@@ -1,19 +1,19 @@
 ################################################################################
-###################### catalog-info for connectors-python ######################
-# Declare a Backstage Component for connectors-python
+###################### catalog-info for connectors ######################
+# Declare a Backstage Component for connectors
 # When doing changes validate them using https://backstage.elastic.dev/entity-validation
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/catalog-info.json
 apiVersion: "backstage.io/v1alpha1"
 kind: "Component"
 metadata:
-  name: "elastic-connectors-python"
-  description: "Ingestion Service hosting connectors that can be used to ingest data into Elasticsearch"
+  name: "elastic-connectors"
+  description: "Ingestion service hosting connectors that can be used to ingest data into Elasticsearch"
   annotations:
-    backstage.io/source-location: "url:https://github.com/elastic/connectors-python/"
-    github.com/project-slug: "elastic/connectors-python"
+    backstage.io/source-location: "url:https://github.com/elastic/connectors/"
+    github.com/project-slug: "elastic/connectors"
     github.com/team-slug: "elastic/ingestion-team"
-    buildkite.com/project-slug: "elastic/connectors-python"
+    buildkite.com/project-slug: "elastic/connectors"
   tags:
     - "python"
     - "buildkite"
@@ -32,11 +32,11 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python"
-  description: "Lints and tests Python Connectors"
+  name: "connectors"
+  description: "Lints and tests Elastic connector framework and connector implementations"
   links:
-    - title: "connectors-python Main Pipeline"
-      url: "https://buildkite.com/elastic/connectors-python"
+    - title: "connectors Main Pipeline"
+      url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
   owner: "group:ingestion-team"
@@ -45,12 +45,12 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-python"
+      name: "connectors"
       description: "Your Connector Service to ingest data into Elasticsearch"
     spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
-      repository: "elastic/connectors-python"
+      repository: "elastic/connectors"
       teams:
         everyone:
           access_level: "READ_ONLY"
@@ -62,11 +62,11 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python-nightly"
+  name: "connectors-nightly"
   description: "Nightly Connector Service Tests"
   links:
-    - title: "connectors-python Nightly Buildkite Jobs"
-      url: "https://buildkite.com/elastic/connectors-python"
+    - title: "connectors Nightly Buildkite Jobs"
+      url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
   owner: "group:ingestion-team"
@@ -75,29 +75,29 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-python-nightly"
-      description: "Connectors Service in Python Nightly Tests"
+      name: "connectors-nightly"
+      description: "Connectors Service Nightly Tests"
       links:
         - title: "Connector Service Nightly Pipeline"
-          url: "https://buildkite.com/elastic/connectors-python-nightly"
+          url: "https://buildkite.com/elastic/connectors-nightly"
     spec:
       pipeline_file: ".buildkite/nightly.py"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors-python"
+      repository: "elastic/connectors"
       schedules:
-        Daily 8_7:
-          branch: '8.7'
-          cronline: '@daily'
-          message: "Runs daily `8.7` e2e test"
-        Daily 8_8:
-          branch: '8.8'
-          cronline: '@daily'
-          message: "Runs daily `8.8` e2e test"
         Daily 8_9:
           branch: '8.9'
           cronline: '@daily'
           message: "Runs daily `8.9` e2e test"
+        Daily 8_10:
+          branch: '8.10'
+          cronline: '@daily'
+          message: "Runs daily `8.10` e2e test"
+        Daily 8_11:
+          branch: '8.11'
+          cronline: '@daily'
+          message: "Runs daily `8.11` e2e test"          
         Daily main:
           branch: main
           cronline: '@daily'
@@ -114,11 +114,11 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python-nightly-aarch64"
+  name: "connectors-nightly-aarch64"
   description: "Nightly Connector Service Tests"
   links:
-    - title: "connectors-python Nightly Buildkite Jobs"
-      url: "https://buildkite.com/elastic/connectors-python"
+    - title: "connectors Nightly Buildkite Jobs"
+      url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
   owner: "group:ingestion-team"
@@ -127,16 +127,16 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-python-nightly-aarch64"
-      description: "Connectors Service in Python Nightly Tests"
+      name: "connectors-nightly-aarch64"
+      description: "Connectors Service Nightly Tests"
       links:
         - title: "Connector Service Nightly Pipeline"
-          url: "https://buildkite.com/elastic/connectors-python-nightly-aarch64"
+          url: "https://buildkite.com/elastic/connectors-nightly-aarch64"
     spec:
       pipeline_file: ".buildkite/nightly_aarch64.py"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors-python"
+      repository: "elastic/connectors"
       schedules:
         Daily main:
           branch: main
@@ -152,11 +152,11 @@ spec:
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
 metadata:
-  name: "connectors-python-nightly-dockers"
+  name: "connectors-nightly-dockers"
   description: "Connectors Service Nightly Dockers"
   links:
-    - title: "connectors-python Nightly Buildkite Jobs"
-      url: "https://buildkite.com/elastic/connectors-python"
+    - title: "connectors Nightly Buildkite Jobs"
+      url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
   owner: "group:ingestion-team"
@@ -165,29 +165,29 @@ spec:
     apiVersion: "buildkite.elastic.dev/v1"
     kind: "Pipeline"
     metadata:
-      name: "connectors-python-nightly-dockers"
+      name: "connectors-nightly-dockers"
       description: "Connectors Service Nightly Dockers"
       links:
         - title: "Connector Service Nightly Pipeline"
-          url: "https://buildkite.com/elastic/connectors-python-nightly"
+          url: "https://buildkite.com/elastic/connectors-nightly"
     spec:
       pipeline_file: ".buildkite/nightly_docker.yml"
       provider_settings:
         trigger_mode: "none"
-      repository: "elastic/connectors-python"
+      repository: "elastic/connectors"
       schedules:
-        Daily 8_7:
-          branch: '8.7'
-          cronline: '@daily'
-          message: "Runs daily `8.7` e2e aarch64 test"
-        Daily 8_8:
-          branch: '8.8'
-          cronline: '@daily'
-          message: "Runs daily `8.8` e2e aarch64 test"
         Daily 8_9:
           branch: '8.9'
           cronline: '@daily'
           message: "Runs daily `8.9` e2e aarch64 test"
+        Daily 8_10:
+          branch: '8.10'
+          cronline: '@daily'
+          message: "Runs daily `8.10` e2e aarch64 test"
+        Daily 8_11:
+          branch: '8.11'
+          cronline: '@daily'
+          message: "Runs daily `8.11` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'

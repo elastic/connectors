@@ -19,6 +19,7 @@ from connectors.sources.mssql import MSSQLQueries
 SCHEMA = "dbo"
 TABLE = "emp_table"
 USER = "admin"
+CUSTOMER_TABLE = "customer"
 
 
 class ConnectionSync:
@@ -90,10 +91,20 @@ class CursorSync:
                 schema=SCHEMA, table=TABLE, user=USER
             ):
                 return [("ids",)]
+            elif self.query == self.query_object.table_primary_key(
+                schema=SCHEMA, table=CUSTOMER_TABLE, user=USER
+            ):
+                return [("ids",)]
             elif self.query == self.query_object.table_last_update_time(
                 schema=SCHEMA, table=TABLE
             ):
                 return [("2023-02-21T08:37:15+00:00",)]
+            elif self.query == self.query_object.table_last_update_time(
+                schema=SCHEMA, table=CUSTOMER_TABLE
+            ):
+                return [("2023-02-21T08:37:15+00:00",)]
+            elif self.query.lower() == "select * from customer":
+                return [(1, "customer_1"), (2, "customer_2")]
             else:
                 return [
                     (
@@ -133,18 +144,20 @@ COLUMN_NAMES = ["Column_1", "Column_2"]
 
 
 @pytest.mark.parametrize(
-    "schema, table, prefix",
+    "schema, tables, prefix",
     [
         (None, None, ""),
         ("Schema", None, "schema_"),
-        ("Schema", " ", "schema_"),
-        (None, "Table", "table_"),
-        (" ", "Table", "table_"),
-        ("Schema", "Table", "schema_table_"),
+        ("Schema", [], "schema_"),
+        (None, ["Table"], "table_"),
+        (" ", ["Table"], "table_"),
+        ("Schema", ["Table"], "schema_table_"),
+        ("Schema", ["Table1", "Table2"], "schema_table1_table2_"),
     ],
 )
-def test_map_column_names(schema, table, prefix):
-    mapped_column_names = map_column_names(COLUMN_NAMES, schema, table)
+def test_map_column_names(schema, tables, prefix):
+    mapped_column_names = map_column_names(COLUMN_NAMES, schema, tables)
+
     for column_name, mapped_column_name in zip(
         COLUMN_NAMES, mapped_column_names, strict=True
     ):

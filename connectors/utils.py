@@ -10,6 +10,7 @@ import hashlib
 import inspect
 import os
 import platform
+import re
 import shutil
 import ssl
 import subprocess
@@ -17,10 +18,8 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from time import strftime
 
-import aiofiles
-import aiohttp
-from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -36,6 +35,11 @@ DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
+DEFAULT_BULK_MAX_RETRIES = 3
+
+# Regular expression pattern to match a basic email format (no whitespace, valid domain)
+EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
+
 TIKA_SUPPORTED_FILETYPES = [
     ".txt",
     ".py",
@@ -70,6 +74,13 @@ TIKA_SUPPORTED_FILETYPES = [
     ".vsdm",
 ]
 
+ISO_ZULU_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+class Format(Enum):
+    VERBOSE = "verbose"
+    SHORT = "short"
+
 
 def iso_utc(when=None):
     if when is None:
@@ -77,9 +88,19 @@ def iso_utc(when=None):
     return when.isoformat()
 
 
-def next_run(quartz_definition):
+def iso_zulu():
+    """Returns the current time in ISO Zulu format"""
+    return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
+
+
+def epoch_timestamp_zulu():
+    """Returns the timestamp of the start of the epoch, in ISO Zulu format"""
+    return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
+
+
+def next_run(quartz_definition, now):
     """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
+    cron_obj = QuartzCron(quartz_definition, now)
     return cron_obj.next_trigger()
 
 
@@ -136,6 +157,10 @@ class CancellableSleeps:
 def get_size(ob):
     """Returns size in Bytes"""
     return asizeof.asizeof(ob)
+
+
+def get_file_extension(filename):
+    return os.path.splitext(filename)[-1]
 
 
 def get_base64_value(content):
@@ -430,9 +455,17 @@ def retryable(
             return retryable_async_generator(
                 func, retries, interval, strategy, processed_skipped_exceptions
             )
-        else:
+        elif inspect.iscoroutinefunction(func):
             return retryable_async_function(
                 func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        elif inspect.isfunction(func):
+            return retryable_sync_function(
+                func, retries, interval, strategy, processed_skipped_exceptions
+            )
+        else:
+            raise NotImplementedError(
+                f"Retryable decorator is not implemented for {func.__class__}."
             )
 
     return wrapper
@@ -451,7 +484,9 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await apply_retry_strategy(strategy, interval, retry)
+                await asyncio.sleep(
+                    time_to_sleep_between_retries(strategy, interval, retry)
+                )
                 retry += 1
 
     return wrapped
@@ -473,20 +508,41 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await apply_retry_strategy(strategy, interval, retry)
+                await asyncio.sleep(
+                    time_to_sleep_between_retries(strategy, interval, retry)
+                )
                 retry += 1
 
     return wrapped
 
 
-async def apply_retry_strategy(strategy, interval, retry):
+def retryable_sync_function(func, retries, interval, strategy, skipped_exceptions):
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        retry = 1
+        while retry <= retries:
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if retry >= retries or e.__class__ in skipped_exceptions:
+                    raise e
+                logger.debug(
+                    f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
+                )
+                time.sleep(time_to_sleep_between_retries(strategy, interval, retry))
+                retry += 1
+
+    return wrapped
+
+
+def time_to_sleep_between_retries(strategy, interval, retry):
     match strategy:
         case RetryStrategy.CONSTANT:
-            await asyncio.sleep(interval)
+            return interval
         case RetryStrategy.LINEAR_BACKOFF:
-            await asyncio.sleep(interval * retry)
+            return interval * retry
         case RetryStrategy.EXPONENTIAL_BACKOFF:
-            await asyncio.sleep(interval**retry)
+            return interval**retry
         case _:
             raise UnknownRetryStrategyError()
 
@@ -662,7 +718,7 @@ class CacheWithTimeout:
     Example of usage:
 
     cache = CacheWithTimeout()
-    cache.set(50, datetime.datetime.now() + datetime.timedelta(5)
+    cache.set_value(50, datetime.datetime.now() + datetime.timedelta(5)
     value = cache.get() # 50
     sleep(5)
     value = cache.get() # None
@@ -672,7 +728,7 @@ class CacheWithTimeout:
         self._value = None
         self._expiration_date = None
 
-    def get(self):
+    def get_value(self):
         """Get the value that's stored inside if it hasn't expired.
 
         If the expiration_date is past due, None is returned instead.
@@ -685,7 +741,7 @@ class CacheWithTimeout:
 
         return None
 
-    def set(self, value, expiration_date):
+    def set_value(self, value, expiration_date):
         """Set the value in the cache with expiration date.
 
         Once expiration_date is past due, the value will be lost.
@@ -742,152 +798,63 @@ def dict_slice(hsh, keys, default=None):
     return {k: hsh.get(k, default) for k in keys}
 
 
-class ExtractionService:
-    """Data extraction service manager
+def base64url_to_base64(string):
+    if string is None:
+        return string
 
-    Calling `extract_text` with a filename will begin text extraction
-    using an instance of the data extraction service.
-    Requires the data extraction service to be running
+    if len(string) == 0:
+        return ""
+
+    string = string.replace("-", "+")
+    return string.replace("_", "/")
+
+
+def validate_email_address(email_address):
+    """Validates an email address against a regular expression.
+    This method does not include any remote check against an SMTP server for example."""
+
+    # non None values indicate a match
+    return re.fullmatch(EMAIL_REGEX_PATTERN, email_address) is not None
+
+
+def shorten_str(string, shorten_by):
+    """
+    Shorten a string by removing characters from the middle, replacing them with '...'.
+
+    If balanced shortening is not possible, retains an extra character at the beginning.
+
+    Args:
+        string (str): The string to be shortened.
+        shorten_by (int): The number of characters to remove from the string.
+
+    Returns:
+        str: The shortened string.
+
+    Examples:
+        >>> shorten_str("abcdefgh", 1)
+        'abcdefgh'
+        >>> shorten_str("abcdefgh", 4)
+        'ab...gh'
+        >>> shorten_str("abcdefgh", 5)
+        'ab...h'
+        >>> shorten_str("abcdefgh", 1000)
+        'a...h'
     """
 
-    __EXTRACTION_CONFIG = {}  # setup by cli.py on startup
+    if string is None or string == "":
+        return ""
 
-    @classmethod
-    def get_extraction_config(cls):
-        return __EXTRACTION_CONFIG
+    if not string or shorten_by < 3:
+        return string
 
-    @classmethod
-    def set_extraction_config(cls, extraction_config):
-        global __EXTRACTION_CONFIG
-        __EXTRACTION_CONFIG = extraction_config
+    length = len(string)
+    shorten_by = min(length - 2, shorten_by)
 
-    def __init__(self):
-        self.session = None
+    keep = (length - shorten_by) // 2
+    balanced_shortening = (shorten_by + length) % 2 == 0
 
-        self.extraction_config = ExtractionService.get_extraction_config()
-        if self.extraction_config is not None:
-            self.host = self.extraction_config.get("host", None)
-            self.timeout = self.extraction_config.get("timeout", 30)
-            self.headers = {"accept": "application/json"}
-            self.chunk_size = self.extraction_config.get("stream_chunk_size", 65536)
-
-            self.use_file_pointers = self.extraction_config.get(
-                "use_file_pointers", False
-            )
-            if self.use_file_pointers:
-                self.volume_dir = self.extraction_config.get(
-                    "shared_volume_dir", "/app/files"
-                )
-            else:
-                self.volume_dir = None
-                self.headers["content-type"] = "application/octet-stream"
-        else:
-            self.host = None
-
-        if self.host is None:
-            logger.warning(
-                "Extraction service has been initialised but no extraction service configuration was found. No text will be extracted for this sync."
-            )
-
-    def _check_configured(self):
-        if self.host is not None:
-            return True
-
-        return False
-
-    def _begin_session(self):
-        if self.session is not None:
-            return self.session
-
-        timeout = aiohttp.ClientTimeout(total=self.timeout)
-        self.session = aiohttp.ClientSession(
-            timeout=timeout,
-            headers=self.headers,
-        )
-
-    async def _end_session(self):
-        if not self.session:
-            return
-
-        await self.session.close()
-
-    def get_volume_dir(self):
-        if self.host is None:
-            return None
-
-        return self.volume_dir
-
-    async def extract_text(self, filepath, original_filename):
-        """Sends a text extraction request to tika-server using the supplied filename.
-        Args:
-            filepath: local path to the tempfile for extraction
-            original_filename: original name of file
-
-        Returns the extracted text
-        """
-
-        content = ""
-
-        if self._check_configured() is False:
-            # an empty host means configuration was not set correctly
-            # a warning is already raised in __init__
-            return content
-
-        if self.session is None:
-            self._begin_session()
-
-        filename = (
-            original_filename if original_filename else os.path.basename(filepath)
-        )
-
-        try:
-            if self.use_file_pointers:
-                content = await self.send_filepointer(filepath, original_filename)
-            else:
-                content = await self.send_file(filepath, original_filename)
-        except (ClientConnectionError, ServerTimeoutError) as e:
-            logger.error(
-                f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Text extraction unexpectedly failed for {filename}. Error: {e}"
-            )
-
-        return content
-
-    async def send_filepointer(self, filepath, filename):
-        async with self._begin_session().put(
-            f"{self.host}/extract_text/?local_file_path={filepath}",
-        ) as response:
-            return await self.parse_extraction_resp(filename, response)
-
-    async def send_file(self, filepath, filename):
-        async with self._begin_session().put(
-            f"{self.host}/extract_text/",
-            data=self.file_sender(filepath),
-        ) as response:
-            return await self.parse_extraction_resp(filename, response)
-
-    async def file_sender(self, filepath):
-        async with aiofiles.open(filepath, "rb") as f:
-            chunk = await f.read(self.chunk_size)
-            while chunk:
-                yield chunk
-                chunk = await f.read(self.chunk_size)
-
-    async def parse_extraction_resp(self, filename, response):
-        """Parses the response from the tika-server and logs any extraction failures.
-
-        Returns `extracted_text` from the response.
-        """
-        content = await response.json(content_type=None)
-
-        if response.status != 200 or content.get("error"):
-            logger.warning(
-                f"Extraction service could not parse `{filename}'. Status: [{response.status}]; {content.get('error', 'unexpected error')}: {content.get('message', 'unknown cause')}"
-            )
-            return ""
-
-        logger.debug(f"Text extraction is successful for '{filename}'.")
-        return content.get("extracted_text", "")
+    if balanced_shortening:
+        return f"{string[:keep]}...{string[-keep:]}"
+    else:
+        # keep one more at the front
+        return f"{string[:keep + 1]}...{string[-keep:]}"

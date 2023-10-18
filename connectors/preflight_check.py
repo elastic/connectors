@@ -8,7 +8,7 @@ import aiohttp
 
 from connectors.es import ESClient
 from connectors.logger import logger
-from connectors.protocol import CONNECTORS_INDEX, JOBS_INDEX
+from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 from connectors.utils import CancellableSleeps
 
 
@@ -38,7 +38,7 @@ class PreflightCheck:
 
     async def run(self):
         try:
-            logger.info("Preflight checks...")
+            logger.info("Running preflight checks")
             self.running = True
             if not (await self.es_client.wait()):
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
@@ -92,8 +92,12 @@ class PreflightCheck:
         while self.running:
             try:
                 # Checking the indices/pipeline in the loop to be less strict about the boot ordering
-                await self.es_client.check_exists(
-                    indices=[CONNECTORS_INDEX, JOBS_INDEX]
+                # Using concrete write index to create these to ensure ES-installed template processes
+                # The templates are installed here: https://github.com/elastic/elasticsearch/blob/main/x-pack/plugin/ent-search/src/main/java/org/elasticsearch/xpack/application/connector/ConnectorTemplateRegistry.java
+                # and located here: https://github.com/elastic/elasticsearch/tree/main/x-pack/plugin/core/template-resources/src/main/resources/entsearch/connector
+
+                await self.es_client.ensure_exists(
+                    indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
                 )
                 return True
             except Exception as e:

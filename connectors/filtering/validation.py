@@ -10,6 +10,7 @@ import fastjsonschema
 
 from connectors.filtering.basic_rule import BasicRule, Policy, Rule
 from connectors.logger import logger
+from connectors.utils import Format
 
 
 class ValidationTarget(Enum):
@@ -161,8 +162,15 @@ class FilteringValidator:
         self._logger = logger_ or logger
 
     async def validate(self, filtering):
+        def _is_valid_str(result):
+            if result is None:
+                return "Unknown (check validator implementation as it should never return 'None')"
+
+            return "valid" if result.is_valid else "invalid"
+
         self._logger.info("Filtering validation started")
         basic_rules = filtering.basic_rules
+        basic_rules_ids = [basic_rule["id"] for basic_rule in basic_rules]
 
         filtering_validation_result = FilteringValidationResult()
 
@@ -173,10 +181,19 @@ class FilteringValidator:
                 for result in results:
                     filtering_validation_result += result
 
+                    logger.debug(
+                        f"Basic rules set: '{basic_rules_ids}' validation result (Validator: {validator.__name__}): {_is_valid_str(result)}"
+                    )
+
             if issubclass(validator, BasicRuleValidator):
                 for basic_rule in basic_rules:
                     # pass rule by rule (validate rule in isolation)
-                    filtering_validation_result += validator.validate(basic_rule)
+                    validator_result = validator.validate(basic_rule)
+                    filtering_validation_result += validator_result
+
+                    logger.debug(
+                        f"{str(basic_rule)} validation result (Validator: {validator.__name__}): {_is_valid_str(validator_result)}"
+                    )
 
         if filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
@@ -189,12 +206,14 @@ class FilteringValidator:
             for validator in advanced_rules_validators:
                 filtering_validation_result += await validator.validate(advanced_rules)
 
-        self._logger.info(
+        self._logger.debug(
             f"Filtering validation result: {filtering_validation_result.state}"
         )
-        self._logger.info(
-            f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors] if filtering_validation_result.errors else 'None'}"
-        )
+
+        if filtering_validation_result.errors:
+            self._logger.error(
+                f"Filtering validation errors: {[str(error) for error in filtering_validation_result.errors]}"
+            )
 
         return filtering_validation_result
 
@@ -245,7 +264,7 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
     @classmethod
     def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
         def semantic_duplicate_msg(rule_one, rule_two):
-            return f"Rule with id '{rule_one}' is semantically equal to rule with id '{rule_two}'"
+            return f"{format(rule_one, Format.SHORT.value)} is semantically equal to {format(rule_two, Format.SHORT.value)}."
 
         return [
             # We need two error messages to highlight both rules in the UI
@@ -253,14 +272,14 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
                 rule_id=basic_rule.id_,
                 is_valid=False,
                 validation_message=semantic_duplicate_msg(
-                    basic_rule.id_, semantic_duplicate.id_
+                    basic_rule, semantic_duplicate
                 ),
             ),
             SyncRuleValidationResult(
                 rule_id=semantic_duplicate.id_,
                 is_valid=False,
                 validation_message=semantic_duplicate_msg(
-                    semantic_duplicate.id_, basic_rule.id_
+                    semantic_duplicate, basic_rule
                 ),
             ),
         ]
@@ -293,8 +312,7 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
             return SyncRuleValidationResult(
                 rule_id=basic_rule.id_,
                 is_valid=False,
-                validation_message=f"Match all regexps: '{BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}' are "
-                f"not allowed.",
+                validation_message=f"{format(basic_rule, Format.SHORT.value)} uses a match all regexps {BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}, which are not allowed.",
             )
 
         return SyncRuleValidationResult.valid_result(rule_id=basic_rule.id_)

@@ -1,6 +1,6 @@
 # Releasing the Connectors project
 
-The version scheme we use is **MAJOR.MINOR.PATCH.BUILD** and stored in the [VERSION](https://github.com/elastic/connectors-python/blob/main/connectors/VERSION) file at the root of this repository.
+The version scheme we use is **MAJOR.MINOR.PATCH.BUILD** and stored in the [VERSION](https://github.com/elastic/connectors/blob/main/connectors/VERSION) file at the root of this repository.
 
 ## Unified release
 
@@ -25,7 +25,21 @@ Take care of the branching (minor releases only):
 
 After the Elastic unified release is complete
 
-- Update the **BUILD** version ([example PR](https://github.com/elastic/connectors-python/pull/122)). Note that the Connectors project does not immediately bump to the next **PATCH** version. That won't happen until that patch release's FF date.
+- Update the **BUILD** version ([example PR](https://github.com/elastic/connectors/pull/122)). Note that the Connectors project does not immediately bump to the next **PATCH** version. That won't happen until that patch release's FF date.
+
+## Releasing docker images
+
+To release the docker image, follow these steps:
+
+1. Make sure you're on the right tagged release commit, e.g. `v8.10.2.0`
+   - If no release tag exists yet, create it with `git tag <tagid> && git push origin <tagid>`
+2. Make sure the version in [VERSION](../connectors/VERSION) is correct
+3. Run `docker login -u <username> -p <password> docker.elastic.co` with credentials that allow for release
+4. Edit the [Makefile](../Makefile) to remove `-SNAPSHOT` from the `docker-build`, `docker-run` and `docker-push` steps
+5. Run `make docker-build`
+6. Run `make docker-run` to check that the docker image runs correctly
+    - If the image runs and complains about not finding elasticsearch on port 9200, that's okay -- this is enough to confirm the image works
+7. Run `make docker-push` to complete the release
 
 ## In-Between releases
 

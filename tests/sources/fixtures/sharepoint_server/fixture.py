@@ -5,14 +5,16 @@
 #
 """Module to handle api calls received from connector."""
 
-import io
 import os
-import random
-import string
+import time
 
 from flask import Flask, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
+
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
 
 app = Flask(__name__)
 
@@ -36,73 +38,52 @@ if THROTTLING:
         },
     )
 
-# Number of Sharepoint subsites
-total_subsites = 201
-# Number of Sharepoint lists
-total_lists = 1000
-
-SIZES = {
-    "extra_small": 1048576,  # 1MB
-    "small": 10485760,  # 10MB
-    "medium": 20971520,  # 20MB
-    "large": 99614720,  # 95MB
-}
 DOC_ID_SIZE = 36
 DOC_ID_FILLING_CHAR = "0"  # used to fill in missing symbols for IDs
 
-DATA_SIZE = os.environ.get("DATA_SIZE")
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
-# if DATA_SIZE is passed then use only one file size
-if DATA_SIZE and DATA_SIZE in SIZES:
-    FILE_SIZES_DISTRIBUTION = {DATA_SIZE: 100}
-else:
-    FILE_SIZES_DISTRIBUTION = {
-        "extra_small": 70,
-        "small": 15,
-        "medium": 10,
-        "large": 5,
-    }  # sum has to be 100
-
-
-GENERATED_DATA = {}
-
-# Generate range distribution (e.g. [range(0,2), range(2, 15), ...])
-DISTRIBUTION_RANGES = {}
-i = 0
-for k, v in FILE_SIZES_DISTRIBUTION.items():
-    DISTRIBUTION_RANGES[k] = range(i, i + v)
-    i = i + v
-
-# Generate data for different sizes
-for k in FILE_SIZES_DISTRIBUTION.keys():
-    GENERATED_DATA[k] = "".join(
-        [random.choice(string.ascii_letters) for _ in range(SIZES[k])]
-    )
+match DATA_SIZE:
+    case "small":
+        total_subsites = 1
+        lists_per_site = 10
+        attachments_per_list = 5
+    case "medium":
+        total_subsites = 10
+        lists_per_site = 40
+        attachments_per_list = 15
+    case "large":
+        total_subsites = 100
+        lists_per_site = 1000
+        attachments_per_list = 40
 
 
-def generate_attachment_data():
-    rnd = random.randrange(100)
-
-    for k, v in DISTRIBUTION_RANGES.items():
-        if rnd in v:
-            return io.BytesIO(bytes(GENERATED_DATA[k], encoding="utf-8"))
-
-    # fallback to extra_small
-    return io.BytesIO(bytes(GENERATED_DATA["extra_small"], encoding="utf-8"))
-
-
-def adjust_document_id_size(id):
+def adjust_document_id_size(document_id):
     """
     This methods make sure that all the documemts ids are min 36 bytes like in Sharepoint
     """
 
-    bytesize = len(id)
+    bytesize = len(document_id)
 
     if bytesize >= DOC_ID_SIZE:
-        return id
+        return document_id
 
-    addition = "".join(["0" for _ in range(DOC_ID_SIZE - bytesize - 1)])
-    return f"{id}-{addition}"
+    addition = "".join([DOC_ID_FILLING_CHAR for _ in range(DOC_ID_SIZE - bytesize - 1)])
+    return f"{document_id}-{addition}"
+
+
+def get_num_docs():
+    total_attachments = total_subsites * lists_per_site * attachments_per_list
+    total_lists = total_subsites * lists_per_site
+    print(total_subsites + total_lists + 2 * total_attachments)
+
+
+PRE_REQUEST_SLEEP = 0.1
+
+
+@app.before_request
+def before_request():
+    time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/sites/<string:site_collections>/_api/web/webs", methods=["GET"])
@@ -162,21 +143,24 @@ def get_lists(parent_site_url, site):
     Returns:
         lists (dict): Dictionary of lists
     """
-    global total_lists
     lists = {"value": []}
-    if "site1" in site:
+    top = int(request.args.get("$top"))
+    skip_start = int(request.args.get("$skip"))
+    skip_end = min(lists_per_site, skip_start + top)
+
+    for lists_count in range(skip_start, skip_end):
         lists["value"].extend(
             [
                 {
-                    "BaseType": 1,
+                    "BaseType": 0,
                     "Created": "2023-01-30T10:02:39Z",
-                    "Id": adjust_document_id_size(f"document-library-{site}"),
+                    "Id": adjust_document_id_size(f"lists-{site}-{lists_count}"),
                     "LastItemModifiedDate": "2023-01-30T10:02:40Z",
                     "ParentWebUrl": f"/{parent_site_url}",
-                    "Title": f"{site}-List2",
+                    "Title": f"{site}-List1",
                     "RootFolder": {
                         "Name": "Shared Documents",
-                        "ServerRelativeUrl": f"/{parent_site_url}/{site}",
+                        "ServerRelativeUrl": f"/{parent_site_url}/{site}/{lists_count}",
                         "TimeCreated": "2023-02-08T06:03:10Z",
                         "TimeLastModified": "2023-02-16T06:48:36Z",
                         "UniqueId": "52e62bcf-de67-4bbc-b399-b8b28bc97449",
@@ -184,36 +168,6 @@ def get_lists(parent_site_url, site):
                 },
             ]
         )
-    else:
-        skip_start = int(request.args.get("$skip"))
-        top = int(request.args.get("$top"))
-        if skip_start + top >= total_lists:
-            skip_end = total_lists
-            # Removing the data for the second sync
-            total_lists -= 50
-        else:
-            skip_end = skip_start + top
-
-        for lists_count in range(skip_start, skip_end):
-            lists["value"].extend(
-                [
-                    {
-                        "BaseType": 0,
-                        "Created": "2023-01-30T10:02:39Z",
-                        "Id": adjust_document_id_size(f"lists-{site}-{lists_count}"),
-                        "LastItemModifiedDate": "2023-01-30T10:02:40Z",
-                        "ParentWebUrl": f"/{parent_site_url}",
-                        "Title": f"{site}-List1",
-                        "RootFolder": {
-                            "Name": "Shared Documents",
-                            "ServerRelativeUrl": f"/{parent_site_url}/{site}",
-                            "TimeCreated": "2023-02-08T06:03:10Z",
-                            "TimeLastModified": "2023-02-16T06:48:36Z",
-                            "UniqueId": "52e62bcf-de67-4bbc-b399-b8b28bc97449",
-                        },
-                    },
-                ]
-            )
 
     return lists
 
@@ -232,17 +186,12 @@ def get_list_and_items(parent_site_url, list_id):
         item (dict): Dictionary of list item or drive item
     """
     args = request.args
-    if list_id == "lists-site1-0":
+    if args.get("$expand", "") == "AttachmentFiles":
         item = {
             "value": [
                 {
                     "Attachments": True,
-                    "AttachmentFiles": [
-                        {
-                            "FileName": f"dummy{list_id}.txt",
-                            "ServerRelativeUrl": parent_site_url,
-                        }
-                    ],
+                    "AttachmentFiles": [],
                     "Created": "2023-01-30T10:02:39Z",
                     "GUID": f"list-item-att-{parent_site_url}-{list_id}",
                     "FileRef": parent_site_url,
@@ -253,7 +202,15 @@ def get_list_and_items(parent_site_url, list_id):
                 }
             ]
         }
-    elif args.get("$expand", "") == "AttachmentFiles":
+        for item_id in range(attachments_per_list):
+            item["value"][0]["AttachmentFiles"].append(
+                {
+                    "Something": "Something",
+                    "FileName": f"dummy{list_id}-{item_id}.html",
+                    "ServerRelativeUrl": f"{parent_site_url}-dummy{list_id}-{item_id}.html",
+                }
+            )
+    else:
         item = {
             "value": [
                 {
@@ -262,60 +219,34 @@ def get_list_and_items(parent_site_url, list_id):
                     "GUID": adjust_document_id_size(
                         f"list-item-{parent_site_url}-{list_id}"
                     ),
-                    "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
                     "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
-                    "Id": adjust_document_id_size(f"list-id1-{list_id}"),
+                    "Id": adjust_document_id_size(
+                        f"{parent_site_url}-list-id1-{list_id}"
+                    ),
                     "ContentTypeId": f"123-{list_id}",
                 },
                 {
                     "Attachments": False,
                     "Created": "2023-01-30T10:02:39Z",
-                    "GUID": adjust_document_id_size(f"list-item-{list_id}"),
+                    "GUID": adjust_document_id_size(
+                        f"{parent_site_url}-list-item-{list_id}"
+                    ),
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
                     "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
-                    "Id": adjust_document_id_size(f"list-id2-{list_id}"),
+                    "Id": adjust_document_id_size(
+                        f"{parent_site_url}-list-id2-{list_id}"
+                    ),
                     "ContentTypeId": f"456-{list_id}",
                 },
             ]
         }
-    else:
-        item = {
-            "value": [
-                {
-                    "Folder": {
-                        "Name": "Folder sharepoint",
-                        "ServerRelativeUrl": f"{parent_site_url}/Shared Documents/Folder sharepoint",
-                        "TimeCreated": "2023-02-13T10:24:36Z",
-                        "TimeLastModified": "2023-02-13T10:24:36Z",
-                    },
-                    "Modified": "2023-02-13T10:24:36Z",
-                    "GUID": adjust_document_id_size(
-                        f"drive-folder-{parent_site_url}-{list_id}"
-                    ),
-                },
-                {
-                    "File": {
-                        "Length": "26949",
-                        "Name": f"dummy{list_id}.txt",
-                        "ServerRelativeUrl": parent_site_url,
-                        "TimeCreated": "2023-01-30T10:02:40Z",
-                        "TimeLastModified": "2023-01-30T10:02:40Z",
-                        "Title": f"folder-{parent_site_url}",
-                        "UniqueId": "6f885b24-af40-44e0-bd53-82e76e634cf6",
-                    },
-                    "Modified": "2023-01-30T10:02:39Z",
-                    "GUID": adjust_document_id_size(
-                        f"drive-file-{parent_site_url}-{list_id}"
-                    ),
-                },
-            ]
-        }
+
     return item
 
 
@@ -333,12 +264,13 @@ def get_attachment_data(parent_site_url, file_relative_url):
         data (dict): Dictionary of attachment metadata
     """
     return {
-        "Length": "26949",
-        "Name": f"attachment-{parent_site_url}",
+        "Length": 12345,
+        "Name": f"attachment-{parent_site_url}-{file_relative_url}",
         "ServerRelativeUrl": f"{parent_site_url}/dummy",
         "TimeCreated": "2023-01-30T10:02:40Z",
         "TimeLastModified": "2023-01-30T10:02:40Z",
-        "UniqueId": f"attachment-{parent_site_url}",
+        "Id": f"attachment-{parent_site_url}-{file_relative_url}",
+        "UniqueId": f"attachment-{parent_site_url}-{file_relative_url}",
     }
 
 
@@ -356,7 +288,8 @@ def download(parent_url, site, server_url):
     Returns:
         data_reader (io.BytesIO): object of io.BytesIO.
     """
-    return generate_attachment_data()
+    file = fake_provider.get_html()
+    return file.encode("utf-8")
 
 
 if __name__ == "__main__":
