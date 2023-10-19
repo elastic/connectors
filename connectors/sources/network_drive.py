@@ -6,6 +6,7 @@
 """Network Drive source module responsible to fetch documents from Network Drive.
 """
 import asyncio
+import csv
 import os
 from functools import cached_property, partial
 from io import BytesIO
@@ -246,6 +247,7 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
+        self.identity_mappings = self.configuration["identity_mappings"]
         self.session = None
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
 
@@ -294,6 +296,14 @@ class NASDataSource(BaseDataSource):
                 "tooltip": "Document level security ensures identities and permissions set in your network drive are mirrored in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
+            },
+            "identity_mappings": {
+                "label": "Path of CSV file containing users and groups SID (For Linux Network Drive)",
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "order": 7,
+                "type": "str",
+                "required": False,
+                "ui_restrictions": ["advanced"],
             },
         }
 
@@ -475,15 +485,21 @@ class NASDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_access_control_doc(self, user, sid, groups_info, groups_members):
+    async def _user_access_control_doc(
+        self, user, sid, groups_info, groups_members=None
+    ):
         prefixed_username = _prefix_user(user)
         sid_user = _prefix_sid(sid)
         sid_groups = []
 
-        for group_name, group_sid in groups_info.items():
-            members = groups_members.get(group_name)
+        if groups_members:
+            for group_name, group_sid in groups_info.items():
+                members = groups_members.get(group_name)
 
-            if sid in members.values():
+                if sid in members.values():
+                    sid_groups.append(_prefix_sid(group_sid))
+        else:
+            for group_sid in groups_info or []:
                 sid_groups.append(_prefix_sid(group_sid))
 
         access_control = [sid_user, prefixed_username, *sid_groups]
@@ -497,29 +513,61 @@ class NASDataSource(BaseDataSource):
             "created_at": iso_utc(),
         } | es_access_control_query(access_control)
 
+    def read_user_info_csv(self):
+        with open(self.identity_mappings, encoding="utf-8") as file:
+            user_info = []
+            try:
+                csv_reader = csv.reader(file, delimiter=";")
+                for row in csv_reader:
+                    user_info.append(
+                        {
+                            "username": row[0],
+                            "user_id": row[1],
+                            "groups": row[2].split(",") if len(row[2]) > 0 else [],
+                        }
+                    )
+            except csv.Error as e:
+                self._logger.exception(
+                    f"Error while reading user mapping file at the location: {self.identity_mappings}. Error: {e}"
+                )
+            return user_info
+
     async def get_access_control(self):
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        self._logger.info(
-            f"Fetching all groups and members for drive at path '{self.drive_path}'"
-        )
-        groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
-
-        groups_members = {}
-        for group_name, _ in groups_info.items():
-            groups_members[group_name] = await asyncio.to_thread(
-                self.security_info.fetch_members, group_name
+        # This if block fetches users, groups via local csv file path
+        if self.identity_mappings:
+            self._logger.info(
+                f"Fetching all groups and users from configured file path '{self.identity_mappings}'"
             )
 
-        self._logger.info(f"Fetching all users for drive at path '{self.drive_path}'")
-        users_info = await asyncio.to_thread(self.security_info.fetch_users)
-
-        for user, sid in users_info.items():
-            yield await self._user_access_control_doc(
-                user, sid, groups_info, groups_members
+            for user in self.read_user_info_csv():
+                yield await self._user_access_control_doc(
+                    user["name"], user["sid"], user["groups"]
+                )
+        else:
+            self._logger.info(
+                f"Fetching all groups and members for drive at path '{self.drive_path}'"
             )
+            groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
+
+            groups_members = {}
+            for group_name, _ in groups_info.items():
+                groups_members[group_name] = await asyncio.to_thread(
+                    self.security_info.fetch_members, group_name
+                )
+
+            self._logger.info(
+                f"Fetching all users for drive at path '{self.drive_path}'"
+            )
+            users_info = await asyncio.to_thread(self.security_info.fetch_users)
+
+            for user, sid in users_info.items():
+                yield await self._user_access_control_doc(
+                    user, sid, groups_info, groups_members
+                )
 
     async def get_entity_permission(self, file_path, file_type):
         if not self._dls_enabled():
