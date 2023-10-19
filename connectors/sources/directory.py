@@ -12,6 +12,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiofiles
+
 from connectors.source import BaseDataSource
 from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
 
@@ -62,11 +64,12 @@ class DirectoryDataSource(BaseDataSource):
             return
 
         self._logger.info(f"Reading {path}")
-        with open(file=path, mode="rb") as f:
+        async with aiofiles.open(file=path, mode="rb") as f:
+            content = await f.read()
             return {
                 "_id": self.get_id(path),
                 "_timestamp": timestamp,
-                "_attachment": get_base64_value(f.read()),
+                "_attachment": get_base64_value(content),
             }
 
     async def get_docs(self, filtering=None):
