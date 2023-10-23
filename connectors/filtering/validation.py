@@ -10,6 +10,7 @@ import fastjsonschema
 
 from connectors.filtering.basic_rule import BasicRule, Policy, Rule
 from connectors.logger import logger
+from connectors.utils import Format
 
 
 class ValidationTarget(Enum):
@@ -263,7 +264,7 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
     @classmethod
     def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
         def semantic_duplicate_msg(rule_one, rule_two):
-            return f"Rule with id '{rule_one}' is semantically equal to rule with id '{rule_two}'"
+            return f"{format(rule_one, Format.SHORT.value)} is semantically equal to {format(rule_two, Format.SHORT.value)}."
 
         return [
             # We need two error messages to highlight both rules in the UI
@@ -271,14 +272,14 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
                 rule_id=basic_rule.id_,
                 is_valid=False,
                 validation_message=semantic_duplicate_msg(
-                    basic_rule.id_, semantic_duplicate.id_
+                    basic_rule, semantic_duplicate
                 ),
             ),
             SyncRuleValidationResult(
                 rule_id=semantic_duplicate.id_,
                 is_valid=False,
                 validation_message=semantic_duplicate_msg(
-                    semantic_duplicate.id_, basic_rule.id_
+                    semantic_duplicate, basic_rule
                 ),
             ),
         ]
@@ -311,8 +312,7 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
             return SyncRuleValidationResult(
                 rule_id=basic_rule.id_,
                 is_valid=False,
-                validation_message=f"Match all regexps: '{BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}' are "
-                f"not allowed.",
+                validation_message=f"{format(basic_rule, Format.SHORT.value)} uses a match all regexps {BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}, which are not allowed.",
             )
 
         return SyncRuleValidationResult.valid_result(rule_id=basic_rule.id_)
