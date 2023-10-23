@@ -932,9 +932,7 @@ async def test_connector_prepare_different_id_invalid_source():
     ],
 )
 @pytest.mark.asyncio
-async def test_connector_prepare_with_prepared_connector(
-    main_doc_id, this_doc_id
-):
+async def test_connector_prepare_with_prepared_connector(main_doc_id, this_doc_id):
     seq_no = 1
     primary_term = 2
     connector_doc = {
@@ -1035,6 +1033,7 @@ async def test_connector_prepare_with_connector_empty_config_creates_default(
         if_primary_term=primary_term,
     )
 
+
 @pytest.mark.parametrize(
     "main_doc_id, this_doc_id",
     [
@@ -1095,6 +1094,7 @@ async def test_connector_prepare_with_connector_missing_fields_creates_them(
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
+
 
 @pytest.mark.parametrize(
     "main_doc_id, this_doc_id",
@@ -2148,7 +2148,9 @@ def test_updated_configuration_fields():
     }
     missing_configs = ["new_config"]
     connector = Connector(elastic_index=Mock(), doc_source={"_id": "test"})
-    result = connector.updated_configuration_fields(missing_configs, current, simple_default)
+    result = connector.updated_configuration_fields(
+        missing_configs, current, simple_default
+    )
 
     # all keys included where there are changes (excludes 'tenant_name')
     assert result.keys() == set(

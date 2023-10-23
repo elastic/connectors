@@ -759,9 +759,11 @@ class Connector(ESDocument):
                 )
                 return
 
-            configured_service_type = self.service_type
-
-        fqn = sources[configured_service_type]
+        fqn = (
+            sources[configured_service_type]
+            if is_main_connector
+            else sources[self.service_type]
+        )
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
@@ -799,7 +801,7 @@ class Connector(ESDocument):
             self.log_debug("Populated configuration")
             return {
                 "configuration": simple_config,
-                "status": Status.NEEDS_CONFIGURATION.value
+                "status": Status.NEEDS_CONFIGURATION.value,
             }
 
         missing_fields = simple_config.keys() - current_config.keys()
@@ -809,9 +811,7 @@ class Connector(ESDocument):
         if not missing_fields and not fields_missing_properties:
             return {}
 
-        doc = {
-            "configuration": {}
-        }
+        doc = {"configuration": {}}
         if missing_fields:
             doc["configuration"] = self.updated_configuration_fields(
                 missing_fields, current_config, simple_config
@@ -820,7 +820,9 @@ class Connector(ESDocument):
             updated_config = self.updated_configuration_field_properties(
                 fields_missing_properties, simple_config
             )
-            doc["configuration"] = deep_merge_dicts(doc["configuration"], updated_config)
+            doc["configuration"] = deep_merge_dicts(
+                doc["configuration"], updated_config
+            )
 
         return doc
 
@@ -862,10 +864,7 @@ class Connector(ESDocument):
             for key, value in simple_config.items()
             if key in fields_missing_properties.keys()
         }
-        return deep_merge_dicts(
-            filtered_simple_config, fields_missing_properties
-        )
-
+        return deep_merge_dicts(filtered_simple_config, fields_missing_properties)
 
     @with_concurrency_control()
     async def validate_filtering(self, validator):
