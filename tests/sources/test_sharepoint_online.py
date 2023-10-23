@@ -2651,6 +2651,44 @@ class TestSharepointOnlineDataSource:
             )
 
     @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_for_delta_delete_operation(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            drive_id = 1
+            drive_item_ids = ["1", "2"]
+            drive_items_batch = [
+                {"id": "1", "deleted": {"state": "deleted"}},
+                {"id": "2"},
+            ]
+
+            permissions_responses = [
+                {
+                    "id": drive_item_id,
+                    "body": {
+                        "value": [{"grantedToV2": {"user": {"id": "some user id"}}}]
+                    },
+                }
+                for drive_item_id in drive_item_ids
+            ]
+
+            patch_sharepoint_client.drive_items_permissions_batch = AsyncIterator(
+                permissions_responses
+            )
+
+            drive_items_with_permissions = []
+
+            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+                drive_id, drive_items_batch, "dummy_site_web_url"
+            ):
+                drive_items_with_permissions.append(drive_item_with_permission)
+
+            assert len(drive_items_with_permissions) == len(drive_item_ids)
+            # Item with id 1 was deleted, so not trying to fetch permissions
+            assert ACCESS_CONTROL not in drive_items_with_permissions[0]
+            assert ACCESS_CONTROL in drive_items_with_permissions[1]
+
+    @pytest.mark.asyncio
     @patch(
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
