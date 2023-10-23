@@ -1557,16 +1557,31 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             return
 
-        ids_to_items = {
-            drive_item["id"]: drive_item for drive_item in drive_items_batch
+        def _is_item_deleted(drive_item):
+            return self.drive_item_operation(drive_item) == OP_DELETE
+
+        # Don't fetch access controls for deleted drive items
+        deleted_drive_items = [
+            drive_item
+            for drive_item in drive_items_batch
+            if _is_item_deleted(drive_item)
+        ]
+        for drive_item in deleted_drive_items:
+            yield drive_item
+
+        # Fetch access controls only for upserts
+        upsert_ids_to_items = {
+            drive_item["id"]: drive_item
+            for drive_item in drive_items_batch
+            if not _is_item_deleted(drive_item)
         }
-        drive_items_ids = list(ids_to_items.keys())
+        upsert_drive_items_ids = list(upsert_ids_to_items.keys())
 
         async for permissions_response in self.client.drive_items_permissions_batch(
-            drive_id, drive_items_ids
+            drive_id, upsert_drive_items_ids
         ):
             drive_item_id = permissions_response.get("id")
-            drive_item = ids_to_items.get(drive_item_id)
+            drive_item = upsert_ids_to_items.get(drive_item_id)
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
@@ -1694,7 +1709,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site, site_access_control
                 ), None, OP_INDEX
 
-                async for site_drive in self.site_drives(site, check_timestamp=True):
+                # Edit operation on a drive_item doesn't update the
+                # lastModifiedDateTime of the parent site_drive. Therfore, we
+                # set check_timestamp to False when iterating over site_drives.
+                async for site_drive in self.site_drives(site, check_timestamp=False):
                     yield self._decorate_with_access_control(
                         site_drive, site_access_control
                     ), None, OP_INDEX
