@@ -31,19 +31,14 @@ def parse(basic_rules_json):
     if not basic_rules_json:
         return []
 
-    map_to_basic_rules_list = list(
-        map(
-            lambda basic_rule_json: BasicRule.from_json(basic_rule_json),
-            basic_rules_json,
-        )
-    )
+    map_to_basic_rules_list = [
+        BasicRule.from_json(basic_rule_json) for basic_rule_json in basic_rules_json
+    ]
 
     return sorted(
-        list(
-            filter(
-                lambda basic_rule: not basic_rule.is_default_rule(),
-                map_to_basic_rules_list,
-            )
+        filter(
+            lambda basic_rule: not basic_rule.is_default_rule(),
+            map_to_basic_rules_list,
         ),
         key=lambda basic_rule: basic_rule.order,
     )
