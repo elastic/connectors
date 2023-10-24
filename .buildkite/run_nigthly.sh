@@ -14,7 +14,7 @@ fi
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
-# TODO to be moved in the image at https://github.com/elastic/ci-agent-images/blob/main/vm-images/enterprise-search/scripts/connectors-python/install-deps.sh#L6
+# TODO to be moved in the image at https://github.com/elastic/ci-agent-images/blob/main/vm-images/enterprise-search/scripts/connectors/install-deps.sh#L6
 sudo apt-get -y install liblz4-dev libunwind-dev
 
 cd $ROOT
@@ -34,8 +34,8 @@ if [ -v BUILDKITE ]; then
   VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
   VAULT_USER="docker-swiftypeadmin"
   echo "Fetching Docker credentials for '$VAULT_USER' from Vault..."
-  DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors-python/${VAULT_USER})
-  DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors-python/${VAULT_USER})
+  DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors/${VAULT_USER})
+  DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors/${VAULT_USER})
   echo "Done!"
 
   # required by serverless
