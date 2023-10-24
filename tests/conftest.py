@@ -23,7 +23,7 @@ class Logger:
 
     def debug(self, msg, exc_info=False):
         if not self.silent:
-            print(msg)
+            print(msg)  # noqa: T201
         self.logs.append(msg)
         if exc_info:
             self.logs.append(traceback.format_exc())
