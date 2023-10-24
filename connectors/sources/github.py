@@ -641,6 +641,8 @@ class GitHubClient:
                 raise UnauthorizedException(
                     "Your Github token is either expired or revoked. Please check again."
                 ) from exception
+            else:
+                raise
         except Exception:
             raise
 
@@ -920,6 +922,7 @@ class GitHubDataSource(BaseDataSource):
                 "order": 8,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
+                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }

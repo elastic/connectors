@@ -231,6 +231,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "order": 3,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
+                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }
@@ -400,6 +401,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     alt="media",
                     userProject=self._google_storage_client.user_project_id,
                     pipe_to=async_buffer,
+                    path_params_safe_chars={"object": "'"},
                 )
             )
             await async_buffer.close()

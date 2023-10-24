@@ -18,6 +18,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from time import strftime
 
 from base64io import Base64IO
 from bs4 import BeautifulSoup
@@ -73,6 +74,13 @@ TIKA_SUPPORTED_FILETYPES = [
     ".vsdm",
 ]
 
+ISO_ZULU_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+class Format(Enum):
+    VERBOSE = "verbose"
+    SHORT = "short"
+
 
 def iso_utc(when=None):
     if when is None:
@@ -80,9 +88,19 @@ def iso_utc(when=None):
     return when.isoformat()
 
 
-def next_run(quartz_definition):
+def iso_zulu():
+    """Returns the current time in ISO Zulu format"""
+    return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
+
+
+def epoch_timestamp_zulu():
+    """Returns the timestamp of the start of the epoch, in ISO Zulu format"""
+    return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
+
+
+def next_run(quartz_definition, now):
     """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
+    cron_obj = QuartzCron(quartz_definition, now)
     return cron_obj.next_trigger()
 
 
@@ -797,3 +815,46 @@ def validate_email_address(email_address):
 
     # non None values indicate a match
     return re.fullmatch(EMAIL_REGEX_PATTERN, email_address) is not None
+
+
+def shorten_str(string, shorten_by):
+    """
+    Shorten a string by removing characters from the middle, replacing them with '...'.
+
+    If balanced shortening is not possible, retains an extra character at the beginning.
+
+    Args:
+        string (str): The string to be shortened.
+        shorten_by (int): The number of characters to remove from the string.
+
+    Returns:
+        str: The shortened string.
+
+    Examples:
+        >>> shorten_str("abcdefgh", 1)
+        'abcdefgh'
+        >>> shorten_str("abcdefgh", 4)
+        'ab...gh'
+        >>> shorten_str("abcdefgh", 5)
+        'ab...h'
+        >>> shorten_str("abcdefgh", 1000)
+        'a...h'
+    """
+
+    if string is None or string == "":
+        return ""
+
+    if not string or shorten_by < 3:
+        return string
+
+    length = len(string)
+    shorten_by = min(length - 2, shorten_by)
+
+    keep = (length - shorten_by) // 2
+    balanced_shortening = (shorten_by + length) % 2 == 0
+
+    if balanced_shortening:
+        return f"{string[:keep]}...{string[-keep:]}"
+    else:
+        # keep one more at the front
+        return f"{string[:keep + 1]}...{string[-keep:]}"

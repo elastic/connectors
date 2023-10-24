@@ -604,7 +604,7 @@ class Connector(ESDocument):
             self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self, job_type):
+    def next_sync(self, job_type, now):
         """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
@@ -619,7 +619,7 @@ class Connector(ESDocument):
 
         if not scheduling_property.get("enabled", False):
             return None
-        return next_run(scheduling_property.get("interval"))
+        return next_run(scheduling_property.get("interval"), now)
 
     async def _update_datetime(self, field, new_ts):
         await self.index.update(

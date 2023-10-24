@@ -671,7 +671,7 @@ async def test_connector_next_sync(
     next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
 
-    assert connector.next_sync(job_type) == expected_next_sync
+    assert connector.next_sync(job_type, datetime.utcnow()) == expected_next_sync
 
 
 @pytest.mark.asyncio
