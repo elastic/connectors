@@ -360,7 +360,7 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        services_to_filter = set(rule["service"] for rule in advanced_rules)
+        services_to_filter = {rule["service"] for rule in advanced_rules}
 
         (
             _,
@@ -657,7 +657,7 @@ class ServiceNowDataSource(BaseDataSource):
         self._logger.info("Fetching ServiceNow data")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            services = set(rule["service"] for rule in advanced_rules)
+            services = {rule["service"] for rule in advanced_rules}
 
             (
                 servicenow_mapping,
