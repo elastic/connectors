@@ -7,7 +7,7 @@
 import json
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -52,6 +52,10 @@ MOCK_CURRENT_USER = {
     "country": "US",
 }
 
+MOCK_AUTHENTICATED_ADMIN = {
+    "admin_profile": {"account_id": "dbid:123", "team_member_id": "dbmid:123-456"}
+}
+
 MOCK_CHECK_PATH = {
     ".tag": "folder",
     "name": "shared",
@@ -81,6 +85,82 @@ MOCK_FILES_FOLDERS = {
     "has_more": True,
 }
 
+MOCK_MEMBERS = {
+    "members": [
+        {
+            "profile": {
+                "team_member_id": "dbmid:456",
+                "account_id": "dbid:456",
+                "email": "dummy@gmail.com",
+                "status": {".tag": "suspended"},
+                "name": {
+                    "display_name": "Dummy",
+                },
+                "joined_on": "2023-10-11T11:52:58Z",
+                "groups": ["g:456"],
+            }
+        },
+    ],
+    "cursor": "abcd#1234",
+    "has_more": True,
+}
+
+MOCK_LIST_FILE_FOLDER_PERMISSION = {
+    "groups": [
+        {
+            "group": {
+                "group_id": "g:e2db7665347abcd600000000001a2b3c",
+                "group_name": "Test group",
+            },
+        }
+    ],
+    "invitees": [
+        {
+            "invitee": {".tag": "email", "email": "jessica@example.com"},
+        }
+    ],
+    "users": [
+        {
+            "user": {
+                "account_id": "dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+                "display_name": "Robert Smith",
+                "email": "bob@example.com",
+                "team_member_id": "dbmid:abcd1234",
+            }
+        }
+    ],
+    "cursor": "abcd#1234",
+    "has_more": True,
+}
+
+MOCK_LIST_FILE_FOLDER_PERMISSION_CONTINUE = {
+    "groups": [
+        {
+            "group": {
+                "group_id": "g:123",
+                "group_name": "Test group",
+            },
+        }
+    ],
+    "invitees": [
+        {
+            "invitee": {".tag": "email", "email": "dummy@example.com"},
+        }
+    ],
+    "users": [
+        {
+            "user": {
+                "account_id": "dbid:678",
+                "display_name": "Robert Smith",
+                "email": "dummy2@example.com",
+                "team_member_id": "dbmid:abcd1234",
+            }
+        }
+    ],
+    "cursor": "abcd#1234",
+    "has_more": True,
+}
+
 MOCK_FILES_FOLDERS_CONTINUE = {
     "entries": [
         {
@@ -96,6 +176,50 @@ MOCK_FILES_FOLDERS_CONTINUE = {
         },
     ],
     "cursor": None,
+    "has_more": False,
+}
+
+MOCK_MEMBERS_CONTINUE = {
+    "members": [
+        {
+            "profile": {
+                "team_member_id": "dbmid:123",
+                "account_id": "dbid:123",
+                "email": "dummy1@gmail.com",
+                "status": {".tag": "suspended"},
+                "name": {
+                    "display_name": "Dummy1",
+                },
+                "joined_on": "2023-10-11T11:52:58Z",
+                "groups": ["g:123"],
+            }
+        },
+    ],
+    "cursor": None,
+    "has_more": False,
+}
+
+MOCK_TEAM_FOLDER_LIST = {
+    "team_folders": [
+        {
+            "team_folder_id": "123",
+            "name": "dummy1",
+            "status": {".tag": "active"},
+        }
+    ],
+    "cursor": "cursor:123",
+    "has_more": True,
+}
+
+MOCK_TEAM_FOLDER_LIST_CONTINUE = {
+    "team_folders": [
+        {
+            "team_folder_id": "456",
+            "name": "dummy2",
+            "status": {".tag": "active"},
+        }
+    ],
+    "cursor": "cursor:123",
     "has_more": False,
 }
 
@@ -116,6 +240,16 @@ EXPECTED_FILES_FOLDERS = [
         "size": 200,
         "_timestamp": "2023-01-01T06:06:06Z",
     },
+]
+
+
+EXPECTED_FILE_PERMISSION = [
+    "user_id:dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+    "email:jessica@example.com",
+    "group:g:e2db7665347abcd600000000001a2b3c",
+    "user_id:dbid:678",
+    "email:dummy@example.com",
+    "group:g:123",
 ]
 
 MOCK_SHARED_FILES = {
@@ -316,6 +450,27 @@ MOCK_SEARCH_FILE_3 = {
     "server_modified": "2023-01-01T06:06:06Z",
     "size": 200,
 }
+
+EXPECTED_GET_DOCS_WITH_DLS = [
+    {
+        "_id": "id:2",
+        "type": "File",
+        "name": "index.py",
+        "file_path": "/test/dummy folder/index.py",
+        "size": 200,
+        "_timestamp": "2023-01-01T06:06:06Z",
+        "_allow_access_control": ["user:123"],
+    },
+    {
+        "_id": "id:1",
+        "type": "Folder",
+        "name": "dummy folder",
+        "file_path": "/test/dummy folder",
+        "size": 0,
+        "_timestamp": "2023-01-01T06:06:06+00:00",
+        "_allow_access_control": ["group:456"],
+    },
+]
 
 
 class JSONAsyncMock(AsyncMock):
@@ -792,7 +947,7 @@ async def test_fetch_files_folders():
                 AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS_CONTINUE, status=200)]),
             ],
         ):
-            async for document, _ in source._fetch_files_folders("/"):
+            async for document, _ in source._fetch_files_folders("/", folder_id="123"):
                 actual_response.append(document)
 
         assert actual_response == EXPECTED_FILES_FOLDERS
@@ -1015,3 +1170,180 @@ async def test_get_docs_with_advanced_rules(
                 "_timestamp": "2023-01-01T06:06:06Z",
             },
         ]
+
+
+@pytest.mark.asyncio
+async def test_get_team_folder_id():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client.path = "/"
+
+        actual_response = []
+        with patch.object(
+            source.dropbox_client,
+            "api_call",
+            side_effect=[
+                AsyncIterator([JSONAsyncMock(MOCK_TEAM_FOLDER_LIST, status=200)]),
+                AsyncIterator(
+                    [JSONAsyncMock(MOCK_TEAM_FOLDER_LIST_CONTINUE, status=200)]
+                ),
+            ],
+        ):
+            async for document in source.get_team_folder_id():
+                actual_response.append(document)
+        assert actual_response == ["123", "456"]
+
+
+@pytest.mark.asyncio
+async def test_get_access_control():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._dls_enabled = MagicMock(return_value=True)
+        source.dropbox_client.path = "/"
+        with patch.object(
+            source.dropbox_client,
+            "api_call",
+            side_effect=[
+                AsyncIterator([JSONAsyncMock(MOCK_MEMBERS, status=200)]),
+                AsyncIterator([JSONAsyncMock(MOCK_MEMBERS_CONTINUE, status=200)]),
+            ],
+        ):
+            async for document in source.get_access_control():
+                assert document["_id"] in ["dummy@gmail.com", "dummy1@gmail.com"]
+
+
+@pytest.mark.asyncio
+async def test_ping_dls_enabled():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._dls_enabled = MagicMock(return_value=True)
+        source.dropbox_client._set_access_token = AsyncMock()
+        with patch.object(
+            aiohttp.ClientSession,
+            "post",
+            return_value=get_json_mock(MOCK_AUTHENTICATED_ADMIN, 200),
+        ):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+async def test_get_permission_list_for_file():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._dls_enabled = MagicMock(return_value=True)
+        source.dropbox_client._set_access_token = AsyncMock()
+        actual_response = []
+        with patch.object(
+            source.dropbox_client,
+            "api_call",
+            side_effect=[
+                AsyncIterator(
+                    [JSONAsyncMock(MOCK_LIST_FILE_FOLDER_PERMISSION, status=200)]
+                ),
+                AsyncIterator(
+                    [
+                        JSONAsyncMock(
+                            MOCK_LIST_FILE_FOLDER_PERMISSION_CONTINUE, status=200
+                        )
+                    ]
+                ),
+            ],
+        ):
+            actual_response = await source.get_permission_list(
+                item_type="file", item={"id": 123}, account_id=456
+            )
+        assert actual_response == EXPECTED_FILE_PERMISSION
+
+
+@pytest.mark.asyncio
+async def test_get_permission_list_for_folder():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._dls_enabled = MagicMock(return_value=True)
+        source.dropbox_client._set_access_token = AsyncMock()
+        actual_response = []
+        with patch.object(
+            source.dropbox_client,
+            "api_call",
+            side_effect=[
+                AsyncIterator(
+                    [JSONAsyncMock(MOCK_LIST_FILE_FOLDER_PERMISSION, status=200)]
+                ),
+                AsyncIterator(
+                    [
+                        JSONAsyncMock(
+                            MOCK_LIST_FILE_FOLDER_PERMISSION_CONTINUE, status=200
+                        )
+                    ]
+                ),
+            ],
+        ):
+            actual_response = await source.get_permission_list(
+                item_type="Folder", item={"shared_folder_id": 123}, account_id=456
+            )
+        assert actual_response == EXPECTED_FILE_PERMISSION
+
+
+@pytest.mark.asyncio
+async def test_get_account_details():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client._set_access_token = AsyncMock()
+        actual_response = []
+        with patch.object(
+            aiohttp.ClientSession,
+            "post",
+            return_value=get_json_mock(MOCK_AUTHENTICATED_ADMIN, 200),
+        ):
+            actual_response = await source.get_account_details()
+            assert actual_response == ("dbid:123", "dbmid:123-456")
+
+
+async def create_fake_coroutine(data):
+    return data
+
+
+@pytest.mark.asyncio
+async def test_get_docs_for_dls():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._dls_enabled = MagicMock(return_value=True)
+        source.get_content = Mock(return_value=EXPECTED_CONTENT)
+        source._fetch_files_folders = Mock(
+            return_value=AsyncIterator([(EXPECTED_FILES_FOLDERS[1], {"id": 123})])
+        )
+        source._fetch_shared_files = Mock(
+            return_value=AsyncIterator([(EXPECTED_FILES_FOLDERS[0], {"id": 456})])
+        )
+        source.get_file_permission = Mock(
+            return_value=create_fake_coroutine(["user:123"])
+        )
+        source.get_folder_permission = Mock(
+            return_value=create_fake_coroutine(["group:456"])
+        )
+        source.get_account_details = Mock(
+            return_value=create_fake_coroutine(["dbid:123", "dbmid:123-456"])
+        )
+        source.get_team_folder_id = Mock(return_value=AsyncIterator(["dbid:123"]))
+
+        documents = []
+        async for item, _ in source.get_docs():
+            documents.append(item)
+
+        assert documents == EXPECTED_GET_DOCS_WITH_DLS
+
+
+@pytest.mark.asyncio
+async def test_remote_validation_with_dls():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._dls_enabled = MagicMock(return_value=True)
+        source.dropbox_client.path = "/abc"
+        source.get_account_details = Mock(
+            return_value=create_fake_coroutine(["dbid:123", "dbmid:123-456"])
+        )
+        source.get_team_folder_id = Mock(return_value=AsyncIterator(["dbid:123"]))
+        source.dropbox_client.check_path = JSONAsyncMock(
+            json=MOCK_CHECK_PATH, status=200
+        )
+        await source._remote_validation()
