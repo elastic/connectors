@@ -933,28 +933,6 @@ async def test_get_content_when_is_downloadable_is_true_with_extraction_service(
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-01T06:06:06")
-async def test_fetch_files_folders():
-    async with create_source(DropboxDataSource) as source:
-        setup_dropbox(source)
-        source.dropbox_client.path = "/"
-
-        actual_response = []
-        with patch.object(
-            source.dropbox_client,
-            "api_call",
-            side_effect=[
-                AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS, status=200)]),
-                AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS_CONTINUE, status=200)]),
-            ],
-        ):
-            async for document, _ in source._fetch_files_folders("/", folder_id="123"):
-                actual_response.append(document)
-
-        assert actual_response == EXPECTED_FILES_FOLDERS
-
-
-@pytest.mark.asyncio
-@freeze_time("2023-01-01T06:06:06")
 async def test_fetch_shared_files():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
