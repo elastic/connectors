@@ -37,8 +37,20 @@ def _parser():
     parser.add_argument(
         "--action",
         type=str,
-        default=["schedule", "execute", "cleanup"],
-        choices=["schedule", "execute", "list", "config", "cleanup"],
+        default=[
+            "schedule",
+            "execute_content_sync_job",
+            "execute_access_control_sync_job",
+            "cleanup",
+        ],
+        choices=[
+            "schedule",
+            "execute_content_sync_job",
+            "execute_access_control_sync_job",
+            "list",
+            "config",
+            "cleanup",
+        ],
         nargs="+",
         help="What elastic-ingest should do",
     )

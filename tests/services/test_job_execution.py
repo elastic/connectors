@@ -4,17 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock
 
-import pytest
-
-from connectors.es.client import License
-from connectors.es.index import DocumentNotFoundError
-from connectors.protocol import JobStatus, JobType
+from connectors.config import load_config
 from connectors.services.job_execution import (
     JobExecutionService,
-    load_max_concurrent_access_control_syncs,
-    load_max_concurrent_content_syncs,
 )
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
