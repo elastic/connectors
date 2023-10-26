@@ -813,9 +813,9 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.github_client.repos = set(
+        self.source.github_client.repos = {
             rule["repository"] for rule in advanced_rules
-        )
+        }
         invalid_repos = await self.source.get_invalid_repos()
 
         if len(invalid_repos) > 0:

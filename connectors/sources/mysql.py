@@ -122,18 +122,18 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
-        tables_to_filter = set(
+        tables_to_filter = {
             table
             for query_info in advanced_rules
             for table in query_info.get("tables", [])
-        )
+        }
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Tables not found or inaccessible: {format_list(sorted(list(missing_tables)))}.",
+                validation_message=f"Tables not found or inaccessible: {format_list(sorted(missing_tables))}.",
             )
 
         return SyncRuleValidationResult.valid_result(
@@ -203,7 +203,7 @@ class MySQLClient:
     async def get_all_table_names(self):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(self.queries.all_tables())
-            return list(map(lambda table: table[0], await cursor.fetchall()))
+            return [table[0] for table in await cursor.fetchall()]
 
     async def ping(self):
         try:

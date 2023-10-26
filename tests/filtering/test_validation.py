@@ -1009,10 +1009,8 @@ def test_basic_rules_set_no_conflicting_policies_validation(
     else:
         assert not any(result.is_valid for result in validation_results)
 
-    validation_results_rule_ids = set(
-        map(lambda result: result.rule_id, validation_results)
-    )
-    basic_rule_ids = set(map(lambda rule: rule["id"], basic_rules))
+    validation_results_rule_ids = {result.rule_id for result in validation_results}
+    basic_rule_ids = {rule["id"] for rule in basic_rules}
 
     assert validation_results_rule_ids == basic_rule_ids
 
