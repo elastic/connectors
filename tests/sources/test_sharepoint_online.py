@@ -272,7 +272,7 @@ def dls_enabled(value):
 
 
 def access_control_matches(actual, expected):
-    return all([access_control in expected for access_control in actual])
+    return all(access_control in expected for access_control in actual)
 
 
 def access_control_is_equal(actual, expected):
@@ -641,7 +641,7 @@ class TestMicrosoftAPISession:
         for response in responses.values():
             mock_responses.get(response["url"], payload=response["payload"])
 
-        pages = list()
+        pages = []
 
         async for page in microsoft_api_session.scroll_delta_url(
             url=responses["page1"]["url"]
@@ -2263,23 +2263,19 @@ class TestSharepointOnlineDataSource:
             assert len(site_collections) == len(self.site_collections)
             assert len(sites) == len(self.sites)
             assert all(
-                [
-                    access_control_matches(
-                        site[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                    )
-                    for site in sites
-                ]
+                access_control_matches(
+                    site[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site in sites
             )
 
             assert len(site_drives) == len(self.site_drives)
             assert all(
-                [
-                    access_control_matches(
-                        site_drive[ALLOW_ACCESS_CONTROL_PATCHED],
-                        expected_access_control,
-                    )
-                    for site_drive in site_drives
-                ]
+                access_control_matches(
+                    site_drive[ALLOW_ACCESS_CONTROL_PATCHED],
+                    expected_access_control,
+                )
+                for site_drive in site_drives
             )
 
             assert len(drive_items) == sum([len(j) for j in self.drive_items])
@@ -2290,56 +2286,46 @@ class TestSharepointOnlineDataSource:
                 *expected_access_control,
             ]
             assert all(
-                [
-                    access_control_matches(
-                        drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
-                        expected_drive_item_access_control,
-                    )
-                    for drive_item in drive_items
-                ]
+                access_control_matches(
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                    expected_drive_item_access_control,
+                )
+                for drive_item in drive_items
             )
 
             assert len(site_lists) == len(self.site_lists)
             assert all(
-                [
-                    access_control_matches(
-                        site_list[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                    )
-                    for site_list in site_lists
-                ]
+                access_control_matches(
+                    site_list[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site_list in site_lists
             )
 
             assert (
                 len(list_items) == len(self.site_list_items) - 1
             )  # -1 because one of them is ignored!
             assert all(
-                [
-                    access_control_matches(
-                        list_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                    )
-                    for list_item in list_items
-                ]
+                access_control_matches(
+                    list_item[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for list_item in list_items
             )
 
             assert len(list_item_attachments) == len(self.site_list_item_attachments)
             assert all(
-                [
-                    access_control_matches(
-                        list_item_attachment[ALLOW_ACCESS_CONTROL_PATCHED],
-                        expected_access_control,
-                    )
-                    for list_item_attachment in list_item_attachments
-                ]
+                access_control_matches(
+                    list_item_attachment[ALLOW_ACCESS_CONTROL_PATCHED],
+                    expected_access_control,
+                )
+                for list_item_attachment in list_item_attachments
             )
 
             assert len(site_pages) == len(self.site_pages)
             assert all(
-                [
-                    access_control_matches(
-                        site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
-                    )
-                    for site_page in site_pages
-                ]
+                access_control_matches(
+                    site_page[ALLOW_ACCESS_CONTROL_PATCHED], expected_access_control
+                )
+                for site_page in site_pages
             )
 
             assert source.sync_cursor()["cursor_timestamp"] == self.today
@@ -2374,8 +2360,8 @@ class TestSharepointOnlineDataSource:
         for page in self.drive_items_delta:
             deleted += len(list(filter(lambda item: "deleted" in item, page)))
 
-        docs = list()
-        downloads = list()
+        docs = []
+        downloads = []
         operations = {"index": 0, "delete": 0}
 
         async for doc, download_func, operation in source.get_docs_incrementally(
@@ -2647,6 +2633,44 @@ class TestSharepointOnlineDataSource:
             )
 
     @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_for_delta_delete_operation(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(use_document_level_security=True) as source:
+            drive_id = 1
+            drive_item_ids = ["1", "2"]
+            drive_items_batch = [
+                {"id": "1", "deleted": {"state": "deleted"}},
+                {"id": "2"},
+            ]
+
+            permissions_responses = [
+                {
+                    "id": drive_item_id,
+                    "body": {
+                        "value": [{"grantedToV2": {"user": {"id": "some user id"}}}]
+                    },
+                }
+                for drive_item_id in drive_item_ids
+            ]
+
+            patch_sharepoint_client.drive_items_permissions_batch = AsyncIterator(
+                permissions_responses
+            )
+
+            drive_items_with_permissions = []
+
+            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+                drive_id, drive_items_batch, "dummy_site_web_url"
+            ):
+                drive_items_with_permissions.append(drive_item_with_permission)
+
+            assert len(drive_items_with_permissions) == len(drive_item_ids)
+            # Item with id 1 was deleted, so not trying to fetch permissions
+            assert ACCESS_CONTROL not in drive_items_with_permissions[0]
+            assert ACCESS_CONTROL in drive_items_with_permissions[1]
+
+    @pytest.mark.asyncio
     @patch(
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
@@ -2681,23 +2705,19 @@ class TestSharepointOnlineDataSource:
             ]
 
             assert all(
-                [
-                    access_control_is_equal(
-                        drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
-                        expected_drive_item_access_control,
-                    )
-                    for drive_item in drive_items
-                ]
+                access_control_is_equal(
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                    expected_drive_item_access_control,
+                )
+                for drive_item in drive_items
             )
 
             assert all(
-                [
-                    not access_control_is_equal(
-                        drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
-                        drive_item_access_control_with_ac_inhertiance,
-                    )
-                    for drive_item in drive_items
-                ]
+                not access_control_is_equal(
+                    drive_item[ALLOW_ACCESS_CONTROL_PATCHED],
+                    drive_item_access_control_with_ac_inhertiance,
+                )
+                for drive_item in drive_items
             )
 
     @pytest.mark.asyncio
@@ -2724,13 +2744,11 @@ class TestSharepointOnlineDataSource:
             site_pages = [i for i in results if i["object_type"] == "site_page"]
 
             assert all(
-                [
-                    access_control_is_equal(
-                        site_page[ALLOW_ACCESS_CONTROL_PATCHED],
-                        admin_site_access_controls,
-                    )
-                    for site_page in site_pages
-                ]
+                access_control_is_equal(
+                    site_page[ALLOW_ACCESS_CONTROL_PATCHED],
+                    admin_site_access_controls,
+                )
+                for site_page in site_pages
             )
 
     @pytest.mark.asyncio
@@ -3238,7 +3256,7 @@ class TestSharepointOnlineDataSource:
             expected_email = f"email:{email}"
             expected_user = f"user:{username}"
             expected_user_id = f"user_id:{user_id}"
-            expected_groups = list(map(lambda group: f"group:{group}", groups))
+            expected_groups = [f"group:{group}" for group in groups]
 
             user_doc = await source._user_access_control_doc(user)
             access_control = user_doc["query"]["template"]["params"]["access_control"]
@@ -3252,7 +3270,7 @@ class TestSharepointOnlineDataSource:
             assert user_doc["identity"]["user_id"] == expected_user_id
             assert expected_email in access_control
             assert expected_user in access_control
-            all([group in access_control for group in expected_groups])
+            all(group in access_control for group in expected_groups)
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
@@ -3339,10 +3357,8 @@ class TestSharepointOnlineDataSource:
 
         assert len(actual_emails_and_usernames) == len(expected_emails_and_usernames)
         assert all(
-            [
-                email_or_username in expected_emails_and_usernames
-                for email_or_username in actual_emails_and_usernames
-            ]
+            email_or_username in expected_emails_and_usernames
+            for email_or_username in actual_emails_and_usernames
         )
 
     def test_prefix_group(self):

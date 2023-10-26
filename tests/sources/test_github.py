@@ -607,6 +607,25 @@ async def test_post_with_unauthorized():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_post_with_error_not_found():
+    async with create_github_source() as source:
+        source.github_client._get_session.post = Mock(
+            side_effect=ClientResponseError(
+                status=404,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+            )
+        )
+        with pytest.raises(Exception):
+            await source.github_client.post(
+                {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+            )
+
+
+@pytest.mark.asyncio
 async def test_paginated_api_call():
     expected_response = MOCK_RESPONSE_REPO
     async with create_github_source() as source:

@@ -1012,7 +1012,7 @@ def test_basic_rules_set_no_conflicting_policies_validation(
     validation_results_rule_ids = set(
         chain.from_iterable(result.rule_ids for result in validation_results)
     )
-    basic_rule_ids = set(map(lambda rule: rule["id"], basic_rules))
+    basic_rule_ids = {rule["id"] for rule in basic_rules}
 
     assert validation_results_rule_ids == basic_rule_ids
 

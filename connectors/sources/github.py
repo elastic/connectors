@@ -641,6 +641,8 @@ class GitHubClient:
                 raise UnauthorizedException(
                     "Your Github token is either expired or revoked. Please check again."
                 ) from exception
+            else:
+                raise
         except Exception:
             raise
 
@@ -811,9 +813,9 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.github_client.repos = set(
+        self.source.github_client.repos = {
             rule["repository"] for rule in advanced_rules
-        )
+        }
         invalid_repos = await self.source.get_invalid_repos()
 
         if len(invalid_repos) > 0:
