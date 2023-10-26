@@ -187,7 +187,12 @@ class JobExecutionService(BaseService):
                         )
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(
-                            connector_ids=supported_connector_ids
+                            connector_ids=supported_connector_ids,
+                            job_types=[
+                                JobType.FULL.value,
+                                JobType.INCREMENTAL.value,
+                                JobType.ACCESS_CONTROL.value,
+                            ],
                         ):
                             await self._sync(sync_job)
                 except Exception as e:
