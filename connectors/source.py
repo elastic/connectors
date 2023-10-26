@@ -352,9 +352,8 @@ class DataSourceConfiguration:
             validation_errors.extend(field.validate())
 
         if len(validation_errors) > 0:
-            raise ConfigurableFieldValueError(
-                f"Field validation errors: {'; '.join(validation_errors)}"
-            )
+            msg = f"Field validation errors: {'; '.join(validation_errors)}"
+            raise ConfigurableFieldValueError(msg)
 
     def dependencies_satisfied(self, field):
         """Used to check if a Field has its dependencies satisfied.
@@ -368,9 +367,8 @@ class DataSourceConfiguration:
         for dependency in field.depends_on:
             if dependency["field"] not in self._config:
                 # cannot check dependency if field does not exist
-                raise ConfigurableFieldDependencyError(
-                    f'\'{field.label}\' depends on configuration \'{dependency["field"]}\', but it does not exist.'
-                )
+                msg = f"'{field.label}' depends on configuration '{dependency['field']}', but it does not exist."
+                raise ConfigurableFieldDependencyError(msg)
 
             if self._config[dependency["field"]].value != dependency["value"]:
                 return False
@@ -392,9 +390,8 @@ class BaseDataSource:
         # Initialize to the global logger
         self._logger = logger
         if not isinstance(configuration, DataSourceConfiguration):
-            raise TypeError(
-                f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
-            )
+            msg = f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
+            raise TypeError(msg)
 
         self.configuration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
@@ -545,9 +542,8 @@ class BaseDataSource:
         missing_fields = list(set(default_config.keys()) - set(current_config.keys()))
 
         if len(missing_fields) > 0:
-            raise MalformedConfigurationError(
-                f'Connector has missing configuration fields: {", ".join(missing_fields)}'
-            )
+            msg = f"Connector has missing configuration fields: {', '.join(missing_fields)}"
+            raise MalformedConfigurationError(msg)
 
         return
 

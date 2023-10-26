@@ -86,9 +86,8 @@ class JobSchedulingService(BaseService):
             return
 
         if connector.service_type not in self.source_list:
-            raise DataSourceError(
-                f"Couldn't find data source class for {connector.service_type}"
-            )
+            msg = f"Couldn't find data source class for {connector.service_type}"
+            raise DataSourceError(msg)
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():

@@ -280,9 +280,8 @@ class Settings:
         self.language_code = language_code or DEFAULT_LANGUAGE
 
         if self.language_code not in self.language_data:
-            raise UnsupportedLanguageCode(
-                f"Language '{language_code}' is not supported"
-            )
+            msg = f"Language '{language_code}' is not supported"
+            raise UnsupportedLanguageCode(msg)
 
         self.analysis_icu = analysis_icu
         self.analysis_settings = self.icu_settings(analysis_icu)

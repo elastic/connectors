@@ -57,11 +57,8 @@ def verify():
     "Method to verify if prerequisites are satisfied for e2e or not"
     storage_emulator_host = os.getenv(key="STORAGE_EMULATOR_HOST", default=None)
     if storage_emulator_host != "http://localhost:4443":
-        raise PrerequisiteException(
-            "Environment variable STORAGE_EMULATOR_HOST is not set properly.\n"
-            "Solution: Please set the environment variable STORAGE_EMULATOR_HOST value with the below command on your terminal:\n"
-            "export STORAGE_EMULATOR_HOST=http://localhost:4443 \n"
-        )
+        msg = "Environment variable STORAGE_EMULATOR_HOST is not set properly.\nSolution: Please set the environment variable STORAGE_EMULATOR_HOST value with the below command on your terminal:\nexport STORAGE_EMULATOR_HOST=http://localhost:4443 \n"
+        raise PrerequisiteException(msg)
 
 
 def create_connection():

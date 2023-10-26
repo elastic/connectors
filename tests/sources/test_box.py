@@ -256,7 +256,8 @@ async def test_ping_with_successful_connection():
         try:
             await source.ping()
         except Exception as exception:
-            raise AssertionError("Ping should've been successful") from exception
+            msg = "Ping should've been successful"
+            raise AssertionError(msg) from exception
 
 
 @pytest.mark.asyncio

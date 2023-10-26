@@ -58,9 +58,8 @@ class ESIndex(ESClient):
             logger.critical(f"The server returned {e.status_code}")
             logger.critical(e.body, exc_info=True)
             if e.status_code == 404:
-                raise DocumentNotFoundError(
-                    f"Couldn't find document in {self.index_name} by id {doc_id}"
-                ) from e
+                msg = f"Couldn't find document in {self.index_name} by id {doc_id}"
+                raise DocumentNotFoundError(msg) from e
             raise
 
         return resp.body

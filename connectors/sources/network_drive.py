@@ -609,9 +609,8 @@ class NASDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
             matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
             if len(invalid_rules) > 0:
-                raise InvalidRulesError(
-                    f"Following advanced rules are invalid: {invalid_rules}"
-                )
+                msg = f"Following advanced rules are invalid: {invalid_rules}"
+                raise InvalidRulesError(msg)
 
             for path in matched_paths:
                 async for file in self.get_files(path=path):

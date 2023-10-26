@@ -28,9 +28,8 @@ match DATA_SIZE:
     case "large":
         RECORD_COUNT = 10000
     case _:
-        raise Exception(
-            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
-        )
+        msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        raise Exception(msg)
 
 SOBJECTS = [
     "Account",

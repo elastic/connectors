@@ -331,7 +331,8 @@ def main(args=None):
     config_file = args.config_file
 
     if not os.path.exists(config_file):
-        raise IOError(f"config file at '{config_file}' does not exist")
+        msg = f"config file at '{config_file}' does not exist"
+        raise IOError(msg)
 
     config = load_config(config_file)
     connector_definition = None

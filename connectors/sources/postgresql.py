@@ -444,9 +444,8 @@ class PostgreSQLDataSource(BaseDataSource):
             await self.postgresql_client.ping()
             self._logger.info("Successfully connected to Postgresql.")
         except Exception as e:
-            raise Exception(
-                f"Can't connect to Postgresql on {self.postgresql_client.host}."
-            ) from e
+            msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
+            raise Exception(msg) from e
 
     def row2doc(self, row, doc_id, table, timestamp):
         row.update(

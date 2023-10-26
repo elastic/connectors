@@ -98,9 +98,8 @@ def _monitor_service(pid):
 
             if len(response["hits"]["hits"]) == 0:
                 if time.time() - start > index_present_timeout:
-                    raise Exception(
-                        f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds."
-                    )
+                    msg = f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds."
+                    raise Exception(msg)
 
                 logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)
