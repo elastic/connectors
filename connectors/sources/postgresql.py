@@ -113,11 +113,11 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        tables_to_filter = set(
+        tables_to_filter = {
             table
             for query_info in advanced_rules
             for table in query_info.get("tables", [])
-        )
+        }
         tables = {
             table
             async for table in self.source.postgresql_client.get_tables_to_fetch(
@@ -538,7 +538,7 @@ class PostgreSQLDataSource(BaseDataSource):
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
         ):
-            doc_id = f"{self.database}_{self.schema}_{hash_id([table for table in tables], row, primary_key_columns)}"
+            doc_id = f"{self.database}_{self.schema}_{hash_id(list(tables), row, primary_key_columns)}"
 
             yield self.serialize(
                 doc=self.row2doc(

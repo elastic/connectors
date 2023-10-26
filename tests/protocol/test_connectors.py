@@ -2153,9 +2153,13 @@ def test_updated_configuration_fields():
     )
 
     # all keys included where there are changes (excludes 'tenant_name')
-    assert result.keys() == set(
-        ["new_config", "tenant_id", "client_id", "secret_value", "some_toggle"]
-    )
+    assert result.keys() == {
+        "new_config",
+        "tenant_id",
+        "client_id",
+        "secret_value",
+        "some_toggle",
+    }
 
     # order is adjusted
     assert result["client_id"]["order"] == 4

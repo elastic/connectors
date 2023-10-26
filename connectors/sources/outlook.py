@@ -463,7 +463,7 @@ class OutlookDocFormatter:
                 recipient.email_address for recipient in (mail.bcc_recipients or [])
             ],
             "importance": mail.importance,
-            "categories": [category for category in (mail.categories or [])],
+            "categories": list((mail.categories or [])),
             "message": html_to_text(html=mail.body),
         }
 
@@ -528,7 +528,7 @@ class OutlookDocFormatter:
             "complete_date": ews_format_to_datetime(
                 source_datetime=task.complete_date, timezone=timezone
             ),
-            "categories": [category for category in (task.categories or [])],
+            "categories": list((task.categories or [])),
             "importance": task.importance,
             "content": task.text_body,
             "status": task.status,

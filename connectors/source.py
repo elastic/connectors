@@ -170,7 +170,7 @@ class Field:
                 return (
                     value is None
                     or len(value) <= 0
-                    or all([x in (None, "") for x in value])
+                    or all(x in (None, "") for x in value)
                 )
             case _:
                 # int and bool
