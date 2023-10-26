@@ -160,32 +160,38 @@ def run(args):
 
     # just display the list of connectors
     if args.action == ["list"]:
-        print("Registered connectors:")
+        print("Registered connectors:")  # noqa: T201
         for source in get_source_klasses(config):
-            print(f"- {source.name}")
-        print("Bye")
+            print(f"- {source.name}")  # noqa: T201
+        print("Bye")  # noqa: T201
         return 0
 
     if args.action == ["config"]:
         service_type = args.service_type
-        print(f"Getting default configuration for service type {service_type}")
+        print(  # noqa: T201
+            f"Getting default configuration for service type {service_type}"
+        )
 
         source_list = config["sources"]
         if service_type not in source_list:
-            print(f"Could not find a connector for service type {service_type}")
+            print(  # noqa: T201
+                f"Could not find a connector for service type {service_type}"
+            )
             return -1
 
         source_klass = get_source_klass(source_list[service_type])
-        print(json.dumps(source_klass.get_simple_configuration(), indent=2))
-        print("Bye")
+        print(  # noqa: T201
+            json.dumps(source_klass.get_simple_configuration(), indent=2)
+        )
+        print("Bye")  # noqa: T201
         return 0
 
     if "list" in args.action:
-        print("Cannot use the `list` action with other actions")
+        print("Cannot use the `list` action with other actions")  # noqa: T201
         return -1
 
     if "config" in args.action:
-        print("Cannot use the `config` action with other actions")
+        print("Cannot use the `config` action with other actions")  # noqa: T201
         return -1
 
     loop = get_event_loop(args.uvloop)
@@ -210,7 +216,7 @@ def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
     if args.version:
-        print(__version__)
+        print(__version__)  # noqa: T201
         return 0
 
     return run(args)
