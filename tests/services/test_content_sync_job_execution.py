@@ -14,7 +14,7 @@ from connectors.services.content_sync_job_execution import (
     load_max_concurrent_content_syncs,
 )
 from tests.commons import AsyncIterator
-from tests.services.test_job_execution import create_and_run_service
+from tests.services.test_base import create_and_run_service
 
 MAX_FIVE_CONCURRENT_SYNCS = 5
 

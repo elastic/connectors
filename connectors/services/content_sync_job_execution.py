@@ -13,7 +13,7 @@ from connectors.protocol import (
     JobType,
     SyncJobIndex,
 )
-from connectors.services import JobExecutionService
+from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
@@ -35,11 +35,13 @@ def load_max_concurrent_content_syncs(config):
     return config.get("max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_CONTENT_SYNCS)
 
 
-class ContentSyncJobExecutionService(JobExecutionService):
+class ContentSyncJobExecutionService(BaseService):
     name = "execute_content_sync_job"
 
     def __init__(self, config):
         super().__init__(config)
+        self.idling = self.service_config["idling"]
+        self.source_list = config["sources"]
         self.max_concurrent_content_syncs = load_max_concurrent_content_syncs(
             self.service_config
         )

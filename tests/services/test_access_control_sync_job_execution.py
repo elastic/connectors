@@ -6,7 +6,6 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from test_job_execution import create_and_run_service
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
@@ -16,6 +15,7 @@ from connectors.services.access_control_sync_job_execution import (
     load_max_concurrent_access_control_syncs,
 )
 from tests.commons import AsyncIterator
+from tests.services.test_base import create_and_run_service
 
 MAX_SIX_CONCURRENT_SYNCS = 6
 
