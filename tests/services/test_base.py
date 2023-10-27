@@ -5,12 +5,54 @@
 #
 import asyncio
 import functools
+import os
 from collections import defaultdict
 from copy import deepcopy
 
 import pytest
 
+from connectors.config import load_config
 from connectors.services.base import BaseService, MultiService, get_services
+
+HERE = os.path.dirname(__file__)
+FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
+CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
+
+
+def create_service(service_klass, config=None, config_file=None, idling=None):
+    if config is None:
+        config = load_config(config_file) if config_file else {}
+    service = service_klass(config)
+    service.idling = 0
+
+    return service
+
+
+async def run_service_with_stop_after(service, stop_after=0):
+    def _stop_running_service_without_cancelling():
+        service.running = False
+
+    async def _terminate():
+        if stop_after == 0:
+            # so we actually want the service
+            # to run current loop without interruption
+            asyncio.get_event_loop().call_soon(_stop_running_service_without_cancelling)
+        else:
+            # but if stop_after is provided we want to
+            # interrupt the service after the timeout
+            await asyncio.sleep(stop_after)
+            service.stop()
+
+        await asyncio.sleep(0)
+
+    await asyncio.gather(service.run(), _terminate())
+
+
+async def create_and_run_service(
+    service_klass, config=None, config_file=CONFIG_FILE, stop_after=0
+):
+    service = create_service(service_klass, config=config, config_file=config_file)
+    await run_service_with_stop_after(service, stop_after)
 
 
 class StubService:
