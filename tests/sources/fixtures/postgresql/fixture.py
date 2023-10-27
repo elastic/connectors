@@ -15,6 +15,9 @@ CONNECTION_STRING = "postgresql://admin:Password_123@127.0.0.1:9090/xe"
 _SIZES = {"small": 5, "medium": 10, "large": 30}
 NUM_TABLES = _SIZES[DATA_SIZE]
 
+READONLY_USERNAME = "readonly"
+READONLY_PASSWORD = "foobar123"
+
 
 def random_text(k=1024 * 20):
     """Function to generate random text
@@ -32,7 +35,17 @@ BIG_TEXT = random_text()
 
 
 def load():
-    """Generate tables and loads table data in the microsoft server."""
+    """Create a read-only user for use when configuring the connector,
+    then create tables and load table data."""
+
+    async def create_readonly_user():
+        connect = await asyncpg.connect(CONNECTION_STRING)
+        sql_query = (
+            f"CREATE USER {READONLY_USERNAME} PASSWORD '{READONLY_PASSWORD}'; "
+            f"GRANT pg_read_all_data TO {READONLY_USERNAME};"
+        )
+        await connect.execute(sql_query)
+        await connect.close()
 
     async def inject_lines(table, connect, start, lines):
         """Ingest rows in table
@@ -64,6 +77,7 @@ def load():
                 await inject_lines(table, connect, i * 1000, 1000)
         await connect.close()
 
+    asyncio.get_event_loop().run_until_complete(create_readonly_user())
     asyncio.get_event_loop().run_until_complete(load_rows())
 
 
