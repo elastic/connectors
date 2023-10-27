@@ -33,14 +33,14 @@
                         "label": "Username",
                         "order": 3,
                         "type": "str",
-                        "value": "admin"
+                        "value": "readonly"
                 },
                 "password": {
                         "label": "Password",
                         "order": 4,
                         "sensitive": true,
                         "type": "str",
-                        "value": "Password_123"
+                        "value": "foobar123"
                 },
                 "database": {
                         "label": "Database",

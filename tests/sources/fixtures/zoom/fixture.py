@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Module to responsible to generate Zoom documents using the Flask framework."""
 
 import os

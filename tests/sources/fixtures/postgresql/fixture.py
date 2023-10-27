@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 import asyncio
 import os
 import random
@@ -16,6 +17,9 @@ fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 CONNECTION_STRING = "postgresql://admin:Password_123@127.0.0.1:9090/xe"
 BATCH_SIZE = 100
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+
+READONLY_USERNAME = "readonly"
+READONLY_PASSWORD = "foobar123"
 
 match DATA_SIZE:
     case "small":
@@ -36,7 +40,17 @@ def get_num_docs():
 
 
 def load():
-    """Generate tables and loads table data in the microsoft server."""
+    """Create a read-only user for use when configuring the connector,
+    then create tables and load table data."""
+
+    async def create_readonly_user():
+        connect = await asyncpg.connect(CONNECTION_STRING)
+        sql_query = (
+            f"CREATE USER {READONLY_USERNAME} PASSWORD '{READONLY_PASSWORD}'; "
+            f"GRANT pg_read_all_data TO {READONLY_USERNAME};"
+        )
+        await connect.execute(sql_query)
+        await connect.close()
 
     async def inject_lines(table, connect, lines):
         """Ingest rows in table
@@ -75,6 +89,7 @@ def load():
             await inject_lines(table, connect, RECORD_COUNT)
         await connect.close()
 
+    asyncio.get_event_loop().run_until_complete(create_readonly_user())
     asyncio.get_event_loop().run_until_complete(load_rows())
 
 
