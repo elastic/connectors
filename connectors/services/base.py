@@ -89,9 +89,8 @@ class BaseService(metaclass=_Registry):
     async def run(self):
         """Runs the service"""
         if self.running:
-            raise ServiceAlreadyRunningError(
-                f"{self.__class__.__name__} is already running."
-            )
+            msg = f"{self.__class__.__name__} is already running."
+            raise ServiceAlreadyRunningError(msg)
 
         self.running = True
         try:

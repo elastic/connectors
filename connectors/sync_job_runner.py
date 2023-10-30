@@ -93,9 +93,8 @@ class SyncJobRunner:
 
     async def execute(self):
         if self.running:
-            raise SyncJobRunningError(
-                f"Sync job {self.sync_job.id} is already running."
-            )
+            msg = f"Sync job {self.sync_job.id} is already running."
+            raise SyncJobRunningError(msg)
 
         self.running = True
 
@@ -273,7 +272,8 @@ class SyncJobRunner:
     @with_concurrency_control()
     async def sync_starts(self):
         if not await self.reload_connector():
-            raise SyncJobStartError(f"Couldn't reload connector {self.connector.id}")
+            msg = f"Couldn't reload connector {self.connector.id}"
+            raise SyncJobStartError(msg)
 
         job_type = self.sync_job.job_type
 
@@ -282,22 +282,19 @@ class SyncJobRunner:
                 logger.debug(
                     f"A content sync job is started for connector {self.connector.id} by another connector instance, skipping..."
                 )
-                raise SyncJobStartError(
-                    f"A content sync job is started for connector {self.connector.id} by another connector instance"
-                )
+                msg = f"A content sync job is started for connector {self.connector.id} by another connector instance"
+                raise SyncJobStartError(msg)
         elif job_type == JobType.ACCESS_CONTROL:
             if self.connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
                 logger.debug(
                     f"An access control sync job is started for connector {self.connector.id} by another connector instance, skipping..."
                 )
-                raise SyncJobStartError(
-                    f"An access control sync job is started for connector {self.connector.id} by another connector instance"
-                )
+                msg = f"An access control sync job is started for connector {self.connector.id} by another connector instance"
+                raise SyncJobStartError(msg)
         else:
             logger.error(f"Unknown job type: '{job_type}'. Skipping running sync job")
-            raise SyncJobStartError(
-                f"Unknown job type: '{job_type}'. Skipping running sync job"
-            )
+            msg = f"Unknown job type: '{job_type}'. Skipping running sync job"
+            raise SyncJobStartError(msg)
 
         try:
             await self.connector.sync_starts(job_type)

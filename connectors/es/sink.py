@@ -673,9 +673,8 @@ class SyncOrchestrator(ESClient):
     async def prepare_content_index(self, index, language_code=None):
         """Creates the index, given a mapping if it does not exists."""
         if not index.startswith("search-"):
-            raise ContentIndexNameInvalid(
-                'Index name {index} is invalid. Index name must start with "search-"'
-            )
+            msg = f"Index name {index} is invalid. Index name must start with 'search-'"
+            raise ContentIndexNameInvalid(msg)
 
         self._logger.debug(f"Checking index {index}")
 
@@ -815,7 +814,8 @@ class SyncOrchestrator(ESClient):
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
         if self._extractor_task is not None or self._sink_task is not None:
-            raise AsyncBulkRunningError("Async bulk task has already started.")
+            msg = "Async bulk task has already started."
+            raise AsyncBulkRunningError(msg)
         if filter_ is None:
             filter_ = Filter()
         if options is None:

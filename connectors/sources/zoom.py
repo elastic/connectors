@@ -114,9 +114,8 @@ class ZoomAPIToken:
                     "expires_in", 3599
                 )
         except Exception as exception:
-            raise TokenError(
-                f"Error while generating access token. Exception {exception}."
-            ) from exception
+            msg = f"Error while generating access token. Exception {exception}."
+            raise TokenError(msg) from exception
 
 
 class ZoomAPISession:
@@ -157,7 +156,8 @@ class ZoomAPISession:
                 await self._api_token.get(is_cache=False)
                 raise
             elif exception.status == 404:
-                raise ZoomResourceNotFound("Resource Not Found") from exception
+                msg = "Resource Not Found"
+                raise ZoomResourceNotFound(msg) from exception
             else:
                 raise
         except Exception:

@@ -527,14 +527,12 @@ class GoogleDriveDataSource(BaseDataSource):
             google_workspace_admin_email = self._get_google_workspace_admin_email()
 
             if google_workspace_admin_email is None:
-                raise ConfigurableFieldValueError(
-                    "Google Workspace admin email cannot be empty."
-                )
+                msg = "Google Workspace admin email cannot be empty."
+                raise ConfigurableFieldValueError(msg)
 
             if not validate_email_address(google_workspace_admin_email):
-                raise ConfigurableFieldValueError(
-                    "Google Workspace admin email is malformed or contains whitespace characters."
-                )
+                msg = "Google Workspace admin email is malformed or contains whitespace characters."
+                raise ConfigurableFieldValueError(msg)
 
     def _validate_google_workspace_email_for_shared_drives_sync(self):
         """
@@ -554,14 +552,12 @@ class GoogleDriveDataSource(BaseDataSource):
             ]
 
             if google_workspace_email is None:
-                raise ConfigurableFieldValueError(
-                    "Google Workspace admin email for shared drives sync cannot be empty when 'Use domain-wide delegation for data sync' is enabled."
-                )
+                msg = "Google Workspace admin email for shared drives sync cannot be empty when 'Use domain-wide delegation for data sync' is enabled."
+                raise ConfigurableFieldValueError(msg)
 
             if not validate_email_address(google_workspace_email):
-                raise ConfigurableFieldValueError(
-                    "Google Workspace email for shared drives sync is malformed or contains whitespace characters."
-                )
+                msg = "Google Workspace email for shared drives sync is malformed or contains whitespace characters."
+                raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         """Verify the connection with Google Drive"""

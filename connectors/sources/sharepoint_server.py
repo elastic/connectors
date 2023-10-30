@@ -552,9 +552,10 @@ class SharepointServerDataSource(BaseDataSource):
             if is_invalid:
                 self.invalid_collections.append(collection)
         if self.invalid_collections:
-            raise ConfigurableFieldValueError(
+            msg = (
                 f"Collections {', '.join(self.invalid_collections)} are not available."
             )
+            raise ConfigurableFieldValueError(msg)
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields

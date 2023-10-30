@@ -270,9 +270,8 @@ class SyncJob(ESDocument):
         validation_result = await validator.validate_filtering(self.filtering)
 
         if validation_result.state != FilteringValidationState.VALID:
-            raise InvalidFilteringError(
-                f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
-            )
+            msg = f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
+            raise InvalidFilteringError(msg)
 
     async def claim(self, sync_cursor=None):
         doc = {
@@ -590,7 +589,8 @@ class Connector(ESDocument):
             case JobType.FULL:
                 return self.last_sync_scheduled_at
             case _:
-                raise ValueError(f"Unknown job type: {job_type}")
+                msg = f"Unknown job type: {job_type}"
+                raise ValueError(msg)
 
     @property
     def sync_cursor(self):
@@ -615,7 +615,8 @@ class Connector(ESDocument):
             case JobType.FULL:
                 scheduling_property = self.full_sync_scheduling
             case _:
-                raise ValueError(f"Unknown job type: {job_type}")
+                msg = f"Unknown job type: {job_type}"
+                raise ValueError(msg)
 
         if not scheduling_property.get("enabled", False):
             return None
@@ -642,7 +643,8 @@ class Connector(ESDocument):
             case JobType.FULL:
                 await self._update_datetime("last_sync_scheduled_at", new_ts)
             case _:
-                raise ValueError(f"Unknown job type: {job_type}")
+                msg = f"Unknown job type: {job_type}"
+                raise ValueError(msg)
 
     async def sync_starts(self, job_type):
         if job_type == JobType.ACCESS_CONTROL:
@@ -656,7 +658,8 @@ class Connector(ESDocument):
                 "last_sync_error": None,
             }
         else:
-            raise ValueError(f"Unknown job type: {job_type}")
+            msg = f"Unknown job type: {job_type}"
+            raise ValueError(msg)
 
         doc = {
             "status": Status.CONNECTED.value,
@@ -709,7 +712,8 @@ class Connector(ESDocument):
                 "last_sync_error": job_error,
             }
         else:
-            raise ValueError(f"Unknown job type: {job_type}")
+            msg = f"Unknown job type: {job_type}"
+            raise ValueError(msg)
 
         doc = {
             "last_synced": iso_utc(),
@@ -748,7 +752,8 @@ class Connector(ESDocument):
         if is_main_connector:
             if not configured_service_type:
                 self.log_error("Service type is not configured")
-                raise ServiceTypeNotConfiguredError("Service type is not configured.")
+                msg = "Service type is not configured."
+                raise ServiceTypeNotConfiguredError(msg)
 
             if configured_service_type not in sources:
                 raise ServiceTypeNotSupportedError(configured_service_type)
@@ -768,9 +773,8 @@ class Connector(ESDocument):
             source_klass = get_source_klass(fqn)
         except Exception as e:
             self.log_critical(e, exc_info=True)
-            raise DataSourceError(
-                f"Could not instantiate {fqn} for {configured_service_type}"
-            ) from e
+            msg = f"Could not instantiate {fqn} for {configured_service_type}"
+            raise DataSourceError(msg) from e
 
         doc = self.validated_doc(source_klass)
         if is_main_connector and self.service_type is None:

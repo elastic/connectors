@@ -58,7 +58,8 @@ def test_validate_service_account_json_when_valid():
             valid_service_account_credentials, "some google service"
         )
     except ConfigurableFieldValueError:
-        raise AssertionError("Should've been a valid config") from None
+        msg = "Should've been a valid config"
+        raise AssertionError(msg) from None
 
 
 def test_validate_service_account_json_when_invalid():
@@ -212,7 +213,8 @@ class TestGoogleDirectoryClient:
         try:
             await google_directory_client.ping()
         except Exception:
-            raise AssertionError("Ping should've been successful") from None
+            msg = "Ping should've been successful"
+            raise AssertionError(msg) from None
 
     @pytest.mark.asyncio
     async def test_ping_failed(self, patch_google_service_account_client):
@@ -274,7 +276,8 @@ class TestGMailClient:
         try:
             await gmail_client.ping()
         except Exception:
-            raise AssertionError("Ping should've been successful") from None
+            msg = "Ping should've been successful"
+            raise AssertionError(msg) from None
 
     @pytest.mark.asyncio
     async def test_ping_failed(self, patch_google_service_account_client):
