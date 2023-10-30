@@ -977,7 +977,11 @@ class SyncJobIndex(ESIndex):
         }
         await self.index(job_def)
 
-    async def pending_jobs(self, connector_ids):
+    async def pending_jobs(self, connector_ids, job_types):
+        if not job_types:
+            return
+        if not isinstance(job_types, list):
+            job_types = [str(job_types)]
         query = {
             "bool": {
                 "must": [
@@ -990,6 +994,7 @@ class SyncJobIndex(ESIndex):
                         }
                     },
                     {"terms": {"connector.id": connector_ids}},
+                    {"terms": {"job_type": job_types}},
                 ]
             }
         }

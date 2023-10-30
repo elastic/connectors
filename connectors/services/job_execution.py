@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from copy import deepcopy
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
@@ -187,7 +186,12 @@ class JobExecutionService(BaseService):
                         )
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(
-                            connector_ids=supported_connector_ids
+                            connector_ids=supported_connector_ids,
+                            job_types=[
+                                JobType.FULL.value,
+                                JobType.INCREMENTAL.value,
+                                JobType.ACCESS_CONTROL.value,
+                            ],
                         ):
                             await self._sync(sync_job)
                 except Exception as e:
@@ -212,18 +216,3 @@ class JobExecutionService(BaseService):
                 self.sync_job_index.stop_waiting()
                 await self.sync_job_index.close()
         return 0
-
-    def _override_es_config(self, connector):
-        es_config = deepcopy(self.es_config)
-        if connector.id not in self.connectors:
-            return es_config
-
-        api_key = self.connectors[connector.id].get("api_key", None)
-        if not api_key:
-            return es_config
-
-        es_config.pop("username", None)
-        es_config.pop("password", None)
-        es_config["api_key"] = api_key
-
-        return es_config
