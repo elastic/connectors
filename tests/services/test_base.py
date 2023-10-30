@@ -8,6 +8,7 @@ import functools
 import os
 from collections import defaultdict
 from copy import deepcopy
+from unittest.mock import Mock
 
 import pytest
 
@@ -245,3 +246,31 @@ def test_parse_connectors_with_deprecated_config():
     assert len(service.connectors) == 1
     assert service.connectors["deprecated"]["connector_id"] == "deprecated"
     assert service.connectors["deprecated"]["service_type"] == "deprecated"
+
+
+def test_override_es_config():
+    connector_api_key = "connector_api_key"
+    config = {
+        "elasticsearch": {
+            "username": "username",
+            "password": "password",
+            "api_key": "global_api_key",
+        },
+        "service": {"idling": 30},
+        "sources": [],
+        "connectors": [
+            {
+                "connector_id": "foo",
+                "service_type": "bar",
+                "api_key": connector_api_key,
+            }
+        ],
+    }
+
+    service = BaseService(config)
+    connector = Mock()
+    connector.id = "foo"
+    override_config = service._override_es_config(connector)
+    assert "username" not in override_config
+    assert "password" not in override_config
+    assert override_config["api_key"] == connector_api_key

@@ -142,6 +142,21 @@ class BaseService(metaclass=_Registry):
 
         return connectors
 
+    def _override_es_config(self, connector):
+        es_config = deepcopy(self.es_config)
+        if connector.id not in self.connectors:
+            return es_config
+
+        api_key = self.connectors[connector.id].get("api_key", None)
+        if not api_key:
+            return es_config
+
+        es_config.pop("username", None)
+        es_config.pop("password", None)
+        es_config["api_key"] = api_key
+
+        return es_config
+
 
 class MultiService:
     """Wrapper class to run multiple services against the same config."""
