@@ -22,13 +22,6 @@ from connectors.utils import ConcurrentTasks
 DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS = 1
 
 
-def load_max_concurrent_access_control_syncs(config):
-    return config.get(
-        "max_concurrent_access_control_syncs",
-        DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS,
-    )
-
-
 class AccessControlSyncJobExecutionService(BaseService):
     name = "sync_access_control"
 
@@ -36,8 +29,9 @@ class AccessControlSyncJobExecutionService(BaseService):
         super().__init__(config)
         self.idling = self.service_config["idling"]
         self.source_list = config["sources"]
-        self.max_concurrent_access_control_syncs = (
-            load_max_concurrent_access_control_syncs(self.service_config)
+        self.max_concurrent_access_control_syncs = self.service_config.get(
+            "max_concurrent_access_control_syncs",
+            DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS,
         )
         self.access_control_syncs = None
 

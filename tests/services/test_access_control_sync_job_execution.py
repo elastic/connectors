@@ -12,7 +12,6 @@ from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import JobStatus, JobType
 from connectors.services.access_control_sync_job_execution import (
     AccessControlSyncJobExecutionService,
-    load_max_concurrent_access_control_syncs,
 )
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
@@ -290,22 +289,3 @@ async def test_access_control_job_execution_with_dls_feature_flag_disabled(
     await create_and_run_service(AccessControlSyncJobExecutionService)
 
     access_control_syncs_tasks_mock.put.assert_not_awaited()
-
-
-def test_load_max_concurrent_access_control_syncs_from_config():
-    max_concurrent_access_control_syncs = 3
-
-    assert (
-        load_max_concurrent_access_control_syncs(
-            {"max_concurrent_access_control_syncs": max_concurrent_access_control_syncs}
-        )
-        == max_concurrent_access_control_syncs
-    )
-
-
-@patch(
-    "connectors.services.access_control_sync_job_execution.DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS",
-    MAX_SIX_CONCURRENT_SYNCS,
-)
-def test_load_max_concurrent_access_control_syncs_fallback_on_default():
-    assert load_max_concurrent_access_control_syncs({}) == MAX_SIX_CONCURRENT_SYNCS
