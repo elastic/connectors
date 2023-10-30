@@ -37,8 +37,6 @@ class JobSchedulingService(BaseService):
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
-        self.connector_index = None
-        self.sync_job_index = None
         self.last_wake_up_time = datetime.utcnow()
 
     async def _schedule(self, connector):

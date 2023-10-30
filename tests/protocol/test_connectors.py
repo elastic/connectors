@@ -1952,8 +1952,23 @@ async def test_create_jobs_with_correct_target_index(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_types, job_type_query, remote_call",
+    [
+        (None, None, False),
+        ("", None, False),
+        (JobType.ACCESS_CONTROL.value, [JobType.ACCESS_CONTROL.value], True),
+        (
+            [JobType.FULL.value, JobType.INCREMENTAL.value],
+            [JobType.FULL.value, JobType.INCREMENTAL.value],
+            True,
+        ),
+    ],
+)
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
-async def test_pending_jobs(get_all_docs, set_env):
+async def test_pending_jobs(
+    get_all_docs, job_types, job_type_query, remote_call, set_env
+):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1970,6 +1985,7 @@ async def test_pending_jobs(get_all_docs, set_env):
                     }
                 },
                 {"terms": {"connector.id": connector_ids}},
+                {"terms": {"job_type": job_type_query}},
             ]
         }
     }
@@ -1977,12 +1993,19 @@ async def test_pending_jobs(get_all_docs, set_env):
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [
-        job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)
+        job
+        async for job in sync_job_index.pending_jobs(
+            connector_ids=connector_ids, job_types=job_types
+        )
     ]
 
-    get_all_docs.assert_called_with(query=expected_query, sort=expected_sort)
-    assert len(jobs) == 1
-    assert jobs[0] == job
+    if remote_call:
+        get_all_docs.assert_called_with(query=expected_query, sort=expected_sort)
+        assert len(jobs) == 1
+        assert jobs[0] == job
+    else:
+        get_all_docs.assert_not_called()
+        assert len(jobs) == 0
 
 
 @pytest.mark.asyncio
