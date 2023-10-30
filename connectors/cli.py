@@ -39,14 +39,14 @@ def _parser():
         type=str,
         default=[
             "schedule",
-            "execute_content_sync_job",
-            "execute_access_control_sync_job",
+            "sync_content",
+            "sync_access_control",
             "cleanup",
         ],
         choices=[
             "schedule",
-            "execute_content_sync_job",
-            "execute_access_control_sync_job",
+            "sync_content",
+            "sync_access_control",
             "list",
             "config",
             "cleanup",

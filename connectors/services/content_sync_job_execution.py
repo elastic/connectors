@@ -36,7 +36,7 @@ def load_max_concurrent_content_syncs(config):
 
 
 class ContentSyncJobExecutionService(BaseService):
-    name = "execute_content_sync_job"
+    name = "sync_content"
 
     def __init__(self, config):
         super().__init__(config)

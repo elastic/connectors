@@ -30,7 +30,7 @@ def load_max_concurrent_access_control_syncs(config):
 
 
 class AccessControlSyncJobExecutionService(BaseService):
-    name = "execute_access_control_sync_job"
+    name = "sync_access_control"
 
     def __init__(self, config):
         super().__init__(config)
