@@ -87,7 +87,7 @@ class ESClient:
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
         options["headers"] = config.get("headers", {})
-        options["headers"]["user-agent"] = f"elastic-connectors-python-{__version__}"
+        options["headers"]["user-agent"] = f"elastic-connectors-{__version__}"
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True
 
