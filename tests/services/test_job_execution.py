@@ -3,13 +3,11 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
 import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from connectors.config import load_config
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import JobStatus, JobType
@@ -19,6 +17,7 @@ from connectors.services.job_execution import (
     load_max_concurrent_content_syncs,
 )
 from tests.commons import AsyncIterator
+from tests.services.test_base import create_and_run_service
 
 MAX_FIVE_CONCURRENT_SYNCS = 5
 MAX_SIX_CONCURRENT_SYNCS = 6
@@ -26,39 +25,6 @@ MAX_SIX_CONCURRENT_SYNCS = 6
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
-
-
-def create_service(config_file):
-    config = load_config(config_file)
-    service = JobExecutionService(config)
-    service.idling = 0.05
-
-    return service
-
-
-async def run_service_with_stop_after(service, stop_after=0):
-    def _stop_running_service_without_cancelling():
-        service.running = False
-
-    async def _terminate():
-        if stop_after == 0:
-            # so we actually want the service
-            # to run current loop without interruption
-            asyncio.get_event_loop().call_soon(_stop_running_service_without_cancelling)
-        else:
-            # but if stop_after is provided we want to
-            # interrupt the service after the timeout
-            await asyncio.sleep(stop_after)
-            service.stop()
-
-        await asyncio.sleep(0)
-
-    await asyncio.gather(service.run(), _terminate())
-
-
-async def create_and_run_service(config_file=CONFIG_FILE, stop_after=0):
-    service = create_service(config_file)
-    await run_service_with_stop_after(service, stop_after)
 
 
 @pytest.fixture(autouse=True)
@@ -161,7 +127,7 @@ async def test_no_connector(connector_index_mock, concurrent_tasks_mocks, set_en
     content_syncs_tasks_mock, access_control_syncs_tasks_mock = concurrent_tasks_mocks
 
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -179,7 +145,7 @@ async def test_no_pending_jobs(
     connector = mock_connector()
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -205,7 +171,7 @@ async def test_job_execution_content_sync_job_and_access_control_sync_job(
         [content_sync_job, access_control_sync_job]
     )
 
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
     access_control_syncs_tasks_mock.put.assert_awaited_once_with(
@@ -230,7 +196,7 @@ async def test_job_execution_content_sync_job(
     content_sync_job = mock_sync_job()
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([content_sync_job])
 
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_awaited_once_with(sync_job_runner_mock.execute)
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -255,7 +221,7 @@ async def test_job_execution_access_control_sync_job(
         [access_control_sync_job]
     )
 
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     access_control_syncs_tasks_mock.put.assert_awaited_once_with(
         sync_job_runner_mock.execute
@@ -276,7 +242,7 @@ async def test_job_execution_with_unsupported_source(
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     sync_job = mock_sync_job(service_type="mysql")
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -300,7 +266,7 @@ async def test_job_execution_with_connector_not_found(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator(
         [content_sync_job, access_control_sync_job]
     )
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -321,7 +287,7 @@ async def test_job_execution_with_premium_connector(
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_awaited_once_with(
@@ -352,7 +318,7 @@ async def test_job_execution_with_premium_connector_with_insufficient_license(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator(
         [content_sync_job, access_control_sync_job]
     )
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     # Access control sync job should not be executed (license insufficient)
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -376,7 +342,7 @@ async def test_content_job_execution_with_connector_still_syncing(
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     sync_job = mock_sync_job()
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -400,7 +366,7 @@ async def test_access_control_job_execution_with_connector_still_syncing(
     connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -428,7 +394,7 @@ async def test_access_control_job_execution_with_insufficient_license(
 
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -456,7 +422,7 @@ async def test_access_control_job_execution_with_dls_feature_flag_disabled(
     sync_job = mock_sync_job(job_type=JobType.ACCESS_CONTROL)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
 
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -482,7 +448,7 @@ async def test_job_execution_with_unknown_job_type(
     sync_job = mock_sync_job(job_type=JobType.UNSET)
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
 
-    await create_and_run_service()
+    await create_and_run_service(JobExecutionService)
 
     content_syncs_tasks_mock.put.assert_not_awaited()
     access_control_syncs_tasks_mock.put.assert_not_awaited()
@@ -535,31 +501,3 @@ def test_load_max_concurrent_access_control_syncs_from_config():
 )
 def test_load_max_concurrent_access_control_syncs_fallback_on_default():
     assert load_max_concurrent_access_control_syncs({}) == MAX_SIX_CONCURRENT_SYNCS
-
-
-def test_override_es_config():
-    connector_api_key = "connector_api_key"
-    config = {
-        "elasticsearch": {
-            "username": "username",
-            "password": "password",
-            "api_key": "global_api_key",
-        },
-        "service": {"idling": 30},
-        "sources": [],
-        "connectors": [
-            {
-                "connector_id": "foo",
-                "service_type": "bar",
-                "api_key": connector_api_key,
-            }
-        ],
-    }
-
-    service = JobExecutionService(config)
-    connector = Mock()
-    connector.id = "foo"
-    override_config = service._override_es_config(connector)
-    assert "username" not in override_config
-    assert "password" not in override_config
-    assert override_config["api_key"] == connector_api_key

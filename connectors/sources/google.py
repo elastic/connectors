@@ -81,9 +81,10 @@ def load_service_account_json(service_account_credentials_json, google_service):
         try:
             json_credentials = json.loads(json_string)
         except ValueError as e:
-            raise ConfigurableFieldValueError(
+            msg = (
                 f"{google_service} service account is not a valid JSON. Exception: {e}"
-            ) from e
+            )
+            raise ConfigurableFieldValueError(msg) from e
 
         return json_credentials
 
@@ -96,9 +97,8 @@ def load_service_account_json(service_account_credentials_json, google_service):
         # in that case we need to call json.loads() twice
         return _load_json(json_credentials)
     else:
-        raise ConfigurableFieldValueError(
-            f"{google_service} service account is not a valid JSON."
-        )
+        msg = f"{google_service} service account is not a valid JSON."
+        raise ConfigurableFieldValueError(msg)
 
 
 def validate_service_account_json(service_account_credentials, google_service):
@@ -115,9 +115,8 @@ def validate_service_account_json(service_account_credentials, google_service):
 
     for key in json_credentials.keys():
         if key not in SERVICE_ACCOUNT_JSON_ALLOWED_KEYS:
-            raise ConfigurableFieldValueError(
-                f"{google_service} service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
-            )
+            msg = f"{google_service} service account JSON contains an unexpected key: '{key}'. Allowed keys are: {SERVICE_ACCOUNT_JSON_ALLOWED_KEYS}"
+            raise ConfigurableFieldValueError(msg)
 
 
 class GoogleServiceAccountClient:

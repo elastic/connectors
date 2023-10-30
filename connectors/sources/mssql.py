@@ -481,9 +481,8 @@ class MSSQLDataSource(BaseDataSource):
             await self.mssql_client.ping()
             self._logger.info("Successfully connected to Microsoft SQL.")
         except Exception as e:
-            raise Exception(
-                f"Can't connect to Microsoft SQL on {self.mssql_client.host}"
-            ) from e
+            msg = f"Can't connect to Microsoft SQL on {self.mssql_client.host}"
+            raise Exception(msg) from e
 
     def row2doc(self, row, doc_id, table, timestamp):
         row.update(

@@ -63,10 +63,23 @@
                     "order": 6,
                     "ui_restrictions": []
                 },
+                "drive_type":{
+                    "display": "dropdown",
+                    "label": "Drive type",
+                    "depends_on": [{"field": "use_document_level_security", "value": true}],
+                    "options": [
+                        {"label": "Windows", "value": "windows"},
+                        {"label": "Linux", "value": "linux"}
+                      ],
+                    "order":7,
+                    "type": "str",
+                    "ui_restrictions": ["advanced"],
+                    "value":"windows"
+                },
                 "identity_mappings": {
                     "label": "Path of CSV file containing users and groups SID (For Linux Network Drive)",
-                    "depends_on": [{"field": "use_document_level_security", "value": true}],
-                    "order": 7,
+                    "depends_on": [{"field": "use_document_level_security", "value": true}, {"field": "drive_type", "value": "linux"}],
+                    "order": 8,
                     "type": "str",
                     "required": false,
                     "ui_restrictions": ["advanced"],

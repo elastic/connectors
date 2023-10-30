@@ -41,9 +41,8 @@ class SyncRuleValidationResult:
 
     def __eq__(self, other):
         if not isinstance(other, SyncRuleValidationResult):
-            raise TypeError(
-                f"Can't compare SyncRuleValidationResult with {type(other)}"
-            )
+            msg = f"Can't compare SyncRuleValidationResult with {type(other)}"
+            raise TypeError(msg)
 
         return (
             self.rule_id == other.rule_id
@@ -126,9 +125,8 @@ class FilteringValidationResult:
             else:
                 return self
         else:
-            raise NotImplementedError(
-                f"Result of type '{type(other)}' cannot be added to '{type(FilteringValidationResult)}'"
-            )
+            msg = f"Result of type '{type(other)}' cannot be added to '{type(FilteringValidationResult)}'"
+            raise NotImplementedError(msg)
 
     def __eq__(self, other):
         if other is None:

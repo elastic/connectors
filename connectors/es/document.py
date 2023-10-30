@@ -91,21 +91,18 @@ class ESDocument:
     def __init__(self, elastic_index, doc_source):
         self.index = elastic_index
         if not isinstance(doc_source, dict):
-            raise InvalidDocumentSourceError(
-                f"Invalid type found for doc_source: {type(doc_source).__name__}, expected: {dict.__name__}"
-            )
+            msg = f"Invalid type found for doc_source: {type(doc_source).__name__}, expected: {dict.__name__}"
+            raise InvalidDocumentSourceError(msg)
         self.id = doc_source.get("_id")
         if not isinstance(self.id, str):
-            raise InvalidDocumentSourceError(
-                f"Invalid type found for id: {type(self.id).__name__}, expected: {str.__name__}"
-            )
+            msg = f"Invalid type found for id: {type(self.id).__name__}, expected: {str.__name__}"
+            raise InvalidDocumentSourceError(msg)
         self._seq_no = doc_source.get("_seq_no")
         self._primary_term = doc_source.get("_primary_term")
         self._source = doc_source.get("_source", {})
         if not isinstance(self._source, dict):
-            raise InvalidDocumentSourceError(
-                f"Invalid type found for source: {type(self._source).__name__}, expected: {dict.__name__}"
-            )
+            msg = f"Invalid type found for source: {type(self._source).__name__}, expected: {dict.__name__}"
+            raise InvalidDocumentSourceError(msg)
         self.logger = DocumentLogger(prefix=self._prefix(), extra=self._extra())
 
     def get(self, *keys, default=None):

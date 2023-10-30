@@ -32,7 +32,8 @@ class Logger:
         for log in self.logs:
             if isinstance(log, instance):
                 return
-        raise AssertionError(f"Could not find an instance of {instance}")
+        msg = f"Could not find an instance of {instance}"
+        raise AssertionError(msg)
 
     def assert_not_present(self, lines):
         if isinstance(lines, str):
@@ -155,4 +156,5 @@ def assert_re(expr, items):
         if isinstance(item, str) and expr.match(item):
             return
 
-    raise AssertionError(f"{expr} not found in {items}")
+    msg = f"{expr} not found in {items}"
+    raise AssertionError(msg)

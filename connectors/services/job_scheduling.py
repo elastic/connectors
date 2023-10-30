@@ -37,8 +37,6 @@ class JobSchedulingService(BaseService):
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
-        self.connector_index = None
-        self.sync_job_index = None
         self.last_wake_up_time = datetime.utcnow()
 
     async def _schedule(self, connector):
@@ -86,9 +84,8 @@ class JobSchedulingService(BaseService):
             return
 
         if connector.service_type not in self.source_list:
-            raise DataSourceError(
-                f"Couldn't find data source class for {connector.service_type}"
-            )
+            msg = f"Couldn't find data source class for {connector.service_type}"
+            raise DataSourceError(msg)
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
         if connector.features.sync_rules_enabled():

@@ -162,7 +162,8 @@ class CustomPath:
         elif path == "Contacts":
             return MockOutlookObject(object_type=CONTACT)
         else:
-            raise ValueError("Unsupported path element")
+            msg = "Unsupported path element"
+            raise ValueError(msg)
 
 
 class MockAttachmentId:

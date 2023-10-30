@@ -37,9 +37,8 @@ match DATA_SIZE:
         MESSAGE_COUNT = 50
         FILE_MESSAGE_COUNT = 15
     case _:
-        raise Exception(
-            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
-        )
+        msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        raise Exception(msg)
 
 USER_COUNT = 10
 USERS_TO_DELETE = 2
