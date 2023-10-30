@@ -60,7 +60,7 @@ if "OVERRIDE_URL" in os.environ:
     GRAPH_ACQUIRE_TOKEN_URL = override_url
 else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
-    GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"
+    GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
     BASE_URL = "https://graph.microsoft.com/v1.0"
 
 SCOPE = [

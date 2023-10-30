@@ -617,7 +617,7 @@ class OutlookClient:
                     folder_object = (
                         account.root / "Top of Information Store" / "Archive"
                     )
-                except Exception:
+                except Exception:  # noqa S112
                     continue
             else:
                 folder_object = getattr(account, mail_type["folder"])

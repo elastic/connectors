@@ -29,7 +29,7 @@ RETRY_INTERVAL = 1
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
-TOKEN_ENDPOINT = "/services/oauth2/token"
+TOKEN_ENDPOINT = "/services/oauth2/token"  # noqa S105
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
