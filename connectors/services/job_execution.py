@@ -58,8 +58,6 @@ class JobExecutionService(BaseService):
             load_max_concurrent_access_control_syncs(self.service_config)
         )
         self.source_list = config["sources"]
-        self.connector_index = None
-        self.sync_job_index = None
         self.content_syncs = None
         self.access_control_syncs = None
 
