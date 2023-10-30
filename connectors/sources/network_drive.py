@@ -581,9 +581,8 @@ class NASDataSource(BaseDataSource):
                         groups_info=user["groups"],
                     )
             else:
-                raise ConfigurableFieldValueError(
-                    "CSV file path cannot be empty. Please provide a valid csv file path."
-                )
+                msg = "CSV file path cannot be empty. Please provide a valid csv file path."
+                raise ConfigurableFieldValueError(msg)
         else:
             try:
                 self._logger.info(
@@ -610,7 +609,8 @@ class NASDataSource(BaseDataSource):
                         groups_members=groups_members,
                     )
             except ConnectionError as exception:
-                raise ConnectionError("Something went wrong") from exception
+                msg = "Something went wrong"
+                raise ConnectionError(msg) from exception
 
     async def get_entity_permission(self, file_path, file_type):
         if not self._dls_enabled():
