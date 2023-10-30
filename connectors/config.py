@@ -13,7 +13,11 @@ from connectors.logger import logger
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
-    configuration = EnvYAML(config_file)
+    yaml_config = EnvYAML(config_file, flatten=False).export()
+    nested_yaml_config = {}
+    for key, value in yaml_config.items():
+        _nest_configs(nested_yaml_config, key, value)
+    configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
     return configuration
 
@@ -40,6 +44,73 @@ log_level_mappings = {
 }
 
 
+def _default_config():
+    return {
+        "elasticsearch": {
+            "host": "http://localhost:9200",
+            "username": "elastic",
+            "password": "changeme",
+            "ssl": True,
+            "bulk": {
+                "queue_max_size": 1024,
+                "queue_max_mem_size": 25,
+                "display_every": 100,
+                "chunk_size": 1000,
+                "max_concurrency": 5,
+                "chunk_max_mem_size": 5,
+                "concurrent_downloads": 10,
+                "max_retries": 3,
+            },
+            "retry_on_timeout": True,
+            "request_timeout": 120,
+            "max_wait_duration": 120,
+            "initial_backoff_duration": 1,
+            "backoff_multiplier": 2,
+            "log_level": "info",
+        },
+        "service": {
+            "idling": 30,
+            "heartbeat": 300,
+            "preflight_max_attempts": 10,
+            "preflight_idle": 30,
+            "max_errors": 20,
+            "max_errors_span": 600,
+            "max_concurrent_content_syncs": 1,
+            "max_concurrent_access_control_syncs": 1,
+            "job_cleanup_interval": 300,
+            "log_level": "INFO",
+        },
+        "sources": {
+            "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
+            "confluence": "connectors.sources.confluence:ConfluenceDataSource",
+            "dir": "connectors.sources.directory:DirectoryDataSource",
+            "dropbox": "connectors.sources.dropbox:DropboxDataSource",
+            "github": "connectors.sources.github:GitHubDataSource",
+            "gmail": "connectors.sources.gmail:GMailDataSource",
+            "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
+            "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
+            "jira": "connectors.sources.jira:JiraDataSource",
+            "mongodb": "connectors.sources.mongo:MongoDataSource",
+            "mssql": "connectors.sources.mssql:MSSQLDataSource",
+            "mysql": "connectors.sources.mysql:MySqlDataSource",
+            "network_drive": "connectors.sources.network_drive:NASDataSource",
+            "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
+            "oracle": "connectors.sources.oracle:OracleDataSource",
+            "outlook": "connectors.sources.outlook:OutlookDataSource",
+            "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
+            "s3": "connectors.sources.s3:S3DataSource",
+            "salesforce": "connectors.sources.salesforce:SalesforceDataSource",
+            "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
+            "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
+            "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
+            "slack": "connectors.sources.slack:SlackDataSource",
+            "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
+            "zoom": "connectors.sources.zoom:ZoomDataSource",
+            "box": "connectors.sources.box:BoxDataSource",
+        },
+    }
+
+
 def _ent_search_config(configuration):
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
         return
@@ -54,23 +125,22 @@ def _ent_search_config(configuration):
 
         if es_field == "log_level":
             if es_field_value not in log_level_mappings:
-                raise ValueError(
-                    f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
-                )
+                msg = f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
+                raise ValueError(msg)
             es_field_value = log_level_mappings[es_field_value]
 
-        _update_config_field(configuration, connector_field, es_field_value)
+        _nest_configs(configuration, connector_field, es_field_value)
 
         logger.debug(f"Overridden {connector_field}")
 
 
-def _update_config_field(configuration, field, value):
+def _nest_configs(configuration, field, value):
     """
     Update configuration field value taking into account the nesting.
 
     Configuration is a hash of hashes, so we need to dive inside to do proper assignment.
 
-    E.g. _update_config({}, "elasticsearch.bulk.queuesize", 20) will result in the following config:
+    E.g. _nest_config({}, "elasticsearch.bulk.queuesize", 20) will result in the following config:
     {
         "elasticsearch": {
             "bulk": {
@@ -80,6 +150,7 @@ def _update_config_field(configuration, field, value):
     }
     """
     subfields = field.split(".")
+    last_key = subfields[-1]
 
     current_leaf = configuration
     for subfield in subfields[:-1]:
@@ -87,4 +158,22 @@ def _update_config_field(configuration, field, value):
             current_leaf[subfield] = {}
         current_leaf = current_leaf[subfield]
 
-    current_leaf[subfields[-1]] = value
+    if isinstance(current_leaf.get(last_key), dict):
+        current_leaf[last_key] = dict(_merge_dicts(current_leaf[last_key], value))
+    else:
+        current_leaf[last_key] = value
+
+
+def _merge_dicts(hsh1, hsh2):
+    for k in set(hsh1.keys()).union(hsh2.keys()):
+        if k in hsh1 and k in hsh2:
+            if isinstance(hsh1[k], dict) and isinstance(
+                hsh2[k], dict
+            ):  # only merge objects
+                yield (k, dict(_merge_dicts(hsh1[k], hsh2[k])))
+            else:
+                yield (k, hsh2[k])
+        elif k in hsh1:
+            yield (k, hsh1[k])
+        else:
+            yield (k, hsh2[k])

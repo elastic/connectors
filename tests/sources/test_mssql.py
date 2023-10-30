@@ -4,16 +4,24 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the microsoft sql database source class methods"""
-from unittest.mock import patch
+import os
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from freezegun import freeze_time
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import ProgrammingError
 
-from connectors.sources.mssql import MSSQLDataSource, MSSQLQueries
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
+from connectors.sources.mssql import (
+    MSSQLAdvancedRulesValidator,
+    MSSQLDataSource,
+    MSSQLQueries,
+)
 from tests.sources.support import create_source
 from tests.sources.test_generic_database import ConnectionSync
 
-MSSQL_CONNECTION_STRING = "mssql+pytds://admin:Password_123@127.0.0.1:9090/xe"
+ADVANCED_SNIPPET = "advanced_snippet"
 
 
 class MockEngine:
@@ -28,79 +36,326 @@ class MockEngine:
         return ConnectionSync(MSSQLQueries())
 
 
-@freeze_time("2023-01-24T04:07:19")
-@patch("connectors.sources.mssql.create_engine")
-@patch("connectors.sources.mssql.URL.create")
 @pytest.mark.asyncio
-async def test_create_engine(mock_create_url, mock_create_engine):
-    # Setup
-    source = create_source(MSSQLDataSource)
-    mock_create_engine.return_value = "Mock engine"
-    mock_create_url.return_value = MSSQL_CONNECTION_STRING
-
-    # Execute
-    source._create_engine()
-
-    # Assert
-    mock_create_engine.assert_called_with(MSSQL_CONNECTION_STRING, connect_args={})
-
-    # Setup
-    source.ssl_enabled = True
-    source.ssl_ca = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
-
-    # Execute
-    source._create_engine()
-
-    # Assert
-    mock_create_engine.assert_called_with(
-        MSSQL_CONNECTION_STRING,
-        connect_args={
-            "cafile": source.certfile,
-            "validate_host": False,
-        },
-    )
-
-    # Cleanup
-    await source.close()
+async def test_ping():
+    async with create_source(MSSQLDataSource) as source:
+        source.engine = MockEngine()
+        with patch.object(
+            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
+        ):
+            await source.ping()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_mssql():
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_ping_negative():
+    with pytest.raises(Exception):
+        async with create_source(MSSQLDataSource) as source:
+            with patch.object(Engine, "connect", side_effect=Exception()):
+                await source.ping()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_documents_from_table_negative():
+    async with create_source(MSSQLDataSource) as source:
+        with patch.object(
+            source.mssql_client,
+            "get_table_row_count",
+            side_effect=ProgrammingError(statement=None, params=None, orig=None),
+        ):
+            async for _ in source.fetch_documents_from_table("table"):
+                pass
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_documents_from_query_negative():
+    async with create_source(MSSQLDataSource) as source:
+        with patch.object(
+            source,
+            "get_primary_key",
+            side_effect=ProgrammingError(statement=None, params=None, orig=None),
+        ):
+            async for _ in source.fetch_documents_from_query(
+                ["table"], "select * from table"
+            ):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_get_docs():
     # Setup
-    source = create_source(MSSQLDataSource)
-    source.engine = MockEngine()
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
+        with patch.object(
+            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
+        ):
+            actual_response = []
+            expected_response = [
+                {
+                    "dbo_emp_table_ids": 1,
+                    "dbo_emp_table_names": "abcd",
+                    "_id": "xe_dbo_emp_table_1",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": "emp_table",
+                    "schema": "dbo",
+                },
+                {
+                    "dbo_emp_table_ids": 2,
+                    "dbo_emp_table_names": "xyz",
+                    "_id": "xe_dbo_emp_table_2",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": "emp_table",
+                    "schema": "dbo",
+                },
+            ]
+
+            # Execute
+            async for doc in source.get_docs():
+                actual_response.append(doc[0])
+
+            # Assert
+            assert actual_response == expected_response
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: valid queries
+            [
+                {
+                    "tables": ["emp_table"],
+                    "query": "select * from emp_table",
+                }
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: tables not present in database
+            [
+                {
+                    "tables": ["table_name"],
+                    "query": "select * from table_name",
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables key missing
+            [{"query": "select * from table_name"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: invalid key
+            [
+                {
+                    "tables": "table_name",
+                    "query": "select * from table_name",
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables can be empty
+            [
+                {
+                    "tables": [],
+                    "query": "select * from table_name",
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
+        with patch.object(
+            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
+        ):
+            validation_result = await MSSQLAdvancedRulesValidator(source).validate(
+                advanced_rules
+            )
+
+            assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_response",
+    [
+        # Configured valid query
+        (
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "tables": ["emp_table"],
+                                "query": "select * from emp_table",
+                            },
+                        ]
+                    }
+                }
+            ),
+            [
+                {
+                    "dbo_emp_table_ids": 1,
+                    "dbo_emp_table_names": "abcd",
+                    "_id": "xe_dbo_emp_table_1",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "dbo",
+                },
+                {
+                    "dbo_emp_table_ids": 2,
+                    "dbo_emp_table_names": "xyz",
+                    "_id": "xe_dbo_emp_table_2",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "dbo",
+                },
+            ],
+        ),
+        (
+            # Configured multiple rules
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "tables": ["emp_table"],
+                                "query": "select * from emp_table",
+                            },
+                            {"tables": ["customer"], "query": "select * from customer"},
+                        ]
+                    }
+                }
+            ),
+            [
+                {
+                    "dbo_emp_table_ids": 1,
+                    "dbo_emp_table_names": "abcd",
+                    "_id": "xe_dbo_emp_table_1",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "dbo",
+                },
+                {
+                    "dbo_emp_table_ids": 2,
+                    "dbo_emp_table_names": "xyz",
+                    "_id": "xe_dbo_emp_table_2",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["emp_table"],
+                    "schema": "dbo",
+                },
+                {
+                    "dbo_customer_ids": 1,
+                    "dbo_customer_names": "customer_1",
+                    "_id": "xe_dbo_customer_1",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["customer"],
+                    "schema": "dbo",
+                },
+                {
+                    "dbo_customer_ids": 2,
+                    "dbo_customer_names": "customer_2",
+                    "_id": "xe_dbo_customer_2",
+                    "_timestamp": "2023-02-21T08:37:15+00:00",
+                    "database": "xe",
+                    "table": ["customer"],
+                    "schema": "dbo",
+                },
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering, expected_response):
+    async with create_source(
+        MSSQLDataSource, database="xe", tables="*", schema="dbo"
+    ) as source:
+        with patch.object(
+            Engine, "connect", return_value=ConnectionSync(MSSQLQueries())
+        ):
+            actual_response = []
+
+            async for doc in source.get_docs(filtering=filtering):
+                actual_response.append(doc[0])
+
+            assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_create_pem_file():
+    async with create_source(MSSQLDataSource) as source:
+        source.mssql_client.create_pem_file()
+        assert ".pem" in source.mssql_client.certfile
+        try:
+            os.remove(source.mssql_client.certfile)
+        except Exception:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_get_tables_to_fetch():
     actual_response = []
-    expected_response = [
-        {
-            "dbo_emp_table_ids": 1,
-            "dbo_emp_table_names": "abcd",
-            "_id": "xe_dbo_emp_table_1_",
-            "_timestamp": "2023-02-21T08:37:15+00:00",
-            "Database": "xe",
-            "Table": "emp_table",
-            "schema": "dbo",
-        },
-        {
-            "dbo_emp_table_ids": 2,
-            "dbo_emp_table_names": "xyz",
-            "_id": "xe_dbo_emp_table_2_",
-            "_timestamp": "2023-02-21T08:37:15+00:00",
-            "Database": "xe",
-            "Table": "emp_table",
-            "schema": "dbo",
-        },
-    ]
-
-    # Execute
-    async for doc in source.get_docs():
-        actual_response.append(doc[0])
-
-    # Assert
-    assert actual_response == expected_response
+    expected_response = ["table1", "table2"]
+    async with create_source(MSSQLDataSource) as source:
+        source.mssql_client.tables = expected_response
+        async for table in source.mssql_client.get_tables_to_fetch():
+            actual_response.append(table)
+        assert expected_response == actual_response
 
 
 @pytest.mark.asyncio
-async def test_close():
-    source = create_source(MSSQLDataSource)
-    source.create_pem_file()
-    await source.close()
+async def test_yield_docs_custom_query():
+    async with create_source(MSSQLDataSource) as source:
+        source.mssql_client.get_table_primary_key = AsyncMock(return_value=[])
+        async for _ in source._yield_docs_custom_query(
+            ["tables"], "select * form tables"
+        ):
+            pass

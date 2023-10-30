@@ -4,9 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest import mock
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from bson.decimal128 import Decimal128
@@ -18,16 +19,18 @@ from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 
-def create_connector():
-    return create_source(
+@asynccontextmanager
+async def create_mongo_source(database="db", collection="col"):
+    async with create_source(
         MongoDataSource,
         host="mongodb://127.0.0.1:27021",
-        database="db",
-        collection="col",
-        direct_connection=True,
         user="foo",
-        password="password",
-    )
+        password="bar",
+        direct_connection=True,
+        database=database,
+        collection=collection,
+    ) as source:
+        yield source
 
 
 @pytest.mark.asyncio
@@ -143,103 +146,104 @@ def build_resp():
 @mock.patch(
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
 async def test_get_docs(*args):
-    source = create_connector()
-    num = 0
-    async for (doc, _) in source.get_docs():
-        assert doc["id"] in ("one", "two")
-        num += 1
+    async with create_mongo_source() as source:
+        num = 0
+        async for (doc, _) in source.get_docs():
+            assert doc["id"] in ("one", "two")
+            num += 1
 
-    assert num == 2
+        assert num == 2
 
 
 @pytest.mark.asyncio
 @mock.patch(
     "pymongo.topology.Topology._select_servers_loop", lambda *x: [mock.MagicMock()]
 )
-@mock.patch("pymongo.mongo_client.MongoClient._get_socket")
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
-@pytest.mark.asyncio
 async def test_ping_when_called_then_does_not_raise(*args):
-    source = create_connector()
-
-    await source.ping()
+    admin_mock = Mock()
+    command_mock = AsyncMock()
+    admin_mock.command = command_mock
+    async with create_mongo_source() as source:
+        source.client.admin = admin_mock
+        await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
-    source = create_connector()
-    collection_mock = Mock()
-    collection_mock.find = AsyncIterator(items=[{"_id": 1}])
-    source.collection = collection_mock
+    async with create_mongo_source() as source:
+        collection_mock = Mock()
+        collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+        source.collection = collection_mock
 
-    filtering = Filter(
-        {
-            "advanced_snippet": {
-                "value": {
-                    "find": {
-                        "filter": {"key": "value"},
-                        "projection": ["field"],
-                        "skip": 1,
-                        "limit": 10,
-                        "no_cursor_timeout": True,
-                        "allow_partial_results": True,
-                        "batch_size": 5,
-                        "return_key": True,
-                        "show_record_id": False,
-                        "max_time_ms": 10,
-                        "allow_disk_use": True,
+        filtering = Filter(
+            {
+                "advanced_snippet": {
+                    "value": {
+                        "find": {
+                            "filter": {"key": "value"},
+                            "projection": ["field"],
+                            "skip": 1,
+                            "limit": 10,
+                            "no_cursor_timeout": True,
+                            "allow_partial_results": True,
+                            "batch_size": 5,
+                            "return_key": True,
+                            "show_record_id": False,
+                            "max_time_ms": 10,
+                            "allow_disk_use": True,
+                        }
                     }
                 }
             }
-        }
-    )
+        )
 
-    async for _ in source.get_docs(filtering):
-        pass
+        async for _ in source.get_docs(filtering):
+            pass
 
-    find_call_kwargs = collection_mock.find.call_kwargs
-    assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
+        find_call_kwargs = collection_mock.find.call_kwargs
+        assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
-    source = create_connector()
+    async with create_mongo_source() as source:
+        collection_mock = Mock()
+        collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
+        source.collection = collection_mock
 
-    collection_mock = Mock()
-    collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
-    source.collection = collection_mock
-
-    filtering = Filter(
-        {
-            "advanced_snippet": {
-                "value": {
-                    "aggregate": {
-                        "allowDiskUse": True,
-                        "maxTimeMS": 10,
-                        "batchSize": 1,
-                        "let": {"key": "value"},
-                        "pipeline": [
-                            {"$match": {"field1": "value1"}},
-                            {"$group": {"_id": "$field2", "count": {"$sum": 1}}},
-                        ],
+        filtering = Filter(
+            {
+                "advanced_snippet": {
+                    "value": {
+                        "aggregate": {
+                            "allowDiskUse": True,
+                            "maxTimeMS": 10,
+                            "batchSize": 1,
+                            "let": {"key": "value"},
+                            "pipeline": [
+                                {"$match": {"field1": "value1"}},
+                                {"$group": {"_id": "$field2", "count": {"$sum": 1}}},
+                            ],
+                        }
                     }
                 }
             }
-        }
-    )
+        )
 
-    async for _ in source.get_docs(filtering):
-        pass
+        async for _ in source.get_docs(filtering):
+            pass
 
-    aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
-    assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get("aggregate")
+        aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
+        assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get(
+            "aggregate"
+        )
 
 
 def future_with_result(result):
@@ -258,21 +262,17 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
         "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
         return_value=future_with_result(server_database_names),
     ):
-        source = create_source(
-            MongoDataSource,
-            host="mongodb://127.0.0.1:27021",
-            user="foo",
-            password="password",
+        async with create_mongo_source(
             database=configured_database_name,
             collection="something",
-        )
-        with pytest.raises(ConfigurableFieldValueError) as e:
-            await source.validate_config()
-        # assert that message contains database name from config
-        assert e.match(configured_database_name)
-        # assert that message contains database names from the server too
-        for database_name in server_database_names:
-            assert e.match(database_name)
+        ) as source:
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+            # assert that message contains database name from config
+            assert e.match(configured_database_name)
+            # assert that message contains database names from the server too
+            for database_name in server_database_names:
+                assert e.match(database_name)
 
 
 @pytest.mark.asyncio
@@ -289,21 +289,17 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
         "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
         return_value=future_with_result(server_collection_names),
     ):
-        source = create_source(
-            MongoDataSource,
-            host="mongodb://127.0.0.1:27021",
-            user="foo",
-            password="bar",
+        async with create_mongo_source(
             database=configured_database_name,
             collection=configured_collection_name,
-        )
-        with pytest.raises(ConfigurableFieldValueError) as e:
-            await source.validate_config()
-        # assert that message contains database name from config
-        assert e.match(configured_collection_name)
-        # assert that message contains database names from the server too
-        for collection_name in server_collection_names:
-            assert e.match(collection_name)
+        ) as source:
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+            # assert that message contains database name from config
+            assert e.match(configured_collection_name)
+            # assert that message contains database names from the server too
+            for collection_name in server_collection_names:
+                assert e.match(collection_name)
 
 
 @pytest.mark.asyncio
@@ -320,13 +316,8 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
         "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
         return_value=future_with_result(server_collection_names),
     ):
-        source = create_source(
-            MongoDataSource,
-            host="mongodb://127.0.0.1:27021",
-            user="foo",
-            password="bar",
+        async with create_mongo_source(
             database=configured_database_name,
             collection=configured_collection_name,
-        )
-
-        await source.validate_config()
+        ) as source:
+            await source.validate_config()

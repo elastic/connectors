@@ -10,48 +10,50 @@ import os
 from copy import copy
 from functools import partial
 
-import aiofiles
 import aiohttp
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ServerDisconnectedError
 
+from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
+from connectors.sources.atlassian import (
+    AtlassianAccessControl,
+    AtlassianAdvancedRulesValidator,
+    prefix_account_id,
+    prefix_group_id,
+)
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
-    convert_to_b64,
     iso_utc,
     ssl_context,
 )
 
-FILE_SIZE_LIMIT = 10485760
 RETRY_INTERVAL = 2
 SPACE = "space"
+BLOGPOST = "blogpost"
+PAGE = "page"
 ATTACHMENT = "attachment"
 CONTENT = "content"
 DOWNLOAD = "download"
 SEARCH = "search"
-SPACE_QUERY = "limit=100"
+USER = "user"
+SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
-CONTENT_QUERY = (
-    "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space"
-)
+CONTENT_QUERY = "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
+USER_QUERY = "expand=groups,applicationRoles"
 
 URLS = {
     SPACE: "rest/api/space?{api_query}",
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
+    USER: "rest/api/3/users/search",
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
-CHUNK_SIZE = 1024
 MAX_CONCURRENCY = 50
 QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
@@ -193,6 +195,7 @@ class ConfluenceDataSource(BaseDataSource):
     name = "Confluence"
     service_type = "confluence"
     advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to Confluence
@@ -204,6 +207,9 @@ class ConfluenceDataSource(BaseDataSource):
         self.spaces = self.configuration["spaces"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.confluence_client = ConfluenceClient(configuration=configuration)
+        self.atlassian_access_control = AtlassianAccessControl(
+            self, self.confluence_client
+        )
 
         self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
@@ -236,7 +242,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Confluence Server username",
                 "order": 2,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
@@ -244,14 +249,12 @@ class ConfluenceDataSource(BaseDataSource):
                 "sensitive": True,
                 "order": 3,
                 "type": "str",
-                "value": "abc@123",
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud account email",
                 "order": 4,
                 "type": "str",
-                "value": "me@example.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
@@ -259,13 +262,11 @@ class ConfluenceDataSource(BaseDataSource):
                 "sensitive": True,
                 "order": 5,
                 "type": "str",
-                "value": "abc#123",
             },
             "confluence_url": {
                 "label": "Confluence URL",
                 "order": 6,
                 "type": "str",
-                "value": "http://127.0.0.1:5000",
             },
             "spaces": {
                 "display": "textarea",
@@ -273,7 +274,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -287,7 +287,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 9,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -297,7 +296,6 @@ class ConfluenceDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 3,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -310,9 +308,121 @@ class ConfluenceDataSource(BaseDataSource):
                 "validations": [
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
-                "value": MAX_CONCURRENT_DOWNLOADS,
+            },
+            "use_document_level_security": {
+                "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 12,
+                "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 13,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if self._features is None:
+            return False
+
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+
+        return document
+
+    async def get_access_control(self):
+        """Get access control documents for active Atlassian users.
+
+        This method fetches access control documents for active Atlassian users when document level security (DLS)
+        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        If DLS is enabled, the method fetches all users from the Confluence API, filters out active Atlassian users,
+        and fetches additional information for each active user using the fetch_user method. After gathering the user information,
+        it generates an access control document for each user using the user_access_control_doc method and yields the results.
+
+        Yields:
+            dict: An access control document for each active Atlassian user.
+        """
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        self._logger.info("Fetching all users")
+        url = os.path.join(self.configuration["confluence_url"], URLS[USER])
+        async for users in self.atlassian_access_control.fetch_all_users(url=url):
+            active_atlassian_users = filter(
+                self.atlassian_access_control.is_active_atlassian_user, users
+            )
+            tasks = [
+                anext(
+                    self.atlassian_access_control.fetch_user(
+                        url=f"{user_info.get('self')}&{USER_QUERY}"
+                    )
+                )
+                for user_info in active_atlassian_users
+            ]
+            user_results = await asyncio.gather(*tasks)
+
+            for user in user_results:
+                yield await self.atlassian_access_control.user_access_control_doc(
+                    user=user
+                )
+
+    def _get_access_control_from_permission(self, permissions, target_type):
+        if not self._dls_enabled():
+            return []
+
+        access_control = set()
+        for permission in permissions:
+            permission_operation = permission.get("operation", {})
+            if permission_operation.get("targetType") != target_type and (
+                permission_operation.get("targetType") != SPACE
+                and permission_operation.get("operation") != "read"
+            ):
+                continue
+
+            access_control = access_control.union(
+                self._extract_identities(response=permission.get("subjects", {}))
+            )
+
+        return access_control
+
+    def _extract_identities(self, response):
+        if not self._dls_enabled():
+            return set()
+
+        identities = set()
+        user_results = response.get("user", {}).get("results", [])
+        group_results = response.get("group", {}).get("results", [])
+
+        for item in user_results + group_results:
+            item_type = item.get("type")
+            if item_type == "known" and item.get("accountType") == "atlassian":
+                identities.add(prefix_account_id(account_id=item.get("accountId", "")))
+            elif item_type == "group":
+                identities.add(prefix_group_id(group_id=item.get("id", "")))
+
+        return identities
 
     async def close(self):
         """Closes unclosed client session"""
@@ -336,7 +446,7 @@ class ConfluenceDataSource(BaseDataSource):
         Raises:
             Exception: Configured keys can't be empty
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     async def _remote_validation(self):
@@ -349,9 +459,8 @@ class ConfluenceDataSource(BaseDataSource):
             spaces = response.get("results", [])
             space_keys.extend([space["key"] for space in spaces])
         if unavailable_spaces := set(self.spaces) - set(space_keys):
-            raise ConfigurableFieldValueError(
-                f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
-            )
+            msg = f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
+            raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         """Verify the connection with Confluence"""
@@ -371,6 +480,7 @@ class ConfluenceDataSource(BaseDataSource):
 
         Yields:
             Dictionary: Space document to get indexed
+            List: List of permissions attached to space
         """
         async for response in self.confluence_client.paginated_api_call(
             url_name=SPACE,
@@ -387,7 +497,7 @@ class ConfluenceDataSource(BaseDataSource):
                         "title": space["name"],
                         "_timestamp": iso_utc(),
                         "url": space_url,
-                    }
+                    }, space.get("permissions", [])
 
     async def fetch_documents(self, api_query):
         """Get pages and blog posts with the help of REST APIs
@@ -398,6 +508,8 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             Dictionary: Page or blog post to be indexed
             Integer: Number of attachments in a page/blogpost
+            List: List of permissions attached to document
+            Dictionary: Dictionary of restrictions attached to document
         """
         async for response in self.confluence_client.paginated_api_call(
             url_name=CONTENT,
@@ -420,7 +532,15 @@ class ConfluenceDataSource(BaseDataSource):
                     "space": document["space"]["name"],
                     "body": document["body"]["storage"]["value"],
                     "url": document_url,
-                }, attachment_count
+                }, attachment_count, document.get("space", {}).get(
+                    "permissions", []
+                ), document.get(
+                    "restrictions", {}
+                ).get(
+                    "read", {}
+                ).get(
+                    "restrictions", {}
+                )
 
     async def fetch_attachments(
         self, content_id, parent_name, parent_space, parent_type
@@ -521,52 +641,35 @@ class ConfluenceDataSource(BaseDataSource):
         Returns:
             Dictionary: Document of the attachment to be indexed.
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size):
-            return
-        attachment_name = attachment["title"]
-        file_extension = os.path.splitext(attachment_name)[-1]
-        if file_extension.lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(f"{attachment_name} can't be extracted")
+        file_size = int(attachment["size"])
+        if not (doit and file_size):
             return
 
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
+        filename = attachment["title"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
-        self._logger.debug(
-            f"Downloading {attachment_name} of size {attachment_size} bytes"
-        )
+
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.confluence_client.api_call(
-                url=os.path.join(self.confluence_client.host_url, url),
-            ):
-                async for data in response.content.iter_chunked(n=CHUNK_SIZE):
-                    await async_buffer.write(data)
-            source_file_name = str(async_buffer.name)
-
-        self._logger.debug(
-            f"Download completed for file: {attachment_name}. Calling convert_to_b64"
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.confluence_client.api_call,
+                    url=os.path.join(self.confluence_client.host_url, url),
+                ),
+            ),
         )
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
-        await remove(source_file_name)
-        self._logger.debug(f"Downloaded {attachment_name} for {attachment_size} bytes ")
-        return document
 
-    async def _attachment_coro(self, document):
+    async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content
 
         Args:
             document (dict): Formatted document of page/blogpost
+            access_control (list): List of identities which have access to document
         """
         async for attachment, download_link in self.fetch_attachments(
             content_id=document["_id"],
@@ -574,6 +677,9 @@ class ConfluenceDataSource(BaseDataSource):
             parent_space=document["space"],
             parent_type=document["type"],
         ):
+            attachment = self._decorate_with_access_control(
+                document=attachment, access_control=access_control
+            )
             await self.queue.put(
                 (  # pyright: ignore
                     attachment,
@@ -588,20 +694,45 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
-        async for space in self.fetch_spaces():
+        async for space, permissions in self.fetch_spaces():
+            access_control = list(
+                self._get_access_control_from_permission(
+                    permissions=permissions, target_type=SPACE
+                )
+            )
+            space = self._decorate_with_access_control(
+                document=space, access_control=access_control
+            )
             await self.queue.put((space, None))  # pyright: ignore
         await self.queue.put(END_SIGNAL)  # pyright: ignore
 
-    async def _page_blog_coro(self, api_query):
+    async def _page_blog_coro(self, api_query, target_type):
         """Coroutine to add pages/blogposts to Queue
 
         Args:
             api_query (str): API Query Parameters for fetching page/blogpost
+            target_type (str): Type of object to filter permission
         """
-        async for document, attachment_count in self.fetch_documents(api_query):
+        async for document, attachment_count, permissions, restrictions in self.fetch_documents(
+            api_query
+        ):
+            # Pages/Bolgpost are open to viewing or editing by default, but you can restrict either viewing or editing to certain users or groups.
+            access_control = list(self._extract_identities(response=restrictions))
+            if len(access_control) == 0:
+                # Every space has its own independent set of permissions, managed by the space admin(s), which determine the access settings for different users and groups.
+                access_control = list(
+                    self._get_access_control_from_permission(
+                        permissions=permissions, target_type=target_type
+                    )
+                )
+            document = self._decorate_with_access_control(
+                document=document, access_control=access_control
+            )
             await self.queue.put((document, None))  # pyright: ignore
             if attachment_count > 0:
-                await self.fetchers.put(partial(self._attachment_coro, copy(document)))
+                await self.fetchers.put(
+                    partial(self._attachment_coro, copy(document), access_control)
+                )
                 self.fetcher_count += 1
         await self.queue.put(END_SIGNAL)  # pyright: ignore
 
@@ -651,13 +782,15 @@ class ConfluenceDataSource(BaseDataSource):
             await self.fetchers.put(
                 partial(
                     self._page_blog_coro,
-                    f"{configured_spaces_query}blogpost&{CONTENT_QUERY}",
+                    f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
+                    BLOGPOST,
                 )
             )
             await self.fetchers.put(
                 partial(
                     self._page_blog_coro,
-                    f"{configured_spaces_query}page&{CONTENT_QUERY}",
+                    f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
+                    PAGE,
                 )
             )
             self.fetcher_count += 3

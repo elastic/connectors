@@ -42,6 +42,8 @@ from connectors.utils import (
 __all__ = [
     "CONNECTORS_INDEX",
     "JOBS_INDEX",
+    "CONCRETE_CONNECTORS_INDEX",
+    "CONCRETE_JOBS_INDEX",
     "ConnectorIndex",
     "Filter",
     "SyncJobIndex",
@@ -65,6 +67,8 @@ __all__ = [
 
 CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
+CONCRETE_CONNECTORS_INDEX = CONNECTORS_INDEX + "-v1"
+CONCRETE_JOBS_INDEX = JOBS_INDEX + "-v1"
 
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
@@ -266,9 +270,8 @@ class SyncJob(ESDocument):
         validation_result = await validator.validate_filtering(self.filtering)
 
         if validation_result.state != FilteringValidationState.VALID:
-            raise InvalidFilteringError(
-                f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
-            )
+            msg = f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
+            raise InvalidFilteringError(msg)
 
     async def claim(self, sync_cursor=None):
         doc = {
@@ -335,7 +338,7 @@ class SyncJob(ESDocument):
         await self.index.update(doc_id=self.id, doc=doc)
 
     def _prefix(self):
-        return f"[Sync Job id: {self.id}, connector id: {self.connector_id}, index name: {self.index_name}]"
+        return f"[Connector id: {self.connector_id}, index name: {self.index_name}, Sync job id: {self.id}]"
 
     def _extra(self):
         return {
@@ -586,7 +589,8 @@ class Connector(ESDocument):
             case JobType.FULL:
                 return self.last_sync_scheduled_at
             case _:
-                raise ValueError(f"Unknown job type: {job_type}")
+                msg = f"Unknown job type: {job_type}"
+                raise ValueError(msg)
 
     @property
     def sync_cursor(self):
@@ -600,7 +604,7 @@ class Connector(ESDocument):
             self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self, job_type):
+    def next_sync(self, job_type, now):
         """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
@@ -611,11 +615,12 @@ class Connector(ESDocument):
             case JobType.FULL:
                 scheduling_property = self.full_sync_scheduling
             case _:
-                raise ValueError(f"Unknown job type: {job_type}")
+                msg = f"Unknown job type: {job_type}"
+                raise ValueError(msg)
 
         if not scheduling_property.get("enabled", False):
             return None
-        return next_run(scheduling_property.get("interval"))
+        return next_run(scheduling_property.get("interval"), now)
 
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
@@ -638,7 +643,8 @@ class Connector(ESDocument):
             case JobType.FULL:
                 await self._update_datetime("last_sync_scheduled_at", new_ts)
             case _:
-                raise ValueError(f"Unknown job type: {job_type}")
+                msg = f"Unknown job type: {job_type}"
+                raise ValueError(msg)
 
     async def sync_starts(self, job_type):
         if job_type == JobType.ACCESS_CONTROL:
@@ -652,7 +658,8 @@ class Connector(ESDocument):
                 "last_sync_error": None,
             }
         else:
-            raise ValueError(f"Unknown job type: {job_type}")
+            msg = f"Unknown job type: {job_type}"
+            raise ValueError(msg)
 
         doc = {
             "status": Status.CONNECTED.value,
@@ -705,7 +712,8 @@ class Connector(ESDocument):
                 "last_sync_error": job_error,
             }
         else:
-            raise ValueError(f"Unknown job type: {job_type}")
+            msg = f"Unknown job type: {job_type}"
+            raise ValueError(msg)
 
         doc = {
             "last_synced": iso_utc(),
@@ -739,54 +747,41 @@ class Connector(ESDocument):
 
         configured_connector_id = config.get("connector_id", "")
         configured_service_type = config.get("service_type", "")
+        is_main_connector = self.id == configured_connector_id
 
-        if self.id != configured_connector_id:
-            # check configuration for native and other peripheral connectors
+        if is_main_connector:
+            if not configured_service_type:
+                self.log_error("Service type is not configured")
+                msg = "Service type is not configured."
+                raise ServiceTypeNotConfiguredError(msg)
+
+            if configured_service_type not in sources:
+                raise ServiceTypeNotSupportedError(configured_service_type)
+        else:
             if self.service_type not in sources:
                 self.log_debug(
                     f"Peripheral connector has invalid service type {self.service_type}, cannot check configuration formatting."
                 )
                 return
 
-            await self.validate_configuration_formatting(
-                sources[self.service_type], self.service_type
-            )
-
-            return
-
-        if not configured_service_type:
-            self.log_error("Service type is not configured")
-            raise ServiceTypeNotConfiguredError("Service type is not configured.")
-
-        if configured_service_type not in sources:
-            raise ServiceTypeNotSupportedError(configured_service_type)
-
-        if self.service_type is not None and not self.configuration.is_empty():
-            await self.validate_configuration_formatting(
-                sources[configured_service_type], configured_service_type
-            )
-
-        doc = {}
-        fqn = sources[configured_service_type]
+        fqn = (
+            sources[configured_service_type]
+            if is_main_connector
+            else sources[self.service_type]
+        )
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
             self.log_critical(e, exc_info=True)
-            raise DataSourceError(
-                f"Could not instantiate {fqn} for {configured_service_type}"
-            ) from e
+            msg = f"Could not instantiate {fqn} for {configured_service_type}"
+            raise DataSourceError(msg) from e
 
-        if self.service_type is None:
+        doc = self.validated_doc(source_klass)
+        if is_main_connector and self.service_type is None:
             doc["service_type"] = configured_service_type
             self.log_debug(f"Populated service type {configured_service_type}")
 
-        if self.configuration.is_empty():
-            # sets the defaults and the flag to NEEDS_CONFIGURATION
-            doc["configuration"] = source_klass.get_simple_configuration()
-            doc["status"] = Status.NEEDS_CONFIGURATION.value
-            self.log_debug("Populated configuration")
-
-        if self.features.features != source_klass.features():
+        if is_main_connector and self.features.features != source_klass.features():
             doc["features"] = source_klass.features()
             self.log_debug("Populated features")
 
@@ -800,6 +795,80 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
         await self.reload()
+
+    def validated_doc(self, source_klass):
+        simple_config = source_klass.get_simple_configuration()
+        current_config = self.configuration.to_dict()
+
+        if self.configuration.is_empty():
+            # sets the defaults and the flag to NEEDS_CONFIGURATION
+            self.log_debug("Populated configuration")
+            return {
+                "configuration": simple_config,
+                "status": Status.NEEDS_CONFIGURATION.value,
+            }
+
+        missing_fields = simple_config.keys() - current_config.keys()
+        fields_missing_properties = filter_nested_dict_by_keys(
+            DEFAULT_CONFIGURATION.keys(), current_config
+        )
+        if not missing_fields and not fields_missing_properties:
+            return {}
+
+        doc = {"configuration": {}}
+        if missing_fields:
+            doc["configuration"] = self.updated_configuration_fields(
+                missing_fields, current_config, simple_config
+            )
+        if fields_missing_properties:
+            updated_config = self.updated_configuration_field_properties(
+                fields_missing_properties, simple_config
+            )
+            doc["configuration"] = deep_merge_dicts(
+                doc["configuration"], updated_config
+            )
+
+        return doc
+
+    def updated_configuration_fields(
+        self, missing_keys, current_config, simple_default_config
+    ):
+        self.log_warning(
+            f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade."
+        )
+        draft_config = {
+            k: simple_default_config[k] for k in missing_keys
+        }  # add missing configs as they exist in the simple default
+
+        # copy any differences (excluding differences in "value") to the draft
+        # the contents of simple_default_config are used unless they are missing
+        for config_name, config_obj in current_config.items():
+            for k, v in config_obj.items():
+                simple_default_value = simple_default_config.get(config_name, {}).get(k)
+                if k != "value" and simple_default_value != v:
+                    draft_config_obj = draft_config.get(config_name, {})
+                    draft_config_obj[k] = simple_default_value or v
+                    draft_config[config_name] = draft_config_obj
+        return draft_config
+
+    def updated_configuration_field_properties(
+        self, fields_missing_properties, simple_config
+    ):
+        """Checks the field properties for every field in a configuration.
+        If a field is missing field properties, add those field properties
+        with default values.
+        """
+        self.log_info(
+            f"Connector {self.id} ({self.service_type}) is missing configuration field properties. Generating defaults."
+        )
+
+        # filter the default config by what fields we want to update, then merge the actual config into it
+        filtered_simple_config = {
+            key: value
+            for key, value in simple_config.items()
+            if key in fields_missing_properties.keys()
+        }
+        return deep_merge_dicts(filtered_simple_config, fields_missing_properties)
 
     @with_concurrency_control()
     async def validate_filtering(self, validator):
@@ -843,71 +912,6 @@ class Connector(ESDocument):
             index=self.index_name, ignore_unavailable=True
         )
         return result["count"]
-
-    async def validate_configuration_formatting(self, fqn, service_type):
-        """Wrapper function for validating configuration field properties.
-
-        Args:
-            fqn (string): the source fqn for a service, from config file
-            service_type (string): service type of the connector
-        """
-        try:
-            source_klass = get_source_klass(fqn)
-        except Exception as e:
-            self.log_critical(e, exc_info=True)
-            raise DataSourceError(
-                f"Could not instantiate {fqn} for {service_type}"
-            ) from e
-
-        default_config = source_klass.get_simple_configuration()
-        current_config = self.configuration.to_dict()
-
-        await self.add_missing_configuration_field_properties(
-            service_type, default_config, current_config
-        )
-
-    async def add_missing_configuration_field_properties(
-        self, service_type, default_config, current_config
-    ):
-        """Checks the field properties for every field in a configuration.
-        If a field is missing field properties, add those field properties
-        with default values.
-        If no field properties are missing, nothing is updated.
-
-        Args:
-            service_type (string): service type of the connector
-            default_config (dict): the default configuration for the connector
-            current_config (dict): the currently existing configuration for the connector
-        """
-        configs_missing_properties = filter_nested_dict_by_keys(
-            DEFAULT_CONFIGURATION.keys(), current_config
-        )
-        if not configs_missing_properties:
-            return
-
-        self.log_info(
-            f"Connector for {service_type} is missing configuration field properties. Generating defaults."
-        )
-
-        # filter the default config by what fields we want to update, then merge the actual config into it
-        filtered_default_config = {
-            key: value
-            for key, value in default_config.items()
-            if key in configs_missing_properties.keys()
-        }
-        doc = {
-            "configuration": deep_merge_dicts(
-                filtered_default_config, configs_missing_properties
-            )
-        }
-
-        await self.index.update(
-            doc_id=self.id,
-            doc=doc,
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
-        await self.reload()
 
     def _prefix(self):
         return f"[Connector id: {self.id}, index name: {self.index_name}]"
@@ -977,7 +981,11 @@ class SyncJobIndex(ESIndex):
         }
         await self.index(job_def)
 
-    async def pending_jobs(self, connector_ids):
+    async def pending_jobs(self, connector_ids, job_types):
+        if not job_types:
+            return
+        if not isinstance(job_types, list):
+            job_types = [str(job_types)]
         query = {
             "bool": {
                 "must": [
@@ -990,6 +998,7 @@ class SyncJobIndex(ESIndex):
                         }
                     },
                     {"terms": {"connector.id": connector_ids}},
+                    {"terms": {"job_type": job_types}},
                 ]
             }
         }

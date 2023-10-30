@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
@@ -57,8 +58,6 @@ class JobExecutionService(BaseService):
             load_max_concurrent_access_control_syncs(self.service_config)
         )
         self.source_list = config["sources"]
-        self.connector_index = None
-        self.sync_job_index = None
         self.content_syncs = None
         self.access_control_syncs = None
 
@@ -78,7 +77,7 @@ class JobExecutionService(BaseService):
             source_klass=source_klass,
             sync_job=sync_job,
             connector=connector,
-            es_config=self.es_config,
+            es_config=self._override_es_config(connector),
         )
         await self.content_syncs.put(sync_job_runner.execute)
 
@@ -93,15 +92,14 @@ class JobExecutionService(BaseService):
             source_klass=source_klass,
             sync_job=sync_job,
             connector=connector,
-            es_config=self.es_config,
+            es_config=self._override_es_config(connector),
         )
         await self.access_control_syncs.put(sync_job_runner.execute)
 
     async def _sync(self, sync_job):
         if sync_job.service_type not in self.source_list:
-            raise DataSourceError(
-                f"Couldn't find data source class for {sync_job.service_type}"
-            )
+            msg = f"Couldn't find data source class for {sync_job.service_type}"
+            raise DataSourceError(msg)
         source_klass = get_source_klass(self.source_list[sync_job.service_type])
         connector_id = sync_job.connector_id
 
@@ -144,11 +142,17 @@ class JobExecutionService(BaseService):
         self.sync_job_index = SyncJobIndex(self.es_config)
 
         native_service_types = self.config.get("native_service_types", []) or []
-        logger.debug(f"Native support for {', '.join(native_service_types)}")
+        if len(native_service_types) > 0:
+            logger.debug(
+                f"Native support for job execution for {', '.join(native_service_types)}"
+            )
+        else:
+            logger.debug("No native service types configured for job execution")
+
         connector_ids = list(self.connectors.keys())
 
         logger.info(
-            f"Service started, listening to events from {self.es_config['host']}"
+            f"Job Execution Service started, listening to events from {self.es_config['host']}"
         )
 
         try:
@@ -163,7 +167,7 @@ class JobExecutionService(BaseService):
 
                 try:
                     logger.debug(
-                        f"Polling every {self.idling} seconds for Job Execution Service"
+                        f"Polling every {self.idling} seconds for Job Execution"
                     )
                     supported_connector_ids = [
                         connector.id
@@ -179,7 +183,12 @@ class JobExecutionService(BaseService):
                         )
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(
-                            connector_ids=supported_connector_ids
+                            connector_ids=supported_connector_ids,
+                            job_types=[
+                                JobType.FULL.value,
+                                JobType.INCREMENTAL.value,
+                                JobType.ACCESS_CONTROL.value,
+                            ],
                         ):
                             await self._sync(sync_job)
                 except Exception as e:

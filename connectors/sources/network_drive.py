@@ -6,18 +6,229 @@
 """Network Drive source module responsible to fetch documents from Network Drive.
 """
 import asyncio
+import csv
 import os
-from functools import partial
+from functools import cached_property, partial
 from io import BytesIO
 
+import fastjsonschema
 import smbclient
+import winrm
+from requests.exceptions import ConnectionError
 from smbprotocol.exceptions import SMBException, SMBOSError
+from smbprotocol.file_info import (
+    InfoType,
+)
+from smbprotocol.open import (
+    DirectoryAccessMask,
+    FilePipePrinterAccessMask,
+    SMB2QueryInfoRequest,
+    SMB2QueryInfoResponse,
+)
+from smbprotocol.security_descriptor import (
+    SMB2CreateSDBuffer,
+)
+from wcmatch import glob
 
-from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, iso_utc
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import (
+    TIKA_SUPPORTED_FILETYPES,
+    RetryStrategy,
+    get_base64_value,
+    iso_utc,
+    retryable,
+)
+
+ACCESS_ALLOWED_TYPE = 0
+ACCESS_MASK_DENIED_WRITE_PERMISSION = 278
+GET_USERS_COMMAND = "Get-LocalUser | Select Name, SID"
+GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
+GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
+SECURITY_INFO_DACL = 0x00000004
 
 MAX_CHUNK_SIZE = 65536
 DEFAULT_FILE_SIZE_LIMIT = 10485760
+RETRIES = 3
+RETRY_INTERVAL = 2
+
+WINDOWS = "windows"
+LINUX = "linux"
+
+
+def _prefix_user(user):
+    return prefix_identity("user", user)
+
+
+def _prefix_sid(sid):
+    return prefix_identity("sid", sid)
+
+
+class InvalidRulesError(Exception):
+    pass
+
+
+class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "minLength": 1},
+        },
+        "required": ["pattern"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        return await self._remote_validation(advanced_rules)
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _remote_validation(self, advanced_rules):
+        try:
+            NetworkDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+        self.source.create_connection()
+
+        _, invalid_rules = self.source.find_matching_paths(advanced_rules)
+
+        if len(invalid_rules) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Following patterns do not match any path'{', '.join(invalid_rules)}'",
+            )
+
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
+
+
+class SecurityInfo:
+    def __init__(self, user, password, server):
+        self.username = user
+        self.server_ip = server
+        self.password = password
+
+    def get_descriptor(self, file_descriptor, info):
+        """Get the Security Descriptor for the opened file."""
+        query_request = SMB2QueryInfoRequest()
+        query_request["info_type"] = InfoType.SMB2_0_INFO_SECURITY
+        query_request["output_buffer_length"] = MAX_CHUNK_SIZE
+        query_request["additional_information"] = info
+        query_request["file_id"] = file_descriptor.file_id
+
+        req = file_descriptor.connection.send(
+            query_request,
+            sid=file_descriptor.tree_connect.session.session_id,
+            tid=file_descriptor.tree_connect.tree_connect_id,
+        )
+        response = file_descriptor.connection.receive(req)
+        query_response = SMB2QueryInfoResponse()
+        query_response.unpack(response["data"].get_value())
+
+        security_descriptor = SMB2CreateSDBuffer()
+        security_descriptor.unpack(query_response["buffer"].get_value())
+
+        return security_descriptor
+
+    @cached_property
+    def session(self):
+        return winrm.Session(
+            self.server_ip,
+            auth=(self.username, self.password),
+            transport="ntlm",
+            server_cert_validation="ignore",
+        )
+
+    def parse_output(self, raw_output):
+        """
+        Formats and extracts key-value pairs from raw output data.
+
+        This method takes raw output data as input and processes it to extract
+        key-value pairs. It handles cases where key-value pairs may be spread
+        across multiple lines and returns a dictionary containing the formatted
+        key-value pairs.
+
+        Args:
+            raw_output (str): The raw output data to be processed.
+
+        Returns:
+            dict: A dictionary containing key-value pairs extracted from the raw
+                output data.
+
+        Example:
+            Given the following raw output:
+
+            Header 1: Value 1
+            Header 2: Value 2
+            Key 1   Value1
+            Key 2   Value2
+            Key 3   Value3
+
+            The method will return the following dictionary:
+
+            {
+                "Key 1": "Value1",
+                "Key 2": "Value2",
+                "Key 3": "Value3"
+            }
+        """
+        formatted_result = {}
+        output_lines = raw_output.std_out.decode().splitlines()
+
+        #  Ignoring initial headers with fixed length of 2
+        if len(output_lines) > 2:
+            for line in output_lines[3:]:
+                parts = line.rsplit(maxsplit=1)
+                if len(parts) == 2:
+                    key, value = parts
+                    key = key.strip()
+                    value = value.strip()
+                    formatted_result[key] = value
+
+        return formatted_result
+
+    def fetch_users(self):
+        users = self.session.run_ps(GET_USERS_COMMAND)
+        return self.parse_output(users)
+
+    def fetch_groups(self):
+        groups = self.session.run_ps(GET_GROUPS_COMMAND)
+
+        return self.parse_output(groups)
+
+    def fetch_members(self, group_name):
+        members = self.session.run_ps(GET_GROUP_MEMBERS.format(name=group_name))
+
+        return self.parse_output(members)
 
 
 class NASDataSource(BaseDataSource):
@@ -25,6 +236,8 @@ class NASDataSource(BaseDataSource):
 
     name = "Network Drive"
     service_type = "network_drive"
+    advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Network Drive
@@ -38,7 +251,13 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
+        self.drive_type = self.configuration["drive_type"]
+        self.identity_mappings = self.configuration["identity_mappings"]
         self.session = None
+        self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
+
+    def advanced_rules_validators(self):
+        return [NetworkDriveAdvancedRulesValidator(self)]
 
     @classmethod
     def get_default_configuration(cls):
@@ -52,33 +271,62 @@ class NASDataSource(BaseDataSource):
                 "label": "Username",
                 "order": 1,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "label": "Password",
                 "order": 2,
                 "sensitive": True,
                 "type": "str",
-                "value": "abc@123",
             },
             "server_ip": {
                 "label": "SMB IP",
                 "order": 3,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "server_port": {
                 "display": "numeric",
                 "label": "SMB port",
                 "order": 4,
                 "type": "int",
-                "value": 445,
             },
             "drive_path": {
                 "label": "SMB path",
                 "order": 5,
                 "type": "str",
-                "value": "Folder1",
+            },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 6,
+                "tooltip": "Document level security ensures identities and permissions set in your network drive are mirrored in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
+            "drive_type": {
+                "display": "dropdown",
+                "label": "Drive type",
+                "depends_on": [
+                    {"field": "use_document_level_security", "value": True},
+                ],
+                "options": [
+                    {"label": "Windows", "value": WINDOWS},
+                    {"label": "Linux", "value": LINUX},
+                ],
+                "order": 7,
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "value": WINDOWS,
+            },
+            "identity_mappings": {
+                "label": "Path of CSV file containing users and groups SID (For Linux Network Drive)",
+                "depends_on": [
+                    {"field": "use_document_level_security", "value": True},
+                    {"field": "drive_type", "value": LINUX},
+                ],
+                "order": 8,
+                "type": "str",
+                "required": False,
+                "ui_restrictions": ["advanced"],
             },
         }
 
@@ -90,6 +338,39 @@ class NASDataSource(BaseDataSource):
             password=self.password,
             port=self.port,
         )
+
+    @cached_property
+    def get_directory_details(self):
+        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+
+    def find_matching_paths(self, advanced_rules):
+        """
+        Find matching paths based on advanced rules.
+
+        Args:
+            advanced_rules (list): List of advanced rules configured
+
+        Returns:
+            matched_paths (set): Set of paths that match the advanced rules.
+            invalid_rules (list): List of advanced rules that have no matching paths.
+        """
+        invalid_rules = []
+        matched_paths = set()
+        for rule in advanced_rules:
+            rule_valid = False
+            glob_pattern = rule["pattern"].replace("\\", "/")
+            for path, _, _ in self.get_directory_details:
+                normalized_path = path.split("/", 1)[1].replace("\\", "/")
+                is_match = glob.globmatch(
+                    normalized_path, glob_pattern, flags=glob.GLOBSTAR
+                )
+
+                if is_match:
+                    rule_valid = True
+                    matched_paths.add(path)
+            if not rule_valid:
+                invalid_rules.append(rule["pattern"])
+        return matched_paths, invalid_rules
 
     async def ping(self):
         """Verify the connection with Network Drive"""
@@ -187,6 +468,8 @@ class NASDataSource(BaseDataSource):
             executor=None, func=partial(self.fetch_file_content, path=file["path"])
         )
 
+        if not content:
+            return
         attachment = content.read()
         content.close()
         return {
@@ -195,16 +478,200 @@ class NASDataSource(BaseDataSource):
             "_attachment": get_base64_value(content=attachment),
         }
 
+    def list_file_permission(self, file_path, file_type, mode, access):
+        try:
+            with smbclient.open_file(
+                file_path,
+                mode=mode,
+                buffering=0,
+                file_type=file_type,
+                desired_access=access,
+            ) as file:
+                descriptor = self.security_info.get_descriptor(
+                    file_descriptor=file.fd, info=SECURITY_INFO_DACL
+                )
+                return descriptor.get_dacl()["aces"]
+        except SMBOSError as error:
+            self._logger.error(
+                f"Cannot read the contents of file on path:{file_path}. Error {error}"
+            )
+
+    def _dls_enabled(self):
+        if (
+            self._features is None
+            or not self._features.document_level_security_enabled()
+        ):
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    async def _decorate_with_access_control(self, document, file_path, file_type):
+        if self._dls_enabled():
+            entity_permissions = await self.get_entity_permission(
+                file_path=file_path, file_type=file_type
+            )
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + entity_permissions)
+            )
+        return document
+
+    async def _user_access_control_doc(
+        self, user, sid, groups_info, groups_members=None
+    ):
+        prefixed_username = _prefix_user(user)
+        sid_user = _prefix_sid(sid)
+        sid_groups = []
+
+        if groups_members:
+            for group_name, group_sid in groups_info.items():
+                members = groups_members.get(group_name)
+
+                if sid in members.values():
+                    sid_groups.append(_prefix_sid(group_sid))
+        else:
+            for group_sid in groups_info or []:
+                sid_groups.append(_prefix_sid(group_sid))
+
+        access_control = [sid_user, prefixed_username, *sid_groups]
+
+        return {
+            "_id": sid,
+            "identity": {
+                "username": prefixed_username,
+                "user_id": sid_user,
+            },
+            "created_at": iso_utc(),
+        } | es_access_control_query(access_control)
+
+    def read_user_info_csv(self):
+        with open(self.identity_mappings, encoding="utf-8") as file:
+            user_info = []
+            try:
+                csv_reader = csv.reader(file, delimiter=";")
+                for row in csv_reader:
+                    user_info.append(
+                        {
+                            "name": row[0],
+                            "user_sid": row[1],
+                            "groups": row[2].split(",") if len(row[2]) > 0 else [],
+                        }
+                    )
+            except csv.Error as e:
+                self._logger.exception(
+                    f"Error while reading user mapping file at the location: {self.identity_mappings}. Error: {e}"
+                )
+            return user_info
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        # This if block fetches users, groups via local csv file path
+        if self.drive_type == LINUX:
+            if self.identity_mappings:
+                self._logger.info(
+                    f"Fetching all groups and users from configured file path '{self.identity_mappings}'"
+                )
+
+                for user in self.read_user_info_csv():
+                    yield await self._user_access_control_doc(
+                        user=user["name"],
+                        sid=user["user_sid"],
+                        groups_info=user["groups"],
+                    )
+            else:
+                msg = "CSV file path cannot be empty. Please provide a valid csv file path."
+                raise ConfigurableFieldValueError(msg)
+        else:
+            try:
+                self._logger.info(
+                    f"Fetching all groups and members for drive at path '{self.drive_path}'"
+                )
+                groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
+
+                groups_members = {}
+                for group_name, _ in groups_info.items():
+                    groups_members[group_name] = await asyncio.to_thread(
+                        self.security_info.fetch_members, group_name
+                    )
+
+                self._logger.info(
+                    f"Fetching all users for drive at path '{self.drive_path}'"
+                )
+                users_info = await asyncio.to_thread(self.security_info.fetch_users)
+
+                for user, sid in users_info.items():
+                    yield await self._user_access_control_doc(
+                        user=user,
+                        sid=sid,
+                        groups_info=groups_info,
+                        groups_members=groups_members,
+                    )
+            except ConnectionError as exception:
+                msg = "Something went wrong"
+                raise ConnectionError(msg) from exception
+
+    async def get_entity_permission(self, file_path, file_type):
+        if not self._dls_enabled():
+            return []
+
+        permissions = []
+        if file_type == "file":
+            list_permissions = await asyncio.to_thread(
+                self.list_file_permission,
+                file_path=file_path,
+                file_type="file",
+                mode="rb",
+                access=FilePipePrinterAccessMask.READ_CONTROL,
+            )
+        else:
+            list_permissions = await asyncio.to_thread(
+                self.list_file_permission,
+                file_path=file_path,
+                file_type="dir",
+                mode="br",
+                access=DirectoryAccessMask.READ_CONTROL,
+            )
+        for permission in list_permissions or []:
+            if (
+                permission["ace_type"].value == ACCESS_ALLOWED_TYPE
+                or permission["mask"].value == ACCESS_MASK_DENIED_WRITE_PERMISSION
+            ):
+                permissions.append(_prefix_sid(permission["sid"]))
+
+        return permissions
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch files and folders in async manner.
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents
         """
-        directory_details = smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}")
 
-        for path, _, _ in directory_details:
-            async for file in self.get_files(path=path):
-                if file["type"] == "folder":
-                    yield file, None
-                else:
-                    yield file, partial(self.get_content, file)
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
+            if len(invalid_rules) > 0:
+                msg = f"Following advanced rules are invalid: {invalid_rules}"
+                raise InvalidRulesError(msg)
+
+            for path in matched_paths:
+                async for file in self.get_files(path=path):
+                    if file["type"] == "folder":
+                        yield file, None
+                    else:
+                        yield file, partial(self.get_content, file)
+
+        else:
+            matched_paths = (path for path, _, _ in self.get_directory_details)
+
+            for path in matched_paths:
+                async for file in self.get_files(path=path):
+                    if file["type"] == "folder":
+                        yield await self._decorate_with_access_control(
+                            file, file.get("path"), file.get("type")
+                        ), None
+                    else:
+                        yield await self._decorate_with_access_control(
+                            file, file.get("path"), file.get("type")
+                        ), partial(self.get_content, file)

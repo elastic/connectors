@@ -3,21 +3,31 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Module to handle api calls received from connector."""
 
 import os
 import random
 import string
+import time
 
-from faker import Faker
 from flask import Flask, escape, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
-from yattag import Doc
+
+from tests.commons import WeightedFakeProvider
+
+seed = 1597463007
+
+fake_provider = WeightedFakeProvider()
+fake = fake_provider.fake
+
+random.seed(seed)
 
 app = Flask(__name__)
 
 THROTTLING = os.environ.get("THROTTLING", False)
+PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
 
 if THROTTLING:
     limiter = Limiter(
@@ -37,7 +47,6 @@ if THROTTLING:
         },
     )
 
-seed = 1597463007
 
 TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
 
@@ -46,10 +55,6 @@ ROOT = os.environ.get(
 )  # possible to override if hosting somewhere else
 
 TENANT = "functionaltest.sharepoint.fake"
-
-random.seed(seed)
-fake = Faker()
-fake.seed_instance(seed)
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
@@ -83,29 +88,6 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEMS = 10
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
-
-fake_large_image = fake.pystr(min_chars=1 << 20, max_chars=1 << 20 + 1)
-
-
-def _generate_html(text, number_of_large_images):
-    images = []
-    for _ in range(number_of_large_images):
-        images.append(f"<img src='{fake_large_image}'/>")
-
-    large_html = f"<html><head></head><body><div>{text}</div><div>{'<br/>'.join(images)}</div></body></html>"
-
-    return large_html
-
-
-small_text = _generate_html(fake.text(max_nb_chars=5000), 0)
-medium_text = _generate_html(fake.text(max_nb_chars=20000), 1)
-large_text = _generate_html(fake.text(max_nb_chars=100000), 10)
-
-small_text_bytesize = len(small_text.encode("utf-8"))
-medium_text_bytesize = len(medium_text.encode("utf-8"))
-large_text_bytesize = len(large_text.encode("utf-8"))
-
-fake_binary_image = fake.pystr(min_chars=65536, max_chars=65536 << 1)
 
 TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
     1 * NUMBER_OF_DRIVE_ITEMS
@@ -198,47 +180,19 @@ class RandomDataStorage:
                     drive_item["folder"] = False
                     drive_item["name"] = fake.file_name(extension="html")
 
-                    if j % 5 == 0:  # Every 5th is medium
-                        self.drive_item_content[drive_item["id"]] = medium_text
-                        drive_item["size"] = medium_text_bytesize
-                    elif j % 17 == 0:  # Every 17th is large
-                        self.drive_item_content[drive_item["id"]] = large_text
-                        drive_item["size"] = large_text_bytesize
-                    else:  # Every other is small
-                        self.drive_item_content[drive_item["id"]] = small_text
-                        drive_item["size"] = small_text_bytesize
+                    file = fake_provider.get_html()
+                    self.drive_item_content[drive_item["id"]] = file
+                    drive_item["size"] = len(file.encode("utf-8"))
 
                 self.drive_items[drive["id"]].append(drive_item)
 
             # Generate Site Pages
             for _ in range(NUMBER_OF_PAGES):
-                doc, tag, text = Doc().tagtext()
-
-                with tag("html"):
-                    with tag("body", id="hello"):
-                        with tag("h1"):
-                            text(fake.word())
-                        with tag("p"):
-                            text(fake.paragraph())
-                        with tag("p"):
-                            text(fake.paragraph())
-                        with tag("ul"):
-                            with tag("li"):
-                                text(fake.word())
-                            with tag("li"):
-                                text(fake.word())
-                            with tag("li"):
-                                text(fake.word())
-                            doc.stag(
-                                "img",
-                                src=fake_binary_image,
-                            )  # just fake invalid image as if it was base64-encoded png, purely to fill-in some data
-
                 page = {
                     "id": str(self.autoinc.get()),
                     "odata.id": str(fake.uuid4()),
                     "guid": str(fake.uuid4()),
-                    "content": doc.getvalue(),
+                    "content": fake_provider.get_html(),
                 }
 
                 self.site_pages[site["id"]].append(page)
@@ -271,25 +225,16 @@ class RandomDataStorage:
                     ] = {}
 
                     # Generate Attachments
-                    for m in range(NUMBER_OF_LIST_ITEM_ATTACHMENTS):
+                    for _m in range(NUMBER_OF_LIST_ITEM_ATTACHMENTS):
                         list_item_attachment = {
                             "title": fake.file_name(extension="txt")
                         }
 
                         list_item["attachments"].append(list_item_attachment)
 
-                        # Generate Attachment Content
-                        generated_content = None
-                        if m % 5 == 0:  # Every 5th item
-                            generated_content = medium_text
-                        elif m % 9 == 0:  # Every 9th item
-                            generated_content = large_text
-                        else:
-                            generated_content = small_text
-
                         self.list_item_attachment_content[site_list["id"]][
                             list_item["id"]
-                        ][list_item_attachment["title"]] = generated_content
+                        ][list_item_attachment["title"]] = fake_provider.get_html()
 
                     self.site_list_items[site_list["id"]].append(list_item)
 
@@ -322,6 +267,7 @@ class RandomDataStorage:
                     "webUrl": f"{ROOT}/sites/{site['name']}",
                     "createdDateTime": "2023-05-31T16:08:46Z",
                     "lastModifiedDateTime": "2023-05-31T16:08:48Z",
+                    "siteCollection": {"hostname": ROOT},
                 }
             )
 
@@ -618,6 +564,11 @@ data_storage = RandomDataStorage()
 data_storage.generate()
 
 
+@app.before_request
+def before_request():
+    time.sleep(PRE_REQUEST_SLEEP)
+
+
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
 def get_graph_token(tenant_id):
     return {
@@ -760,7 +711,8 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
             site_name, list_title, list_item_id
         )
     else:
-        raise Exception("Nope")
+        msg = "Nope"
+        raise Exception(msg)
 
 
 @app.route("/sites/<string:site_name>/_api/web/lists/GetByTitle('Site Pages')/items")

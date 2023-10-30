@@ -3,15 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import asyncio
-import os
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from elasticsearch import ConflictError
 
-from connectors.config import load_config
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import (
@@ -25,44 +22,9 @@ from connectors.protocol import (
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import DataSourceConfiguration
 from tests.commons import AsyncIterator
+from tests.services.test_base import create_and_run_service
 
-HERE = os.path.dirname(__file__)
-FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
-CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 JOB_TYPES = [JobType.FULL, JobType.ACCESS_CONTROL]
-
-
-def create_service(config_file):
-    config = load_config(config_file)
-    service = JobSchedulingService(config)
-    service.idling = 0.05
-
-    return service
-
-
-async def run_service_with_stop_after(service, stop_after=0):
-    def _stop_running_service_without_cancelling():
-        service.running = False
-
-    async def _terminate():
-        if stop_after == 0:
-            # so we actually want the service
-            # to run current loop without interruption
-            asyncio.get_event_loop().call_soon(_stop_running_service_without_cancelling)
-        else:
-            # but if stop_after is provided we want to
-            # interrupt the service after the timeout
-            await asyncio.sleep(stop_after)
-            service.stop()
-
-        await asyncio.sleep(0)
-
-    await asyncio.gather(service.run(), _terminate())
-
-
-async def create_and_run_service(config_file=CONFIG_FILE, stop_after=0):
-    service = create_service(config_file)
-    await run_service_with_stop_after(service, stop_after)
 
 
 @pytest.fixture(autouse=True)
@@ -139,7 +101,7 @@ def mock_connector(
 @pytest.mark.asyncio
 async def test_no_connector(connector_index_mock, sync_job_index_mock, set_env):
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     sync_job_index_mock.create.assert_not_awaited()
 
@@ -152,7 +114,7 @@ async def test_connector_ready_to_sync(
 ):
     connector = mock_connector(next_sync=datetime.utcnow())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -190,7 +152,7 @@ async def test_connector_ready_to_sync_with_race_condition(
         body={},
     )
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -204,7 +166,7 @@ async def test_connector_sync_disabled(
 ):
     connector = mock_connector(next_sync=None)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -222,7 +184,7 @@ async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled
         next_sync=datetime.utcnow(), document_level_security_enabled=False
     )
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -249,7 +211,7 @@ async def test_connector_scheduled_access_control_sync_with_insufficient_license
         return_value=(False, License.BASIC)
     )
 
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -289,7 +251,7 @@ async def test_connector_scheduled_incremental_sync(
         document_level_security_enabled=False,
     )
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -323,7 +285,7 @@ async def test_connector_not_configured(
 ):
     connector = mock_connector(status=connector_status)
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_awaited()
@@ -349,7 +311,7 @@ async def test_connector_prepare_failed(
 ):
     connector = mock_connector(prepare_exception=prepare_exception())
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
-    await create_and_run_service()
+    await create_and_run_service(JobSchedulingService)
 
     connector.prepare.assert_awaited()
     connector.heartbeat.assert_not_awaited()
@@ -372,7 +334,7 @@ async def test_run_when_sync_fails_then_continues_service_execution(
     # 0.15 is a bit arbitrary here
     # It should be enough to make the loop execute a couple of times
     # but is there a better way to tell service to execute loop a couple of times?
-    await create_and_run_service(stop_after=0.15)
+    await create_and_run_service(JobSchedulingService, stop_after=0.15)
 
     # assert that service tried to call connector heartbeat for all connectors
     connector.heartbeat.assert_awaited()

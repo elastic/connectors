@@ -74,10 +74,12 @@ services:
       - esnet
   
   confluence:
-    build: .
-    command: python fixture.py
+    build: 
+      context: ../../../../
+      dockerfile: Dockerfile.ftest
+    command: bin/python tests/sources/fixtures/confluence/fixture.py
     ports:
-      - "5000:5000"
+      - "9696:9696"
     volumes:
       - .:/python-flask
     restart: always  

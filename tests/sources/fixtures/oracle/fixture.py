@@ -3,90 +3,87 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Oracle module responsible to generate records on the Oracle server.
 """
-import asyncio
 import os
 import random
-import string
 
 import oracledb
 
-from connectors.utils import RetryStrategy, retryable
+from tests.commons import WeightedFakeProvider
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
-_SIZES = {"small": 5, "medium": 10, "large": 30}
-NUM_TABLES = _SIZES[DATA_SIZE]
+fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
+
 
 # If the Oracle Service takes too much time to respond, modify the following retry constants accordingly.
 RETRY_INTERVAL = 4
-RETRIES = 5
+RETRIES = 1
+BATCH_SIZE = 100
 
-
-def random_text(k=1024 * 20):
-    """Generate random string for the record content
-
-    Args:
-        k (int): Length to generate the string
-    """
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
-
-
-BIG_TEXT = random_text()
 USER = "admin"
 PASSWORD = "Password_123"
 ENCODING = "UTF-8"
 DSN = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
 
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
-def inject_lines(table, cursor, start, lines):
-    """Ingest rows in table
+match DATA_SIZE:
+    case "small":
+        NUM_TABLES = 1
+        RECORD_COUNT = 500
+    case "medium":
+        NUM_TABLES = 3
+        RECORD_COUNT = 3000
+    case "large":
+        NUM_TABLES = 5
+        RECORD_COUNT = 7000
 
-    Args:
-        table (str): Name of table
-        cursor (cursor): Cursor to execute query
-        start (int): Starting row
-        lines (int): Number of rows
-    """
-    rows = []
-    for row_id in range(lines):
-        row_id += start
-        rows.append((row_id + 1, f"user_{row_id}", row_id, BIG_TEXT))
-    sql_query = f"INSERT into customers_{table} VALUES (:1, :2, :3, :4)"
-    cursor.executemany(sql_query, rows)
+RECORDS_TO_DELETE = 10
+
+
+def get_num_docs():
+    print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
+
+
+def inject_lines(table, cursor, lines):
+    batch_count = max(int(lines / BATCH_SIZE), 1)
+    inserted = 0
+    print(f"Inserting {lines} lines in {batch_count} batches")
+    for batch in range(batch_count):
+        rows = []
+        batch_size = min(BATCH_SIZE, lines - inserted)
+        for row_id in range(batch_size):
+            rows.append((fake_provider.fake.name(), row_id, fake_provider.get_text()))
+        sql_query = (
+            f"INSERT into customers_{table}(name, age, description) VALUES (:1, :2, :3)"
+        )
+        cursor.executemany(sql_query, rows)
+        inserted += batch_size
+        print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
 def load():
     """Generate tables and loads table data in the oracle server."""
-
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    """N tables of RECORD_COUNT rows each"""
+    connection = oracledb.connect(
+        user="system", password=PASSWORD, dsn=DSN, encoding=ENCODING
     )
-    async def load_rows():
-        """N tables of 10000 rows each. each row is ~ 1024*20 bytes"""
-        connection = oracledb.connect(
-            user="system", password=PASSWORD, dsn=DSN, encoding=ENCODING
-        )
-        cursor = connection.cursor()
-        cursor.execute("CREATE USER admin IDENTIFIED by Password_123")
-        cursor.execute("GRANT CONNECT, RESOURCE, DBA TO admin")
-        connection.commit()
+    cursor = connection.cursor()
+    cursor.execute("CREATE USER admin IDENTIFIED by Password_123")
+    cursor.execute("GRANT CONNECT, RESOURCE, DBA TO admin")
+    connection.commit()
 
-        connection = oracledb.connect(
-            user=USER, password=PASSWORD, dsn=DSN, encoding=ENCODING
-        )
-        cursor = connection.cursor()
-        for table in range(NUM_TABLES):
-            print(f"Adding data from table #{table}...")
-            sql_query = f"CREATE TABLE customers_{table} (id int, name VARCHAR(255), age int, description long, PRIMARY KEY (id))"
-            cursor.execute(sql_query)
-            for i in range(10):
-                inject_lines(table, cursor, i * 1000, 1000)
-        connection.commit()
-
-    asyncio.get_event_loop().run_until_complete(load_rows())
+    connection = oracledb.connect(
+        user=USER, password=PASSWORD, dsn=DSN, encoding=ENCODING
+    )
+    cursor = connection.cursor()
+    for table in range(NUM_TABLES):
+        print(f"Adding data for table #{table}...")
+        sql_query = f"CREATE TABLE customers_{table} (id NUMBER GENERATED AS IDENTITY, name VARCHAR(255), age int, description long, PRIMARY KEY (id))"
+        cursor.execute(sql_query)
+        inject_lines(table, cursor, RECORD_COUNT)
+    connection.commit()
 
 
 def remove():
@@ -97,7 +94,10 @@ def remove():
     cursor = connection.cursor()
 
     for table in range(NUM_TABLES):
-        rows = [(f"user_{row_id}",) for row_id in random.sample(range(1, 1000), 10)]
-        sql_query = f"DELETE from customers_{table} where name=:1"
+        rows = [
+            (row_id,)
+            for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+        ]
+        sql_query = f"DELETE FROM customers_{table} WHERE id IN(:1)"
         cursor.executemany(sql_query, rows)
     connection.commit()

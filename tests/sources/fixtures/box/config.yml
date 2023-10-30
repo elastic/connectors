@@ -1,0 +1,4 @@
+connectors:
+  -
+    connector_id: 'box'
+    service_type: 'box'

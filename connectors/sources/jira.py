@@ -6,37 +6,40 @@
 """Jira source module responsible to fetch documents from Jira on-prem or cloud server.
 """
 import asyncio
-import os
 from copy import copy
 from datetime import datetime
 from functools import partial
 from urllib import parse
 
-import aiofiles
 import aiohttp
 import pytz
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
-from aiohttp.client_exceptions import ServerDisconnectedError
+from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 
+from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
 from connectors.source import BaseDataSource
-from connectors.sources.atlassian import AtlassianAdvancedRulesValidator
+from connectors.sources.atlassian import (
+    AtlassianAccessControl,
+    AtlassianAdvancedRulesValidator,
+    prefix_account_id,
+    prefix_account_name,
+    prefix_group_id,
+)
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
-    convert_to_b64,
+    RetryStrategy,
     iso_utc,
+    retryable,
     ssl_context,
 )
 
+RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760
+DEFAULT_RETRY_SECONDS = 30
 
 FETCH_SIZE = 100
-CHUNK_SIZE = 1024
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
@@ -48,6 +51,11 @@ ISSUES = "all_issues"
 ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
+USERS = "users"
+PROJECT_PERMISSIONS_BY_KEY = "project_permissions_by_key"
+ISSUE_SECURITY_LEVEL = "issue_security_level"
+SECURITY_LEVEL_MEMBERS = "issue_security_members"
+PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
 URLS = {
     PING: "/rest/api/2/myself",
     PROJECT: "/rest/api/2/project?expand=description,lead,url",
@@ -56,10 +64,32 @@ URLS = {
     ISSUE_DATA: "/rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
+    USERS: "/rest/api/3/users/search",
+    PROJECT_PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?projectKey={project_key}&permissions=BROWSE_PROJECTS&maxResults={max_results}&startAt={start_at}",
+    PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
+    ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
+    SECURITY_LEVEL_MEMBERS: "/rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
 }
 
 JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
+
+ATLASSIAN = "atlassian"
+USER_QUERY = "expand=groups,applicationRoles"
+
+
+class ThrottledError(Exception):
+    """Internal exception class to indicate that request was throttled by the API"""
+
+    pass
+
+
+class InternalServerError(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
 
 
 class JiraClient:
@@ -125,7 +155,41 @@ class JiraClient:
         await self.session.close()
         self.session = None
 
-    async def api_call(self, url_name, **url_kwargs):
+    async def _handle_client_errors(self, url, exception):
+        if exception.status == 429:
+            response_headers = exception.headers or {}
+            retry_seconds = DEFAULT_RETRY_SECONDS
+            if "Retry-After" in response_headers:
+                try:
+                    retry_seconds = int(response_headers["Retry-After"])
+                except (TypeError, ValueError) as exception:
+                    self._logger.error(
+                        f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    )
+            else:
+                self._logger.warning(
+                    f"Rate Limited but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+            self._logger.debug(f"Rate Limit reached: retry in {retry_seconds} seconds")
+
+            await self._sleeps.sleep(retry_seconds)
+            raise ThrottledError
+        elif exception.status == 404:
+            self._logger.error(f"Getting Not Found Error for url: {url}")
+            raise NotFound
+        elif exception.status == 500:
+            self._logger.error("Internal Server Error occurred")
+            raise InternalServerError
+        else:
+            raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=NotFound,
+    )
+    async def api_call(self, url_name=None, **url_kwargs):
         """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.
 
         Args:
@@ -138,8 +202,9 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        retry = 0
-        url = parse.urljoin(self.host_url, URLS[url_name].format(**url_kwargs))
+        url = url_kwargs.get("url") or parse.urljoin(
+            self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
+        )
         while True:
             try:
                 async with self._get_session().get(  # pyright: ignore
@@ -148,21 +213,13 @@ class JiraClient:
                 ) as response:
                     yield response
                     break
-            except Exception as exception:
-                if isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self.close_session()
-                retry += 1
-                if retry > self.retry_count:
-                    raise exception
-                self._logger.warning(
-                    f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
-                )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry)
+            except ServerConnectionError:
+                await self.close_session()
+                raise
+            except ClientResponseError as exception:
+                await self._handle_client_errors(url=url, exception=exception)
 
-    async def paginated_api_call(self, url_name, jql=None):
+    async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
 
         Args:
@@ -176,11 +233,22 @@ class JiraClient:
 
         while True:
             try:
+                url = None
+                if kwargs.get("level_id"):
+                    url = parse.urljoin(
+                        self.host_url,
+                        URLS[url_name].format(
+                            max_results=FETCH_SIZE,
+                            start_at=start_at,
+                            level_id=kwargs.get("level_id"),
+                        ),  # pyright: ignore
+                    )
                 async for response in self.api_call(
                     url_name=url_name,
                     start_at=start_at,
                     max_results=FETCH_SIZE,
                     jql=jql,
+                    url=url,
                 ):
                     response_json = await response.json()
                     total = response_json["total"]
@@ -201,6 +269,7 @@ class JiraDataSource(BaseDataSource):
     name = "Jira"
     service_type = "jira"
     advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Jira
@@ -212,10 +281,13 @@ class JiraDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.jira_client = JiraClient(configuration=configuration)
+        self.atlassian_access_control = AtlassianAccessControl(self, self.jira_client)
 
         self.tasks = 0
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
+
+        self.project_permission_cache = {}
 
     def _set_internal_logger(self):
         self.jira_client.set_logger(self._logger)
@@ -244,7 +316,6 @@ class JiraDataSource(BaseDataSource):
                 "label": "Jira Server username",
                 "order": 2,
                 "type": "str",
-                "value": "admin",
             },
             "password": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
@@ -252,14 +323,12 @@ class JiraDataSource(BaseDataSource):
                 "sensitive": True,
                 "order": 3,
                 "type": "str",
-                "value": "changeme",
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
                 "order": 4,
                 "type": "str",
-                "value": "me@example.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
@@ -267,13 +336,11 @@ class JiraDataSource(BaseDataSource):
                 "order": 5,
                 "sensitive": True,
                 "type": "str",
-                "value": "abc#123",
             },
             "jira_url": {
                 "label": "Jira host url",
                 "order": 6,
                 "type": "str",
-                "value": "http://127.0.0.1:8080",
             },
             "projects": {
                 "display": "textarea",
@@ -281,7 +348,6 @@ class JiraDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": "*",
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -295,7 +361,6 @@ class JiraDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 9,
                 "type": "str",
-                "value": "",
             },
             "retry_count": {
                 "default_value": 3,
@@ -305,7 +370,6 @@ class JiraDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": 3,
             },
             "concurrent_downloads": {
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
@@ -318,9 +382,219 @@ class JiraDataSource(BaseDataSource):
                 "validations": [
                     {"type": "less_than", "constraint": MAX_CONCURRENT_DOWNLOADS + 1}
                 ],
-                "value": MAX_CONCURRENT_DOWNLOADS,
+            },
+            "use_document_level_security": {
+                "display": "toggle",
+                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
+                "label": "Enable document level security",
+                "order": 12,
+                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 13,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if self._features is None:
+            return False
+
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+        return document
+
+    async def _user_information_list(self, project):
+        start_at = 0
+        while True:
+            async for users in self.jira_client.api_call(
+                url_name=PROJECT_PERMISSIONS_BY_KEY,
+                project_key=project["key"],
+                start_at=start_at,
+                max_results=FETCH_SIZE,
+            ):
+                response = await users.json()
+                if len(response) == 0:
+                    return
+                yield response
+                start_at += FETCH_SIZE
+
+    async def _project_access_control(self, project):
+        if not self._dls_enabled():
+            return []
+
+        access_control = set()
+        async for actors in self._user_information_list(project=project):
+            for actor in actors:
+                if actor["accountType"] == ATLASSIAN:
+                    access_control.add(
+                        prefix_account_id(account_id=actor.get("accountId"))
+                    )
+                    access_control.add(
+                        prefix_account_name(account_name=actor.get("displayName"))
+                    )
+        return list(access_control)
+
+    async def _issue_security_level(self, issue_key):
+        async for response in self.jira_client.api_call(
+            url_name=ISSUE_SECURITY_LEVEL, issue_key=issue_key
+        ):
+            yield await response.json()
+
+    async def _issue_security_level_members(self, level_id):
+        async for response in self.jira_client.paginated_api_call(
+            url_name=SECURITY_LEVEL_MEMBERS, level_id=level_id
+        ):
+            yield response
+
+    async def _project_role_members(self, project, role_id, access_control):
+        async for actor_response in self.jira_client.api_call(
+            url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
+            project_key=project["key"],
+            role_id=role_id,
+        ):
+            actors = await actor_response.json()
+            for actor in actors.get("actors", []):
+                if actor.get("actorUser"):
+                    access_control.add(
+                        prefix_account_id(
+                            account_id=actor.get("actorUser").get("accountId")
+                        )
+                    )
+                    access_control.add(
+                        prefix_account_name(account_name=actor.get("displayName"))
+                    )
+                elif actor.get("actorGroup"):
+                    access_control.add(
+                        prefix_group_id(group_id=actor.get("actorGroup").get("groupId"))
+                    )
+            yield access_control
+
+    async def _cache_project_access_control(self, project):
+        project_key = project["key"]
+        if project_key in self.project_permission_cache.keys():
+            project_access_controls = self.project_permission_cache.get(project_key)
+        else:
+            project_access_controls = await self._project_access_control(
+                project=project
+            )
+            self.project_permission_cache[project_key] = project_access_controls
+        return project_access_controls
+
+    async def _issue_access_control(self, issue_key, project):
+        if not self._dls_enabled():
+            return []
+
+        access_control = set()
+        async for response in self._issue_security_level(issue_key=issue_key):
+            if security := response.get("fields", {}).get("security"):
+                level_id = security.get("id")
+                async for members in self._issue_security_level_members(
+                    level_id=level_id
+                ):
+                    for actor in members["values"]:
+                        actor_type = actor.get("holder", {}).get("type")
+                        if actor_type == "user":
+                            user = actor.get("holder", {}).get("user", {})
+                            if self.atlassian_access_control.is_active_atlassian_user(
+                                user_info=user
+                            ):
+                                access_control.add(
+                                    prefix_account_id(account_id=user.get("accountId"))
+                                )
+                                access_control.add(
+                                    prefix_account_name(
+                                        account_name=user.get("displayName")
+                                    )
+                                )
+                        elif actor_type == "group":
+                            group_id = (
+                                actor.get("holder", {}).get("group", {}).get("groupId")
+                            )
+                            access_control.add(prefix_group_id(group_id=group_id))
+                        elif actor_type == "projectRole":
+                            if (
+                                role_id := actor.get("holder", {})
+                                .get("projectRole", {})
+                                .get("id")
+                            ):
+                                # Project Role - `atlassian-addons-project-access` with id 10003 is not needed for DLS
+                                is_addons_projects_access = role_id == 10003
+                                if not is_addons_projects_access:
+                                    access_control = await anext(
+                                        self._project_role_members(
+                                            project=project,
+                                            role_id=role_id,
+                                            access_control=access_control,
+                                        )
+                                    )
+            else:
+                self._logger.debug(
+                    f"Issue security level is not set for an issue: {issue_key}. Hence, Assigning project permissions"
+                )
+                project_access_controls = await self._cache_project_access_control(
+                    project=project
+                )
+
+                return project_access_controls
+        return list(access_control)
+
+    async def get_access_control(self):
+        """Get access control documents for active Atlassian users.
+
+        This method fetches access control documents for active Atlassian users when document level security (DLS)
+        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        If DLS is enabled, the method fetches all users from the Jira API, filters out active Atlassian users,
+        and fetches additional information for each active user using the _fetch_user method. After gathering the user information,
+        it generates an access control document for each user using the user_access_control_doc method and yields the results.
+
+        Yields:
+            dict: An access control document for each active Atlassian user.
+        """
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        self._logger.info("Fetching all users")
+        url = parse.urljoin(self.configuration["jira_url"], URLS[USERS])
+        async for users in self.atlassian_access_control.fetch_all_users(url=url):
+            active_atlassian_users = filter(
+                self.atlassian_access_control.is_active_atlassian_user, users
+            )
+            tasks = [
+                anext(
+                    self.atlassian_access_control.fetch_user(
+                        url=f"{user_info.get('self')}&{USER_QUERY}"
+                    )
+                )
+                for user_info in active_atlassian_users
+            ]
+            user_results = await asyncio.gather(*tasks)
+
+            for user in user_results:
+                yield await self.atlassian_access_control.user_access_control_doc(
+                    user=user
+                )
 
     def advanced_rules_validators(self):
         return [AtlassianAdvancedRulesValidator(self)]
@@ -349,57 +623,41 @@ class JiraDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        attachment_size = int(attachment["size"])
-        if not (doit and attachment_size > 0):
+        file_size = int(attachment["size"])
+        if not (doit and file_size > 0):
             return
 
-        attachment_name = attachment["filename"]
-        if (
-            os.path.splitext(attachment_name)[-1]
-        ).lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.warning(
-                f"{attachment_name} is not supported by TIKA, skipping"
-            )
+        filename = attachment["filename"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(
+            file_extension,
+            filename,
+            file_size,
+        ):
             return
 
-        if attachment_size > FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
-            )
-            return
-
-        self._logger.debug(f"Downloading {attachment_name}")
+        download_url = (
+            ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
+        )
 
         document = {
             "_id": f"{issue_key}-{attachment['id']}",
             "_timestamp": attachment["created"],
         }
-        temp_filename = ""
-        attachment_url = (
-            ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
+                partial(
+                    self.jira_client.api_call,
+                    url_name=download_url,
+                    attachment_id=attachment["id"],
+                    attachment_name=attachment["filename"],
+                ),
+            ),
         )
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
-            async for response in self.jira_client.api_call(
-                url_name=attachment_url,
-                attachment_id=attachment["id"],
-                attachment_name=attachment["filename"],
-            ):
-                async for data in response.content.iter_chunked(CHUNK_SIZE):
-                    await async_buffer.write(data)
-                temp_filename = str(async_buffer.name)
-
-        self._logger.debug(f"Calling convert_to_b64 for file : {attachment_name}")
-        await asyncio.to_thread(convert_to_b64, source=temp_filename)
-        async with aiofiles.open(file=temp_filename, mode="r") as async_buffer:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await async_buffer.read()).strip()
-        try:
-            await remove(temp_filename)
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file from: {temp_filename}. Error: {exception}"
-            )
-        return document
 
     async def ping(self):
         """Verify the connection with Jira"""
@@ -426,13 +684,11 @@ class JiraDataSource(BaseDataSource):
             if unavailable_projects := set(self.jira_client.projects) - set(
                 project_keys
             ):
-                raise Exception(
-                    f"Configured unavailable projects: {', '.join(unavailable_projects)}"
-                )
+                msg = f"Configured unavailable projects: {', '.join(unavailable_projects)}"
+                raise Exception(msg)
         except Exception as exception:
-            raise Exception(
-                f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
-            ) from exception
+            msg = f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
+            raise Exception(msg) from exception
 
     async def _get_timezone(self):
         """Returns the timezone of the Jira deployment"""
@@ -453,7 +709,13 @@ class JiraDataSource(BaseDataSource):
             "Type": "Project",
             "Project": project,
         }
-        await self.queue.put((document, None))  # pyright: ignore
+        project_access_control = await self._cache_project_access_control(
+            project=project
+        )
+        document_with_access_control = self._decorate_with_access_control(
+            document=document, access_control=project_access_control
+        )
+        await self.queue.put((document_with_access_control, None))  # pyright: ignore
 
     async def _get_projects(self):
         """Get projects with the help of REST APIs
@@ -503,11 +765,38 @@ class JiraDataSource(BaseDataSource):
                     "Type": response_fields["issuetype"]["name"],
                     "Issue": response_fields,
                 }
-                await self.queue.put((document, None))  # pyright: ignore
+                if restrictions := [
+                    restriction["restrictionValue"]
+                    for restriction in response_fields.get("issuerestriction", {})
+                    .get("issuerestrictions", {})
+                    .get("projectrole", [])
+                ]:
+                    issue_access_control = []
+                    for role_id in restrictions:
+                        access_control = await anext(
+                            self._project_role_members(
+                                project=response_fields["project"],
+                                role_id=role_id,
+                                access_control=set(),
+                            )
+                        )
+                        issue_access_control.extend(list(access_control))
+                else:
+                    issue_access_control = await self._issue_access_control(
+                        issue_key=issue["key"], project=response_fields["project"]
+                    )
+                document_with_access_control = self._decorate_with_access_control(
+                    document=document, access_control=issue_access_control
+                )
+                await self.queue.put(
+                    (document_with_access_control, None)
+                )  # pyright: ignore
                 attachments = issue["fields"]["attachment"]
                 if len(attachments) > 0:
                     await self._put_attachment(
-                        attachments=attachments, issue_key=issue["key"]
+                        attachments=attachments,
+                        issue_key=issue["key"],
+                        access_control=issue_access_control,
                     )
             await self.queue.put("FINISHED")  # pyright: ignore
         except Exception as exception:
@@ -537,7 +826,7 @@ class JiraDataSource(BaseDataSource):
                 self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _put_attachment(self, attachments, issue_key):
+    async def _put_attachment(self, attachments, issue_key, access_control):
         """Put attachments of a specific issue in a queue
 
         Args:
@@ -553,9 +842,12 @@ class JiraDataSource(BaseDataSource):
                 "_timestamp": attachment["created"],
                 "size": attachment["size"],
             }
+            document_with_access_control = self._decorate_with_access_control(
+                document=document, access_control=access_control
+            )
             await self.queue.put(
                 (  # pyright: ignore
-                    document,
+                    document_with_access_control,
                     partial(
                         self.get_content,
                         issue_key=issue_key,

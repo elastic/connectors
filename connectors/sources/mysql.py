@@ -16,7 +16,6 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
-    WILDCARD,
     Queries,
     configured_tables,
     is_wildcard,
@@ -37,7 +36,6 @@ DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_SSL_ENABLED = False
-DEFAULT_SSL_CA = ""
 
 
 def parse_tables_string_to_list_of_tables(tables_string):
@@ -124,18 +122,18 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
-        tables_to_filter = set(
+        tables_to_filter = {
             table
             for query_info in advanced_rules
             for table in query_info.get("tables", [])
-        )
+        }
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Tables not found or inaccessible: {format_list(sorted(list(missing_tables)))}.",
+                validation_message=f"Tables not found or inaccessible: {format_list(sorted(missing_tables))}.",
             )
 
         return SyncRuleValidationResult.valid_result(
@@ -205,7 +203,7 @@ class MySQLClient:
     async def get_all_table_names(self):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(self.queries.all_tables())
-            return list(map(lambda table: table[0], await cursor.fetchall()))
+            return [table[0] for table in await cursor.fetchall()]
 
     async def ping(self):
         try:
@@ -356,54 +354,47 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Host",
                 "order": 1,
                 "type": "str",
-                "value": "127.0.0.1",
             },
             "port": {
                 "display": "numeric",
                 "label": "Port",
                 "order": 2,
                 "type": "int",
-                "value": 3306,
             },
             "user": {
                 "label": "Username",
                 "order": 3,
                 "type": "str",
-                "value": "root",
             },
             "password": {
                 "label": "Password",
                 "order": 4,
                 "sensitive": True,
                 "type": "str",
-                "value": "changeme",
             },
             "database": {
                 "label": "Database",
                 "order": 5,
                 "type": "str",
-                "value": "customerinfo",
             },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "order": 6,
                 "type": "list",
-                "value": WILDCARD,
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
                 "order": 7,
                 "type": "bool",
-                "value": DEFAULT_SSL_ENABLED,
+                "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
                 "order": 8,
                 "type": "str",
-                "value": DEFAULT_SSL_CA,
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -413,7 +404,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_FETCH_SIZE,
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -423,7 +413,6 @@ class MySqlDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": RETRIES,
             },
         }
 
@@ -454,7 +443,7 @@ class MySqlDataSource(BaseDataSource):
             ConfigurableFieldValueError: The database or the tables do not exist or aren't accessible, or a field contains an empty or wrong value
             ConfigurableFieldDependencyError: A inter-field dependency is not met
         """
-        self.configuration.check_valid()
+        await super().validate_config()
         await self._remote_validation()
 
     @retryable(
@@ -472,9 +461,8 @@ class MySqlDataSource(BaseDataSource):
         try:
             await cursor.execute(f"USE {self.database};")
         except aiomysql.Error as e:
-            raise ConfigurableFieldValueError(
-                f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
-            ) from e
+            msg = f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
+            raise ConfigurableFieldValueError(msg) from e
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
@@ -487,9 +475,8 @@ class MySqlDataSource(BaseDataSource):
                 non_accessible_tables.append(table)
 
         if len(non_accessible_tables) > 0:
-            raise ConfigurableFieldValueError(
-                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
-            )
+            msg = f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
+            raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         async with self.mysql_client() as client:

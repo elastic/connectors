@@ -3,12 +3,14 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 import asyncio
 import os
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-import yaml
 from elasticsearch import AsyncElasticsearch
+
+from connectors.config import load_config
 
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
 SERVERLESS = "SERVERLESS" in os.environ
@@ -77,8 +79,7 @@ def main(args=None):
     if not os.path.exists(config_file):
         raise IOError(f"{config_file} does not exist")
 
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
+    config = load_config(config_file)
 
     try:
         asyncio.run(verify(args.service_type, args.index_name, args.size, config))

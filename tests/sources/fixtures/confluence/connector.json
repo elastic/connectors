@@ -1,0 +1,195 @@
+{
+        "name": "confluence",
+        "index_name": "search-confluence",
+        "service_type": "confluence",
+        "sync_cursor": null,
+        "is_native": false,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
+        "last_sync_status": "canceled",
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+                "data_source": {
+                        "display": "dropdown",
+                        "label": "Confluence data source",
+                        "options": [
+                                {"label": "Confluence Cloud", "value": "confluence_cloud"},
+                                {"label": "Confluence Server", "value": "confluence_server"}
+                        ],
+                        "order": 1,
+                        "type": "str",
+                        "value": "confluence_server"
+                },
+                "username": {
+                        "depends_on": [{"field": "data_source", "value": "confluence_server"}],
+                        "label": "Confluence Server username",
+                        "order": 2,
+                        "type": "str",
+                        "value": "admin"
+                },
+                "password": {
+                        "depends_on": [{"field": "data_source", "value": "confluence_server"}],
+                        "label": "Confluence Server password",
+                        "sensitive": true,
+                        "order": 3,
+                        "type": "str",
+                        "value": "abc@123"
+                },
+                "account_email": {
+                        "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
+                        "label": "Confluence Cloud account email",
+                        "order": 4,
+                        "type": "str",
+                        "value": "me@example.com"
+                },
+                "api_token": {
+                        "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
+                        "label": "Confluence Cloud API token",
+                        "sensitive": true,
+                        "order": 5,
+                        "type": "str",
+                        "value": "abc#123"
+                },
+                "confluence_url": {
+                        "label": "Confluence URL",
+                        "order": 6,
+                        "type": "str",
+                        "value": "http://127.0.0.1:9696"
+                },
+                "spaces": {
+                        "display": "textarea",
+                        "label": "Confluence space keys",
+                        "order": 7,
+                        "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
+                        "type": "list",
+                        "value": "*"
+                },
+                "ssl_enabled": {
+                        "display": "toggle",
+                        "label": "Enable SSL",
+                        "order": 8,
+                        "type": "bool",
+                        "value": false
+                },
+                "ssl_ca": {
+                        "depends_on": [{"field": "ssl_enabled", "value": true}],
+                        "label": "SSL certificate",
+                        "order": 9,
+                        "type": "str",
+                        "value": ""
+                },
+                "retry_count": {
+                        "default_value": 3,
+                        "display": "numeric",
+                        "label": "Retries per request",
+                        "order": 10,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": 3
+                },
+                "concurrent_downloads": {
+                        "default_value": 50,
+                        "display": "numeric",
+                        "label": "Maximum concurrent downloads",
+                        "order": 11,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "validations": [
+                                {"type": "less_than", "constraint": 51}
+                        ],
+                        "value": 50
+                },
+                "use_document_level_security": {
+                        "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
+                        "display": "toggle",
+                        "label": "Enable document level security",
+                        "order": 12,
+                        "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                        "type": "bool",
+                        "value": false
+                },
+                "use_text_extraction_service": {
+                        "default_value": null,
+                        "depends_on": [],
+                        "display": "toggle",
+                        "label": "Use text extraction service",
+                        "options": [],
+                        "order": 13,
+                        "required": true,
+                        "sensitive": false,
+                        "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                        "type": "bool",
+                        "ui_restrictions": [],
+                        "validations": [],
+                        "value": false
+                }
+        },
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        },
+                        "active": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        }
+                }
+
+        ],
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+        }
+}

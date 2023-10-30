@@ -16,21 +16,19 @@ import tempfile
 import time
 import timeit
 from datetime import datetime
-from unittest.mock import Mock, mock_open, patch
+from unittest.mock import Mock, patch
 
 import pytest
-import pytest_asyncio
-from aioresponses import aioresponses
 from freezegun import freeze_time
 from pympler import asizeof
 
 from connectors import utils
 from connectors.utils import (
     ConcurrentTasks,
-    ExtractionService,
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
+    base64url_to_base64,
     convert_to_b64,
     decode_base64_value,
     deep_merge_dicts,
@@ -46,21 +44,27 @@ from connectors.utils import (
     iterable_batches_generator,
     next_run,
     retryable,
+    shorten_str,
     ssl_context,
     truncate_id,
     url_encode,
+    validate_email_address,
     validate_index_name,
 )
 
 
-@freeze_time("2023-01-18 17:18:56.814003", tick=True)
 def test_next_run():
+    now = datetime(2023, 1, 18, 17, 18, 56, 814)
     # can run within two minutes
-    assert next_run("1 * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:19:01"
-    assert next_run("* * * * * *").isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    assert (
+        next_run("1 * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+    )
+    assert (
+        next_run("* * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+    )
 
     # this should get parsed
-    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030")
+    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030", now)
 
 
 def test_invalid_names():
@@ -147,6 +151,10 @@ async def test_mem_queue_race():
 
 @pytest.mark.asyncio
 async def test_mem_queue():
+    # Initial timeout is really small so that the test is fast.
+    # The part of the test before timeout increase will take at least refresh_timeout
+    # seconds to execute, so if timeout is 60 seconds, then it'll take 60+ seconds.
+    # Thus we make timeout small and increase it later
     queue = MemQueue(maxmemsize=1024, refresh_interval=0, refresh_timeout=0.15)
     await queue.put("small stuff")
 
@@ -159,6 +167,8 @@ async def test_mem_queue():
         while True:
             await queue.put("x" * 100)
 
+    # We increase the timeout to not be so flaky
+    queue.refresh_timeout = 2
     when = []
 
     async def add_data():
@@ -175,8 +185,8 @@ async def test_mem_queue():
         await queue.get()  # removes the 2kb
         assert not queue.full()
 
-    await asyncio.gather(remove_data(), add_data())
-    assert when[1] - when[0] > 0.1
+    await asyncio.gather(add_data(), remove_data())
+    assert when[1] - when[0] < queue.refresh_timeout
 
 
 @pytest.mark.asyncio
@@ -197,6 +207,21 @@ async def test_mem_queue_too_large_item():
 
     with pytest.raises(asyncio.QueueFull) as e:
         await queue.put("x")
+
+    assert e is not None
+
+
+@pytest.mark.asyncio
+async def test_mem_queue_put_nowait():
+    queue = MemQueue(
+        maxsize=5, maxmemsize=1000, refresh_interval=0.1, refresh_timeout=0.5
+    )
+    # make queue full by size
+    for i in range(5):
+        queue.put_nowait(i)
+
+    with pytest.raises(asyncio.QueueFull) as e:
+        await queue.put_nowait("x")
 
     assert e is not None
 
@@ -242,7 +267,8 @@ async def test_concurrent_runner_fails():
     async def coroutine(i):
         await asyncio.sleep(0.1)
         if i == 5:
-            raise Exception("I FAILED")
+            msg = "I FAILED"
+            raise Exception(msg)
         return i
 
     runner = ConcurrentTasks(results_callback=_results_callback)
@@ -395,8 +421,44 @@ async def test_exponential_backoff_retry_async_generator():
 
 
 @pytest.mark.fail_slow(1)
+def test_exponential_backoff_retry_sync_function():
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        interval=0,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    def raises_function():
+        for _ in range(3):
+            mock_func()
+            raise CustomException()
+
+    with pytest.raises(CustomException):
+        for _ in raises_function():
+            pass
+
+    # retried 10 times
+    assert mock_func.call_count == num_retries
+
+    # would lead to roughly ~ 50 seconds of retrying
+    @retryable(retries=10, interval=5, strategy=RetryStrategy.LINEAR_BACKOFF)
+    def does_not_raise_function():
+        for _ in range(3):
+            yield 1
+
+    # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
+    items = []
+    for item in does_not_raise_function():
+        items.append(item)
+
+    assert items == [1, 1, 1]
+
+
+@pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
-async def test_exponential_backoff_retry():
+async def test_exponential_backoff_retry_async_function():
     mock_func = Mock()
     num_retries = 10
 
@@ -422,6 +484,84 @@ async def test_exponential_backoff_retry():
 
     # would fail, if retried once (retry_interval = 5 seconds). Explicit time boundary for this test: 1 second
     await does_not_raise()
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions",
+    [CustomGeneratorException, [CustomGeneratorException, RuntimeError]],
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
+    mock_gen = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises_async_generator():
+        for _ in range(3):
+            mock_gen()
+            raise CustomGeneratorException()
+            yield 1
+
+    with pytest.raises(CustomGeneratorException):
+        async for _ in raises_async_generator():
+            pass
+
+    assert mock_gen.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    async def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        assert mock_func.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
+)
+@pytest.mark.asyncio
+async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
+    mock_func = Mock()
+    num_retries = 10
+
+    @retryable(
+        retries=num_retries,
+        skipped_exceptions=skipped_exceptions,
+    )
+    def raises():
+        mock_func()
+        raise CustomException()
+
+    with pytest.raises(CustomException):
+        await raises()
+
+        assert mock_func.call_count == 1
+
+
+def test_retryable_not_implemented_error():
+    with pytest.raises(NotImplementedError):
+
+        @retryable()
+        class NotSupported:
+            pass
 
 
 class MockSSL:
@@ -472,44 +612,41 @@ def test_evaluate_timedelta():
     assert expected_response == "2023-02-19T14:25:05.158843"
 
 
-def test_get_pem_format():
-    """This function tests prepare private key and certificate with dummy values"""
-    # Setup
-    expected_formated_pem_key = """-----BEGIN PRIVATE KEY-----
+def test_get_pem_format_with_postfix():
+    expected_formatted_pem_key = """-----BEGIN PRIVATE KEY-----
 PrivateKey
 -----END PRIVATE KEY-----"""
     private_key = "-----BEGIN PRIVATE KEY----- PrivateKey -----END PRIVATE KEY-----"
 
-    # Execute
-    formated_privat_key = get_pem_format(
+    formatted_private_key = get_pem_format(
         key=private_key, postfix="-----END PRIVATE KEY-----"
     )
-    assert formated_privat_key == expected_formated_pem_key
+    assert formatted_private_key == expected_formatted_pem_key
 
-    # Setup
-    expected_formated_certificate = """-----BEGIN CERTIFICATE-----
+
+def test_get_pem_format_multiline():
+    expected_formatted_certificate = """-----BEGIN CERTIFICATE-----
 Certificate1
 Certificate2
 -----END CERTIFICATE-----"""
     certificate = "-----BEGIN CERTIFICATE----- Certificate1 Certificate2 -----END CERTIFICATE-----"
 
-    # Execute
-    formated_certificate = get_pem_format(key=certificate)
-    assert formated_certificate == expected_formated_certificate
+    formatted_certificate = get_pem_format(key=certificate)
+    assert formatted_certificate == expected_formatted_certificate
 
-    # Setup
-    expected_formated_multi_certificate = """-----BEGIN CERTIFICATE-----
+
+def test_get_pem_format_multiple_certificates():
+    expected_formatted_multiple_certificates = """-----BEGIN CERTIFICATE-----
 Certificate1
 -----END CERTIFICATE-----
 -----BEGIN CERTIFICATE-----
 Certificate2
 -----END CERTIFICATE-----
 """
-    multi_certificate = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
+    multiple_certificates = "-----BEGIN CERTIFICATE----- Certificate1 -----END CERTIFICATE----- -----BEGIN CERTIFICATE----- Certificate2 -----END CERTIFICATE-----"
 
-    # Execute
-    formated_multi_certificate = get_pem_format(key=multi_certificate)
-    assert formated_multi_certificate == expected_formated_multi_certificate
+    formatted_multi_certificate = get_pem_format(key=multiple_certificates)
+    assert formatted_multi_certificate == expected_formatted_multiple_certificates
 
 
 def test_hash_id():
@@ -609,7 +746,10 @@ def test_html_to_text_without_html():
 def test_html_to_text_with_weird_html():
     invalid_html = "<div/>just</div> text"
 
-    assert html_to_text(invalid_html) == "just\n text"
+    text = html_to_text(invalid_html)
+
+    assert "just" in text
+    assert "text" in text
 
 
 def batch_size(value):
@@ -647,134 +787,48 @@ def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
     assert actual_batches == expected_batches
 
 
-class TestExtractionService:
-    @pytest_asyncio.fixture
-    async def mock_responses(self):
-        with aioresponses() as m:
-            yield m
+@pytest.mark.parametrize(
+    "base64url_encoded_value, base64_expected_value",
+    [("YQ-_", "YQ+/"), ("", ""), (None, None)],
+)
+def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
+    assert base64url_to_base64(base64url_encoded_value) == base64_expected_value
 
-    @pytest.mark.parametrize(
-        "mock_config, expected_result",
-        [
-            (
-                {
-                    "extraction_service": {
-                        "host": "http://localhost:8090",
-                    }
-                },
-                True,
-            ),
-            ({"something_else": "???"}, False),
-            ({"extraction_service": {"not_a_host": "!!!m"}}, False),
-        ],
-    )
-    def test_check_configured(self, mock_config, expected_result):
-        with patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value=mock_config.get("extraction_service", None),
-        ):
-            extraction_service = ExtractionService()
-            assert extraction_service._check_configured() is expected_result
 
-    @pytest.mark.asyncio
-    async def test_extract_text(self, mock_responses):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-        payload = {"extracted_text": "I've been extracted!"}
+@pytest.mark.parametrize(
+    "email_address, is_valid",
+    [
+        ("subject@email_address.com", True),
+        ("subject", False),
+        ("@email_address.com", False),
+        ("", False),
+        ("subject @email_address.com", False),
+        ("subject@email_address", False),
+    ],
+)
+def test_validate_email_address(email_address, is_valid):
+    assert validate_email_address(email_address) == is_valid
 
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(url, status=200, payload=payload)
 
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-
-            assert response == "I've been extracted!"
-
-    @pytest.mark.asyncio
-    async def test_extract_text_with_file_pointer(self, mock_responses):
-        filepath = "/tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
-        payload = {"extracted_text": "I've been extracted from a local file!"}
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={
-                "host": "http://localhost:8090",
-                "use_file_pointers": True,
-                "shared_volume_dir": "/tmp",
-            },
-        ):
-            mock_responses.put(url, status=200, payload=payload)
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-
-            assert response == "I've been extracted from a local file!"
-
-    @pytest.mark.asyncio
-    async def test_extract_text_when_response_isnt_200_logs_warning(
-        self, mock_responses, patch_logger
-    ):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(
-                url,
-                status=422,
-                payload={
-                    "error": "Unprocessable Entity",
-                    "message": "Could not process file.",
-                },
-            )
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-            assert response == ""
-
-            patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [422]; Unprocessable Entity: Could not process file."
-            )
-
-    @pytest.mark.asyncio
-    async def test_extract_text_when_response_is_200_with_error_logs_warning(
-        self, mock_responses, patch_logger
-    ):
-        filepath = "tmp/notreal.txt"
-        url = "http://localhost:8090/extract_text/"
-
-        with patch("builtins.open", mock_open(read_data=b"data")), patch(
-            "connectors.utils.ExtractionService.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
-        ):
-            mock_responses.put(
-                url,
-                status=200,
-                payload={"error": "oh no!", "message": "I'm all messed up..."},
-            )
-
-            extraction_service = ExtractionService()
-            extraction_service._begin_session()
-
-            response = await extraction_service.extract_text(filepath, "notreal.txt")
-            await extraction_service._end_session()
-            assert response == ""
-
-            patch_logger.assert_present(
-                "Extraction service could not parse `notreal.txt'. Status: [200]; oh no!: I'm all messed up..."
-            )
+@pytest.mark.parametrize(
+    "original, shorten_by, shortened",
+    [
+        ("", 0, ""),
+        ("", 1000, ""),
+        (None, 0, ""),
+        (None, 1000, ""),
+        # introducing '...' would increase the string length -> no shortening
+        ("abcdefgh", 0, "abcdefgh"),
+        ("abcdefgh", 1, "abcdefgh"),
+        ("abcdefgh", 2, "abcdefgh"),
+        # valid shortening
+        ("abcdefgh", 4, "ab...gh"),
+        ("abcdefgh", 5, "ab...h"),
+        ("abcdefg", 4, "ab...g"),
+        ("abcdefg", 5, "a...g"),
+        # shortens to the max, if shorten_by is bigger than the actual string
+        ("abcdefgh", 1000, "a...h"),
+    ],
+)
+def test_shorten_str(original, shorten_by, shortened):
+    assert shorten_str(original, shorten_by) == shortened

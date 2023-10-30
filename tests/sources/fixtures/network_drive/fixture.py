@@ -3,12 +3,16 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Network Drive module responsible to generate file/folder(s) on Network Drive server.
 """
-import random
-import string
+import os
 
 import smbclient
+
+from tests.commons import WeightedFakeProvider
+
+fake_provider = WeightedFakeProvider()
 
 SERVER = "127.0.0.1"
 NUMBER_OF_SMALL_FILES = 10000
@@ -17,26 +21,15 @@ NUMBER_OF_FILES_TO_BE_DELETED = 10
 USERNAME = "admin"
 PASSWORD = "abc@123"
 
+DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
-def generate_small_files():
-    """Method for generating small files on Network Drive server"""
-    try:
-        smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
-
-        print("Started loading small files on network drive server....")
-
-        for number in range(0, NUMBER_OF_SMALL_FILES):
-            with smbclient.open_file(
-                rf"\\{SERVER}/Folder1/file{number}.txt", mode="w"
-            ) as fd:
-                fd.write(f"File {number} dummy content....")
-
-        print(f"Loaded {NUMBER_OF_SMALL_FILES} small files on network drive server....")
-    except Exception as error:
-        print(
-            f"Error occurred while generating small files on Network Drive server. Error: {error}"
-        )
-        raise
+match DATA_SIZE:
+    case "small":
+        FILE_COUNT = 1000
+    case "medium":
+        FILE_COUNT = 5000
+    case "large":
+        FILE_COUNT = 25000
 
 
 def generate_folder():
@@ -54,42 +47,31 @@ def generate_folder():
         )
 
 
-def generate_large_files():
-    """Method for generating large files on Network Drive server"""
+def generate_files():
+    """Method for generating files on Network Drive server"""
     try:
-        size_of_file = 1024**2  # 1 Mb of text
-        large_data = "".join(
-            [random.choice(string.ascii_letters) for i in range(size_of_file)]
-        )
-
         smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
 
-        print("Started loading large files on network drive server....")
+        print("Started loading files on network drive server....")
 
-        for number in range(0, NUMBER_OF_LARGE_FILES):
+        for number in range(FILE_COUNT):
             with smbclient.open_file(
-                rf"\\{SERVER}/Folder1/Large-Data-Folder/large_size_file{number}.txt",
+                rf"\\{SERVER}/Folder1/file{number}.html",
                 mode="w",
             ) as fd:
-                fd.write(large_data)
+                fd.write(fake_provider.get_html())
 
-        print(f"Loaded {NUMBER_OF_LARGE_FILES} large files on network drive server....")
+        print(f"Loaded {FILE_COUNT} files on network drive server....")
     except Exception as error:
         print(
-            f"Error occurred while generating large files on Network Drive server. Error: {error}"
+            f"Error occurred while generating files on Network Drive server. Error: {error}"
         )
         raise
 
 
 def load():
-    if NUMBER_OF_SMALL_FILES:
-        generate_small_files()
     generate_folder()
-    if NUMBER_OF_LARGE_FILES:
-        generate_large_files()
-    print(
-        f"Loaded {NUMBER_OF_LARGE_FILES} large files, {NUMBER_OF_SMALL_FILES} small files, and 1 folder on network drive server."
-    )
+    generate_files()
 
 
 def remove():
@@ -100,8 +82,8 @@ def remove():
         print("Started deleting files from network drive server....")
 
         for number in range(0, NUMBER_OF_FILES_TO_BE_DELETED):
-            smbclient.remove(rf"\\{SERVER}/Folder1/file{number}.txt")
-            smbclient.remove(rf"\\{SERVER}/Folder1/.deleted/file{number}.txt")
+            smbclient.remove(rf"\\{SERVER}/Folder1/file{number}.html")
+            smbclient.remove(rf"\\{SERVER}/Folder1/.deleted/file{number}.html")
 
         print(
             f"Deleted {NUMBER_OF_FILES_TO_BE_DELETED} files from network drive server...."

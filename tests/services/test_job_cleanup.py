@@ -4,13 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from connectors.services.job_cleanup import IDLE_JOB_ERROR, JobCleanUpService
 from tests.commons import AsyncIterator
+from tests.services.test_base import create_and_run_service
 
 CONFIG = {
     "elasticsearch": {
@@ -27,34 +27,22 @@ CONFIG = {
 }
 
 
-def create_service():
-    return JobCleanUpService(CONFIG)
-
-
-def mock_connector(id="1", index_name="index_name"):
+def mock_connector(connector_id="1", index_name="index_name"):
     connector = Mock()
-    connector.id = id
+    connector.id = connector_id
     connector.index_name = index_name
     connector.sync_done = AsyncMock()
     return connector
 
 
-def mock_sync_job(id="1", connector_id="1", index_name="index_name"):
+def mock_sync_job(sync_job_id="1", connector_id="1", index_name="index_name"):
     job = Mock()
-    job.job_id = id
+    job.job_id = sync_job_id
     job.connector_id = connector_id
     job.index_name = index_name
     job.fail = AsyncMock()
     job.reload = AsyncMock()
     return job
-
-
-async def run_service_with_stop_after(service, stop_after):
-    async def _terminate():
-        await asyncio.sleep(stop_after)
-        service.stop()
-
-    await asyncio.gather(service.run(), _terminate())
 
 
 @pytest.mark.asyncio
@@ -87,8 +75,7 @@ async def test_cleanup_jobs(
     idle_jobs.return_value = AsyncIterator([sync_job])
     delete_jobs.return_value = {"deleted": 1, "failures": [], "total": 1}
 
-    service = create_service()
-    await run_service_with_stop_after(service, 0.1)
+    await create_and_run_service(JobCleanUpService, config=CONFIG, stop_after=0.1)
 
     delete_indices.assert_called_with(indices=[to_be_deleted_index_name])
     delete_jobs.assert_called_with(job_ids=[sync_job.id, another_sync_job.id])

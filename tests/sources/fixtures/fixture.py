@@ -3,8 +3,11 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
+# ruff: noqa: T203
 import importlib
 import importlib.util
+import logging
 import os
 import pprint
 import signal
@@ -16,23 +19,30 @@ import requests
 from elasticsearch import Elasticsearch
 from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
-from retry import retry
+
+from connectors.logger import set_extra_logger
+from connectors.utils import retryable
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
+logger = logging.getLogger("ftest")
+set_extra_logger(logger, log_level=logging.DEBUG, prefix="FTEST")
 
-@retry(tries=3, delay=1.0)
+
+@retryable(retries=3, interval=1)
 def wait_for_es(url="http://localhost:9200", user="elastic", password="changeme"):
-    print("Waiting for Elasticsearch to be up and running")
+    logger.info("Waiting for Elasticsearch to be up and running")
+
     basic = HTTPBasicAuth(user, password)
-    s = requests.Session()
+    session = requests.Session()
     retries = Retry(total=5, backoff_factor=1.0, status_forcelist=[500, 502, 503, 504])
-    s.mount("http://", HTTPAdapter(max_retries=retries))
+    session.mount("http://", HTTPAdapter(max_retries=retries))
+
     try:
-        return s.get(url, auth=basic).json()
+        return session.get(url, auth=basic).json()
     except Exception as e:
         # we're going to display some docker info here
-        print(f"Failed to reach out Elasticsearch {repr(e)}")
+        logger.error(f"Failed to reach out to Elasticsearch {repr(e)}")
         os.system("docker ps -a")
         os.system("docker logs es01")
         raise
@@ -76,7 +86,9 @@ def _es_client():
 
 def _monitor_service(pid):
     es_client = _es_client()
-    timeout = 20 * 60  # 20 minutes timeout
+    sync_job_timeout = 20 * 60  # 20 minutes timeout
+    index_present_timeout = 30  # 30 seconds
+
     try:
         # we should have something like connectorIndex.search()[0].last_synced
         # once we have ConnectorIndex and Connector class ready
@@ -85,13 +97,14 @@ def _monitor_service(pid):
             response = es_client.search(index=CONNECTORS_INDEX, size=1)
 
             if len(response["hits"]["hits"]) == 0:
-                if time.time() - start > 30:
-                    raise Exception(f"{CONNECTORS_INDEX} not present after 30s")
+                if time.time() - start > index_present_timeout:
+                    msg = f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds."
+                    raise Exception(msg)
 
-                print(f"{CONNECTORS_INDEX} not present, waiting...")
+                logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)
             else:
-                print(f"{CONNECTORS_INDEX} detected")
+                logger.info(f"{CONNECTORS_INDEX} detected")
                 break
 
         start = time.time()
@@ -102,15 +115,18 @@ def _monitor_service(pid):
             response = es_client.get(index=CONNECTORS_INDEX, id=connector_id)
             new_last_synced = response["_source"]["last_synced"]
             lapsed = time.time() - start
-            if last_synced != new_last_synced or lapsed > timeout:
-                if lapsed > timeout:
-                    print("Took too long to complete the sync job, give up!")
+            if last_synced != new_last_synced or lapsed > sync_job_timeout:
+                if lapsed > sync_job_timeout:
+                    logger.error(
+                        f"Took too long to complete the sync job (over {sync_job_timeout} minutes), give up!"
+                    )
                 break
             time.sleep(1)
     except Exception as e:
-        print(f"Failed to monitor the sync job. Something bad happened: {e}")
+        logger.error(f"Failed to monitor the sync job. Something bad happened: {e}")
     finally:
         # the process should always be killed, no matter the monitor succeeds, times out or raises errors.
+        logger.debug(f"Trying to kill the process with PID '{pid}'")
         os.kill(pid, signal.SIGINT)
         es_client.close()
 
@@ -118,19 +134,22 @@ def _monitor_service(pid):
 def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
+    action = args.action
 
-    if args.action in ("start_stack", "stop_stack"):
+    logger.info(f"Executing action: '{action}'.")
+
+    if action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
-        if args.action == "start_stack":
+        if action == "start_stack":
             os.system("docker compose pull")
             os.system("docker compose up -d")
         else:
             os.system("docker compose down --volumes")
         return
 
-    if args.action == "monitor":
+    if action == "monitor":
         if args.pid == 0:
-            print("Invalid pid specified, exit the monitor process.")
+            logger.error(f"Invalid pid {args.pid} specified, exit the monitor process.")
             return
         _monitor_service(args.pid)
         return
@@ -145,7 +164,7 @@ def main(args=None):
         func = getattr(module, args.action)
         return func()
     else:
-        if args.action == "get_num_docs":
+        if action == "get_num_docs":
             # returns default
             match os.environ.get("DATA_SIZE", "medium"):
                 case "small":
@@ -154,16 +173,16 @@ def main(args=None):
                     print("1500")
                 case _:
                     print("3000")
-        elif args.action == "description":
-            print(
+        elif action == "description":
+            logger.info(
                 f'Running an e2e test for {args.name} with a {os.environ.get("DATA_SIZE", "medium")} corpus.'
             )
-        elif args.action == "check_stack":
+        elif action == "check_stack":
             # default behavior: we wait until elasticsearch is responding
             pprint.pprint(wait_for_es())
         else:
-            print(
-                f"Fixture {args.name} does not have an {args.action} action, skipping"
+            logger.warning(
+                f"Fixture {args.name} does not have an {args.action} action, skipping."
             )
 
 

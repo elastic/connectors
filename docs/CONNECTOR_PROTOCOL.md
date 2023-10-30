@@ -19,6 +19,28 @@ Connectors can:
 
 At this stage, our assumption is that one connector will manage one index, and one index will have only one connector associated with it. This may change in the future.
 
+### Data freshness
+
+Data from remote sources are synced via [sync jobs](DEVELOPING.md#syncing), which means there can be data discrepancy between the remote source and Elasticsearch until the next sync job runs.
+
+We don't currently support streaming options for real-time data updates. In order to achieve (near) real-time data availability, [implement incremental sync](DEVELOPING.md#how-an-incremental-sync-works) for the data source, with a frequency that matches your needs.
+
+Kibana won't allow you to configure a schedule more frequently than every hour, but you can do so via the Elasticsearch API (through Kibana Dev Tools, or cURL, etc):
+
+```
+# Update to every 5 seconds
+POST /.elastic-connectors/_update/<_id>
+{
+  "doc": {
+    "scheduling": {
+      "incremental": {
+        "interval": "0/5 * * * * ?"
+      }
+    }
+  }
+}
+```
+
 ## Communication protocol
 
 All communication will need to go through Elasticsearch. We've created a connector index called `.elastic-connectors`, where a document represents a connector. In addition, there's a connector job index called `.elastic-connectors-sync-jobs`, which holds the job history. You can find the definitions for these indices in the next section.
@@ -50,9 +72,9 @@ This is our main communication index, used to communicate the connector's config
       tooltip: string;      -> Text for populating the Kibana tooltip element
       type: string;         -> The field value type (str, int, bool, list)
       ui_restrictions: string[];    -> List of places in the UI to restrict the field to
-      validations: [                -> Array of rules to validate the field's value against
-        type: string;               -> The validation type
-        constraint: string | number -> The rule to use for this validation
+      validations: [                         -> Array of rules to validate the field's value against
+        type: string;                        -> The validation type
+        constraint: string | number | list;  -> The rule to use for this validation
       ];
       value: any;           -> The value of the field configured in Kibana
     }
@@ -82,9 +104,9 @@ This is our main communication index, used to communicate the connector's config
     };                                  -> Features to enable/disable for this connector
   };
   filtering: [          -> Array of filtering rules, connectors use the first entry by default
-    {          
+    {
       domain: string,     -> what data domain these rules apply to
-      active: {           -> "active" rules are run in jobs. 
+      active: {           -> "active" rules are run in jobs.
         rules: {
           id: string,         -> rule identifier
           policy: string,     -> one of ["include", "exclude"]
@@ -119,7 +141,7 @@ This is our main communication index, used to communicate the connector's config
   last_access_control_sync_status: string:  -> Status of the last access control sync job, or null if no job has been executed
   last_deleted_document_count: number;    -> How many documents were deleted in the last job
   last_incremental_sync_scheduled_at: date; -> Date/time when the last incremental sync job is scheduled (UTC)
-  last_indexed_document_count: number;    -> How many documents were indexed in the last job  
+  last_indexed_document_count: number;    -> How many documents were indexed in the last job
   last_seen: date;      -> Connector writes check-in date-time regularly (UTC)
   last_sync_error: string;   -> Optional last full or incremental sync job error message
   last_sync_status: string;  -> Status of the last content sync job, or null if no job has been executed
@@ -487,12 +509,12 @@ For every half hour, and every time a job is executed, the connector should upda
 For custom connectors, the connector should also update `configuration` field if its status is `created`.
 
 The connector should also sync data for connectors:
-- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `scheduling` and `custom_scheduling` values. 
+- Read connector definitions from `.elastic-connectors` regularly, and determine whether to sync data based on `scheduling` and `custom_scheduling` values.
 - Set the index mappings of the to-be-written-to index if not already present.
 - Sync with the data source and index resulting documents into the correct index.
 - Log jobs to `.elastic-connectors-sync-jobs`.
 
-**Sequence diagram**:
+**Sequence diagram (content syncs)**:
 ```mermaid
 sequenceDiagram
     actor User
@@ -510,8 +532,13 @@ sequenceDiagram
         User->>Kibana: Creates a connector via Use a connector
         Kibana->>Elasticsearch: Saves connector definition
     end
-    User->>Kibana: Enters necessary configuration and synchronization schedule
-    Kibana->>Elasticsearch: Writes configuration and synchronization schedule
+    alt Job type: full
+        User->>Kibana: Enters necessary configuration and full content synchronization schedule
+        Kibana->>Elasticsearch: Writes configuration and full content synchronization schedule
+    else Job type: incremental
+        User->>Kibana: Enters necessary configuration and incremental content synchronization schedule
+        Kibana->>Elasticsearch: Writes configuration and incremental content synchronization schedule
+    end
     loop Every 3 seconds (by default)
         par Heartbeat
             Connector->>Elasticsearch: Updates last_seen and status regularly
@@ -521,12 +548,13 @@ sequenceDiagram
             Connector->>Elasticsearch: Updates validation state of filtering rules
         and Job
             Connector->>Elasticsearch: Reads job schedule and filtering rules
-            opt sync_schedule requires synchronization
+            opt full content or incremental sync_schedule requires synchronization
                 Connector->>Elasticsearch: Sets last_sync_status to in_progress
                 Connector->>Data source: Queries data
                 Connector->>Elasticsearch: Indexes filtered data
                 alt Job is successfully completed
                     Connector->>Elasticsearch: Sets last_sync_status to completed
+                    Connector->>Elasticsearch: Update sync_cursor 
                 else Job error
                     Connector->>Elasticsearch: Sets status and last_sync_status to error
                     Connector->>Elasticsearch: Writes error message to error field
@@ -536,6 +564,49 @@ sequenceDiagram
     end
 ```
 
+**Sequence diagram (access control syncs)**:
+```mermaid
+sequenceDiagram
+    actor User
+    participant Kibana
+    participant Elasticsearch
+    participant Connector
+    participant Data source
+    alt Custom connector
+        User->>Kibana: Creates a connector via Build a connector
+        Kibana->>Elasticsearch: Saves connector definition
+        User->>Kibana: Generates new API key & id
+        Kibana->>Elasticsearch: Saves API key & id
+        User->>Connector: Deploys with API key, id & Elasticsearch host (for custom connector)
+    else Native connector
+        User->>Kibana: Creates a connector via Use a connector
+        Kibana->>Elasticsearch: Saves connector definition
+    end
+    User->>Kibana: Enters necessary configuration and access control synchronization schedule
+    Kibana->>Elasticsearch: Writes configuration and access control synchronization schedule
+    loop Every 3 seconds (by default)
+        par Heartbeat
+            Connector->>Elasticsearch: Updates last_seen and status regularly
+        and Configuration
+            Connector->>Elasticsearch: Updates configurable fields for custom connector
+        and Rule Validation
+            Connector->>Elasticsearch: Updates validation state of filtering rules
+        and Job
+            Connector->>Elasticsearch: Reads access control job schedule
+            opt access control sync_schedule requires synchronization
+                Connector->>Elasticsearch: Sets last_access_control_sync_status to in_progress
+                Connector->>Data source: Queries access control data
+                Connector->>Elasticsearch: Indexes access control data
+                alt Job is successfully completed
+                    Connector->>Elasticsearch: Sets last_access_control_sync_status to completed
+                else Job error
+                    Connector->>Elasticsearch: Sets status and last_access_control_sync_status to error
+                    Connector->>Elasticsearch: Writes error message to last_access_control_sync_error field
+                end
+            end
+        end
+    end
+```
 
 ### Migration concerns
 If the mapping of `.elastic-connectors` or `.elastic-connectors-sync-jobs` is updated in a future version in a way that necessitates a complete re-indexing, Enterprise Search will migrate that data on startup.

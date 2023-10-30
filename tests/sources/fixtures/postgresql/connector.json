@@ -1,0 +1,159 @@
+{
+        "name": "postgresql",
+        "index_name": "search-postgresql",
+        "service_type": "postgresql",
+        "sync_cursor": null,
+        "is_native": false,
+        "api_key_id": null,
+        "status": "configured",
+        "language": "en",
+        "last_access_control_sync_error": null,
+        "last_access_control_sync_status": null,
+        "last_sync_status": "canceled",
+        "last_sync_error": null,
+        "last_synced": null,
+        "last_seen": null,
+        "created_at": null,
+        "updated_at": null,
+        "configuration": {
+                "host": {
+                        "label": "Host",
+                        "order": 1,
+                        "type": "str",
+                        "value": "127.0.0.1"
+                },
+                "port": {
+                        "display": "numeric",
+                        "label": "Port",
+                        "order": 2,
+                        "type": "int",
+                        "value": 9090
+                },
+                "username": {
+                        "label": "Username",
+                        "order": 3,
+                        "type": "str",
+                        "value": "readonly"
+                },
+                "password": {
+                        "label": "Password",
+                        "order": 4,
+                        "sensitive": true,
+                        "type": "str",
+                        "value": "foobar123"
+                },
+                "database": {
+                        "label": "Database",
+                        "order": 5,
+                        "type": "str",
+                        "value": "xe"
+                },
+                "schema": {
+                        "label": "Schema",
+                        "order": 6,
+                        "type": "str",
+                        "value": "public"
+                },
+                "tables": {
+                        "display": "textarea",
+                        "label": "Comma-separated list of tables",
+                        "options": [],
+                        "order": 7,
+                        "type": "list",
+                        "value": "*"
+                },
+                "fetch_size": {
+                        "default_value": 50,
+                        "display": "numeric",
+                        "label": "Rows fetched per request",
+                        "order": 8,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": null
+                },
+                "retry_count": {
+                        "default_value": 3,
+                        "display": "numeric",
+                        "label": "Retries per request",
+                        "order": 9,
+                        "required": false,
+                        "type": "int",
+                        "ui_restrictions": ["advanced"],
+                        "value": null
+                },
+                "ssl_enabled": {
+                        "display": "toggle",
+                        "label": "Enable SSL verification",
+                        "order": 10,
+                        "type": "bool",
+                        "value": false
+                },
+                "ssl_ca": {
+                        "depends_on": [{"field": "ssl_enabled", "value": true}],
+                        "label": "SSL certificate",
+                        "order": 11,
+                        "type": "str",
+                        "value": ""
+                }
+        },
+        "filtering": [
+                {
+                        "domain": "DEFAULT",
+                        "draft": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        },
+                        "active": {
+                            "advanced_snippet": {
+                                "updated_at": "2023-01-31T16:41:27.341Z",
+                                "created_at": "2023-01-31T16:38:49.244Z",
+                                "value": {}
+                            },
+                            "rules": [
+                                {
+                                    "field": "_",
+                                    "updated_at": "2023-01-31T16:41:27.341Z",
+                                    "created_at": "2023-01-31T16:38:49.244Z",
+                                    "rule": "regex",
+                                    "id": "DEFAULT",
+                                    "value": ".*",
+                                    "order": 1,
+                                    "policy": "include"
+                                }
+                            ],
+                            "validation": {
+                                "state": "valid",
+                                "errors": []
+                            }
+                        }
+                }
+
+        ],
+        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+        "pipeline": {
+                "extract_binary_content": true,
+                "name": "ent-search-generic-ingestion",
+                "reduce_whitespace": true,
+                "run_ml_inference": true
+        }
+}

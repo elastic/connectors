@@ -6,20 +6,20 @@
 """Google Cloud Storage source module responsible to fetch documents from Google Cloud Storage.
 """
 import asyncio
-import json
 import os
 import urllib.parse
 from functools import cached_property, partial
 
-import aiofiles
-from aiofiles.os import remove
-from aiofiles.tempfile import NamedTemporaryFile
 from aiogoogle import Aiogoogle
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, convert_to_b64, get_pem_format
+from connectors.source import BaseDataSource
+from connectors.sources.google import (
+    load_service_account_json,
+    validate_service_account_json,
+)
+from connectors.utils import get_pem_format
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -44,21 +44,40 @@ BLOB_ADAPTER = {
 }
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
-DEFAULT_FILE_SIZE_LIMIT = 10485760
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
-DEFAULT_PEM_FILE = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "tests",
-    "sources",
-    "fixtures",
-    "google_cloud_storage",
-    "service_account_dummy_cert.pem",
-)
+DEFAULT_PEM_KEY = """
+-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDY3E8o1NEFcjMM
+HW/5ZfFJw29/8NEqpViNjQIx95Xx5KDtJ+nWn9+OW0uqsSqKlKGhAdAo+Q6bjx2c
+uXVsXTu7XrZUY5Kltvj94DvUa1wjNXs606r/RxWTJ58bfdC+gLLxBfGnB6CwK0YQ
+xnfpjNbkUfVVzO0MQD7UP0Hl5ZcY0Puvxd/yHuONQn/rIAieTHH1pqgW+zrH/y3c
+59IGThC9PPtugI9ea8RSnVj3PWz1bX2UkCDpy9IRh9LzJLaYYX9RUd7++dULUlat
+AaXBh1U6emUDzhrIsgApjDVtimOPbmQWmX1S60mqQikRpVYZ8u+NDD+LNw+/Eovn
+xCj2Y3z1AgMBAAECggEAWDBzoqO1IvVXjBA2lqId10T6hXmN3j1ifyH+aAqK+FVl
+GjyWjDj0xWQcJ9ync7bQ6fSeTeNGzP0M6kzDU1+w6FgyZqwdmXWI2VmEizRjwk+/
+/uLQUcL7I55Dxn7KUoZs/rZPmQDxmGLoue60Gg6z3yLzVcKiDc7cnhzhdBgDc8vd
+QorNAlqGPRnm3EqKQ6VQp6fyQmCAxrr45kspRXNLddat3AMsuqImDkqGKBmF3Q1y
+xWGe81LphUiRqvqbyUlh6cdSZ8pLBpc9m0c3qWPKs9paqBIvgUPlvOZMqec6x4S6
+ChbdkkTRLnbsRr0Yg/nDeEPlkhRBhasXpxpMUBgPywKBgQDs2axNkFjbU94uXvd5
+znUhDVxPFBuxyUHtsJNqW4p/ujLNimGet5E/YthCnQeC2P3Ym7c3fiz68amM6hiA
+OnW7HYPZ+jKFnefpAtjyOOs46AkftEg07T9XjwWNPt8+8l0DYawPoJgbM5iE0L2O
+x8TU1Vs4mXc+ql9F90GzI0x3VwKBgQDqZOOqWw3hTnNT07Ixqnmd3dugV9S7eW6o
+U9OoUgJB4rYTpG+yFqNqbRT8bkx37iKBMEReppqonOqGm4wtuRR6LSLlgcIU9Iwx
+yfH12UWqVmFSHsgZFqM/cK3wGev38h1WBIOx3/djKn7BdlKVh8kWyx6uC8bmV+E6
+OoK0vJD6kwKBgHAySOnROBZlqzkiKW8c+uU2VATtzJSydrWm0J4wUPJifNBa/hVW
+dcqmAzXC9xznt5AVa3wxHBOfyKaE+ig8CSsjNyNZ3vbmr0X04FoV1m91k2TeXNod
+jMTobkPThaNm4eLJMN2SQJuaHGTGERWC0l3T18t+/zrDMDCPiSLX1NAvAoGBAN1T
+VLJYdjvIMxf1bm59VYcepbK7HLHFkRq6xMJMZbtG0ryraZjUzYvB4q4VjHk2UDiC
+lhx13tXWDZH7MJtABzjyg+AI7XWSEQs2cBXACos0M4Myc6lU+eL+iA+OuoUOhmrh
+qmT8YYGu76/IBWUSqWuvcpHPpwl7871i4Ga/I3qnAoGBANNkKAcMoeAbJQK7a/Rn
+wPEJB+dPgNDIaboAsh1nZhVhN5cvdvCWuEYgOGCPQLYQF0zmTLcM+sVxOYgfy8mV
+fbNgPgsP5xmu6dw2COBKdtozw0HrWSRjACd1N4yGu75+wPCcX/gQarcjRcXXZeEa
+NtBLSfcqPULqD+h7br9lEJio
+-----END PRIVATE KEY-----
+"""
 REQUIRED_CREDENTIAL_KEYS = [
     "type",
     "project_id",
@@ -189,25 +208,13 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Default configuration.
         """
-        default_credentials = {
-            "type": "service_account",
-            "project_id": "dummy_project_id",
-            "private_key_id": "abc",
-            "private_key": open(
-                os.path.abspath(DEFAULT_PEM_FILE)
-            ).read(),  # TODO: change this and provide meaningful defaults
-            "client_email": "123-abc@developer.gserviceaccount.com",
-            "client_id": "123-abc.apps.googleusercontent.com",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "http://localhost:4444/token",
-        }
+
         return {
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "Google Cloud service account JSON",
                 "order": 1,
                 "type": "str",
-                "value": json.dumps(default_credentials),
             },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
@@ -217,7 +224,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
-                "value": DEFAULT_RETRY_COUNT,
+            },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 3,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
             },
         }
 
@@ -227,14 +242,11 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Raises:
             Exception: The format of service account json is invalid.
         """
-        self.configuration.check_valid()
+        await super().validate_config()
 
-        try:
-            json.loads(self.configuration["service_account_credentials"])
-        except ValueError as e:
-            raise ConfigurableFieldValueError(
-                "Google Cloud service account is not a valid JSON."
-            ) from e
+        validate_service_account_json(
+            self.configuration["service_account_credentials"], "Google Cloud Storage"
+        )
 
     @cached_property
     def _google_storage_client(self):
@@ -243,7 +255,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             GoogleCloudStorageClient: An instance of the GoogleCloudStorageClient.
         """
-        json_credentials = json.loads(self.configuration["service_account_credentials"])
+        json_credentials = load_service_account_json(
+            self.configuration["service_account_credentials"], "Google Cloud Storage"
+        )
 
         if (
             json_credentials.get("private_key")
@@ -361,50 +375,41 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        blob_size = int(blob["size"])
-        if not (doit and blob_size):
+        file_size = int(blob["size"])
+        if not (doit and file_size):
             return
 
-        blob_name = blob["name"]
-        if (os.path.splitext(blob_name)[-1]).lower() not in TIKA_SUPPORTED_FILETYPES:
-            self._logger.debug(f"{blob_name} can't be extracted")
+        filename = blob["name"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
-        if blob_size > DEFAULT_FILE_SIZE_LIMIT:
-            self._logger.warning(
-                f"File size {blob_size} of file {blob_name} is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
-            )
-            return
-        self._logger.debug(f"Downloading {blob_name}")
         document = {
             "_id": blob["id"],
             "_timestamp": blob["_timestamp"],
         }
-        source_file_name = ""
-        async with NamedTemporaryFile(mode="wb", delete=False) as async_buffer:
+
+        # gcs has a unique download method so we can't utilize
+        # the generic download_and_extract_file func
+        async with self.create_temp_file(file_extension) as async_buffer:
             await anext(
                 self._google_storage_client.api_call(
                     resource="objects",
                     method="get",
                     bucket=blob["bucket_name"],
-                    object=blob_name,
+                    object=filename,
                     alt="media",
                     userProject=self._google_storage_client.user_project_id,
                     pipe_to=async_buffer,
+                    path_params_safe_chars={"object": "'"},
                 )
             )
-            source_file_name = async_buffer.name
+            await async_buffer.close()
 
-        self._logger.debug(f"Calling convert_to_b64 for file : {blob_name}")
-        await asyncio.to_thread(
-            convert_to_b64,
-            source=source_file_name,
-        )
-        async with aiofiles.open(file=source_file_name, mode="r") as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            document["_attachment"] = (await target_file.read()).strip()
-        await remove(str(source_file_name))
-        self._logger.debug(f"Downloaded {blob_name} for {blob_size} bytes ")
+            document = await self.handle_file_content_extraction(
+                document, filename, async_buffer.name
+            )
+
         return document
 
     async def get_docs(self, filtering=None):

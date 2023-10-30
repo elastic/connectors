@@ -11,6 +11,7 @@ from enum import Enum
 from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
+from connectors.utils import Format, shorten_str
 
 IS_BOOL_FALSE = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
@@ -30,19 +31,14 @@ def parse(basic_rules_json):
     if not basic_rules_json:
         return []
 
-    map_to_basic_rules_list = list(
-        map(
-            lambda basic_rule_json: BasicRule.from_json(basic_rule_json),
-            basic_rules_json,
-        )
-    )
+    map_to_basic_rules_list = [
+        BasicRule.from_json(basic_rule_json) for basic_rule_json in basic_rules_json
+    ]
 
     return sorted(
-        list(
-            filter(
-                lambda basic_rule: not basic_rule.is_default_rule(),
-                map_to_basic_rules_list,
-            )
+        filter(
+            lambda basic_rule: not basic_rule.is_default_rule(),
+            map_to_basic_rules_list,
         ),
         key=lambda basic_rule: basic_rule.order,
     )
@@ -113,7 +109,8 @@ class RuleMatchStats:
                 policy=self.policy, matches_count=self.matches_count + other
             )
         else:
-            raise NotImplementedError(f"__add__ is not implemented for '{type(other)}'")
+            msg = f"__add__ is not implemented for '{type(other)}'"
+            raise NotImplementedError(msg)
 
     def __eq__(self, other):
         return self.policy == other.policy and self.matches_count == other.matches_count
@@ -152,6 +149,10 @@ class BasicRuleEngine:
                 continue
 
             if rule.matches(document):
+                logger.debug(
+                    f"Document (id: '{document.get('_id')}') matched basic rule (id: '{rule.id_}'). Document will be {rule.policy.value}d"
+                )
+
                 self.rules_match_stats.setdefault(
                     rule.id_, RuleMatchStats(rule.policy, 0)
                 )
@@ -161,6 +162,9 @@ class BasicRuleEngine:
 
         # default behavior: ingest document, if no rule matches ("default rule")
         self.rules_match_stats[BasicRule.DEFAULT_RULE_ID] += 1
+        logger.debug(
+            f"Document (id: '{document.get('_id')}') didn't match any basic rule. Document will be included"
+        )
         return True
 
 
@@ -169,13 +173,13 @@ class InvalidRuleError(ValueError):
 
 
 class Rule(Enum):
-    EQUALS = 1
-    STARTS_WITH = 2
-    ENDS_WITH = 3
-    CONTAINS = 4
-    REGEX = 5
-    GREATER_THAN = 6
-    LESS_THAN = 7
+    EQUALS = "equals"
+    STARTS_WITH = "starts_with"
+    ENDS_WITH = "ends_with"
+    CONTAINS = "contains"
+    REGEX = "regex"
+    GREATER_THAN = "greater_than"
+    LESS_THAN = "less_than"
 
     RULES = [EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS, REGEX, GREATER_THAN, LESS_THAN]
 
@@ -205,9 +209,8 @@ class Rule(Enum):
             case "starts_with":
                 return Rule.STARTS_WITH
             case _:
-                raise InvalidRuleError(
-                    f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
-                )
+                msg = f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
+                raise InvalidRuleError(msg)
 
 
 class InvalidPolicyError(ValueError):
@@ -215,8 +218,8 @@ class InvalidPolicyError(ValueError):
 
 
 class Policy(Enum):
-    INCLUDE = 1
-    EXCLUDE = 2
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
 
     POLICIES = [INCLUDE, EXCLUDE]
 
@@ -236,15 +239,15 @@ class Policy(Enum):
             case "exclude":
                 return Policy.EXCLUDE
             case _:
-                raise InvalidPolicyError(
-                    f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
-                )
+                msg = f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
+                raise InvalidPolicyError(msg)
 
 
 class BasicRule:
     """A BasicRule is used to match documents based on different comparisons (see `matches` method)."""
 
     DEFAULT_RULE_ID = "DEFAULT"
+    SHORTEN_UUID_BY = 26  # UUID: 32 random chars + 4 hyphens; keep 10 characters
 
     def __init__(self, id_, order, policy, field, rule, value):
         self.id_ = id_
@@ -353,3 +356,20 @@ class BasicRule:
                 f"Failed to coerce value '{self.value}' ({type(self.value)}) based on document value '{doc_value}' ({type(doc_value)}) due to error: {type(e)}: {e}"
             )
             return str(self.value)
+
+    def __str__(self):
+        def _format_field(key, value):
+            if isinstance(value, Enum):
+                return f"{key}: {value.value}"
+            return f"{key}: {value}"
+
+        formatted_fields = [
+            _format_field(key, value) for key, value in self.__dict__.items()
+        ]
+        return "Basic rule: " + ", ".join(formatted_fields)
+
+    def __format__(self, format_spec):
+        if format_spec == Format.SHORT.value:
+            # order uses 0 based indexing
+            return f"Basic rule {self.order + 1} (id: '{shorten_str(self.id_, BasicRule.SHORTEN_UUID_BY)}')"
+        return str(self)
