@@ -25,7 +25,8 @@ class FakeSource(BaseDataSource):
     def __init__(self, configuration):
         self.configuration = configuration
         if configuration.has_field("raise"):
-            raise Exception("I break on init")
+            msg = "I break on init"
+            raise Exception(msg)
         self.fail = configuration.has_field("fail")
         self.configuration_invalid = configuration.has_field("configuration_invalid")
 
@@ -45,7 +46,8 @@ class FakeSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         if self.fail:
-            raise Exception("I fail while syncing")
+            msg = "I fail while syncing"
+            raise Exception(msg)
         yield {"_id": "1"}, partial(self._dl, "1")
 
     @classmethod
@@ -61,7 +63,8 @@ class FakeSource(BaseDataSource):
 
     async def validate_config(self):
         if self.configuration_invalid:
-            raise ValueError("I fail when validating configuration")
+            msg = "I fail when validating configuration"
+            raise ValueError(msg)
 
     def tweak_bulk_options(self, options):
         pass
@@ -127,7 +130,8 @@ class FakeSourceTS(FakeSource):
 
     async def get_docs(self, filtering=None):
         if self.fail:
-            raise Exception("I fail while syncing")
+            msg = "I fail while syncing"
+            raise Exception(msg)
         yield {"_id": "1", "_timestamp": self.ts}, partial(self._dl, "1")
 
 
@@ -141,7 +145,8 @@ class FailsThenWork(FakeSource):
     async def get_docs(self, filtering=None):
         if FailsThenWork.fail:
             FailsThenWork.fail = False
-            raise Exception("I fail while syncing")
+            msg = "I fail while syncing"
+            raise Exception(msg)
         yield {"_id": "1"}, partial(self._dl, "1")
 
 

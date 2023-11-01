@@ -245,7 +245,8 @@ class SlackDataSource(BaseDataSource):
 
     async def ping(self):
         if not await self.slack_client.ping():
-            raise Exception("Could not connect to Slack")
+            msg = "Could not connect to Slack"
+            raise Exception(msg)
 
     async def close(self):
         await self.slack_client.close()

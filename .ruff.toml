@@ -1,4 +1,4 @@
-select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20", "S"]
+select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20", "EM", "ISC", "S"]
 ignore = ["E501"]
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
@@ -18,6 +18,10 @@ target-version = "py310"
 [per-file-ignores]
 "tests/*" = ["B017", "S101", "S"]
 "connectors/*" = ["S608"]
+"tests/*" = ["B017"]
+"tests/conftest.py" = [ "EM" ]
+"setup.py" = [ "EM" ]
+"scripts/verify.py" = [ "EM" ]
 
 [isort]
 known-first-party=["connectors", "tests"]

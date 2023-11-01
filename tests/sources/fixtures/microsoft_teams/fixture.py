@@ -86,9 +86,8 @@ match DATA_SIZE:
         FILES = 150
         CHANNEL_MESSAGE = 1000
     case _:
-        raise Exception(
-            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
-        )
+        msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        raise Exception(msg)
 
 MESSAGES_TO_DELETE = 10
 EVENTS_TO_DELETE = 1

@@ -181,17 +181,14 @@ class AccessToken:
         except ClientResponseError as e:
             match e.status:
                 case 400:
-                    raise TokenRetrievalError(
-                        "Failed to fetch access token. Please verify that provided Tenant ID, Client ID are correct."
-                    ) from e
+                    msg = "Failed to fetch access token. Please verify that provided Tenant ID, Client ID are correct."
+                    raise TokenRetrievalError(msg) from e
                 case 401:
-                    raise TokenRetrievalError(
-                        "Failed to fetch access token. Please check if Client Secret is valid."
-                    ) from e
+                    msg = "Failed to fetch access token. Please check if Client Secret is valid."
+                    raise TokenRetrievalError(msg) from e
                 case _:
-                    raise TokenRetrievalError(
-                        f"Failed to fetch access token. Response Status: {e.status}, Message: {e.message}"
-                    ) from e
+                    msg = f"Failed to fetch access token. Response Status: {e.status}, Message: {e.message}"
+                    raise TokenRetrievalError(msg) from e
         return self.access_token
 
     @retryable(

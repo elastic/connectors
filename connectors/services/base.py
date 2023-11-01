@@ -73,6 +73,8 @@ class BaseService(metaclass=_Registry):
         self.service_config = self.config["service"]
         self.es_config = self.config["elasticsearch"]
         self.connectors = self._parse_connectors()
+        self.connector_index = None
+        self.sync_job_index = None
         self.running = False
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
@@ -87,9 +89,8 @@ class BaseService(metaclass=_Registry):
     async def run(self):
         """Runs the service"""
         if self.running:
-            raise ServiceAlreadyRunningError(
-                f"{self.__class__.__name__} is already running."
-            )
+            msg = f"{self.__class__.__name__} is already running."
+            raise ServiceAlreadyRunningError(msg)
 
         self.running = True
         try:
@@ -141,6 +142,21 @@ class BaseService(metaclass=_Registry):
                 }
 
         return connectors
+
+    def _override_es_config(self, connector):
+        es_config = deepcopy(self.es_config)
+        if connector.id not in self.connectors:
+            return es_config
+
+        api_key = self.connectors[connector.id].get("api_key", None)
+        if not api_key:
+            return es_config
+
+        es_config.pop("username", None)
+        es_config.pop("password", None)
+        es_config["api_key"] = api_key
+
+        return es_config
 
 
 class MultiService:
