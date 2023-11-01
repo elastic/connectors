@@ -215,15 +215,14 @@ def convert_to_b64(source, target=None, overwrite=False):
             version = int(platform.mac_ver()[0].split(".")[0])
             # MacOS 13 has changed base64 util
             if version >= 13:
-                cmd = [_BASE64, "-i", source, "-o", temp_target]
+                cmd = f"{_BASE64} -i {source} -o {temp_target}"
             else:
-                cmd = [_BASE64, source, ">", temp_target]
+                cmd = f"{_BASE64} {source} > {temp_target}"
         else:
             # In Linuces, avoid line wrapping
-            cmd = [_BASE64, "-w", "0", source, ">", temp_target]
+            cmd = f"{_BASE64} -w 0 {source} > {temp_target}"
         logger.debug(f"Calling {cmd}")
-        # TODO: make it more robust
-        subprocess.check_call(cmd)  # noqa S603
+        subprocess.check_call(cmd, shell=True)  # noqa S602
     else:
         # Pure Python version
         with open(source, "rb") as sf, open(temp_target, "wb") as tf:
