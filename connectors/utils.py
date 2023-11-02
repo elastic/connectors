@@ -123,12 +123,12 @@ def validate_index_name(name):
         msg = f"Invalid prefix {name[0]}"
         raise InvalidIndexNameError(msg)
 
-    if not name.islower():
-        msg = "Must be lowercase"
-        raise InvalidIndexNameError(msg)
-
     if name in INVALID_NAME:
         msg = "Can't use that name"
+        raise InvalidIndexNameError(msg)
+
+    if not name.islower():
+        msg = "Must be lowercase"
         raise InvalidIndexNameError(msg)
 
     return name
