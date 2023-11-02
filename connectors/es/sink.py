@@ -102,13 +102,10 @@ class Sink:
     ):
         self.client = client
         self.queue = queue
-        self.bulk_time = 0
-        self.bulking = False
         self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline = pipeline
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
-        self.max_concurrent_bulks = max_concurrency
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
         self.indexed_document_count = 0
@@ -148,22 +145,16 @@ class Sink:
             self._logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
-        start = time.time()
-        try:
-            res = await _bulk_api_call()
-            if res.get("errors"):
-                for item in res["items"]:
-                    for op, data in item.items():
-                        if "error" in data:
-                            self._logger.error(
-                                f"operation {op} failed, {data['error']}"
-                            )
-                            raise Exception(data["error"]["reason"])
+        time.time()
+        res = await _bulk_api_call()
+        if res.get("errors"):
+            for item in res["items"]:
+                for op, data in item.items():
+                    if "error" in data:
+                        self._logger.error(f"operation {op} failed, {data['error']}")
+                        raise Exception(data["error"]["reason"])
 
-            self._populate_stats(stats, res)
-
-        finally:
-            self.bulk_time += time.time() - start
+        self._populate_stats(stats, res)
 
         return res
 
@@ -216,8 +207,6 @@ class Sink:
         batch = []
         # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
         stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
-        self.bulk_time = 0
-        self.bulking = True
         bulk_size = 0
         overhead_size = None
 
@@ -295,11 +284,8 @@ class Extractor:
             filter_ = Filter()
         self.client = client
         self.queue = queue
-        self.bulk_time = 0
-        self.bulking = False
         self.index = index
         self.loop = asyncio.get_event_loop()
-        self.sync_runs = False
         self.total_downloads = 0
         self.total_docs_updated = 0
         self.total_docs_created = 0
@@ -407,8 +393,6 @@ class Extractor:
         """
         generator = self._decorate_with_metrics_span(generator)
 
-        self.sync_runs = True
-
         start = time.time()
         self._logger.info("Collecting local document ids")
         existing_ids = {k: v async for (k, v) in self._get_existing_ids()}
@@ -495,8 +479,6 @@ class Extractor:
         """
         generator = self._decorate_with_metrics_span(generator)
 
-        self.sync_runs = True
-
         self._logger.info("Iterating on remote documents incrementally when possible")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
@@ -559,8 +541,6 @@ class Extractor:
         """
         self._logger.info("Starting access control doc lookups")
         generator = self._decorate_with_metrics_span(generator)
-
-        self.sync_runs = True
 
         existing_ids = {
             doc_id: last_update_timestamp
@@ -635,10 +615,6 @@ class Extractor:
             f"updated: {self.total_docs_updated} | "
             f"deleted: {self.total_docs_deleted}"
         )
-
-
-class IndexMissing(Exception):
-    pass
 
 
 class ContentIndexNameInvalid(Exception):

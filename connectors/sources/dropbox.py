@@ -108,10 +108,6 @@ class InvalidPathException(Exception):
     pass
 
 
-class InvalidDownloadFormatException(Exception):
-    pass
-
-
 class BreakingField(Enum):
     CURSOR = "cursor"
     HAS_MORE = "has_more"

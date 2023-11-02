@@ -36,8 +36,6 @@ SUBJECT_LABEL = "Subject"
 
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 
-GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
-
 
 class GMailAdvancedRulesValidator(AdvancedRulesValidator):
     MESSAGES_SCHEMA_DEFINITION = {
