@@ -9,9 +9,7 @@ import os
 from functools import partial
 from urllib.parse import quote
 
-import aiofiles
 import aiohttp
-from aiofiles.os import remove
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 from connectors.logger import logger
