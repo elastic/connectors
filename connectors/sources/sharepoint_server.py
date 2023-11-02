@@ -161,24 +161,6 @@ class SharepointServerClient:
         await self.session.close()  # pyright: ignore
         self.session = None
 
-    async def convert_file_to_b64(self, source_file_name):
-        """This method converts the file content into b64
-        Args:
-            source_file_name: Name of source file
-        Returns:
-            attachment_content: Attachment content in b64
-        """
-        async with aiofiles.open(file=source_file_name) as target_file:
-            # base64 on macOS will add a EOL, so we strip() here
-            attachment_content = (await target_file.read()).strip()
-        try:
-            await remove(source_file_name)  # pyright: ignore
-        except Exception as exception:
-            self._logger.warning(
-                f"Could not remove file: {source_file_name}. Error: {exception}"
-            )
-        return attachment_content
-
     async def _api_call(self, url_name, url="", **url_kwargs):
         """Make an API call to the SharePoint Server
 
