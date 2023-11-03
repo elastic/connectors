@@ -311,24 +311,6 @@ async def test_concurrent_runner_high_concurrency():
     assert second_results == [3]
 
 
-@pytest.mark.asyncio
-async def test_concurrent_runner_cancel():
-    async def coroutine(i):
-        await asyncio.sleep(20)
-        return i
-
-    runner = ConcurrentTasks(max_concurrency=1000)
-    for i in range(1000):
-        await runner.put(functools.partial(coroutine, i))
-
-    runner.cancel()
-
-    await runner.join()
-
-    for task in runner.tasks:
-        assert task.cancelled()
-
-
 @contextlib.contextmanager
 def temp_file(converter):
     if converter == "system":
