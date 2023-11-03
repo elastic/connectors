@@ -6,6 +6,8 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
+Please refer to the following Docker image registry to access and pull the various available versions of our service: [Elastic Connectors Docker Registry](https://www.docker.elastic.co/r/enterprise-search/elastic-connectors).
+
 Follow these steps:
 
 1. [Create network](#1-create-a-docker-network)
@@ -84,6 +86,8 @@ docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT \
 /app/bin/elastic-ingest \
 -c /config/config.yml
 ```
+
+You can access the 
 
 You might need to adjust some details here:
 
