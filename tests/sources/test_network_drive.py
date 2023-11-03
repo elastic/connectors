@@ -18,6 +18,7 @@ from smbprotocol.exceptions import LogonFailure, SMBOSError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
+from connectors.source import ConfigurableFieldValueError
 from connectors.sources.network_drive import (
     NASDataSource,
     NetworkDriveAdvancedRulesValidator,
@@ -29,6 +30,9 @@ from tests.sources.support import create_source
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536
 ADVANCED_SNIPPET = "advanced_snippet"
+
+WINDOWS = "windows"
+LINUX = "linux"
 
 
 def mock_permission(sid):
@@ -703,6 +707,16 @@ async def test_get_access_control_dls_disabled():
 
 
 @pytest.mark.asyncio
+async def test_get_access_control_linux_empty_csv_file_path():
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.drive_type = LINUX
+        source.identity_mappings = ""
+        with pytest.raises(ConfigurableFieldValueError):
+            await anext(source.get_access_control())
+
+
+@pytest.mark.asyncio
 async def test_get_access_control_dls_enabled():
     expected_user_access_control = [
         [
@@ -718,6 +732,7 @@ async def test_get_access_control_dls_enabled():
 
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
+        source.drive_type = WINDOWS
         mock_groups = {"Admins": "S-1-5-32-546"}
         mock_group_members = {
             "Administrator": "S-1-5-21-227823342-1368486282-703244805-500"
@@ -890,8 +905,8 @@ async def test_read_csv_with_valid_data():
         ):
             user_info = source.read_user_info_csv()
             expected_user_info = [
-                {"username": "user1", "user_id": "S-1", "groups": ["S-11", "S-22"]},
-                {"username": "user2", "user_id": "S-2", "groups": ["S-22"]},
+                {"name": "user1", "user_sid": "S-1", "groups": ["S-11", "S-22"]},
+                {"name": "user2", "user_sid": "S-2", "groups": ["S-22"]},
             ]
             assert user_info == expected_user_info
 
@@ -913,8 +928,8 @@ async def test_read_csv_with_empty_groups():
         ):
             user_info = source.read_user_info_csv()
             expected_user_info = [
-                {"username": "user1", "user_id": "1", "groups": []},
-                {"username": "user2", "user_id": "2", "groups": []},
+                {"name": "user1", "user_sid": "1", "groups": []},
+                {"name": "user2", "user_sid": "2", "groups": []},
             ]
             assert user_info == expected_user_info
 
@@ -938,3 +953,19 @@ async def test_list_file_permissions(mock_get_descriptor):
             )
 
             assert result == mock_dacl["aces"]
+
+
+@pytest.mark.asyncio
+async def test_list_file_permissions_with_inaccessible_file():
+    with mock.patch("smbclient.open_file", return_value=MagicMock()) as mock_file:
+        mock_file.side_effect = SMBOSError(ntstatus=0xC0000043, filename="file1.txt")
+
+        async with create_source(NASDataSource) as source:
+            result = source.list_file_permission(
+                file_path="/path/to/file.txt",
+                file_type="file",
+                mode="rb",
+                access="read",
+            )
+
+            assert result is None

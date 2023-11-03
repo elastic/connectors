@@ -116,16 +116,20 @@ class InvalidIndexNameError(ValueError):
 def validate_index_name(name):
     for char in INVALID_CHARS:
         if char in name:
-            raise InvalidIndexNameError(f"Invalid character {char}")
+            msg = f"Invalid character {char}"
+            raise InvalidIndexNameError(msg)
 
     if name.startswith(INVALID_PREFIX):
-        raise InvalidIndexNameError(f"Invalid prefix {name[0]}")
+        msg = f"Invalid prefix {name[0]}"
+        raise InvalidIndexNameError(msg)
 
     if not name.islower():
-        raise InvalidIndexNameError("Must be lowercase")
+        msg = "Must be lowercase"
+        raise InvalidIndexNameError(msg)
 
     if name in INVALID_NAME:
-        raise InvalidIndexNameError("Can't use that name")
+        msg = "Can't use that name"
+        raise InvalidIndexNameError(msg)
 
     return name
 
@@ -203,7 +207,8 @@ def convert_to_b64(source, target=None, overwrite=False):
     inplace = target is None
     temp_target = f"{source}.b64"
     if not inplace and not overwrite and os.path.exists(target):
-        raise IOError(f"{target} already exists.")
+        msg = f"{target} already exists."
+        raise IOError(msg)
 
     if _BASE64 is not None:
         if platform.system() == "Darwin":
@@ -340,9 +345,8 @@ class MemQueue(asyncio.Queue):
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
-            raise asyncio.QueueFull(
-                f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
-            )
+            msg = f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
+            raise asyncio.QueueFull(msg)
         super().put_nowait((item_size, item))
 
 
@@ -464,9 +468,8 @@ def retryable(
                 func, retries, interval, strategy, processed_skipped_exceptions
             )
         else:
-            raise NotImplementedError(
-                f"Retryable decorator is not implemented for {func.__class__}."
-            )
+            msg = f"Retryable decorator is not implemented for {func.__class__}."
+            raise NotImplementedError(msg)
 
     return wrapper
 

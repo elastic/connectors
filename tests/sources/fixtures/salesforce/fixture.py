@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Module to handle api calls received from connector."""
 
 import io
@@ -27,9 +28,8 @@ match DATA_SIZE:
     case "large":
         RECORD_COUNT = 10000
     case _:
-        raise Exception(
-            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
-        )
+        msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        raise Exception(msg)
 
 SOBJECTS = [
     "Account",

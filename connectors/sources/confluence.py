@@ -459,9 +459,8 @@ class ConfluenceDataSource(BaseDataSource):
             spaces = response.get("results", [])
             space_keys.extend([space["key"] for space in spaces])
         if unavailable_spaces := set(self.spaces) - set(space_keys):
-            raise ConfigurableFieldValueError(
-                f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
-            )
+            msg = f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
+            raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         """Verify the connection with Confluence"""

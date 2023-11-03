@@ -31,19 +31,14 @@ def parse(basic_rules_json):
     if not basic_rules_json:
         return []
 
-    map_to_basic_rules_list = list(
-        map(
-            lambda basic_rule_json: BasicRule.from_json(basic_rule_json),
-            basic_rules_json,
-        )
-    )
+    map_to_basic_rules_list = [
+        BasicRule.from_json(basic_rule_json) for basic_rule_json in basic_rules_json
+    ]
 
     return sorted(
-        list(
-            filter(
-                lambda basic_rule: not basic_rule.is_default_rule(),
-                map_to_basic_rules_list,
-            )
+        filter(
+            lambda basic_rule: not basic_rule.is_default_rule(),
+            map_to_basic_rules_list,
         ),
         key=lambda basic_rule: basic_rule.order,
     )
@@ -114,7 +109,8 @@ class RuleMatchStats:
                 policy=self.policy, matches_count=self.matches_count + other
             )
         else:
-            raise NotImplementedError(f"__add__ is not implemented for '{type(other)}'")
+            msg = f"__add__ is not implemented for '{type(other)}'"
+            raise NotImplementedError(msg)
 
     def __eq__(self, other):
         return self.policy == other.policy and self.matches_count == other.matches_count
@@ -213,9 +209,8 @@ class Rule(Enum):
             case "starts_with":
                 return Rule.STARTS_WITH
             case _:
-                raise InvalidRuleError(
-                    f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
-                )
+                msg = f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
+                raise InvalidRuleError(msg)
 
 
 class InvalidPolicyError(ValueError):
@@ -244,9 +239,8 @@ class Policy(Enum):
             case "exclude":
                 return Policy.EXCLUDE
             case _:
-                raise InvalidPolicyError(
-                    f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
-                )
+                msg = f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
+                raise InvalidPolicyError(msg)
 
 
 class BasicRule:

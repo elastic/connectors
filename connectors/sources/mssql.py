@@ -117,11 +117,11 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        tables_to_filter = set(
+        tables_to_filter = {
             table
             for query_info in advanced_rules
             for table in query_info.get("tables", [])
-        )
+        }
         tables = {
             table
             async for table in self.source.mssql_client.get_tables_to_fetch(
@@ -481,9 +481,8 @@ class MSSQLDataSource(BaseDataSource):
             await self.mssql_client.ping()
             self._logger.info("Successfully connected to Microsoft SQL.")
         except Exception as e:
-            raise Exception(
-                f"Can't connect to Microsoft SQL on {self.mssql_client.host}"
-            ) from e
+            msg = f"Can't connect to Microsoft SQL on {self.mssql_client.host}"
+            raise Exception(msg) from e
 
     def row2doc(self, row, doc_id, table, timestamp):
         row.update(
@@ -594,7 +593,7 @@ class MSSQLDataSource(BaseDataSource):
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
         ):
-            doc_id = f"{self.database}_{self.schema}_{hash_id([table for table in tables], row, primary_key_columns)}"
+            doc_id = f"{self.database}_{self.schema}_{hash_id(list(tables), row, primary_key_columns)}"
 
             yield self.serialize(
                 doc=self.row2doc(

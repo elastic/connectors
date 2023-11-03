@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
+# ruff: noqa: T203
 import importlib
 import importlib.util
 import logging
@@ -96,9 +98,8 @@ def _monitor_service(pid):
 
             if len(response["hits"]["hits"]) == 0:
                 if time.time() - start > index_present_timeout:
-                    raise Exception(
-                        f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds."
-                    )
+                    msg = f"{CONNECTORS_INDEX} not present after {index_present_timeout} seconds."
+                    raise Exception(msg)
 
                 logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
                 time.sleep(1)

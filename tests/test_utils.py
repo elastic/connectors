@@ -267,7 +267,8 @@ async def test_concurrent_runner_fails():
     async def coroutine(i):
         await asyncio.sleep(0.1)
         if i == 5:
-            raise Exception("I FAILED")
+            msg = "I FAILED"
+            raise Exception(msg)
         return i
 
     runner = ConcurrentTasks(results_callback=_results_callback)

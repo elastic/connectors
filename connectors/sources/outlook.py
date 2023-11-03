@@ -217,9 +217,8 @@ class RootCAAdapter(requests.adapters.HTTPAdapter):
                 cert=cert,
             )
         except Exception as exception:
-            raise SSLFailed(
-                f"Something went wrong while verifying SSL certificate. Error: {exception}"
-            ) from exception
+            msg = f"Something went wrong while verifying SSL certificate. Error: {exception}"
+            raise SSLFailed(msg) from exception
 
 
 class ExchangeUsers:
@@ -258,17 +257,15 @@ class ExchangeUsers:
             )
 
             if not has_value_for_normal_users:
-                raise UsersFetchFailed(
-                    "Error while fetching users from Exchange Active Directory."
-                )
+                msg = "Error while fetching users from Exchange Active Directory."
+                raise UsersFetchFailed(msg)
 
             for user in response:
                 yield user
 
         except Exception as e:
-            raise UsersFetchFailed(
-                f"Something went wrong while fetching users. Error: {e}"
-            ) from e
+            msg = f"Something went wrong while fetching users. Error: {e}"
+            raise UsersFetchFailed(msg) from e
 
     def _fetch_admin_users(self, search_query):
         try:
@@ -284,16 +281,14 @@ class ExchangeUsers:
             )
 
             if not has_value_for_admin_users:
-                raise UsersFetchFailed(
-                    "Error while fetching users from Exchange Active Directory."
-                )
+                msg = "Error while fetching users from Exchange Active Directory."
+                raise UsersFetchFailed(msg)
 
             for user in response_for_admin:
                 yield user
         except Exception as e:
-            raise UsersFetchFailed(
-                f"Something went wrong while fetching users. Error: {e}"
-            ) from e
+            msg = f"Something went wrong while fetching users. Error: {e}"
+            raise UsersFetchFailed(msg) from e
 
     async def get_users(self):
         ldap_domain_name_list = ["DC=" + domain for domain in self.domain.split(".")]
@@ -352,17 +347,17 @@ class Office365Users:
     def _check_errors(self, response):
         match response.status:
             case 400:
-                raise UnauthorizedException(
-                    "Found invalid tenant id or client id value"
-                )
+                msg = "Found invalid tenant id or client id value"
+                raise UnauthorizedException(msg)
             case 401:
-                raise UnauthorizedException("Found invalid client secret value")
+                msg = "Found invalid client secret value"
+                raise UnauthorizedException(msg)
             case 403:
-                raise Forbidden(
-                    f"Missing permission or something went wrong. Error: {response}"
-                )
+                msg = f"Missing permission or something went wrong. Error: {response}"
+                raise Forbidden(msg)
             case 404:
-                raise NotFound(f"Resource Not Found. Error: {response}")
+                msg = f"Resource Not Found. Error: {response}"
+                raise NotFound(msg)
             case _:
                 raise
 
@@ -463,7 +458,7 @@ class OutlookDocFormatter:
                 recipient.email_address for recipient in (mail.bcc_recipients or [])
             ],
             "importance": mail.importance,
-            "categories": [category for category in (mail.categories or [])],
+            "categories": list((mail.categories or [])),
             "message": html_to_text(html=mail.body),
         }
 
@@ -528,7 +523,7 @@ class OutlookDocFormatter:
             "complete_date": ews_format_to_datetime(
                 source_datetime=task.complete_date, timezone=timezone
             ),
-            "categories": [category for category in (task.categories or [])],
+            "categories": list((task.categories or [])),
             "importance": task.importance,
             "content": task.text_body,
             "status": task.status,
