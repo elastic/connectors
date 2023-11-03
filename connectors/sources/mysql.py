@@ -122,18 +122,18 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         async with self.source.mysql_client() as client:
             tables = set(await client.get_all_table_names())
 
-        tables_to_filter = set(
+        tables_to_filter = {
             table
             for query_info in advanced_rules
             for table in query_info.get("tables", [])
-        )
+        }
         missing_tables = tables_to_filter - tables
 
         if len(missing_tables) > 0:
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Tables not found or inaccessible: {format_list(sorted(list(missing_tables)))}.",
+                validation_message=f"Tables not found or inaccessible: {format_list(sorted(missing_tables))}.",
             )
 
         return SyncRuleValidationResult.valid_result(
@@ -203,7 +203,7 @@ class MySQLClient:
     async def get_all_table_names(self):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(self.queries.all_tables())
-            return list(map(lambda table: table[0], await cursor.fetchall()))
+            return [table[0] for table in await cursor.fetchall()]
 
     async def ping(self):
         try:
@@ -461,9 +461,8 @@ class MySqlDataSource(BaseDataSource):
         try:
             await cursor.execute(f"USE {self.database};")
         except aiomysql.Error as e:
-            raise ConfigurableFieldValueError(
-                f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
-            ) from e
+            msg = f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
+            raise ConfigurableFieldValueError(msg) from e
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
@@ -476,9 +475,8 @@ class MySqlDataSource(BaseDataSource):
                 non_accessible_tables.append(table)
 
         if len(non_accessible_tables) > 0:
-            raise ConfigurableFieldValueError(
-                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
-            )
+            msg = f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
+            raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         async with self.mysql_client() as client:

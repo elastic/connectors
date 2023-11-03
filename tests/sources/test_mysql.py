@@ -178,11 +178,13 @@ class Cursor:
             self.first_call = False
             return [["table1"], ["table2"]]
         if self.is_connection_lost:
-            raise Exception("Incomplete Read Error")
+            msg = "Incomplete Read Error"
+            raise Exception(msg)
         return []
 
     async def scroll(self, *args, **kw):
-        raise Exception("Incomplete Read Error")
+        msg = "Incomplete Read Error"
+        raise Exception(msg)
 
     def execute(self, query):
         """This method returns future object"""
@@ -336,7 +338,7 @@ async def test_client_get_column_names_for_query(patch_connection_pool):
 
     async with client:
         result = await client.get_column_names_for_query("SELECT * FROM *")
-        expected_columns = list(map(lambda column: column[0], columns))
+        expected_columns = [column[0] for column in columns]
 
         assert result == expected_columns
 

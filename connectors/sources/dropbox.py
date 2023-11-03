@@ -221,15 +221,14 @@ class DropboxClient:
     def check_errors(self, response):
         error_response = response.get("error")
         if error_response == "invalid_grant":
-            raise InvalidRefreshTokenException("Configured Refresh Token is invalid.")
+            msg = "Configured Refresh Token is invalid."
+            raise InvalidRefreshTokenException(msg)
         elif error_response == "invalid_client: Invalid client_id or client_secret":
-            raise InvalidClientCredentialException(
-                "Configured App Key or App Secret is invalid."
-            )
+            msg = "Configured App Key or App Secret is invalid."
+            raise InvalidClientCredentialException(msg)
         else:
-            raise Exception(
-                f"Error while generating an access token. Error: {error_response}"
-            )
+            msg = f"Error while generating an access token. Error: {error_response}"
+            raise Exception(msg)
 
     @cached_property
     def _get_session(self):
@@ -293,9 +292,8 @@ class DropboxClient:
             # For Dropbox APIs, 409 status code is responsible for endpoint-specific errors.
             # Refer `Errors by status code` section in the documentation: https://www.dropbox.com/developers/documentation/http/documentation
             case 409:
-                raise InvalidPathException(
-                    f"Configured Path: {self.path} is invalid or not found."
-                ) from exception
+                msg = f"Configured Path: {self.path} is invalid or not found."
+                raise InvalidPathException(msg) from exception
             case 429:
                 response_headers = exception.headers
                 updated_response_headers = {
@@ -831,9 +829,8 @@ class DropboxDataSource(BaseDataSource):
         except InvalidPathException:
             raise
         except Exception as exception:
-            raise Exception(
-                f"Error while validating path: {self.dropbox_client.path}. Error: {exception}"
-            ) from exception
+            msg = f"Error while validating path: {self.dropbox_client.path}. Error: {exception}"
+            raise Exception(msg) from exception
 
     def advanced_rules_validators(self):
         return [DropBoxAdvancedRulesValidator(self)]

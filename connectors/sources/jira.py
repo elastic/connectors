@@ -684,13 +684,11 @@ class JiraDataSource(BaseDataSource):
             if unavailable_projects := set(self.jira_client.projects) - set(
                 project_keys
             ):
-                raise Exception(
-                    f"Configured unavailable projects: {', '.join(unavailable_projects)}"
-                )
+                msg = f"Configured unavailable projects: {', '.join(unavailable_projects)}"
+                raise Exception(msg)
         except Exception as exception:
-            raise Exception(
-                f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
-            ) from exception
+            msg = f"Unable to verify projects: {self.jira_client.projects}. Error: {exception}"
+            raise Exception(msg) from exception
 
     async def _get_timezone(self):
         """Returns the timezone of the Jira deployment"""

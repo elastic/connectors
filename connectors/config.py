@@ -125,9 +125,8 @@ def _ent_search_config(configuration):
 
         if es_field == "log_level":
             if es_field_value not in log_level_mappings:
-                raise ValueError(
-                    f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
-                )
+                msg = f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
+                raise ValueError(msg)
             es_field_value = log_level_mappings[es_field_value]
 
         _nest_configs(configuration, connector_field, es_field_value)

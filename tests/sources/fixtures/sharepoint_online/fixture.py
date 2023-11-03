@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Module to handle api calls received from connector."""
 
 import os
@@ -710,7 +711,8 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
             site_name, list_title, list_item_id
         )
     else:
-        raise Exception("Nope")
+        msg = "Nope"
+        raise Exception(msg)
 
 
 @app.route("/sites/<string:site_name>/_api/web/lists/GetByTitle('Site Pages')/items")

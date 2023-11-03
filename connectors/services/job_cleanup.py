@@ -23,8 +23,6 @@ class JobCleanUpService(BaseService):
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())
-        self.connector_index = None
-        self.sync_job_index = None
 
     async def _run(self):
         logger.debug("Successfully started Job cleanup task...")

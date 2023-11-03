@@ -14,6 +14,7 @@ from io import BytesIO
 import fastjsonschema
 import smbclient
 import winrm
+from requests.exceptions import ConnectionError
 from smbprotocol.exceptions import SMBException, SMBOSError
 from smbprotocol.file_info import (
     InfoType,
@@ -38,7 +39,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
@@ -58,6 +59,9 @@ MAX_CHUNK_SIZE = 65536
 DEFAULT_FILE_SIZE_LIMIT = 10485760
 RETRIES = 3
 RETRY_INTERVAL = 2
+
+WINDOWS = "windows"
+LINUX = "linux"
 
 
 def _prefix_user(user):
@@ -247,6 +251,7 @@ class NASDataSource(BaseDataSource):
         self.server_ip = self.configuration["server_ip"]
         self.port = self.configuration["server_port"]
         self.drive_path = self.configuration["drive_path"]
+        self.drive_type = self.configuration["drive_type"]
         self.identity_mappings = self.configuration["identity_mappings"]
         self.session = None
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
@@ -297,10 +302,28 @@ class NASDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "drive_type": {
+                "display": "dropdown",
+                "label": "Drive type",
+                "depends_on": [
+                    {"field": "use_document_level_security", "value": True},
+                ],
+                "options": [
+                    {"label": "Windows", "value": WINDOWS},
+                    {"label": "Linux", "value": LINUX},
+                ],
+                "order": 7,
+                "type": "str",
+                "ui_restrictions": ["advanced"],
+                "value": WINDOWS,
+            },
             "identity_mappings": {
                 "label": "Path of CSV file containing users and groups SID (For Linux Network Drive)",
-                "depends_on": [{"field": "use_document_level_security", "value": True}],
-                "order": 7,
+                "depends_on": [
+                    {"field": "use_document_level_security", "value": True},
+                    {"field": "drive_type", "value": LINUX},
+                ],
+                "order": 8,
                 "type": "str",
                 "required": False,
                 "ui_restrictions": ["advanced"],
@@ -445,6 +468,8 @@ class NASDataSource(BaseDataSource):
             executor=None, func=partial(self.fetch_file_content, path=file["path"])
         )
 
+        if not content:
+            return
         attachment = content.read()
         content.close()
         return {
@@ -454,17 +479,22 @@ class NASDataSource(BaseDataSource):
         }
 
     def list_file_permission(self, file_path, file_type, mode, access):
-        with smbclient.open_file(
-            file_path,
-            mode=mode,
-            buffering=0,
-            file_type=file_type,
-            desired_access=access,
-        ) as file:
-            descriptor = self.security_info.get_descriptor(
-                file_descriptor=file.fd, info=SECURITY_INFO_DACL
+        try:
+            with smbclient.open_file(
+                file_path,
+                mode=mode,
+                buffering=0,
+                file_type=file_type,
+                desired_access=access,
+            ) as file:
+                descriptor = self.security_info.get_descriptor(
+                    file_descriptor=file.fd, info=SECURITY_INFO_DACL
+                )
+                return descriptor.get_dacl()["aces"]
+        except SMBOSError as error:
+            self._logger.error(
+                f"Cannot read the contents of file on path:{file_path}. Error {error}"
             )
-            return descriptor.get_dacl()["aces"]
 
     def _dls_enabled(self):
         if (
@@ -521,8 +551,8 @@ class NASDataSource(BaseDataSource):
                 for row in csv_reader:
                     user_info.append(
                         {
-                            "username": row[0],
-                            "user_id": row[1],
+                            "name": row[0],
+                            "user_sid": row[1],
                             "groups": row[2].split(",") if len(row[2]) > 0 else [],
                         }
                     )
@@ -538,36 +568,49 @@ class NASDataSource(BaseDataSource):
             return
 
         # This if block fetches users, groups via local csv file path
-        if self.identity_mappings:
-            self._logger.info(
-                f"Fetching all groups and users from configured file path '{self.identity_mappings}'"
-            )
-
-            for user in self.read_user_info_csv():
-                yield await self._user_access_control_doc(
-                    user["name"], user["sid"], user["groups"]
+        if self.drive_type == LINUX:
+            if self.identity_mappings:
+                self._logger.info(
+                    f"Fetching all groups and users from configured file path '{self.identity_mappings}'"
                 )
+
+                for user in self.read_user_info_csv():
+                    yield await self._user_access_control_doc(
+                        user=user["name"],
+                        sid=user["user_sid"],
+                        groups_info=user["groups"],
+                    )
+            else:
+                msg = "CSV file path cannot be empty. Please provide a valid csv file path."
+                raise ConfigurableFieldValueError(msg)
         else:
-            self._logger.info(
-                f"Fetching all groups and members for drive at path '{self.drive_path}'"
-            )
-            groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
-
-            groups_members = {}
-            for group_name, _ in groups_info.items():
-                groups_members[group_name] = await asyncio.to_thread(
-                    self.security_info.fetch_members, group_name
+            try:
+                self._logger.info(
+                    f"Fetching all groups and members for drive at path '{self.drive_path}'"
                 )
+                groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
 
-            self._logger.info(
-                f"Fetching all users for drive at path '{self.drive_path}'"
-            )
-            users_info = await asyncio.to_thread(self.security_info.fetch_users)
+                groups_members = {}
+                for group_name, _ in groups_info.items():
+                    groups_members[group_name] = await asyncio.to_thread(
+                        self.security_info.fetch_members, group_name
+                    )
 
-            for user, sid in users_info.items():
-                yield await self._user_access_control_doc(
-                    user, sid, groups_info, groups_members
+                self._logger.info(
+                    f"Fetching all users for drive at path '{self.drive_path}'"
                 )
+                users_info = await asyncio.to_thread(self.security_info.fetch_users)
+
+                for user, sid in users_info.items():
+                    yield await self._user_access_control_doc(
+                        user=user,
+                        sid=sid,
+                        groups_info=groups_info,
+                        groups_members=groups_members,
+                    )
+            except ConnectionError as exception:
+                msg = "Something went wrong"
+                raise ConnectionError(msg) from exception
 
     async def get_entity_permission(self, file_path, file_type):
         if not self._dls_enabled():
@@ -590,7 +633,7 @@ class NASDataSource(BaseDataSource):
                 mode="br",
                 access=DirectoryAccessMask.READ_CONTROL,
             )
-        for permission in list_permissions:
+        for permission in list_permissions or []:
             if (
                 permission["ace_type"].value == ACCESS_ALLOWED_TYPE
                 or permission["mask"].value == ACCESS_MASK_DENIED_WRITE_PERMISSION
@@ -609,9 +652,8 @@ class NASDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
             matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
             if len(invalid_rules) > 0:
-                raise InvalidRulesError(
-                    f"Following advanced rules are invalid: {invalid_rules}"
-                )
+                msg = f"Following advanced rules are invalid: {invalid_rules}"
+                raise InvalidRulesError(msg)
 
             for path in matched_paths:
                 async for file in self.get_files(path=path):

@@ -35,7 +35,7 @@ def configured_tables(tables):
         list(
             filter(
                 lambda table: table_filter(table),
-                map(lambda table: table.strip(), tables.split(",")),
+                (table.strip() for table in tables.split(",")),
             )
         )
         if isinstance(tables, str)

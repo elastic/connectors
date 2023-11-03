@@ -236,17 +236,14 @@ class MicrosoftSecurityToken:
             # Error Code serves as a good starting point classifying these errors, see the messages below:
             match e.status:
                 case 400:
-                    raise TokenFetchFailed(
-                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
-                    ) from e
+                    msg = "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
+                    raise TokenFetchFailed(msg) from e
                 case 401:
-                    raise TokenFetchFailed(
-                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
-                    ) from e
+                    msg = "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
+                    raise TokenFetchFailed(msg) from e
                 case _:
-                    raise TokenFetchFailed(
-                        f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
-                    ) from e
+                    msg = f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
+                    raise TokenFetchFailed(msg) from e
 
         self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
 
@@ -502,9 +499,8 @@ class MicrosoftAPISession:
         elif (
             e.status == 403 or e.status == 401
         ):  # Might work weird, but Graph returns 403 and REST returns 401
-            raise PermissionsMissing(
-                f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-            ) from e
+            msg = f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+            raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
         elif e.status == 500:
@@ -1019,9 +1015,8 @@ class SharepointOnlineClient:
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
         if self._tenant_name != actual_tenant_name:
-            raise InvalidSharepointTenant(
-                f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
-            )
+            msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
+            raise InvalidSharepointTenant(msg)
 
     async def close(self):
         await self._http_session.close()
@@ -1293,9 +1288,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         tenant_details = await self.client.tenant_details()
 
         if tenant_details is None or tenant_details["NameSpaceType"] == "Unknown":
-            raise Exception(
-                f"Could not find tenant with name {self.configuration['tenant_name']}. Make sure that provided tenant name is valid."
-            )
+            msg = f"Could not find tenant with name {self.configuration['tenant_name']}. Make sure that provided tenant name is valid."
+            raise Exception(msg)
 
         # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
@@ -1318,9 +1312,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         missing = [x for x in configured_root_sites if x not in retrieved_sites]
 
         if missing:
-            raise Exception(
-                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
-            )
+            msg = f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
+            raise Exception(msg)
 
     def _site_path_from_web_url(self, web_url):
         url_parts = web_url.split("/sites/")
@@ -1704,9 +1697,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         timestamp = iso_zulu()
 
         if not self._sync_cursor:
-            raise SyncCursorEmpty(
-                "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
-            )
+            msg = "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
+            raise SyncCursorEmpty(msg)
 
         max_drive_item_age = None
 

@@ -590,11 +590,11 @@ async def test_api_call_for_attribute_error(catch_stdout):
 
     async with create_gcs_source() as source:
         with pytest.raises(AttributeError):
-            async for _ in source._google_storage_client.api_call(
+            async for resp in source._google_storage_client.api_call(
                 resource="buckets_dummy",
                 method="list",
                 full_response=True,
                 project=source._google_storage_client.user_project_id,
                 userProject=source._google_storage_client.user_project_id,
             ):
-                print("Method called successfully....")
+                assert resp is not None
