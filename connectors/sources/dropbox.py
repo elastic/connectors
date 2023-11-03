@@ -751,7 +751,7 @@ class DropboxDataSource(BaseDataSource):
                 "tooltip": "Include groups and inherited users when indexing permissions. Enabling this configurable field will cause a significant performance degradation.",
                 "type": "bool",
                 "value": False,
-            }
+            },
         }
 
     def _dls_enabled(self):
