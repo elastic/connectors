@@ -2377,11 +2377,11 @@ class TestSharepointOnlineDataSource:
         assert len(docs) == sum(
             [
                 len(self.site_collections),
-                sum([len(i) for i in self.drive_items_delta]),
+                sum(len(i) for i in self.drive_items_delta),
                 len(self.site_drives),
                 len(self.site_pages),
                 len(self.site_lists),
-                len(self.site_list_items) - 1,  # one is too old
+                len(self.site_list_items) - 2,  # one is too old, one is always ignored
                 len(self.site_list_item_attachments),
             ]
         )
