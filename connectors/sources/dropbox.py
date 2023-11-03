@@ -40,7 +40,10 @@ RETRY_COUNT = 3
 DEFAULT_RETRY_AFTER = 300  # seconds
 RETRY_INTERVAL = 2
 MAX_CONCURRENT_DOWNLOADS = 100
+REQUEST_BATCH_SIZE = 50
+BATCH_RESPONSE_COUNT = 20
 LIMIT = 300  # Limit for fetching shared files per call
+FILE_LIMIT = 2000
 PAPER = "paper"
 FILE = "File"
 FOLDER = "Folder"
@@ -75,6 +78,7 @@ class EndpointName(Enum):
     FILES_FOLDERS = "files_folders"
     FILES_FOLDERS_CONTINUE = "files_folders_continue"
     FILE_MEMBERS = "file_members"
+    FILE_MEMBERS_BATCH = "file_members_batch"
     FILE_MEMBERS_CONTINUE = "file_members_continue"
     FOLDER_MEMBERS = "folder_members"
     FOLDER_MEMBERS_CONTINUE = "folder_members_continue"
@@ -100,6 +104,7 @@ ENDPOINTS = {
     EndpointName.FILES_FOLDERS.value: "files/list_folder",
     EndpointName.FILES_FOLDERS_CONTINUE.value: "files/list_folder/continue",
     EndpointName.FILE_MEMBERS.value: "sharing/list_file_members",
+    EndpointName.FILE_MEMBERS_BATCH.value: "sharing/list_file_members/batch",
     EndpointName.FILE_MEMBERS_CONTINUE.value: "sharing/list_file_members/continue",
     EndpointName.FOLDER_MEMBERS.value: "sharing/list_folder_members",
     EndpointName.FOLDER_MEMBERS_CONTINUE.value: "sharing/list_folder_members/continue",
@@ -366,6 +371,9 @@ class DropboxClient:
                     json_response = await response.json()
                     yield json_response
 
+                    if isinstance(json_response, list):
+                        return
+
                     # Breaking condition for pagination
                     # breaking_fields:
                     #  - "has_more" for fetching files/folders
@@ -378,26 +386,8 @@ class DropboxClient:
                             BreakingField.CURSOR.value
                         ]
                     }
-                    if continue_endpoint == "shared_file":
-                        url_name = ENDPOINTS.get(
-                            EndpointName.RECEIVED_FILES_CONTINUE.value
-                        )
-                    elif continue_endpoint == "shared_file_member":
-                        url_name = ENDPOINTS.get(
-                            EndpointName.FILE_MEMBERS_CONTINUE.value
-                        )
-                    elif continue_endpoint == "shared_folder_member":
-                        url_name = ENDPOINTS.get(
-                            EndpointName.FOLDER_MEMBERS_CONTINUE.value
-                        )
-                    elif continue_endpoint == "search_file":
-                        url_name = ENDPOINTS.get(EndpointName.SEARCH_CONTINUE.value)
-                    elif continue_endpoint == "members":
-                        url_name = ENDPOINTS.get(EndpointName.MEMBERS_CONTINUE.value)
-                    elif continue_endpoint == "team_folder":
-                        url_name = ENDPOINTS.get(
-                            EndpointName.TEAM_FOLDER_LIST_CONTINUE.value
-                        )
+                    if continue_endpoint:
+                        url_name = ENDPOINTS.get(continue_endpoint)
                     else:
                         url_name = ENDPOINTS.get(
                             EndpointName.FILES_FOLDERS_CONTINUE.value
@@ -431,6 +421,7 @@ class DropboxClient:
         data = {
             "path": path,
             "recursive": True,
+            "limit": FILE_LIMIT,
         }
         async for result in self._paginated_api_call(
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
@@ -441,17 +432,30 @@ class DropboxClient:
         ):
             yield result
 
-    async def list_file_permission(self, file_id):
+    async def list_file_permission_without_batching(self, file_id):
         data = {
             "file": file_id,
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            continue_endpoint="shared_file_member",
+            continue_endpoint=EndpointName.FILE_MEMBERS_CONTINUE.value,
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.FILE_MEMBERS.value),
             data=data,
             breaking_field=BreakingField.CURSOR.value,
+        ):
+            yield result
+
+    async def list_file_permission_with_batching(self, file_ids):
+        data = {
+            "files": list(file_ids),
+            "limit": BATCH_RESPONSE_COUNT,
+        }
+        async for result in self._paginated_api_call(
+            base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
+            url_name=ENDPOINTS.get(EndpointName.FILE_MEMBERS_BATCH.value),
+            data=data,
+            breaking_field=None,
         ):
             yield result
 
@@ -461,7 +465,7 @@ class DropboxClient:
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            continue_endpoint="shared_file_member",
+            continue_endpoint=EndpointName.FOLDER_MEMBERS_CONTINUE.value,
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.FOLDER_MEMBERS.value),
             data=data,
@@ -474,7 +478,7 @@ class DropboxClient:
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            continue_endpoint="shared_file",
+            continue_endpoint=EndpointName.RECEIVED_FILES_CONTINUE.value,
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.RECEIVED_FILES.value),
             data=data,
@@ -526,7 +530,7 @@ class DropboxClient:
             url_name=ENDPOINTS.get(EndpointName.SEARCH.value),
             data=rule,
             breaking_field=BreakingField.HAS_MORE.value,
-            continue_endpoint="search_file",
+            continue_endpoint=EndpointName.SEARCH_CONTINUE.value,
         ):
             yield result
 
@@ -535,7 +539,7 @@ class DropboxClient:
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            continue_endpoint="members",
+            continue_endpoint=EndpointName.MEMBERS_CONTINUE.value,
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.MEMBERS.value),
             data=data,
@@ -548,7 +552,7 @@ class DropboxClient:
             "limit": LIMIT,
         }
         async for result in self._paginated_api_call(
-            continue_endpoint="team_folder",
+            continue_endpoint=EndpointName.TEAM_FOLDER_LIST_CONTINUE.value,
             base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
             url_name=ENDPOINTS.get(EndpointName.TEAM_FOLDER_LIST.value),
             data=data,
@@ -664,6 +668,9 @@ class DropboxDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.dropbox_client = DropboxClient(configuration=configuration)
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
+        self.include_inherited_users_and_groups = self.configuration[
+            "include_inherited_users_and_groups"
+        ]
 
     def _set_internal_logger(self):
         self.dropbox_client.set_logger(self._logger)
@@ -736,6 +743,15 @@ class DropboxDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "include_inherited_users_and_groups": {
+                "depends_on": [{"field": "use_document_level_security", "value": True}],
+                "display": "toggle",
+                "label": "Include groups and inherited users",
+                "order": 9,
+                "tooltip": "Include groups and inherited users when indexing permissions. Enabling this configurable field will cause a significant performance degradation.",
+                "type": "bool",
+                "value": False,
+            }
         }
 
     def _dls_enabled(self):
@@ -966,7 +982,7 @@ class DropboxDataSource(BaseDataSource):
                 else:
                     yield self._adapt_dropbox_doc_to_es_doc(response=data), data
 
-    def get_id(self, permission, identity):
+    def get_group_id(self, permission, identity):
         if identity in permission:
             return permission.get(identity).get("group_id")
 
@@ -974,58 +990,49 @@ class DropboxDataSource(BaseDataSource):
         if identity in permission:
             return permission.get(identity).get("email")
 
-    async def get_file_permission(self, file_id):
-        if not self._dls_enabled():
-            return []
-
+    async def get_permission(self, permission, account_id):
         permissions = []
-        async for permission in self.dropbox_client.list_file_permission(
-            file_id=file_id
+        if identities := permission.get("users"):
+            for identity in identities:
+                permissions.append(
+                    _prefix_user_id(identity.get("user", {}).get("account_id"))
+                )
+
+        if identities := permission.get("invitees"):
+            for identity in identities:
+                if invitee_permission := self.get_email(identity, "invitee"):
+                    permissions.append(_prefix_email(invitee_permission))
+
+        if identities := permission.get("groups"):
+            for identity in identities:
+                if group_permission := self.get_group_id(identity, "group"):
+                    permissions.append(_prefix_group(group_permission))
+
+        if (
+            not self.include_inherited_users_and_groups
+            and account_id not in permissions
         ):
-            if identities := permission.get("users"):
-                for identity in identities:
-                    permissions.append(
-                        _prefix_user_id(identity.get("user", {}).get("account_id"))
-                    )
-
-            if identities := permission.get("invitees"):
-                for identity in identities:
-                    if invitee_permission := self.get_email(identity, "invitee"):
-                        permissions.append(_prefix_email(invitee_permission))
-
-            if identities := permission.get("groups"):
-                for identity in identities:
-                    if group_permission := self.get_id(identity, "group"):
-                        permissions.append(_prefix_group(group_permission))
+            permissions.append(_prefix_user_id(account_id))
         return permissions
 
     async def get_folder_permission(self, shared_folder_id, account_id):
-        if not self._dls_enabled():
-            return []
+        if not shared_folder_id:
+            return [account_id]
 
-        permissions = []
-        if shared_folder_id:
-            async for permission in self.dropbox_client.list_folder_permission(
-                shared_folder_id=shared_folder_id
-            ):
-                if identities := permission.get("users"):
-                    for identity in identities:
-                        permissions.append(
-                            _prefix_user_id(identity.get("user", {}).get("account_id"))
-                        )
+        async for permission in self.dropbox_client.list_folder_permission(
+            shared_folder_id=shared_folder_id
+        ):
+            return await self.get_permission(
+                permission=permission, account_id=account_id
+            )
 
-                if identities := permission.get("invitees"):
-                    for identity in identities:
-                        if invitee_permission := self.get_email(identity, "invitee"):
-                            permissions.append(_prefix_email(invitee_permission))
-
-                if identities := permission.get("groups"):
-                    for identity in identities:
-                        if group_permission := self.get_id(identity, "group"):
-                            permissions.append(_prefix_group(group_permission))
-        else:
-            permissions.append(_prefix_user_id(account_id))
-        return permissions
+    async def get_file_permission_without_batching(self, file_id, account_id):
+        async for permission in self.dropbox_client.list_file_permission_without_batching(
+            file_id=file_id
+        ):
+            return await self.get_permission(
+                permission=permission, account_id=account_id
+            )
 
     async def get_account_details(self):
         response = await anext(
@@ -1048,12 +1055,99 @@ class DropboxDataSource(BaseDataSource):
             return await self.get_folder_permission(
                 shared_folder_id=shared_folder_id, account_id=account_id
             )
-        return await self.get_file_permission(file_id=item.get("id"))
+        return await self.get_file_permission_without_batching(
+            file_id=item.get("id"), account_id=account_id
+        )
 
     async def get_team_folder_id(self):
         async for folder_list in self.dropbox_client.get_team_folder_list():
             for folder in folder_list.get("team_folders", []):
                 yield folder.get("team_folder_id")
+
+    async def map_permission_with_document(self, batched_document, account_id):
+        async for permissions in self.dropbox_client.list_file_permission_with_batching(
+            file_ids=batched_document.keys()
+        ):
+            for permission in permissions:
+                file_permission = (
+                    await self.get_permission(
+                        permission=permission["result"]["members"],
+                        account_id=account_id,
+                    )
+                    if permission.get("result", {}).get("members", {})
+                    else []
+                )
+                file_id = batched_document[permission["file"]]
+
+                yield self._decorate_with_access_control(
+                    file_id[0], file_permission
+                ), file_id[1]
+
+    def document_tuple(self, document, attachment, folder_id=None):
+        if document.get("type") == FILE:
+            if document.get("url"):
+                return document, partial(
+                    self.get_content,
+                    attachment=attachment,
+                    is_shared=True,
+                    folder_id=folder_id,
+                )
+            else:
+                return document, partial(
+                    self.get_content, attachment=attachment, folder_id=folder_id
+                )
+        else:
+            return document, None
+
+    async def add_document_to_list(self, func, account_id, folder_id, is_shared=False):
+        batched_document = {}
+        calling_func = (
+            func()
+            if is_shared
+            else func(path=self.dropbox_client.path, folder_id=folder_id)
+        )
+
+        async for document, attachment in calling_func:
+            if (
+                self.include_inherited_users_and_groups is True
+                or document.get("type") == FOLDER
+            ):
+                permissions = await self.get_permission_list(
+                    item_type=document.get("type"),
+                    item=attachment,
+                    account_id=account_id,
+                )
+                if permissions is None:
+                    permissions = []
+                yield self.document_tuple(
+                    document=self._decorate_with_access_control(document, permissions),
+                    attachment=attachment,
+                    folder_id=folder_id,
+                )
+            else:
+                if len(batched_document) == REQUEST_BATCH_SIZE:
+                    async for mapped_document, mapped_attachment in self.map_permission_with_document(
+                        batched_document=batched_document, account_id=account_id
+                    ):
+                        yield self.document_tuple(
+                            document=mapped_document,
+                            attachment=mapped_attachment,
+                            folder_id=folder_id,
+                        )
+                    batched_document = {attachment["id"]: (document, attachment)}
+                else:
+                    batched_document[attachment["id"]] = (document, attachment)
+
+        if len(batched_document) > 0:
+            async for mapped_document, mapped_attachment in self.map_permission_with_document(
+                batched_document=batched_document, account_id=account_id
+            ):
+                yield self.document_tuple(
+                    document=mapped_document,
+                    attachment=mapped_attachment,
+                    folder_id=folder_id,
+                )
+            batched_document = {}
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch dropbox objects in async manner
@@ -1065,55 +1159,23 @@ class DropboxDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
 
-        def document_tuple(document, attachment, folder_id=None):
-            if document.get("type") == FILE:
-                if document.get("url"):
-                    return document, partial(
-                        self.get_content,
-                        attachment=attachment,
-                        is_shared=True,
-                        folder_id=folder_id,
-                    )
-                else:
-                    return document, partial(
-                        self.get_content, attachment=attachment, folder_id=folder_id
-                    )
-            else:
-                return document, None
-
         if self._dls_enabled():
             account_id, member_id = await self.get_account_details()
             self.dropbox_client.member_id = member_id
-
             async for folder_id in self.get_team_folder_id():
-                async for document, attachment in self._fetch_files_folders(
-                    path=self.dropbox_client.path, folder_id=folder_id
+                async for mapped_document in self.add_document_to_list(
+                    func=self._fetch_files_folders,
+                    account_id=account_id,
+                    folder_id=folder_id,
                 ):
-                    permissions = await self.get_permission_list(
-                        item_type=document.get("type"),
-                        item=attachment,
-                        account_id=account_id,
-                    )
-                    yield document_tuple(
-                        document=self._decorate_with_access_control(
-                            document, permissions
-                        ),
-                        attachment=attachment,
-                        folder_id=folder_id,
-                    )
-
-                async for document, attachment in self._fetch_shared_files():
-                    permissions = await self.get_permission_list(
-                        item_type=document.get("type"),
-                        item=attachment,
-                        account_id=account_id,
-                    )
-                    yield document_tuple(
-                        document=self._decorate_with_access_control(
-                            document, permissions
-                        ),
-                        attachment=attachment,
-                    )
+                    yield mapped_document
+                async for mapped_document in self.add_document_to_list(
+                    func=self._fetch_shared_files,
+                    account_id=account_id,
+                    folder_id=folder_id,
+                    is_shared=True,
+                ):
+                    yield mapped_document
 
         elif filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
@@ -1121,12 +1183,12 @@ class DropboxDataSource(BaseDataSource):
                 self._logger.debug(f"Fetching files using advanced sync rule: {rule}")
 
                 async for document, attachment in self.advanced_sync(rule=rule):
-                    yield document_tuple(document=document, attachment=attachment)
+                    yield self.document_tuple(document=document, attachment=attachment)
         else:
             async for document, attachment in self._fetch_files_folders(
                 path=self.dropbox_client.path
             ):
-                yield document_tuple(document=document, attachment=attachment)
+                yield self.document_tuple(document=document, attachment=attachment)
 
             async for document, attachment in self._fetch_shared_files():
-                yield document_tuple(document=document, attachment=attachment)
+                yield self.document_tuple(document=document, attachment=attachment)

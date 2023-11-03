@@ -133,6 +133,34 @@ MOCK_LIST_FILE_FOLDER_PERMISSION = {
     "has_more": True,
 }
 
+MOCK_LIST_FILE_BATCHING_PERMISSION = [
+    {
+        "file": 1,
+        "result": {
+            ".tag": "result",
+            "members": {
+                "users": [],
+                "groups": [
+                    {
+                        "group": {
+                            "group_id": "g:2f1b9ae8edc5261b00000000000000fe",
+                            "member_count": 2,
+                        }
+                    },
+                    {
+                        "group": {
+                            "group_id": "g:2f1b9ae8edc5261b0000000000000003",
+                            "member_count": 3,
+                        }
+                    },
+                ],
+                "invitees": [],
+            },
+            "member_count": 2,
+        },
+    }
+]
+
 MOCK_LIST_FILE_FOLDER_PERMISSION_CONTINUE = {
     "groups": [
         {
@@ -247,9 +275,7 @@ EXPECTED_FILE_PERMISSION = [
     "user_id:dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
     "email:jessica@example.com",
     "group:g:e2db7665347abcd600000000001a2b3c",
-    "user_id:dbid:678",
-    "email:dummy@example.com",
-    "group:g:123",
+    "user_id:456",
 ]
 
 MOCK_SHARED_FILES = {
@@ -297,6 +323,21 @@ MOCK_RECEIVED_FILE_METADATA_2 = {
     "preview_type": "text",
     "url": "https://www.dropbox.com/scl/fi/a1xtoxyu0ux73pd7e77ul/index2.py?dl=0",
 }
+
+EXPECTED_DOCUMENT_TUPLE = [
+    {
+        "_id": "id:2",
+        "type": "File",
+        "name": "index.py",
+        "file_path": "/test/dummy folder/index.py",
+        "size": 200,
+        "_timestamp": "2023-01-01T06:06:06Z",
+        "_allow_access_control": [
+            "user_id:dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+            "user_id:dbid:123",
+        ],
+    }
+]
 
 EXPECTED_SHARED_FILES = [
     {
@@ -459,17 +500,52 @@ EXPECTED_GET_DOCS_WITH_DLS = [
         "file_path": "/test/dummy folder/index.py",
         "size": 200,
         "_timestamp": "2023-01-01T06:06:06Z",
-        "_allow_access_control": ["user:123"],
-    },
+        "_allow_access_control": [
+            "user_id:dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+            "user_id:dbid:123",
+        ],
+    }
+]
+
+FORMATTED_DOCUMENT = {
+    "_id": "id:2",
+    "type": "File",
+    "name": "index.py",
+    "file_path": "/test/dummy folder/index.py",
+    "size": 200,
+    "_timestamp": "2023-01-01T06:06:06Z",
+    "_allow_access_control": [
+        "user_id:dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+        "user_id:dbid:123",
+    ],
+}
+
+BATCH_RESPONSE = [
     {
-        "_id": "id:1",
-        "type": "Folder",
-        "name": "dummy folder",
-        "file_path": "/test/dummy folder",
-        "size": 0,
-        "_timestamp": "2023-01-01T06:06:06+00:00",
-        "_allow_access_control": ["group:456"],
-    },
+        "file": "123",
+        "result": {
+            ".tag": "result",
+            "members": {
+                "users": [
+                    {
+                        "access_type": {".tag": "owner"},
+                        "permissions": [],
+                        "platform_type": {".tag": "unknown"},
+                        "time_last_seen": "2016-01-20T00:00:00Z",
+                        "user": {
+                            "account_id": "dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+                            "display_name": "Robert Smith",
+                            "email": "bob@example.com",
+                            "team_member_id": "dbmid:abcd1234",
+                        },
+                    }
+                ],
+                "groups": [],
+                "invitees": [],
+            },
+            "member_count": 1,
+        },
+    }
 ]
 
 
@@ -933,6 +1009,27 @@ async def test_get_content_when_is_downloadable_is_true_with_extraction_service(
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-01T06:06:06")
+async def test_fetch_files_folders():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client.path = "/"
+
+        actual_response = []
+        with patch.object(
+            source.dropbox_client,
+            "api_call",
+            side_effect=[
+                AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS, status=200)]),
+                AsyncIterator([JSONAsyncMock(MOCK_FILES_FOLDERS_CONTINUE, status=200)]),
+            ],
+        ):
+            async for document, _ in source._fetch_files_folders("/", folder_id="123"):
+                actual_response.append(document)
+        assert actual_response == EXPECTED_FILES_FOLDERS
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-01T06:06:06")
 async def test_fetch_shared_files():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -1286,28 +1383,16 @@ async def test_get_docs_for_dls():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
-        source.get_content = Mock(return_value=EXPECTED_CONTENT)
-        source._fetch_files_folders = Mock(
-            return_value=AsyncIterator([(EXPECTED_FILES_FOLDERS[1], {"id": 123})])
-        )
-        source._fetch_shared_files = Mock(
-            return_value=AsyncIterator([(EXPECTED_FILES_FOLDERS[0], {"id": 456})])
-        )
-        source.get_file_permission = Mock(
-            return_value=create_fake_coroutine(["user:123"])
-        )
-        source.get_folder_permission = Mock(
-            return_value=create_fake_coroutine(["group:456"])
+        source.add_document_to_list = Mock(
+            return_value=AsyncIterator([(FORMATTED_DOCUMENT, None)])
         )
         source.get_account_details = Mock(
             return_value=create_fake_coroutine(["dbid:123", "dbmid:123-456"])
         )
         source.get_team_folder_id = Mock(return_value=AsyncIterator(["dbid:123"]))
-
         documents = []
         async for item, _ in source.get_docs():
             documents.append(item)
-
         assert documents == EXPECTED_GET_DOCS_WITH_DLS
 
 
@@ -1325,3 +1410,54 @@ async def test_remote_validation_with_dls():
             json=MOCK_CHECK_PATH, status=200
         )
         await source._remote_validation()
+
+
+@pytest.mark.asyncio
+async def test_add_document_to_list():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.include_inherited_users_and_groups = True
+        source._fetch_files_folders = Mock(
+            return_value=AsyncIterator(
+                [
+                    (
+                        FORMATTED_DOCUMENT,
+                        {"size": 1000000000000, "id": 1, "name": "abc.png"},
+                    )
+                ]
+            )
+        )
+        source.get_permission_list = Mock(
+            return_value=create_fake_coroutine(["dbid:123", "dbmid:123-456"])
+        )
+        documents = []
+        async for item, _ in source.add_document_to_list(
+            func=source._fetch_files_folders, account_id=1, folder_id=2
+        ):
+            documents.append(item)
+        assert documents == EXPECTED_DOCUMENT_TUPLE
+
+
+@pytest.mark.asyncio
+async def test_add_document_to_list_with_exclude_inherited_users_and_groups():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source._fetch_files_folders = Mock(
+            return_value=AsyncIterator(
+                [
+                    (
+                        FORMATTED_DOCUMENT,
+                        {"size": 1000000000000, "id": 1, "name": "abc.png"},
+                    )
+                ]
+            )
+        )
+        source.dropbox_client.list_file_permission_with_batching = Mock(
+            return_value=AsyncIterator([MOCK_LIST_FILE_BATCHING_PERMISSION])
+        )
+        documents = []
+        async for item, _ in source.add_document_to_list(
+            func=source._fetch_files_folders, account_id=1, folder_id=2
+        ):
+            documents.append(item)
+        assert documents == EXPECTED_DOCUMENT_TUPLE
