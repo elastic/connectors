@@ -2379,6 +2379,7 @@ class TestSharepointOnlineDataSource:
         assert len([doc for doc in docs if doc["object_type"] == "drive_item"]) == sum(len(i) for i in self.drive_items_delta)
         assert len([doc for doc in docs if doc["object_type"] == "site_page"]) == len(self.site_pages)
         assert len([doc for doc in docs if doc["object_type"] == "site_list"]) == len(self.site_lists)
+        # -2 because one item is too old (2 months ago), one item is Web Template Extensions and is always ignored
         assert len([doc for doc in docs if doc["object_type"] == "list_item"]) == len(self.site_list_items) - 2
         assert len([doc for doc in docs if doc["object_type"] == "list_item_attachment"]) == len(self.site_list_item_attachments)
         assert sync_cursor["cursor_timestamp"] == self.today  # cursor was updated
