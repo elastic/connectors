@@ -936,7 +936,9 @@ async def test_get_event_loop_uvloop_when_runtime_exception():
         returned_loop = get_event_loop()
 
         assert loop == returned_loop
-        returned_loop.close()
+        # We need to close the loop here because we've created one.
+        # Previous tests operate on already opened loop, thus it's closed
+        # by the test automatically
         loop.close()
 
 
@@ -948,10 +950,7 @@ async def test_get_event_loop_uvloop_when_runtime_exception_and_loop_policy_has_
         "asyncio.get_event_loop_policy", return_value=event_loop_policy_mock
     ):
         loop = get_event_loop()
-
-        assert True
-
-        loop.close()
+        assert loop is not None
 
 
 @pytest.mark.parametrize(
