@@ -145,7 +145,6 @@ class Sink:
             self._logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
-        time.time()
         res = await _bulk_api_call()
         if res.get("errors"):
             for item in res["items"]:
