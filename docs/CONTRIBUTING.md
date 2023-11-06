@@ -70,7 +70,7 @@ If you want to add a new connector source, following requirements are mandatory 
 
 Before investing time developing a connector, you should create an issue and reach out to our team for initial feedback on the connector and the libraries it uses.
 
-## Enhancements
+### Enhancements
 
 Enhancements that can be done after your initial contribution:
 
