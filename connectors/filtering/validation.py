@@ -13,12 +13,6 @@ from connectors.logger import logger
 from connectors.utils import Format
 
 
-class ValidationTarget(Enum):
-    DRAFT = "draft"
-    ACTIVE = "active"
-    UNSET = None
-
-
 class InvalidFilteringError(Exception):
     pass
 
