@@ -9,12 +9,12 @@ import os
 import signal
 from io import StringIO
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from connectors import __version__
-from connectors.cli import get_event_loop, main, run
+from connectors.cli import main, run
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
