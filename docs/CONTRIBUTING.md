@@ -9,10 +9,11 @@ Each time you make a valid contribution, you’ll earn points that increase your
 - [Reporting issues](#reporting-issues)
 - [Getting help](#getting-help)
 - [Types of contributions](#types-of-contributions)
-  - [Initial contribution](#initial-contribution)
+  - [Customize a connector](#customize-a-connector)
+  - [Add new connector](#add-new-connector)
   - [Enhancements](#enhancements)
-  - [Other](#other)
 - [Contribution Checklist](#contribution-checklist)
+  - [Acceptance criteria](#acceptance-criteria)
   - [Correct code organization](#correct-codefile-organization)
   - [Proper async usage](#proper-async-usage)
   - [Log verbosity](#log-verbosity)
@@ -41,33 +42,43 @@ Be sure to mention that you're using Connectors and also let us know what servic
 You can also find us in the `#enterprise-search` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
 
 ## Types of contributions
-### Initial contribution
+
+### Customize a connector
+
+To customize an _existing_ connector, follow these steps:
+
+1. Customize the source file for your data source from [connectors/sources](../connectors/sources)
+2. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
+3. Declare your dependencies in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
+4. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
+5. When possible, provide a docker image that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
+6. Your test backend needs to return more than 10k documents as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly. 
+
+### Add new connector
 
 If you want to add a new connector source, following requirements are mandatory for the initial patch:
 
-1. add a module or a directory in [connectors/sources](../connectors/sources)
-2. implement a class that implements **all methods** described in `connectors.source.BaseDataSource`
-3. add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
-4. **declare your connector** in [config.yml](../config.yml) in the `sources` section
-5. **declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies
-6. For each dependency you are adding, including indirect dependencies, list all the licences and provide the list in your patch.
-7. make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop
-8. when possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
-9. the **test backend** needs to return more than **10k documents** due to 10k being a default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help testing connector more deeply
+1. Add a module or a directory in [connectors/sources](../connectors/sources)
+2. Implement a class that implements **all methods** described in `connectors.source.BaseDataSource`
+3. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
+4. **Declare your connector** in [config.yml](../config.yml) in the `sources` section
+5. **Declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
+6. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
+7. Make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop.
+8. When possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
+9. Your **test backend** needs to return more than **10k documents** as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly.
 
-Before you start spending some time developing a connector, you should add an issue and reach out, to get an initial feedback on the
-connector and what libraries it will use.
+Before investing time developing a connector, you should create an issue and reach out to our team for initial feedback on the connector and the libraries it uses.
 
-### Enhancements
+## Enhancements
 
-Enhancements that can be done after initial contribution:
+Enhancements that can be done after your initial contribution:
 
-1. the backend meets the performance requirements if we provide some (memory usage, how fast it syncs 10k docs, etc.)
-2. update README for the connector client
-3. small functional improvements for connector clients
+1. Ensure the backend meets performance requirements we might request (memory usage, how fast it syncs 10k docs, etc.)
+2. Update the README for the connector client
+3. Small functional improvements for connector clients
 
-
-### Other
+## Contribution Checklist
 
 To make sure we're building great connectors, we will be pretty strict on this checklist, and we will not allow connectors to change the framework code itself.
 
@@ -75,10 +86,8 @@ Any patch with changes outside [connectors/sources](../connectors/sources) or [c
 
 If you need changes in the framework, or you are not sure about how to do something, reach out to the [Ingestion team](https://github.com/orgs/elastic/teams/ingestion-team/members) and/or file an issue.
 
-
-## Contribution Checklist
-
 ### Correct code/file organization
+
 Any contribution should follow established patterns of code organization within the repository.
 For example, a new concrete extension of `BaseDataSource` should live in [connectors/sources](../connectors/sources), and its tests should live in [tests/sources](../tests/sources).
 If that new data source is named `FooDataSource` the files should be `foo.py` and `test_foo.py`, respectively.
