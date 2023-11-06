@@ -8,10 +8,9 @@ Each time you make a valid contribution, you’ll earn points that increase your
 
 - [Reporting issues](#reporting-issues)
 - [Getting help](#getting-help)
-- [Types of contributions](#types-of-contributions)
-  - [Customize a connector](#customize-a-connector)
-  - [Add new connector](#add-new-connector)
-  - [Enhancements](#enhancements)
+- [Customize a connector](#customize-a-connector)
+- [Add new connector](#add-new-connector)
+- [Enhancements](#enhancements)
 - [Contribution Checklist](#contribution-checklist)
   - [Acceptance criteria](#acceptance-criteria)
   - [Correct code organization](#correct-codefile-organization)
@@ -41,9 +40,7 @@ Try posting your question to the [Elastic discuss forums](https://discuss.elasti
 Be sure to mention that you're using Connectors and also let us know what service type you're trying to use, and any errors/issues you are encountering.
 You can also find us in the `#enterprise-search` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
 
-## Types of contributions
-
-### Customize a connector
+## Customize a connector
 
 To customize an _existing_ connector, follow these steps:
 
@@ -51,26 +48,25 @@ To customize an _existing_ connector, follow these steps:
 2. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
 3. Declare your dependencies in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
 4. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
-5. When possible, provide a docker image that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
-6. Your test backend needs to return more than 10k documents as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly. 
+5. Your test backend needs to return more than 10k documents as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly. 
 
-### Add new connector
+## Add new connector
 
-If you want to add a new connector source, following requirements are mandatory for the initial patch:
+> 👩🏻‍🤝‍👨🏿 _Before investing time in developing a connector, create an issue and reach out to our team for initial feedback on the connector and the libraries it uses!_
+
+If you want to add a new connector source, the following requirements are mandatory for the initial patch:
 
 1. Add a module or a directory in [connectors/sources](../connectors/sources)
-2. Implement a class that implements **all methods** described in `connectors.source.BaseDataSource`
+2. Implement a class that implements the required methods described in `connectors.source.BaseDataSource`
 3. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
-4. **Declare your connector** in [config.yml](../config.yml) in the `sources` section
+4. **Declare your connector** in [config.py](../connectors/config.py) in the `sources` section of `_default_config()`
 5. **Declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
 6. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
-7. Make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop.
+7. Make sure you use an **async lib** for your source. See our [async guideliness](DEVELOPING.md). If not possible, make sure you don't block the loop.
 8. When possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
 9. Your **test backend** needs to return more than **10k documents** as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly.
 
-Before investing time developing a connector, you should create an issue and reach out to our team for initial feedback on the connector and the libraries it uses.
-
-### Enhancements
+## Enhancements
 
 Enhancements that can be done after your initial contribution:
 
