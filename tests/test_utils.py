@@ -36,7 +36,6 @@ from connectors.utils import (
     evaluate_timedelta,
     filter_nested_dict_by_keys,
     get_base64_value,
-    get_event_loop,
     get_pem_format,
     get_size,
     has_duplicates,
@@ -385,43 +384,27 @@ def patch_file_ops():
                 yield
 
 
-@pytest.mark.parametrize("converter", ["system"])
-def test_convert_to_b64_newer_macos(converter, patch_file_ops):
-    with patch("platform.system", return_value="Darwin"):
-        with patch("platform.mac_ver", return_value=["13.0"]):
-            with patch("subprocess.check_call") as subprocess_mock:
-                with temp_file(converter) as (source, content):
-                    target = f"{source}.b64"
+@pytest.mark.parametrize(
+    "system,mac_ver,cmd_template",
+    [
+        ("Darwin", "13.0", "/usr/bin/base64 -i {source} -o {target}"),
+        ("Darwin", "12.0", "/usr/bin/base64 {source} > {target}"),
+        ("Ubuntu", None, "/usr/bin/base64 -w 0 {source} > {target}"),
+    ],
+)
+def test_convert_to_b64_newer_macos(system, mac_ver, cmd_template, patch_file_ops):
+    with (
+        patch("platform.system", return_value=system),
+        patch("platform.mac_ver", return_value=[mac_ver]),
+        patch("subprocess.check_call") as subprocess_mock,
+    ):
+        with temp_file("system") as (source, content):
+            target = f"{source}.b64"
 
-                    convert_to_b64(source, target, overwrite=False)
-                    expected_cmd = f"/usr/bin/base64 -i {source} -o {target}"
-                    subprocess_mock.assert_called_with(expected_cmd, shell=True)
+            convert_to_b64(source, target, overwrite=False)
 
-
-@pytest.mark.parametrize("converter", ["system"])
-def test_convert_to_b64_older_macos(converter, patch_file_ops):
-    with patch("platform.system", return_value="Darwin"):
-        with patch("platform.mac_ver", return_value=["12.0"]):
-            with patch("subprocess.check_call") as subprocess_mock:
-                with temp_file(converter) as (source, content):
-                    target = f"{source}.b64"
-
-                    convert_to_b64(source, target, overwrite=False)
-                    expected_cmd = f"/usr/bin/base64 {source} > {target}"
-                    subprocess_mock.assert_called_with(expected_cmd, shell=True)
-
-
-@pytest.mark.parametrize("converter", ["system"])
-def test_convert_to_b64_unix(converter, patch_file_ops):
-    with patch("platform.system", return_value="Ubuntu"):
-        with patch("platform.mac_ver", return_value=["20.04LTS"]):
-            with patch("subprocess.check_call") as subprocess_mock:
-                with temp_file(converter) as (source, content):
-                    target = f"{source}.b64"
-
-                    convert_to_b64(source, target, overwrite=False)
-                    expected_cmd = f"/usr/bin/base64 -w 0 {source} > {target}"
-                    subprocess_mock.assert_called_with(expected_cmd, shell=True)
+            expected_cmd = cmd_template.format(source=source, target=target)
+            subprocess_mock.assert_called_with(expected_cmd, shell=True)
 
 
 class CustomException(Exception):
@@ -909,48 +892,6 @@ def test_validate_email_address(email_address, is_valid):
 )
 def test_shorten_str(original, shorten_by, shortened):
     assert shorten_str(original, shorten_by) == shortened
-
-
-@pytest.mark.asyncio
-async def test_get_event_loop_uvloop():
-    with patch("asyncio.set_event_loop_policy") as set_event_loop_policy_mock:
-        get_event_loop(uvloop=True)
-        set_event_loop_policy_mock.assert_called()
-
-
-@pytest.mark.asyncio
-async def test_get_event_loop_uvloop_when_exception():
-    with patch("asyncio.set_event_loop_policy", side_effect=Exception("welp")):
-        # Event if there's an exception, the loop is created
-        get_event_loop(uvloop=True)
-        assert True
-
-
-@pytest.mark.asyncio
-async def test_get_event_loop_uvloop_when_runtime_exception():
-    with patch("asyncio.get_running_loop", side_effect=RuntimeError("welp")):
-        # If loop is not created beforehands, the test will fail randomly
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        returned_loop = get_event_loop()
-
-        assert loop == returned_loop
-        # We need to close the loop here because we've created one.
-        # Previous tests operate on already opened loop, thus it's closed
-        # by the test automatically
-        loop.close()
-
-
-@pytest.mark.asyncio
-async def test_get_event_loop_uvloop_when_runtime_exception_and_loop_policy_has_no_loop():
-    event_loop_policy_mock = Mock()
-    event_loop_policy_mock.get_event_loop = Mock(return_value=None)
-    with patch("asyncio.get_running_loop", side_effect=RuntimeError("welp")), patch(
-        "asyncio.get_event_loop_policy", return_value=event_loop_policy_mock
-    ):
-        loop = get_event_loop()
-        assert loop is not None
 
 
 @pytest.mark.parametrize(

@@ -9,12 +9,12 @@ import os
 import signal
 from io import StringIO
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from connectors import __version__
-from connectors.cli import main, run
+from connectors.cli import get_event_loop, main, run
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
@@ -101,3 +101,45 @@ def test_main_with_invalid_configuration(load_config, set_logger):
         run(args)
 
     set_logger.assert_called_with(logging.INFO, filebeat=True)
+
+
+@pytest.mark.asyncio
+async def test_get_event_loop_uvloop():
+    with patch("asyncio.set_event_loop_policy") as set_event_loop_policy_mock:
+        get_event_loop(uvloop=True)
+        set_event_loop_policy_mock.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_get_event_loop_uvloop_when_exception():
+    with patch("asyncio.set_event_loop_policy", side_effect=Exception("welp")):
+        # Event if there's an exception, the loop is created
+        get_event_loop(uvloop=True)
+        assert True
+
+
+@pytest.mark.asyncio
+async def test_get_event_loop_uvloop_when_runtime_exception():
+    with patch("asyncio.get_running_loop", side_effect=RuntimeError("welp")):
+        # If loop is not created beforehands, the test will fail randomly
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        returned_loop = get_event_loop()
+
+        assert loop == returned_loop
+        # We need to close the loop here because we've created one.
+        # Previous tests operate on already opened loop, thus it's closed
+        # by the test automatically
+        loop.close()
+
+
+@pytest.mark.asyncio
+async def test_get_event_loop_uvloop_when_runtime_exception_and_loop_policy_has_no_loop():
+    event_loop_policy_mock = Mock()
+    event_loop_policy_mock.get_event_loop = Mock(return_value=None)
+    with patch("asyncio.get_running_loop", side_effect=RuntimeError("welp")), patch(
+        "asyncio.get_event_loop_policy", return_value=event_loop_policy_mock
+    ):
+        loop = get_event_loop()
+        assert loop is not None
