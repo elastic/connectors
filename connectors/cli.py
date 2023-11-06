@@ -25,7 +25,6 @@ from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.source import get_source_klass, get_source_klasses
-from connectors.utils import get_event_loop
 
 __all__ = ["main"]
 
@@ -126,6 +125,28 @@ async def _start_service(actions, config, loop):
             return await multiservice.run()
     else:
         return await multiservice.run()
+
+
+def get_event_loop(uvloop=False):
+    if uvloop:
+        # activate uvloop if lib is present
+        try:
+            import uvloop
+
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        except Exception:
+            logger.warning(
+                "Unable to enable uvloop: {e}. Running with default event loop"
+            )
+            pass
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        if loop is None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    return loop
 
 
 def run(args):
