@@ -1944,7 +1944,7 @@ class TestSharepointOnlineDataSource:
                 "Id": "4",
                 "odata.id": "11",
                 "GUID": "thats-not-a-guid",
-                "Modified": "2023-10-04T08:58:33Z",
+                "Modified": self.day_ago,
             }
         ]
 
