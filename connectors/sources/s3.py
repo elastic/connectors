@@ -8,7 +8,6 @@ import logging
 import os
 from contextlib import AsyncExitStack
 from functools import partial
-from hashlib import md5
 
 import aioboto3
 from aiobotocore.config import AioConfig
@@ -17,6 +16,7 @@ from botocore.exceptions import ClientError
 
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
+from connectors.utils import hash_id
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
@@ -190,7 +190,7 @@ class S3DataSource(BaseDataSource):
             document: Modified document.
         """
 
-        doc_id = md5(f"{bucket_name}/{bucket_object.key}".encode("utf8")).hexdigest()
+        doc_id = hash_id(f"{bucket_name}/{bucket_object.key}")
         owner = await bucket_object.owner
         document = {
             "_id": doc_id,
