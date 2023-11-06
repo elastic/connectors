@@ -28,6 +28,7 @@ from connectors.utils import (
     InvalidIndexNameError,
     MemQueue,
     RetryStrategy,
+    UnknownRetryStrategyError,
     base64url_to_base64,
     convert_to_b64,
     decode_base64_value,
@@ -46,6 +47,7 @@ from connectors.utils import (
     retryable,
     shorten_str,
     ssl_context,
+    time_to_sleep_between_retries,
     truncate_id,
     url_encode,
     validate_email_address,
@@ -372,6 +374,37 @@ def test_convert_to_b64_no_overwrite(converter):
         finally:
             if os.path.exists(target):
                 os.remove(target)
+
+
+@pytest.fixture
+def patch_file_ops():
+    with patch("connectors.utils.open"):
+        with patch("os.remove"):
+            with patch("os.rename"):
+                yield
+
+
+@pytest.mark.parametrize(
+    "system,mac_ver,cmd_template",
+    [
+        ("Darwin", "13.0", "/usr/bin/base64 -i {source} -o {target}"),
+        ("Darwin", "12.0", "/usr/bin/base64 {source} > {target}"),
+        ("Ubuntu", None, "/usr/bin/base64 -w 0 {source} > {target}"),
+    ],
+)
+def test_convert_to_b64_newer_macos(system, mac_ver, cmd_template, patch_file_ops):
+    with (
+        patch("platform.system", return_value=system),
+        patch("platform.mac_ver", return_value=[mac_ver]),
+        patch("subprocess.check_call") as subprocess_mock,
+    ):
+        with temp_file("system") as (source, content):
+            target = f"{source}.b64"
+
+            convert_to_b64(source, target, overwrite=False)
+
+            expected_cmd = cmd_template.format(source=source, target=target)
+            subprocess_mock.assert_called_with(expected_cmd, shell=True)
 
 
 class CustomException(Exception):
@@ -752,6 +785,33 @@ def test_html_to_text_with_weird_html():
     assert "text" in text
 
 
+def test_html_to_text_with_none():
+    assert html_to_text(None) is None
+
+
+def test_html_to_text_with_lxml_exception():
+    # Here we're just mocking it in such a way, that
+    # using BeautifulSoup(html, "lxml") raises an error to emulate the fact
+    # that lxml is not available.
+    def _init_func(html, parser_type=None, features=None):
+        if parser_type == "lxml":
+            msg = "LXML not available"
+            raise Exception(msg)
+        else:
+            parser_mock = Mock()
+            return parser_mock
+
+    with patch("connectors.utils.BeautifulSoup") as beautiful_soup_patch:
+        beautiful_soup_patch.side_effect = _init_func
+        html = "lala <br/>"
+
+        # assert it does not throw
+        html_to_text(html)
+
+        # and assert is uses default parser
+        beautiful_soup_patch.assert_called_with(html, features="html.parser")
+
+
 def batch_size(value):
     """Used for readability purposes in parametrized tests."""
     return value
@@ -832,3 +892,26 @@ def test_validate_email_address(email_address, is_valid):
 )
 def test_shorten_str(original, shorten_by, shortened):
     assert shorten_str(original, shorten_by) == shortened
+
+
+@pytest.mark.parametrize(
+    "strategy, interval, retry, expected_sleep",
+    [
+        (RetryStrategy.CONSTANT, 10, 2, 10),  # Constant 10 seconds
+        (RetryStrategy.LINEAR_BACKOFF, 10, 0, 0),  # 10 * 0 = 0
+        (RetryStrategy.LINEAR_BACKOFF, 10, 1, 10),  # 10 * 1 = 10
+        (RetryStrategy.LINEAR_BACKOFF, 10, 2, 20),  # 10 * 2 = 20
+        (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 0, 1),  # 10 ^ 0 = 1
+        (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 1, 10),  # 10 ^ 1 = 10
+        (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 2, 100),  # 10 ^ 2 = 100
+    ],
+)
+async def test_time_to_sleep_between_retries(strategy, interval, retry, expected_sleep):
+    assert time_to_sleep_between_retries(strategy, interval, retry) == expected_sleep
+
+
+async def test_time_to_sleep_between_retries_invalid_strategy():
+    with pytest.raises(UnknownRetryStrategyError) as e:
+        time_to_sleep_between_retries("lalala", 1, 1)
+
+    assert e is not None
