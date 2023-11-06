@@ -330,7 +330,7 @@ Even passwords in basic-auth _should_ be rotated on occasion.
 Connectors should be designed to accommodate this.
 Find out what types of errors the 3rd-party will raise if invalid or expired credentials are submitted, and be sure to recognize these types of errors for what they are.
 Handling these errors so that they display in Kibana like, `"Your configured credentials have expired, please re-configure"` is significantly preferable over, `"Sync failed, see logs for details: Error: 401 Unauthorized"`.
-Even better than that is to not issue an error at all, but to instead automatically refresh the credentails and retry.
+Even better than that is to not issue an error at all, but to instead automatically refresh the credentials and retry.
 
 Sharepoint Online, using the OAuth2 Client Credentials Flow, expects the `access_token` to frequently expire.
 When it does, the relevant exception can be caught, analyzed to ensure that the root cause is an expired access_token, the token can be refreshed using the configured credentials, and then any requests that have failed in the mean time can be retried.
