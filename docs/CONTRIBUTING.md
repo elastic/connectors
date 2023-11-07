@@ -8,9 +8,9 @@ Each time you make a valid contribution, you’ll earn points that increase your
 
 - [Reporting issues](#reporting-issues)
 - [Getting help](#getting-help)
-- [Customize a connector](#customize-a-connector)
-- [Add new connector](#add-new-connector)
-- [Enhancements](#enhancements)
+- [Types of contribution](#types-of-contribution)
+  - [Add new connector](#add-new-connector)
+  - [Enhancements](#enhancements)
 - [Contribution Checklist](#contribution-checklist)
   - [Acceptance criteria](#acceptance-criteria)
   - [Correct code organization](#correct-codefile-organization)
@@ -32,47 +32,33 @@ Each time you make a valid contribution, you’ll earn points that increase your
   - [Don't add to the PR as a reviewer](#dont-add-to-the-pr-as-a-reviewer)
 
 ## Reporting issues
+
 If something is not working as expected, please open an [issue](https://github.com/elastic/connectors/issues/new).
 
 ## Getting help
+
 The Ingestion team at Elastic maintains this repository and is happy to help.
 Try posting your question to the [Elastic discuss forums](https://discuss.elastic.co/c/enterprise-search/84).
 Be sure to mention that you're using Connectors and also let us know what service type you're trying to use, and any errors/issues you are encountering.
 You can also find us in the `#enterprise-search` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
 
-## Customize a connector
+## Types of contribution
 
-To customize an _existing_ connector, follow these steps:
+### Add new connector
 
-1. Customize the source file for your data source from [connectors/sources](../connectors/sources)
-2. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**. Test coverage is run as part of [unit tests](https://github.com/elastic/connectors/blob/main/docs/DEVELOPING.md#testing-the-connector). Look for your file at the end of the console output.
-3. Declare your dependencies in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
-4. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
-5. Your test backend needs to return more than 10k documents as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly. 
+👩🏻‍🤝‍👨🏿 Before investing time in developing a connector, [create an issue](https://github.com/elastic/connectors/issues/new/choose) and reach out to our team for initial feedback on the connector and the libraries it uses!
 
-## Add new connector
+To add a new connector see our [developing guide](./DEVELOPING.md#implementing-a-new-source).
 
-> 👩🏻‍🤝‍👨🏿 _Before investing time in developing a connector, create an issue and reach out to our team for initial feedback on the connector and the libraries it uses!_
-
-If you want to add a new connector source, the following requirements are mandatory for the initial patch:
-
-1. Add a module or a directory in [connectors/sources](../connectors/sources)
-2. Implement a class that implements the required methods described in `connectors.source.BaseDataSource`
-3. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**. Test coverage is run as part of [unit tests](https://github.com/elastic/connectors/blob/main/docs/DEVELOPING.md#testing-the-connector). Look for your file at the end of the console output.
-4. **Declare your connector** in [config.py](../connectors/config.py) in the `sources` section of `_default_config()`
-5. **Declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
-6. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
-7. Make sure you use an **async lib** for your source. See our [async guidelines](DEVELOPING.md). If not possible, make sure you don't block the loop.
-8. When possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
-9. Your **test backend** needs to return more than **10k documents** as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly.
-
-## Enhancements
+### Enhancements
 
 Enhancements that can be done after your initial contribution:
 
 1. Ensure the backend meets performance requirements we might request (memory usage, how fast it syncs 10k docs, etc.)
 2. Update the README for the connector client
 3. Small functional improvements for connector clients
+
+> ℹ️ Use-case specific customizations (as opposed to generic enhancements) will not be accepted as contributions.
 
 ## Contribution Checklist
 
@@ -126,7 +112,7 @@ You can run the linter locally with `make lint` to ensure that your changes do n
 Tests not only verify and demonstrate that a new feature does what it is supposed to, but they also protect the codebase from unintentional future regressions.
 For this reason, it is important to both add tests when contributing new code, and to ensure that all tests (old and new) are passing.
 
-Our goal is to maintain 90% test coverage for each connector.
+Our goal is to maintain 92% test coverage for each connector.
 
 You can run the tests locally with `make test`.
 
