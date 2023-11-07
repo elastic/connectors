@@ -62,6 +62,8 @@ Enhancements that can be done after your initial contribution:
 
 ## Contribution Checklist
 
+### Acceptance criteria
+
 To make sure we're building great connectors, we will be pretty strict on this checklist, and we will not allow connectors to change the framework code itself.
 
 Any patch with changes outside [connectors/sources](../connectors/sources) or [config.yml](../config.yml) and [requirements.txt](../requirements.txt) will be rejected.
