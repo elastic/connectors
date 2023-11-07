@@ -35,14 +35,6 @@ MAX_POOL_SIZE = 10
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
-DEFAULT_SSL_ENABLED = False
-
-
-def parse_tables_string_to_list_of_tables(tables_string):
-    if tables_string is None or len(tables_string) == 0:
-        return []
-
-    return SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN.findall(tables_string)
 
 
 def format_list(list_):

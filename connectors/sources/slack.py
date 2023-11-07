@@ -22,7 +22,6 @@ CURSOR = "cursor"
 RESPONSE_METADATA = "response_metadata"
 NEXT_CURSOR = "next_cursor"
 DEFAULT_RETRY_SECONDS = 3
-DEFAULT_RETRY_SLEEP = 30
 PAGE_SIZE = 200
 USER_ID_PATTERN = re.compile(r"<@([A-Z0-9]+)>")
 
