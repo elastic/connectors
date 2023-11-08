@@ -258,15 +258,18 @@ class DropboxClient:
         else:
             request_headers["Content-Type"] = "application/json"
 
-        if self.member_id and (
-            url_name
-            not in [
-                ENDPOINTS.get(EndpointName.MEMBERS.value),
-                ENDPOINTS.get(EndpointName.MEMBERS_CONTINUE.value),
-                ENDPOINTS.get(EndpointName.AUTHENTICATED_ADMIN.value),
-                ENDPOINTS.get(EndpointName.TEAM_FOLDER_LIST.value),
-                ENDPOINTS.get(EndpointName.TEAM_FOLDER_LIST_CONTINUE.value),
-            ]
+        if (
+            self.member_id
+            and (  # With DLS, needs to pass Dropbox-API-Select-User in headers for using business endpoints
+                url_name
+                not in [
+                    ENDPOINTS.get(EndpointName.MEMBERS.value),
+                    ENDPOINTS.get(EndpointName.MEMBERS_CONTINUE.value),
+                    ENDPOINTS.get(EndpointName.AUTHENTICATED_ADMIN.value),
+                    ENDPOINTS.get(EndpointName.TEAM_FOLDER_LIST.value),
+                    ENDPOINTS.get(EndpointName.TEAM_FOLDER_LIST_CONTINUE.value),
+                ]
+            )
         ):
             request_headers["Dropbox-API-Select-User"] = self.member_id
         if kwargs.get("folder_id"):
