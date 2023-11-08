@@ -72,7 +72,7 @@ else:
 
 
 class EndpointName(Enum):
-    ACCESS_TOKEN = "access_token"
+    ACCESS_TOKEN = "access_token"  # noqa S105
     PING = "ping"
     CHECK_PATH = "check_path"
     FILES_FOLDERS = "files_folders"
@@ -133,10 +133,6 @@ class InvalidRefreshTokenException(Exception):
 
 
 class InvalidPathException(Exception):
-    pass
-
-
-class InvalidDownloadFormatException(Exception):
     pass
 
 
