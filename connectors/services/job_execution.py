@@ -78,6 +78,7 @@ class JobExecutionService(BaseService):
             sync_job=sync_job,
             connector=connector,
             es_config=self._override_es_config(connector),
+            service_config=self.service_config,
         )
         await self.content_syncs.put(sync_job_runner.execute)
 
@@ -93,6 +94,7 @@ class JobExecutionService(BaseService):
             sync_job=sync_job,
             connector=connector,
             es_config=self._override_es_config(connector),
+            service_config=self.service_config,
         )
         await self.access_control_syncs.put(sync_job_runner.execute)
 

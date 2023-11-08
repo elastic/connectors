@@ -481,14 +481,14 @@ async def setup_extractor(
             total_downloads(0),
         ),
         (
-            # doc 1 is present, data source also has doc 1 with the same timestamp -> nothing happens
+            # doc 1 is present, data source also has doc 1 with the same timestamp -> doc 1 is updated
             [DOC_ONE],
             [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            [end_docs_operation()],
-            updated(0),
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
             created(0),
             deleted(0),
             total_downloads(0),
@@ -584,14 +584,14 @@ async def setup_extractor(
             total_downloads(1),
         ),
         (
-            # doc 1 present, data source has doc 1 -> no lazy download if timestamps are the same for the docs
+            # doc 1 present, data source has doc 1 -> no lazy download (only meta update) if timestamps are the same for the docs
             [DOC_ONE],
             [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            [end_docs_operation()],
-            updated(0),
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
             created(0),
             deleted(0),
             total_downloads(0),

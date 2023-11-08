@@ -171,6 +171,23 @@
 #service.log_level: INFO
 #
 #
+##  Whether Full Syncs should skip indexing records where their timestamp has not been updated since the last full sync.
+##    Enabling this behavior may reduce execution time of subsequent Full Syncs, but also prevents all documents from
+##    being synced on each Full Sync.
+##    This can be frustrating if upgrading connector versions, or making changes to ingest pipelines, as your index's
+##    content may only be partially updated.
+#service.enable_full_sync_meta_ts_optimization: false
+#
+#
+##  Whether Full Syncs should skip downloading binary content for records where their timestamp has not been updated
+##    since the last full sync.
+##    Disabling this behavior may increase execution time of subsequent Full Syncs, but also ensures that the full
+##    content of files will always be re-processed on Full Syncs.
+##    By default, only metadata will be consistently re-synced each Full Sync
+##    (see service.enable_full_sync_meta_ts_optimization)
+#service.enable_full_sync_download_ts_optimization: true
+#
+#
 ## ------------------------------- Extraction Service ----------------------------------
 #
 ##  Local extraction service-related configurations.

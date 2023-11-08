@@ -79,6 +79,7 @@ class SyncJobRunner:
         sync_job,
         connector,
         es_config,
+        service_config,
     ):
         self.source_klass = source_klass
         self.data_provider = None
@@ -90,6 +91,7 @@ class SyncJobRunner:
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
         self.running = False
+        self.service_config = service_config
 
     async def execute(self):
         if self.running:
@@ -132,7 +134,9 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.elastic_server = SyncOrchestrator(self.es_config, self.sync_job.logger)
+            self.elastic_server = SyncOrchestrator(
+                self.es_config, self.service_config, self.sync_job.logger
+            )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -214,6 +218,12 @@ class SyncJobRunner:
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
+            optimize_on_meta_timestamp=self.service_config.get(
+                "enable_full_sync_meta_ts_optimization", False
+            ),
+            optimize_on_download_timestamp=self.service_config.get(
+                "enable_full_sync_download_ts_optimization", True
+            ),
         )
 
     async def _sync_done(self, sync_status, sync_error=None):

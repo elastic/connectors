@@ -79,6 +79,8 @@ def _default_config():
             "max_concurrent_access_control_syncs": 1,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
+            "enable_full_sync_meta_ts_optimization": False,
+            "enable_full_sync_download_ts_optimization": True,
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",

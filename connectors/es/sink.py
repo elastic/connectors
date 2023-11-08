@@ -278,6 +278,8 @@ class Extractor:
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
+        optimize_on_meta_timestamp=False,
+        optimize_on_download_timestamp=True,
     ):
         if filter_ is None:
             filter_ = Filter()
@@ -299,6 +301,8 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
+        self.optimize_on_meta_timestamp = optimize_on_meta_timestamp
+        self.optimize_on_download_timestamp = optimize_on_download_timestamp
 
     async def _get_existing_ids(self):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
@@ -431,11 +435,17 @@ class Extractor:
                     if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
                         # cancel the download
                         if (
-                            self.content_extraction_enabled
+                            self.optimize_on_download_timestamp
+                            and self.content_extraction_enabled
                             and lazy_download is not None
                         ):
                             await lazy_download(doit=False)
-                        continue
+                            lazy_download = (
+                                None  # we don't want to execute this again below
+                            )
+
+                        if self.optimize_on_meta_timestamp:
+                            continue
 
                     self.total_docs_updated += 1
                 else:
@@ -444,7 +454,11 @@ class Extractor:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
                 # if we need to call lazy_download we push it in lazy_downloads
-                if self.content_extraction_enabled and lazy_download is not None:
+                if (
+                    self.optimize_on_download_timestamp
+                    and self.content_extraction_enabled
+                    and lazy_download is not None
+                ):
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
@@ -775,6 +789,8 @@ class SyncOrchestrator(ESClient):
         sync_rules_enabled=False,
         content_extraction_enabled=True,
         options=None,
+        optimize_on_meta_timestamp=False,
+        optimize_on_download_timestamp=True,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -819,6 +835,8 @@ class SyncOrchestrator(ESClient):
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
             logger_=self._logger,
+            optimize_on_meta_timestamp=optimize_on_meta_timestamp,
+            optimize_on_download_timestamp=optimize_on_download_timestamp,
         )
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
