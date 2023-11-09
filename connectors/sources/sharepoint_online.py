@@ -49,8 +49,6 @@ SPO_API_MAX_BATCH_SIZE = 20
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
-
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
     logger.warning(
@@ -1095,30 +1093,6 @@ def _prefix_user_id(user_id):
 
 def _prefix_email(email):
     return prefix_identity("email", email)
-
-
-def _postfix_group(group):
-    if group is None:
-        return None
-
-    return f"{group} Members"
-
-
-async def _emails_and_usernames_of_domain_group(
-    domain_group_id, group_identities_generator
-):
-    """Yield emails and/or usernames for a specific domain group.
-    This function yields both to reduce the number of remote calls made to the group owners or group members API.
-
-    Yields:
-        Tuple: tuple of the user's email and the user's username
-
-    """
-    async for identity in group_identities_generator(domain_group_id):
-        email = identity.get("mail")
-        username = identity.get("userPrincipalName")
-
-        yield email, username
 
 
 def _get_login_name(raw_login_name):

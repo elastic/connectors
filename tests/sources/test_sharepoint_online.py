@@ -42,7 +42,6 @@ from connectors.sources.sharepoint_online import (
     SyncCursorEmpty,
     ThrottledError,
     TokenFetchFailed,
-    _emails_and_usernames_of_domain_group,
     _get_login_name,
     _prefix_email,
     _prefix_group,
@@ -3175,9 +3174,6 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
-    @patch(
-        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
-    )
     async def test_decorate_with_access_control(
         self, _dls_enabled, document, access_control, expected_decorated_document
     ):
@@ -3338,40 +3334,6 @@ class TestSharepointOnlineDataSource:
                 user_access_control_docs.append(doc)
 
             assert len(user_access_control_docs) == 2
-
-    @pytest.mark.parametrize(
-        "group_identities_generator, expected_emails_and_usernames",
-        [
-            (AsyncIterator([]), []),
-            (
-                AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                [IDENTITY_MAIL, IDENTITY_USER_PRINCIPAL_NAME],
-            ),
-        ],
-    )
-    @pytest.mark.asyncio
-    async def test_emails_and_usernames_of_domain_group(
-        self,
-        group_identities_generator,
-        expected_emails_and_usernames,
-    ):
-        actual_emails_and_usernames = []
-
-        async for email, username in _emails_and_usernames_of_domain_group(
-            "some id", group_identities_generator
-        ):
-            # ignore None values
-            if email:
-                actual_emails_and_usernames.append(email)
-
-            if username:
-                actual_emails_and_usernames.append(username)
-
-        assert len(actual_emails_and_usernames) == len(expected_emails_and_usernames)
-        assert all(
-            email_or_username in expected_emails_and_usernames
-            for email_or_username in actual_emails_and_usernames
-        )
 
     def test_prefix_group(self):
         group = "group"

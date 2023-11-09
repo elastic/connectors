@@ -18,10 +18,6 @@ from connectors.logger import logger, set_extra_logger
 from connectors.utils import CancellableSleeps
 
 
-class PreflightCheckError(Exception):
-    pass
-
-
 class License(Enum):
     ENTERPRISE = "enterprise"
     PLATINUM = "platinum"
