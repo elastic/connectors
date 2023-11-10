@@ -188,6 +188,18 @@
 #service.enable_full_sync_download_ts_optimization: true
 #
 #
+##  Service settings that must have different settings for certain sources.
+##    Each object in this collection must specify a `source` (e.g. "sharepoint_online") as well as the configurations
+##    to override.
+##    The supported configurations for overriding are:
+##      - enable_full_sync_meta_ts_optimization
+##      - enable_full_sync_download_ts_optimization
+##    Example:
+##    service.source_overrides:
+##      - source: sharepoint_online
+##        enable_full_sync_meta_ts_optimization: false
+##        enable_full_sync_download_ts_optimization: false
+#service.source_overrides: []
 ## ------------------------------- Extraction Service ----------------------------------
 #
 ##  Local extraction service-related configurations.

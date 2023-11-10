@@ -746,3 +746,21 @@ async def test_sync_job_runner_sets_features_for_data_provider():
     await sync_job_runner.execute()
 
     assert sync_job_runner.data_provider.set_features.called
+
+
+@pytest.mark.parametrize(
+    "service_type, foo, baz",
+    [("skip", "bar", "qux"), ("dip", "qux", "qux")],
+)
+@pytest.mark.asyncio
+async def test_lookup_service_config(service_type, foo, baz):
+    sync_job_runner = create_runner()
+    sync_job_runner.service_config = {
+        "foo": "bar",
+        "baz": "qux",
+        "source_overrides": [{"source": "dip", "foo": "qux"}],
+    }
+    sync_job_runner.connector.service_type = service_type
+
+    assert sync_job_runner._lookup_service_config("foo", None) == foo
+    assert sync_job_runner._lookup_service_config("baz", None) == baz

@@ -216,13 +216,29 @@ class SyncJobRunner:
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
-            optimize_on_meta_timestamp=self.service_config.get(
+            optimize_on_meta_timestamp=self._lookup_service_config(
                 "enable_full_sync_meta_ts_optimization", False
             ),
-            optimize_on_download_timestamp=self.service_config.get(
+            optimize_on_download_timestamp=self._lookup_service_config(
                 "enable_full_sync_download_ts_optimization", True
             ),
         )
+
+    def _lookup_service_config(self, config_key, fallback):
+        """
+        Retrieve the source override config if present, otherwise return the top-level service config
+        :param config_key: the configuration to look up
+        :param fallback: the default value to use if the config_key is not found in the service config
+        :return: the configured value for config_key
+        """
+        default_value = self.service_config.get(config_key, fallback)
+        overrides = self.service_config.get("source_overrides", [])
+        source_override = {}
+        for override in overrides:
+            if override.get("source") == self.connector.service_type:
+                source_override = override
+                break
+        return source_override.get(config_key, default_value)
 
     async def _sync_done(self, sync_status, sync_error=None):
         if self.elastic_server is not None and not self.elastic_server.done():

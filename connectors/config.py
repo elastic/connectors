@@ -81,6 +81,7 @@ def _default_config():
             "log_level": "INFO",
             "enable_full_sync_meta_ts_optimization": False,
             "enable_full_sync_download_ts_optimization": True,
+            "source_overrides": [],
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
