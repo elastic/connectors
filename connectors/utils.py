@@ -350,6 +350,20 @@ class MemQueue(asyncio.Queue):
         super().put_nowait((item_size, item))
 
 
+class NonBlockingBoundedSemaphore(asyncio.BoundedSemaphore):
+    """A bounded semaphore with non-blocking acquire implementation.
+
+    This introduces a new try_acquire method, which will return if it can't acquire immediately.
+    """
+
+    def try_acquire(self):
+        if self.locked():
+            return False
+
+        self._value -= 1
+        return True
+
+
 class ConcurrentTasks:
     """Async task manager.
 
@@ -363,7 +377,7 @@ class ConcurrentTasks:
     def __init__(self, max_concurrency=5, results_callback=None):
         self.tasks = []
         self.results_callback = results_callback
-        self._sem = asyncio.BoundedSemaphore(max_concurrency)
+        self._sem = NonBlockingBoundedSemaphore(max_concurrency)
 
     def __len__(self):
         return len(self.tasks)

@@ -27,6 +27,7 @@ from connectors.utils import (
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
+    NonBlockingBoundedSemaphore,
     RetryStrategy,
     UnknownRetryStrategyError,
     base64url_to_base64,
@@ -238,6 +239,19 @@ def test_decode_base64_value():
     """This test verify decode_base64_value and decodes base64 encoded data"""
     expected_result = decode_base64_value("ZHVtbXk=".encode("utf-8"))
     assert expected_result == b"dummy"
+
+
+def test_try_acquire():
+    bound_value = 5
+    sem = NonBlockingBoundedSemaphore(bound_value)
+
+    for _ in range(bound_value):
+        assert sem.try_acquire()
+
+    assert not sem.try_acquire()
+
+    sem.release()
+    assert sem.try_acquire()
 
 
 @pytest.mark.asyncio
