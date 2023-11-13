@@ -79,6 +79,10 @@ def _default_config():
             "max_concurrent_access_control_syncs": 1,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
+            "telemetry": {
+                "enabled": True,
+                "interval": 3600,
+            },
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
