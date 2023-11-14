@@ -16,7 +16,6 @@ from connectors.filtering.basic_rule import (
     Rule,
     RuleMatchStats,
     parse,
-    try_coerce,
 )
 from connectors.utils import Format
 
@@ -552,10 +551,6 @@ def test_rules_are_ordered_ascending_with_respect_to_the_order_property():
     assert is_rule_one(first_rule)
     assert is_rule_two(second_rule)
     assert is_rule_three(third_rule)
-
-
-def test_matches_default_rule():
-    assert BasicRule.default_rule().matches(DOCUMENT_ONE)
 
 
 def test_no_field_leads_to_no_match():
@@ -1330,102 +1325,6 @@ def test_coerce_rule_to_default_if_doc_value_type_not_matching_rule_value_type()
 
     assert isinstance(coerced_rule_value, str)
     assert coerced_rule_value == "something"
-
-
-def test_coerce_to_float():
-    value = "0.001"
-
-    assert isinstance(try_coerce(value), float)
-
-
-def test_coerce_date_string_to_datetime():
-    value = "03-10-2022"
-
-    assert isinstance(try_coerce(value), datetime.datetime)
-
-
-def test_coerce_datetime_string_to_datetime():
-    value = "03-10-2022 10:00"
-
-    assert isinstance(try_coerce(value), datetime.datetime)
-
-
-def test_coerce_to_true():
-    value = "true"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(coerced_value, bool)
-    assert coerced_value
-
-    value = "t"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(coerced_value, bool)
-    assert coerced_value
-
-    value = "yes"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(coerced_value, bool)
-    assert coerced_value
-
-    value = "y"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(coerced_value, bool)
-    assert coerced_value
-
-    value = "on"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(coerced_value, bool)
-    assert coerced_value
-
-
-def test_coerce_to_false():
-    value = ""
-    coerced_value = try_coerce(value)
-
-    assert isinstance(try_coerce(value), bool)
-    assert not coerced_value
-
-    value = "false"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(try_coerce(value), bool)
-    assert not coerced_value
-
-    value = "f"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(try_coerce(value), bool)
-    assert not coerced_value
-
-    value = "no"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(try_coerce(value), bool)
-    assert not coerced_value
-
-    value = "n"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(try_coerce(value), bool)
-    assert not coerced_value
-
-    value = "off"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(try_coerce(value), bool)
-    assert not coerced_value
-
-
-def test_do_not_coerce_and_return_original_string():
-    value = "value"
-    coerced_value = try_coerce(value)
-
-    assert isinstance(coerced_value, str)
-    assert coerced_value == value
 
 
 def test_is_include_for_include_policy():

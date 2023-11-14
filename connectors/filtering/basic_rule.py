@@ -78,18 +78,6 @@ def to_bool(value):
     return value
 
 
-def try_coerce(value):
-    coerced_value = to_float(value)
-
-    if isinstance(coerced_value, str):
-        coerced_value = to_datetime(value)
-
-    if isinstance(coerced_value, str):
-        coerced_value = to_bool(value)
-
-    return coerced_value
-
-
 class RuleMatchStats:
     """RuleMatchStats records how many documents a basic rule matched and which policy it used.
 
@@ -266,17 +254,6 @@ class BasicRule:
             field=basic_rule_json["field"],
             rule=Rule.from_string(basic_rule_json["rule"]),
             value=basic_rule_json["value"],
-        )
-
-    @classmethod
-    def default_rule(cls):
-        return cls(
-            id_=BasicRule.DEFAULT_RULE_ID,
-            order=0,
-            policy=Policy.INCLUDE,
-            field="_",
-            rule=Rule.EQUALS,
-            value=".*",
         )
 
     def matches(self, document):
