@@ -217,15 +217,14 @@ class DropboxClient:
     def check_errors(self, response):
         error_response = response.get("error")
         if error_response == "invalid_grant":
-            raise InvalidRefreshTokenException("Configured Refresh Token is invalid.")
+            msg = "Configured Refresh Token is invalid."
+            raise InvalidRefreshTokenException(msg)
         elif error_response == "invalid_client: Invalid client_id or client_secret":
-            raise InvalidClientCredentialException(
-                "Configured App Key or App Secret is invalid."
-            )
+            msg = "Configured App Key or App Secret is invalid."
+            raise InvalidClientCredentialException(msg)
         else:
-            raise Exception(
-                f"Error while generating an access token. Error: {error_response}"
-            )
+            msg = f"Error while generating an access token. Error: {error_response}"
+            raise Exception(msg)
 
     @cached_property
     def _get_session(self):
@@ -289,9 +288,8 @@ class DropboxClient:
             # For Dropbox APIs, 409 status code is responsible for endpoint-specific errors.
             # Refer `Errors by status code` section in the documentation: https://www.dropbox.com/developers/documentation/http/documentation
             case 409:
-                raise InvalidPathException(
-                    f"Configured Path: {self.path} is invalid or not found."
-                ) from exception
+                msg = f"Configured Path: {self.path} is invalid or not found."
+                raise InvalidPathException(msg) from exception
             case 429:
                 response_headers = exception.headers
                 updated_response_headers = {
@@ -722,21 +720,21 @@ class DropboxDataSource(BaseDataSource):
                 "type": "int",
                 "ui_restrictions": ["advanced"],
             },
-            "use_document_level_security": {
-                "display": "toggle",
-                "label": "Enable document level security",
-                "order": 7,
-                "tooltip": "Document level security ensures identities and permissions set in Dropbox are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
-                "type": "bool",
-                "value": False,
-            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 8,
+                "order": 7,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
+                "value": False,
+            },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 8,
+                "tooltip": "Document level security ensures identities and permissions set in Dropbox are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
                 "value": False,
             },
             "include_inherited_users_and_groups": {
@@ -744,7 +742,7 @@ class DropboxDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Include groups and inherited users",
                 "order": 9,
-                "tooltip": "This enables you to restrict inherited users and group while indexing permissions. Enabling it would degrade the performance considerably.",
+                "tooltip": "Include groups and inherited users when indexing permissions. Enabling this configurable field will cause a significant performance degradation.",
                 "type": "bool",
                 "value": False,
             },
@@ -827,9 +825,8 @@ class DropboxDataSource(BaseDataSource):
         except InvalidPathException:
             raise
         except Exception as exception:
-            raise Exception(
-                f"Error while validating path: {self.dropbox_client.path}. Error: {exception}"
-            ) from exception
+            msg = f"Error while validating path: {self.dropbox_client.path}. Error: {exception}"
+            raise Exception(msg) from exception
 
     def advanced_rules_validators(self):
         return [DropBoxAdvancedRulesValidator(self)]
