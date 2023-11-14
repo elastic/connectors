@@ -188,16 +188,6 @@ class ConnectorIndex(ESIndex):
         async for connector in self.get_all_docs():
             yield connector
 
-    async def meta(self):
-        response = await self.client.indices.get_mapping(index=self.index_name)
-        latest_index = max(response.keys())
-        return response[latest_index].get("mappings", {}).get("_meta")
-
-    async def update_meta(self, meta):
-        await self.client.indices.put_mapping(
-            index=self.index_name, meta=meta, write_index_only=True
-        )
-
 
 def filter_ingestion_stats(ingestion_stats):
     if ingestion_stats is None:

@@ -127,3 +127,14 @@ class ESIndex(ESClient):
             if count >= total:
                 break
             offset += len(hits)
+
+    async def meta(self):
+        response = await self.client.indices.get_mapping(index=self.index_name)
+        # Assume index name is the same pattern and the latest index is always the one with the largest suffix
+        latest_index = max(response.keys())
+        return response[latest_index].get("mappings", {}).get("_meta")
+
+    async def update_meta(self, meta):
+        await self.client.indices.put_mapping(
+            index=self.index_name, meta=meta, write_index_only=True
+        )

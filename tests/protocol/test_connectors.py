@@ -317,55 +317,6 @@ async def test_all_connectors(mock_responses):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "mappings, expected_meta",
-    [
-        ({".elastic-connectors-v1": {"mappings": {}}}, None),
-        (
-            {".elastic-connectors-v1": {"mappings": {"_meta": {"foo": "bar"}}}},
-            {"foo": "bar"},
-        ),
-        (
-            {
-                ".elastic-connectors-v1": {"mappings": {"_meta": {"foo": "bar"}}},
-                ".elastic-connectors-v2": {"mappings": {"_meta": {"baz": "qux"}}},
-            },
-            {"baz": "qux"},
-        ),
-    ],
-)
-async def test_connector_index_meta(mappings, expected_meta, mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.get(
-        "http://nowhere.com:9200/.elastic-connectors/_mapping",
-        payload=mappings,
-        headers=headers,
-    )
-
-    connectors = ConnectorIndex(config)
-
-    meta = await connectors.meta()
-    assert meta == expected_meta
-    await connectors.close()
-
-
-@pytest.mark.asyncio
-async def test_connector_index_update_meta(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    meta = {"foo": "bar"}
-    headers = {"X-Elastic-Product": "Elasticsearch"}
-    mock_responses.put(
-        "http://nowhere.com:9200/.elastic-connectors/_mapping?write_index_only=true",
-        payload={"_meta": meta},
-        headers=headers,
-    )
-    connectors = ConnectorIndex(config)
-    await connectors.update_meta(meta)
-    await connectors.close()
-
-
-@pytest.mark.asyncio
 async def test_connector_properties():
     connector_src = {
         "_id": "test",

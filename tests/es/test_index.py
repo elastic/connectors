@@ -249,3 +249,48 @@ async def test_get_all_docs(mock_responses):
     assert doc_count == total
 
     await index.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mappings, expected_meta",
+    [
+        ({".elastic-connectors-v1": {"mappings": {}}}, None),
+        (
+            {".elastic-connectors-v1": {"mappings": {"_meta": {"foo": "bar"}}}},
+            {"foo": "bar"},
+        ),
+        (
+            {
+                ".elastic-connectors-v1": {"mappings": {"_meta": {"foo": "bar"}}},
+                ".elastic-connectors-v2": {"mappings": {"_meta": {"baz": "qux"}}},
+            },
+            {"baz": "qux"},
+        ),
+    ],
+)
+async def test__meta(mappings, expected_meta, mock_responses):
+    mock_responses.get(
+        "http://nowhere.com:9200/fake_index/_mapping",
+        payload=mappings,
+        headers=headers,
+    )
+
+    index = ESIndex(index_name, config)
+
+    meta = await index.meta()
+    assert meta == expected_meta
+    await index.close()
+
+
+@pytest.mark.asyncio
+async def test_update_meta(mock_responses):
+    meta = {"foo": "bar"}
+    mock_responses.put(
+        "http://nowhere.com:9200/fake_index/_mapping?write_index_only=true",
+        payload={"_meta": meta},
+        headers=headers,
+    )
+    index = ESIndex(index_name, config)
+    await index.update_meta(meta)
+    await index.close()
