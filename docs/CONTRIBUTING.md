@@ -8,11 +8,11 @@ Each time you make a valid contribution, you’ll earn points that increase your
 
 - [Reporting issues](#reporting-issues)
 - [Getting help](#getting-help)
-- [Types of contributions](#types-of-contributions)
-  - [Initial contribution](#initial-contribution)
+- [Types of contribution](#types-of-contribution)
+  - [Add new connector](#add-new-connector)
   - [Enhancements](#enhancements)
-  - [Other](#other)
 - [Contribution Checklist](#contribution-checklist)
+  - [Acceptance criteria](#acceptance-criteria)
   - [Correct code organization](#correct-codefile-organization)
   - [Proper async usage](#proper-async-usage)
   - [Log verbosity](#log-verbosity)
@@ -32,42 +32,37 @@ Each time you make a valid contribution, you’ll earn points that increase your
   - [Don't add to the PR as a reviewer](#dont-add-to-the-pr-as-a-reviewer)
 
 ## Reporting issues
+
 If something is not working as expected, please open an [issue](https://github.com/elastic/connectors/issues/new).
 
 ## Getting help
+
 The Ingestion team at Elastic maintains this repository and is happy to help.
 Try posting your question to the [Elastic discuss forums](https://discuss.elastic.co/c/enterprise-search/84).
 Be sure to mention that you're using Connectors and also let us know what service type you're trying to use, and any errors/issues you are encountering.
 You can also find us in the `#enterprise-search` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
 
-## Types of contributions
-### Initial contribution
+## Types of contribution
 
-If you want to add a new connector source, following requirements are mandatory for the initial patch:
+### Add new connector
 
-1. add a module or a directory in [connectors/sources](../connectors/sources)
-2. implement a class that implements **all methods** described in `connectors.source.BaseDataSource`
-3. add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+90% coverage**
-4. **declare your connector** in [config.yml](../config.yml) in the `sources` section
-5. **declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies
-6. For each dependency you are adding, including indirect dependencies, list all the licences and provide the list in your patch.
-7. make sure you use an **async lib** for your source. If not possible, make sure you don't block the loop
-8. when possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
-9. the **test backend** needs to return more than **10k documents** due to 10k being a default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help testing connector more deeply
+👩🏻‍🤝‍👨🏿 Before investing time in developing a connector, [create an issue](https://github.com/elastic/connectors/issues/new/choose) and reach out to our team for initial feedback on the connector and the libraries it uses!
 
-Before you start spending some time developing a connector, you should add an issue and reach out, to get an initial feedback on the
-connector and what libraries it will use.
+To add a new connector see our [developing guide](./DEVELOPING.md#implementing-a-new-source).
 
 ### Enhancements
 
-Enhancements that can be done after initial contribution:
+Enhancements that can be done after your initial contribution:
 
-1. the backend meets the performance requirements if we provide some (memory usage, how fast it syncs 10k docs, etc.)
-2. update README for the connector client
-3. small functional improvements for connector clients
+1. Ensure the backend meets performance requirements we might request (memory usage, how fast it syncs 10k docs, etc.)
+2. Update the README for the connector client
+3. Small functional improvements for connector clients
 
+> ℹ️ Use-case specific customizations (as opposed to generic enhancements) will not be accepted as contributions.
 
-### Other
+## Contribution Checklist
+
+### Acceptance criteria
 
 To make sure we're building great connectors, we will be pretty strict on this checklist, and we will not allow connectors to change the framework code itself.
 
@@ -75,10 +70,8 @@ Any patch with changes outside [connectors/sources](../connectors/sources) or [c
 
 If you need changes in the framework, or you are not sure about how to do something, reach out to the [Ingestion team](https://github.com/orgs/elastic/teams/ingestion-team/members) and/or file an issue.
 
-
-## Contribution Checklist
-
 ### Correct code/file organization
+
 Any contribution should follow established patterns of code organization within the repository.
 For example, a new concrete extension of `BaseDataSource` should live in [connectors/sources](../connectors/sources), and its tests should live in [tests/sources](../tests/sources).
 If that new data source is named `FooDataSource` the files should be `foo.py` and `test_foo.py`, respectively.
@@ -121,7 +114,7 @@ You can run the linter locally with `make lint` to ensure that your changes do n
 Tests not only verify and demonstrate that a new feature does what it is supposed to, but they also protect the codebase from unintentional future regressions.
 For this reason, it is important to both add tests when contributing new code, and to ensure that all tests (old and new) are passing.
 
-Our goal is to maintain 90% test coverage for each connector.
+Our goal is to maintain 92% test coverage for each connector.
 
 You can run the tests locally with `make test`.
 
