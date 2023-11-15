@@ -78,6 +78,36 @@
             "ui_restrictions": [],
             "validations": [],
             "value": false
+        },
+        "use_document_level_security": {
+            "depends_on": [],
+            "display": "toggle",
+            "tooltip": null,
+            "default_value": false,
+            "label": "Enable document level security",
+            "sensitive": false,
+            "type": "bool",
+            "required": false,
+            "options": [],
+            "validations": [],
+            "value": false,
+            "order": 8,
+            "ui_restrictions": []
+          },
+        "include_inherited_users_and_groups": {
+            "default_value": null,
+            "depends_on": [],
+            "display": "toggle",
+            "label": "Include groups and inherited users",
+            "options": [],
+            "order": 9,
+            "required": true,
+            "sensitive": false,
+            "tooltip": "Include groups and inherited users when indexing permissions. Enabling this configurable field will cause a significant performance degradation.",
+            "type": "bool",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": false
         }
     },
     "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
