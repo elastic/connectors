@@ -932,6 +932,9 @@ class SharepointOnlineClient:
                         "Modified": site_page.get("Modified"),
                         "EditorId": site_page.get("EditorId"),
                         "odata.id": site_page.get("odata.id"),
+                        "OData__UIVersionString": site_page.get(
+                            "OData__UIVersionString"
+                        ),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
