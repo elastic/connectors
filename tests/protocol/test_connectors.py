@@ -2059,6 +2059,21 @@ async def test_idle_jobs(get_all_docs, set_env):
     assert jobs[0] == job
 
 
+@pytest.mark.asyncio
+@patch("connectors.protocol.SyncJobIndex.get_all_docs")
+async def test_all_sync_jobs(get_all_docs, set_env):
+    job = Mock()
+    get_all_docs.return_value = AsyncIterator([job])
+    config = load_config(CONFIG)
+
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    jobs = [job async for job in sync_job_index.all_sync_jobs()]
+
+    get_all_docs.assert_called_once()
+    assert len(jobs) == 1
+    assert jobs[0] == job
+
+
 @pytest.mark.parametrize(
     "filtering, should_advanced_rules_be_present",
     [

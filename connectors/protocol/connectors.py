@@ -1035,3 +1035,7 @@ class SyncJobIndex(ESIndex):
     async def delete_jobs(self, job_ids):
         query = {"terms": {"_id": job_ids}}
         return await self.client.delete_by_query(index=self.index_name, query=query)
+
+    async def all_sync_jobs(self):
+        async for sync_job in self.get_all_docs():
+            yield sync_job
