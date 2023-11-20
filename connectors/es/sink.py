@@ -437,22 +437,8 @@ class Extractor:
                     continue
 
                 if doc_id in existing_ids:
-                    # pop out of existing_ids
-                    ts = existing_ids.pop(doc_id)
-
-                    # If the doc has a timestamp, we can use it to see if it has
-                    # been modified. This reduces the bulk size a *lot*
-                    #
-                    # Some backends do not know how to do this, so it's optional.
-                    # For these, we update the docs in any case.
-                    if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
-                        # cancel the download
-                        if (
-                            self.content_extraction_enabled
-                            and lazy_download is not None
-                        ):
-                            await lazy_download(doit=False)
-                        continue
+                    # pop out of existing_ids, so they do not get deleted
+                    existing_ids.pop(doc_id)
 
                     self.total_docs_updated += 1
                 else:
