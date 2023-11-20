@@ -347,14 +347,14 @@ class OracleDataSource(BaseDataSource):
             },
             "oracle_home": {
                 "default_value": DEFAULT_ORACLE_HOME,
-                "label": "Path of Oracle Service",
+                "label": "Path to Oracle Home",
                 "order": 10,
                 "required": False,
                 "type": "str",
             },
             "wallet_configuration_path": {
                 "default_value": "",
-                "label": "Path of Oracle Service configuration files",
+                "label": "Path to SSL Wallet configuration files",
                 "order": 11,
                 "required": False,
                 "type": "str",
