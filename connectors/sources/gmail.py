@@ -124,6 +124,7 @@ class GMailDataSource(BaseDataSource):
             "service_account_credentials": {
                 "display": "textarea",
                 "label": SERVICE_ACCOUNT_CREDENTIALS_LABEL,
+                "sensitive": True,
                 "order": 1,
                 "required": True,
                 "type": "str",
