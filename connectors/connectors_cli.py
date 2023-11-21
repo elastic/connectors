@@ -21,6 +21,8 @@ from connectors.cli.connector import Connector
 from tabulate import tabulate
 import os
 
+from connectors.es.settings import Settings
+
 SERVICE_TYPES = {
     'mongodb': 'connectors.sources.mongo:MongoDataSource',
     's3': 'connectors.sources.s3:S3DataSource',
@@ -125,12 +127,21 @@ def list(obj):
     except asyncio.CancelledError as e:
         click.echo(e)
 
-# TODO add language prompt
+language_keys = [*Settings().language_data.keys()]
+
+# Support blank values for languge
+def validate_language(ctx, param, value):
+    if value not in language_keys:
+        return None
+
+    return value
+
 @click.command(help="Creates a new connector and a search index")
 @click.option('--index_name', prompt=f"{click.style('?', blink=True, fg='green')} Search index name (search-)")
 @click.option('--service_type', prompt=f"{click.style('?', blink=True, fg='green')} Service type", type=click.Choice(SERVICE_TYPES.keys(), case_sensitive=False))
+@click.option('--index_language', prompt=f"{click.style('?', blink=True, fg='green')} Index language (leave empty for universal) {language_keys}", default='', callback=validate_language)
 @click.pass_obj
-def create(obj, index_name, service_type):
+def create(obj, index_name, service_type, index_language):
     index_name = f"search-{index_name}"
     connector = Connector(obj['config']['elasticsearch'])
     configuration = connector.service_type_configuration(source_class=SERVICE_TYPES[service_type])
@@ -151,7 +162,7 @@ def create(obj, index_name, service_type):
         if all(configuration[field_item['field']]['value'] == field_item['value'] for field_item in item['depends_on']):
             configuration[key]['value'] = prompt()
 
-    result = connector.create(index_name, service_type, configuration)
+    result = connector.create(index_name, service_type, configuration, index_language)
     click.echo("Connector (ID: " + click.style(result[1], fg="green") +  ", service_type: " + click.style(service_type, fg='green') + ") has been created!")
 
 connector.add_command(create)
