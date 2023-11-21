@@ -114,7 +114,7 @@ def connector(obj):
 
 @click.command(name="list", help="List all existing connectors")
 @click.pass_obj
-def list_command(obj):
+def list_connectors(obj):
     connector = Connector(config=obj["config"]["elasticsearch"])
     coro = connector.list_connectors()
 
@@ -173,7 +173,7 @@ def validate_language(ctx, param, value):
 @click.option(
     "--service_type",
     prompt=f"{click.style('?', blink=True, fg='green')} Service type",
-    type=click.Choice(SERVICE_TYPES.keys(), case_sensitive=False),
+    type=click.Choice(list(SERVICE_TYPES.keys()), case_sensitive=False),
 )
 @click.option(
     "--index_language",
@@ -224,7 +224,7 @@ def create(obj, index_name, service_type, index_language):
 
 
 connector.add_command(create)
-connector.add_command(list_command)
+connector.add_command(list_connectors)
 
 cli.add_command(connector)
 
@@ -238,7 +238,7 @@ def index(obj):
 
 @click.command(name="list", help="Show all indices")
 @click.pass_obj
-def list_command(obj):
+def list_indices(obj):
     index = Index(config=obj["config"]["elasticsearch"])
     indices = index.list_indices()
 
@@ -260,7 +260,7 @@ def list_command(obj):
     click.echo(tabulate(table_rows, headers=["Index name", "Number of documents"]))
 
 
-index.add_command(list_command)
+index.add_command(list_indices)
 
 
 @click.command(help="Remove all documents from the index")
@@ -353,7 +353,7 @@ job.add_command(start)
 @click.command(name="list", help="List of jobs sorted by date.")
 @click.pass_obj
 @click.argument("connector_id", nargs=1)
-def list_command(obj, connector_id):
+def list_jobs(obj, connector_id):
     job_cli = Job(config=obj["config"]["elasticsearch"])
     jobs = job_cli.list_jobs(connector_id=connector_id)
 
@@ -392,7 +392,7 @@ def list_command(obj, connector_id):
     )
 
 
-job.add_command(list_command)
+job.add_command(list_jobs)
 
 
 @click.command(help="Cancel a job")

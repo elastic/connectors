@@ -22,9 +22,8 @@ class Index:
     async def __list_indices(self):
         try:
             return await self.es_client.list_indices()
-        except ApiError:
-            # TODO raise
-            return []
+        except ApiError as e:
+            raise e
         finally:
             await self.es_client.close()
 
