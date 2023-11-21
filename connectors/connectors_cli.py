@@ -49,13 +49,16 @@ def print_version(ctx, param, value):
         return
     click.echo(__version__)
 
-# @TODO print help page when no arguments passed
 @click.group(invoke_without_command=True)
-@click.option('-v', '--version', is_flag=True, callback=print_version,
-              expose_value=False, is_eager=True)
+@click.version_option(__version__, '-v', '--version', message="%(version)s")
 @click.option('-c', '--config', type=click.File('rb'))
 @click.pass_context
 def cli(ctx, config):
+    # print help page if no subcommands provided
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        return
+
     ctx.ensure_object(dict)
     if config:
         ctx.obj['config'] = yaml.safe_load(config)
@@ -63,8 +66,7 @@ def cli(ctx, config):
         with open(CONFIG_FILE_PATH, "r") as f:
             ctx.obj['config'] = yaml.safe_load(f.read())
     else:
-        # todo raise an exception
-        pass
+        raise FileNotFoundError(f"{CONFIG_FILE_PATH} is not found")
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option('--host', prompt="Elastic host")
