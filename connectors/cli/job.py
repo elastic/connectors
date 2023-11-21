@@ -1,11 +1,19 @@
-from connectors.es.client import ESClient
-from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
-from connectors.protocol import SyncJobIndex
-from connectors.protocol import ConnectorIndex
-from connectors.protocol import Sort, JobTriggerMethod, JobType
 import asyncio
 
-from connectors.protocol import JobStatus
+from elasticsearch import ApiError
+
+from connectors.es.client import ESClient
+from connectors.protocol import (
+    CONCRETE_CONNECTORS_INDEX,
+    CONCRETE_JOBS_INDEX,
+    ConnectorIndex,
+    JobStatus,
+    JobTriggerMethod,
+    JobType,
+    Sort,
+    SyncJobIndex,
+)
+
 
 class Job:
     def __init__(self, config):
@@ -68,7 +76,7 @@ class Job:
                 await job._terminate(JobStatus.CANCELING)
 
             return True
-        except:
+        except ApiError:
             return False
         finally:
             await self.sync_job_index.close()
@@ -76,13 +84,15 @@ class Job:
 
     def __job_list_query(self, connector_id, index_name, job_id):
         if job_id:
-            return { "bool": { "must": [{ "term": { "_id": job_id } }] } }
+            return {"bool": {"must": [{"term": {"_id": job_id}}]}}
 
         if index_name:
-            return { "bool": { "filter": [{ "term": { "connector.index_name": index_name } }] } }
+            return {
+                "bool": {"filter": [{"term": {"connector.index_name": index_name}}]}
+            }
 
         if connector_id:
-            return { "bool": { "must": [{ "term": { "connector.id": connector_id } }] } }
+            return {"bool": {"must": [{"term": {"connector.id": connector_id}}]}}
 
         return None
 
