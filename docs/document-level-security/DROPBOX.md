@@ -4,7 +4,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
 ## Document level security
 
-Document level security (DLS) enables you to restrict access to documents based on a userÃ­s permissions. This feature is available by default for the Dropbox connector.
+Document level security (DLS) enables you to restrict access to documents based on a user'­s permissions. This feature is available by default for the Dropbox connector.
 Dropbox connector DLS supports each kind of permission such as folder & file permissions and is shared with individuals or groups.
 
 Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
