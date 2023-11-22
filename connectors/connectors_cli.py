@@ -107,9 +107,12 @@ cli.add_command(login)
 
 # Connector group
 @click.group(invoke_without_command=True, help="Connectors mangement")
-@click.pass_obj
-def connector(obj):
-    pass
+@click.pass_context
+def connector(ctx):
+    # print help page if no subcommands provided
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        return
 
 
 @click.command(name="list", help="List all existing connectors")
