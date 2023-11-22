@@ -5,6 +5,8 @@
 #
 """OneDrive source module responsible to fetch documents from OneDrive.
 """
+import asyncio
+import json
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
@@ -12,7 +14,11 @@ from urllib import parse
 
 import aiohttp
 import fastjsonschema
-from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
+from aiohttp.client_exceptions import (
+    ClientPayloadError,
+    ClientResponseError,
+    ServerConnectionError,
+)
 from wcmatch import glob
 
 from connectors.access_control import (
@@ -31,6 +37,7 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     iso_utc,
+    iterable_batches_generator,
     retryable,
 )
 
@@ -48,6 +55,7 @@ GROUPS = "groups"
 PERMISSIONS = "permissions"
 DELTA = "delta"
 PING = "ping"
+BATCH = "batch"
 ITEM_FIELDS = "id,name,lastModifiedDateTime,content.downloadUrl,createdDateTime,size,webUrl,parentReference,file,folder"
 
 ENDPOINTS = {
@@ -56,7 +64,10 @@ ENDPOINTS = {
     GROUPS: "users/{user_id}/transitiveMemberOf",
     PERMISSIONS: "users/{user_id}/drive/items/{item_id}/permissions",
     DELTA: "users/{user_id}/drive/root/delta",
+    BATCH: "$batch",
 }
+
+GRAPH_API_MAX_BATCH_SIZE = 20
 
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
@@ -239,7 +250,13 @@ class OneDriveClient:
         connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
         return aiohttp.ClientSession(
-            timeout=timeout, raise_for_status=True, connector=connector
+            timeout=timeout,
+            raise_for_status=True,
+            connector=connector,
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
         )
 
     async def close_session(self):
@@ -253,9 +270,11 @@ class OneDriveClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def get(self, url):
+    async def get(self, url, header=None):
         access_token = await self.token.get()
         headers = {"authorization": f"Bearer {access_token}"}
+        if header:
+            headers |= header
         try:
             async with self.session.get(url=url, headers=headers) as response:
                 yield response
@@ -263,34 +282,78 @@ class OneDriveClient:
             await self.close_session()
             raise
         except ClientResponseError as e:
-            if e.status == 429 or e.status == 503:
-                response_headers = e.headers or {}
-                retry_seconds = DEFAULT_RETRY_SECONDS
-                if "Retry-After" in response_headers:
-                    try:
-                        retry_seconds = int(response_headers["Retry-After"])
-                    except (TypeError, ValueError) as exception:
-                        self._logger.error(
-                            f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
-                        )
-                else:
-                    self._logger.warning(
-                        f"Rate Limited but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+            await self._handle_client_side_errors(e)
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=NotFound,
+    )
+    async def post(self, url, payload=None):
+        access_token = await self.token.get()
+        headers = {
+            "authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with self.session.post(url, headers=headers, data=payload) as resp:
+                if url.endswith("/$batch"):
+                    await self._check_batch_items_throttled(resp)
+                yield resp
+
+        except ClientResponseError as e:
+            await self._handle_client_side_errors(e)
+        except ClientPayloadError as e:
+            retry_seconds = DEFAULT_RETRY_SECONDS
+            response_headers = e.headers or {}
+            if "Retry-After" in response_headers:
+                try:
+                    retry_seconds = int(response_headers["Retry-After"])
+                except (TypeError, ValueError) as exception:
+                    self._logger.error(
+                        f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                     )
-                self._logger.debug(
-                    f"Rate Limit reached: retry in {retry_seconds} seconds"
+            await self._sleeps.sleep(retry_seconds)
+            raise
+
+    async def _handle_client_side_errors(self, e):
+        if e.status == 429 or e.status == 503:
+            response_headers = e.headers or {}
+            retry_seconds = DEFAULT_RETRY_SECONDS
+            if "Retry-After" in response_headers:
+                try:
+                    retry_seconds = int(response_headers["Retry-After"])
+                except (TypeError, ValueError) as exception:
+                    self._logger.error(
+                        f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    )
+            else:
+                self._logger.warning(
+                    f"Rate Limited but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+            self._logger.debug(f"Rate Limit reached: retry in {retry_seconds} seconds")
+
+            await self._sleeps.sleep(retry_seconds)
+            raise ThrottledError from e
+        elif e.status == 404:
+            raise NotFound from e
+        elif e.status == 500:
+            raise InternalServerError from e
+        else:
+            raise
+
+    async def _check_batch_items_throttled(self, batch_resp):
+        body = await batch_resp.json()
+        for response in body.get("responses", []):
+            if response.get("status") == 429:
+                logger.warning(
+                    f"Batch request item throttled {response}. Retrying in separate batch"
                 )
 
-                await self._sleeps.sleep(retry_seconds)
-                raise ThrottledError from e
-            elif e.status == 404:
-                raise NotFound from e
-            elif e.status == 500:
-                raise InternalServerError from e
-            else:
-                raise
-
-    async def paginated_api_call(self, url, params=None, fetch_size=FETCH_SIZE):
+    async def paginated_api_call(
+        self, url, params=None, fetch_size=FETCH_SIZE, header=None
+    ):
         if params is None:
             params = {}
         params["$top"] = fetch_size
@@ -299,9 +362,7 @@ class OneDriveClient:
         url = f"{url}?{params}"
         while True:
             try:
-                async for response in self.get(
-                    url=url,
-                ):
+                async for response in self.get(url=url, header=header):
                     response_json = await response.json()
                     result = response_json["value"]
 
@@ -320,17 +381,20 @@ class OneDriveClient:
                 break
 
     async def list_users(self, include_groups=False):
+        header = None
         params = {
             "$filter": "accountEnabled eq true",
             "$select": "userPrincipalName,mail,transitiveMemberOf,id,createdDateTime",
         }
         if include_groups:
             params["$expand"] = "transitiveMemberOf($select=id)"
+        else:
+            params["$filter"] += " and assignedLicenses/$count ne 0&$count=true"
+            header = {"ConsistencyLevel": "eventual"}
         url = parse.urljoin(BASE_URL, ENDPOINTS[USERS])
 
-        async for response in self.paginated_api_call(url, params):
-            for user_detail in response:
-                yield user_detail
+        async for response in self.paginated_api_call(url, params, header=header):
+            yield response
 
     async def list_groups(self, user_id):
         url = parse.urljoin(BASE_URL, ENDPOINTS[GROUPS].format(user_id=user_id))
@@ -515,7 +579,7 @@ class OneDriveDataSource(BaseDataSource):
         )
 
     def prepare_doc(self, file):
-        return {
+        modified_document = {
             "type": FILE if file.get(FILE) else FOLDER,
             "title": file.get("name"),
             "_id": file.get("id"),
@@ -524,6 +588,9 @@ class OneDriveDataSource(BaseDataSource):
             "size": file.get("size"),
             "url": file.get("webUrl"),
         }
+        if self._dls_enabled():
+            modified_document[ACCESS_CONTROL] = file[ACCESS_CONTROL]
+        return modified_document
 
     def _dls_enabled(self):
         if self._features is None:
@@ -534,10 +601,10 @@ class OneDriveDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _decorate_with_access_control(self, document, user_id, file_id):
+    async def _decorate_with_access_control(self, document, user_id):
         if self._dls_enabled():
             entity_permissions = await self.get_entity_permission(
-                user_id=user_id, file_id=file_id
+                user_id=user_id, file_id=document.get("id")
             )
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + entity_permissions)
@@ -580,8 +647,9 @@ class OneDriveDataSource(BaseDataSource):
             return
 
         self._logger.info("Fetching all users")
-        async for user in self.client.list_users(include_groups=True):
-            yield await self._user_access_control_doc(user=user)
+        async for users in self.client.list_users(include_groups=True):
+            for user in users:
+                yield await self._user_access_control_doc(user=user)
 
     async def get_entity_permission(self, user_id, file_id):
         if not self._dls_enabled():
@@ -607,6 +675,75 @@ class OneDriveDataSource(BaseDataSource):
 
         return permissions
 
+    def _prepare_batch(self, request_id, url):
+        return {"id": str(request_id), "method": "GET", "url": url}
+
+    def remove_processed_requests(self, batched_apis, processed_ids):
+        return [api for api in batched_apis if api["id"] not in processed_ids]
+
+    async def get_data(self, batched_users):
+        batched_apis = []
+        for user in batched_users:
+            user_id = user.get("id")
+            files_uri = (
+                f"{ENDPOINTS[DELTA].format(user_id=user_id)}?$select={ITEM_FIELDS}"
+            )
+
+            batched_apis.append(self._prepare_batch(request_id=user_id, url=files_uri))
+
+        while batched_apis:
+            batch_url = f"{BASE_URL}$batch"
+            batch_request = json.dumps({"requests": batched_apis})
+
+            batch_response = await anext(self.client.post(batch_url, batch_request))
+            batch_response = await batch_response.json()
+
+            processed_ids = []
+            next_page_requests = []
+            for response in batch_response.get("responses", []):
+                files = response.get("body", {}).get("value", [])
+
+                if (
+                    response.get("status", 200) == 429
+                ):  # Rate limited request will not be counted as processed and will be retried.
+                    continue
+
+                processed_ids.append(response.get("id"))
+                if files := [file for file in files if file.get("name") != "root"]:
+                    yield files, response.get("id")
+
+                if next_url := response.get("body", {}).get("@odata.nextLink"):
+                    relative_url = next_url.split(BASE_URL)[1]
+                    next_page_requests.append(
+                        self._prepare_batch(
+                            request_id=response.get("id"), url=relative_url
+                        )
+                    )
+
+            batched_apis = self.remove_processed_requests(batched_apis, processed_ids)
+            batched_apis.extend(next_page_requests)
+
+    def send_document_to_es(self, entity, download_url):
+        entity = self.prepare_doc(entity)
+
+        if entity["type"] == FILE and download_url:
+            return entity, partial(self.get_content, entity.copy(), download_url)
+        else:
+            return entity, None
+
+    async def _bounbed_concurrent_tasks(
+        self, items, max_concurrency, calling_func, **kwargs
+    ):
+        async def process_item(item, semaphore):
+            async with semaphore:
+                return await calling_func(item, **kwargs)
+
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        tasks = [process_item(item, semaphore) for item in items]
+
+        return await asyncio.gather(*tasks)
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch OneDrive objects in async manner
 
@@ -621,8 +758,9 @@ class OneDriveDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
 
             user_mail_id_map = {}
-            async for user in self.client.list_users():
-                user_mail_id_map[user["mail"]] = user["id"]
+            async for users in self.client.list_users():
+                for user in users:
+                    user_mail_id_map[user["mail"]] = user["id"]
 
             for query_info in advanced_rules:
                 skipped_extensions = query_info.get("skipFilesWithExtensions")
@@ -637,24 +775,20 @@ class OneDriveDataSource(BaseDataSource):
                     async for entity, download_url in self.client.get_owned_files(
                         user_id, skipped_extensions, pattern
                     ):
-                        entity = self.prepare_doc(entity)
-                        if entity["type"] == FILE and download_url:
-                            yield entity, partial(
-                                self.get_content, entity.copy(), download_url
-                            )
-                        else:
-                            yield entity, None
+                        yield self.send_document_to_es(entity, download_url)
         else:
-            async for user in self.client.list_users():
-                user_id = user.get("id")
-
-                async for entity, download_url in self.client.get_owned_files(user_id):
-                    entity = self.prepare_doc(entity)
-                    if entity["type"] == FILE and download_url:
-                        yield await self._decorate_with_access_control(
-                            entity, user_id, entity.get("_id")
-                        ), partial(self.get_content, entity.copy(), download_url)
-                    else:
-                        yield await self._decorate_with_access_control(
-                            entity, user_id, entity.get("_id")
-                        ), None
+            async for users in self.client.list_users():
+                for batched_users in iterable_batches_generator(
+                    users, GRAPH_API_MAX_BATCH_SIZE
+                ):
+                    async for entities, user_id in self.get_data(batched_users):
+                        if self._dls_enabled():
+                            entities = await self._bounbed_concurrent_tasks(
+                                entities,
+                                self.concurrent_downloads,
+                                self._decorate_with_access_control,
+                                user_id=user_id,
+                            )
+                        for entity in entities:
+                            download_url = entity.get("@microsoft.graph.downloadUrl")
+                            yield self.send_document_to_es(entity, download_url)
