@@ -387,7 +387,7 @@ async def test_concurrent_runner_try_put():
 
     runner = ConcurrentTasks(1, results_callback=_results_callback)
     await runner.put(functools.partial(coroutine, 0))
-    task = await runner.try_put(functools.partial(coroutine, 1))
+    task = runner.try_put(functools.partial(coroutine, 1))
 
     await runner.join()
 
