@@ -413,6 +413,41 @@ async def test_concurrent_runner_try_put(initial_capacity, expected_result):
         assert 100 not in results
 
 
+@pytest.mark.asyncio
+async def test_concurrent_runner_join():
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.2)
+        return i
+
+    runner = ConcurrentTasks(results_callback=_results_callback)
+    for i in range(3):
+        await runner.put(functools.partial(coroutine, i))
+
+    async def delayed_coroutine():
+        await asyncio.sleep(0.1)
+        await runner.put(functools.partial(coroutine, 3))
+
+    # put the 4th task after 0.1 second during the execution of the first 3 tasks
+    asyncio.create_task(delayed_coroutine())
+
+    # calling join will wait for the first 3 tasks to finish, the 4th task is not added yet
+    await runner.join()
+    assert len(results) == 3
+    # the fouth task should still in the pool
+    assert 3 not in results
+    assert len(runner) == 1
+
+    # wait for the 4th task to finish
+    await runner.join()
+    assert len(results) == 4
+    assert 3 in results
+
+
 @contextlib.contextmanager
 def temp_file(converter):
     if converter == "system":
