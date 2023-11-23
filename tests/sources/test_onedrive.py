@@ -905,10 +905,11 @@ async def test_get_data():
     async_response, next_page_response = AsyncMock(), AsyncMock()
     result = []
     expected_result = [
-        [RESPONSE_USER1_FILES[0]],
-        [RESPONSE_USER1_FILES[1]],
-        [RESPONSE_USER2_FILES[0]],
+        "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
     ]
+
     async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(BATCHED_RESPONSE))
     next_page_response.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(NEXT_BATCH_RESPONSE)
@@ -925,7 +926,7 @@ async def test_get_data():
                         {"name": "user1", "id": "231"},
                     ]
                 ):
-                    result.append(file)
+                    result.append(file[0].get("id"))
 
     assert result == expected_result
 
@@ -1216,8 +1217,8 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch):
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES, "11"),
-                    (RESPONSE_USER2_FILES, "12"),
+                    (RESPONSE_USER1_FILES.copy(), "11"),
+                    (RESPONSE_USER2_FILES.copy(), "12"),
                 ]
             )
         ),

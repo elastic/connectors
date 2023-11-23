@@ -692,7 +692,7 @@ class OneDriveDataSource(BaseDataSource):
             batched_apis.append(self._prepare_batch(request_id=user_id, url=files_uri))
 
         while batched_apis:
-            batch_url = f"{BASE_URL}$batch"
+            batch_url = parse.urljoin(BASE_URL, ENDPOINTS[BATCH])
             batch_request = json.dumps({"requests": batched_apis})
 
             batch_response = await anext(self.client.post(batch_url, batch_request))
