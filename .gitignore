@@ -11,3 +11,5 @@ __pycache__
 # jetbrains files
 .idea
 *.iml
+
+**/venv
