@@ -1,0 +1,62 @@
+version: "3"
+
+networks:
+  connectors_stack_net:
+    driver: bridge
+    external: true
+    name: connectors_stack_net
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTICSEARCH_VERSION}
+    environment:
+      - "discovery.type=single-node"
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "xpack.security.enabled=true"
+      - "xpack.security.authc.api_key.enabled=true"
+      - "xpack.security.authc.token.enabled=true"
+      - "ELASTIC_PASSWORD=${ELASTIC_PASSWORD}"
+      - "action.destructive_requires_name=false"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - connectors_stack_net
+    ports:
+      - 9200:9200
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${KIBANA_VERSION}
+    ports:
+      - 5601:5601
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - elasticsearch
+    networks:
+      - connectors_stack_net
+    environment:
+      ELASTICSEARCH_URL: http://host.docker.internal:9200
+      ELASTICSEARCH_HOSTS: http://host.docker.internal:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: c69548d9027afcf4d55146b1d425a9f4c69548d9027afcf4d55146b1d425a9f4
+
+  elastic-connectors:
+    image: docker.elastic.co/enterprise-search/elastic-connectors:${CONNECTORS_VERSION}
+    depends_on:
+      - elasticsearch
+      - kibana
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${CURDIR}/connectors-config:/config
+    command: /app/bin/elastic-ingest -c /config/config.yml
+    networks:
+      - connectors_stack_net
+
+volumes:
+  es-data:
