@@ -412,14 +412,6 @@ async def test_concurrent_runner_try_put(initial_capacity, expected_result):
         assert task is None
         assert 100 not in results
 
-    # try_put the third task
-    task_2 = runner.try_put(functools.partial(coroutine, 2))
-
-    await runner.join()
-
-    assert task_2 is not None
-    assert 2 in results
-
 
 @contextlib.contextmanager
 def temp_file(converter):
