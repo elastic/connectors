@@ -106,7 +106,7 @@ cli.add_command(login)
 
 
 # Connector group
-@click.group(invoke_without_command=True, help="Connectors mangement")
+@click.group(invoke_without_command=True, help="Connectors management")
 @click.pass_context
 def connector(ctx):
     # print help page if no subcommands provided
@@ -233,7 +233,7 @@ cli.add_command(connector)
 
 
 # Index group
-@click.group(invoke_without_command=True)
+@click.group(invoke_without_command=True, help="Search indices management")
 @click.pass_obj
 def index(obj):
     pass
@@ -319,7 +319,7 @@ cli.add_command(index)
 
 
 # Job group
-@click.group(invoke_without_command=True)
+@click.group(invoke_without_command=True, help="Sync jobs management")
 @click.pass_obj
 def job(obj):
     pass
