@@ -81,7 +81,7 @@ class JobExecutionService(BaseService):
             connector=connector,
             es_config=self._override_es_config(connector),
         )
-        if not await self.sync_job_pool.try_put(sync_job_runner.execute):
+        if not self.sync_job_pool.try_put(sync_job_runner.execute):
             sync_job.log_warning(
                 f"{self.display_name.capitalize()} has reached the maximum concurrency of {self.max_concurrency}. Retry in {self.idling} seconds."
             )

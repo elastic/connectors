@@ -52,7 +52,7 @@ def sync_job_index_mock():
 
 def concurrent_task_mock():
     task_mock = Mock()
-    task_mock.try_put = AsyncMock()
+    task_mock.try_put = Mock()
     task_mock.join = AsyncMock()
     task_mock.cancel = Mock()
 
@@ -115,7 +115,7 @@ async def test_no_connector(connector_index_mock, concurrent_tasks_mocks, set_en
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
     await create_and_run_service(ContentSyncJobExecutionService)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -137,7 +137,7 @@ async def test_no_pending_jobs(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([])
     await create_and_run_service(service_klass)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -164,7 +164,7 @@ async def test_job_execution_with_unsupported_source(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service(service_klass)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -193,7 +193,7 @@ async def test_job_execution_with_connector_not_found(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service(service_klass)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -213,7 +213,7 @@ async def test_access_control_sync_job_execution_with_premium_connector(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service(AccessControlSyncJobExecutionService)
 
-    sync_job_pool_mock.try_put.assert_awaited_once_with(sync_job_runner_mock.execute)
+    sync_job_pool_mock.try_put.assert_called_once_with(sync_job_runner_mock.execute)
 
 
 @pytest.mark.asyncio
@@ -237,7 +237,7 @@ async def test_access_control_sync_job_execution_with_insufficient_license(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service(AccessControlSyncJobExecutionService)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -262,7 +262,7 @@ async def test_access_control_sync_job_execution_with_dls_feature_flag_disabled(
 
     await create_and_run_service(AccessControlSyncJobExecutionService)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -294,7 +294,7 @@ async def test_job_execution_with_connector_still_syncing(
     sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
     await create_and_run_service(service_klass)
 
-    sync_job_pool_mock.try_put.assert_not_awaited()
+    sync_job_pool_mock.try_put.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -325,7 +325,7 @@ async def test_job_execution(
 
     await create_and_run_service(service_klass)
 
-    sync_job_pool_mock.try_put.assert_awaited_once_with(sync_job_runner_mock.execute)
+    sync_job_pool_mock.try_put.assert_called_once_with(sync_job_runner_mock.execute)
 
 
 @pytest.mark.parametrize(
@@ -363,5 +363,5 @@ async def test_job_execution_new_sync_job_not_blocked(
 
     await create_and_run_service(service_klass, stop_after=0.2)
 
-    sync_job_pool_mock.try_put.assert_awaited_with(sync_job_runner_mock.execute)
-    assert sync_job_pool_mock.try_put.await_count == 2
+    sync_job_pool_mock.try_put.assert_called_with(sync_job_runner_mock.execute)
+    assert sync_job_pool_mock.try_put.call_count == 2
