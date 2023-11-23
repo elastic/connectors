@@ -374,6 +374,80 @@ async def test_concurrent_runner_high_concurrency():
     assert second_results == [3]
 
 
+@pytest.mark.parametrize(
+    "initial_capacity, expected_result",
+    [
+        (0, True),  # when pool is empty
+        (2, True),  # when pool is almost empty
+        (5, True),  # when pool is half full
+        (8, True),  # when pool is almost full
+        (10, False),  # when pool is full
+    ],
+)
+@pytest.mark.asyncio
+async def test_concurrent_runner_try_put(initial_capacity, expected_result):
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.1)
+        return i
+
+    runner = ConcurrentTasks(10, results_callback=_results_callback)
+    # fill the pool with initial capacity
+    for i in range(initial_capacity):
+        await runner.put(functools.partial(coroutine, i))
+
+    # try to put an additional task
+    task = runner.try_put(functools.partial(coroutine, 100))
+
+    await runner.join()
+
+    if expected_result:
+        assert task is not None
+        assert 100 in results
+    else:
+        assert task is None
+        assert 100 not in results
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_join():
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.2)
+        return i
+
+    runner = ConcurrentTasks(results_callback=_results_callback)
+    for i in range(3):
+        await runner.put(functools.partial(coroutine, i))
+
+    async def delayed_coroutine():
+        await asyncio.sleep(0.1)
+        await runner.put(functools.partial(coroutine, 3))
+
+    # put the 4th task after 0.1 second during the execution of the first 3 tasks
+    asyncio.create_task(delayed_coroutine())
+
+    # calling join will wait for the first 3 tasks to finish, the 4th task is not added yet
+    await runner.join()
+    assert len(results) == 3
+    # the fouth task should still in the pool
+    assert 3 not in results
+    assert len(runner) == 1
+
+    # wait for the 4th task to finish
+    await runner.join()
+    assert len(results) == 4
+    assert 3 in results
+
+
 @contextlib.contextmanager
 def temp_file(converter):
     if converter == "system":
