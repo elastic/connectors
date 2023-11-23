@@ -380,11 +380,11 @@ class ConcurrentTasks:
 
         # put a task into pool
         # it will block until the task was put successfully
-        task = task_pool.put(a_coroutine)
+        task = await task_pool.put(coroutine)
 
         # put a task without blocking
         # it will try to put the task, and return None if it can't be put immediately
-        task = task_pool.try_put(a_coroutine)
+        task = task_pool.try_put(coroutine)
 
         # call join to wait for all tasks in pool to complete
         # this is not required to execute the tasks in pool
