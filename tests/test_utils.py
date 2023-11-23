@@ -374,8 +374,18 @@ async def test_concurrent_runner_high_concurrency():
     assert second_results == [3]
 
 
+@pytest.mark.parametrize(
+    "initial_capacity, expected_result",
+    [
+        (0, True),  # when pool is empty
+        (2, True),  # when pool is almost empty
+        (5, True),  # when pool is half full
+        (8, True),  # when pool is almost full
+        (10, False),  # when pool is full
+    ],
+)
 @pytest.mark.asyncio
-async def test_concurrent_runner_try_put():
+async def test_concurrent_runner_try_put(initial_capacity, expected_result):
     results = []
 
     def _results_callback(result):
@@ -385,18 +395,22 @@ async def test_concurrent_runner_try_put():
         await asyncio.sleep(0.1)
         return i
 
-    runner = ConcurrentTasks(1, results_callback=_results_callback)
-    # the first task is put successfully
-    task_0 = await runner.put(functools.partial(coroutine, 0))
-    # the second task is not put because the pool is full
-    task_1 = runner.try_put(functools.partial(coroutine, 1))
+    runner = ConcurrentTasks(10, results_callback=_results_callback)
+    # fill the pool with initial capacity
+    for i in range(initial_capacity):
+        await runner.put(functools.partial(coroutine, i))
+
+    # try to put an additional task
+    task = runner.try_put(functools.partial(coroutine, 100))
 
     await runner.join()
 
-    assert task_0 is not None
-    assert task_1 is None
-    assert 0 in results
-    assert 1 not in results
+    if expected_result:
+        assert task is not None
+        assert 100 in results
+    else:
+        assert task is None
+        assert 100 not in results
 
     # try_put the third task
     task_2 = runner.try_put(functools.partial(coroutine, 2))
