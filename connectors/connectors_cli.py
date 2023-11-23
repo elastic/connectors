@@ -122,7 +122,7 @@ def list_connectors(obj):
     coro = connector.list_connectors()
 
     try:
-        connectors = asyncio.get_event_loop().run_until_complete(coro)
+        connectors = asyncio.run(coro)
         click.echo("")
         if len(connectors) == 0:
             click.echo("No connectors found")
