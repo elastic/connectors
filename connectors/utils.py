@@ -428,6 +428,7 @@ class ConcurrentTasks:
 
         if self._sem.try_acquire():
             return self._add_task(coroutine, result_callback=result_callback)
+        return None
 
     async def join(self):
         """Wait for all tasks to finish."""
