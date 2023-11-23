@@ -372,6 +372,25 @@ class ConcurrentTasks:
 
     - `max_concurrency`: max concurrent tasks allowed, default: 5
     - `results_callback`: when provided, synchronous function called with the result of each task.
+
+    Examples:
+
+        # create a task pool with the default max concurrency
+        task_pool = ConcurrentTasks()
+
+        # put a task into pool
+        # it will block until the task was put successfully
+        task = await task_pool.put(coroutine)
+
+        # put a task without blocking
+        # it will try to put the task, and return None if it can't be put immediately
+        task = task_pool.try_put(coroutine)
+
+        # call join to wait for all tasks in pool to complete
+        # this is not required to execute the tasks in pool
+        # a task will be automatically scheduled to execute once it's put successfully
+        # call join() only when you need to do something after all tasks in pool complete
+        await task_pool.join()
     """
 
     def __init__(self, max_concurrency=5, results_callback=None):
@@ -396,15 +415,7 @@ class ConcurrentTasks:
         if self.results_callback is not None:
             self.results_callback(task.result())
 
-    async def put(self, coroutine, result_callback=None):
-        """Adds a coroutine for immediate execution.
-
-        If the number of running tasks reach `max_concurrency`, this
-        function will block and wait for a free slot.
-
-        If provided, `result_callback` will be called when the task is done.
-        """
-        await self._sem.acquire()
+    def _add_task(self, coroutine, result_callback=None):
         task = asyncio.create_task(coroutine())
         self.tasks.append(task)
         # _callback will be executed when the task is done,
@@ -414,6 +425,30 @@ class ConcurrentTasks:
             functools.partial(self._callback, result_callback=result_callback)
         )
         return task
+
+    async def put(self, coroutine, result_callback=None):
+        """Adds a coroutine for immediate execution.
+
+        If the number of running tasks reach `max_concurrency`, this
+        function will block and wait for a free slot.
+
+        If provided, `result_callback` will be called when the task is done.
+        """
+        await self._sem.acquire()
+        return self._add_task(coroutine, result_callback=result_callback)
+
+    def try_put(self, coroutine, result_callback=None):
+        """Tries to add a coroutine for immediate execution.
+
+        If the number of running tasks reach `max_concurrency`, this
+        function return a None task immediately
+
+        If provided, `result_callback` will be called when the task is done.
+        """
+
+        if self._sem.try_acquire():
+            return self._add_task(coroutine, result_callback=result_callback)
+        return None
 
     async def join(self):
         """Wait for all tasks to finish."""
