@@ -386,13 +386,25 @@ async def test_concurrent_runner_try_put():
         return i
 
     runner = ConcurrentTasks(1, results_callback=_results_callback)
-    await runner.put(functools.partial(coroutine, 0))
-    task = runner.try_put(functools.partial(coroutine, 1))
+    # the first task is put successfully
+    task_0 = await runner.put(functools.partial(coroutine, 0))
+    # the second task is not put because the pool is full
+    task_1 = runner.try_put(functools.partial(coroutine, 1))
 
     await runner.join()
 
-    assert task is None
+    assert task_0 is not None
+    assert task_1 is None
+    assert 0 in results
     assert 1 not in results
+
+    # try_put the third task
+    task_2 = runner.try_put(functools.partial(coroutine, 2))
+
+    await runner.join()
+
+    assert task_2 is not None
+    assert 2 in results
 
 
 @contextlib.contextmanager
