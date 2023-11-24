@@ -23,37 +23,12 @@ from connectors.cli.connector import Connector
 from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.es.settings import Settings
-
-SERVICE_TYPES = {
-    "mongodb": "connectors.sources.mongo:MongoDataSource",
-    "s3": "connectors.sources.s3:S3DataSource",
-    "dir": "connectors.sources.directory:DirectoryDataSource",
-    "mysql": "connectors.sources.mysql:MySqlDataSource",
-    "network_drive": "connectors.sources.network_drive:NASDataSource",
-    "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
-    "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
-    "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
-    "oracle": "connectors.sources.oracle:OracleDataSource",
-    "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
-    "mssql": "connectors.sources.mssql:MSSQLDataSource",
-    "jira": "connectors.sources.jira:JiraDataSource",
-    "confluence": "connectors.sources.confluence:ConfluenceDataSource",
-    "dropbox": "connectors.sources.dropbox:DropboxDataSource",
-    "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
-    "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
-    "github": "connectors.sources.github:GitHubDataSource",
-}
+from connectors.config import _default_config
 
 __all__ = ["main"]
 
 
 # Main group
-def print_version(ctx, param, value):
-    if not value or ctx.resilient_parsing:
-        return
-    click.echo(__version__)
-
-
 @click.group(invoke_without_command=True)
 @click.version_option(__version__, "-v", "--version", message="%(version)s")
 @click.option("-c", "--config", type=click.File("rb"))
@@ -176,7 +151,7 @@ def validate_language(ctx, param, value):
 @click.option(
     "--service_type",
     prompt=f"{click.style('?', blink=True, fg='green')} Service type",
-    type=click.Choice(list(SERVICE_TYPES.keys()), case_sensitive=False),
+    type=click.Choice(list(_default_config()['sources'].keys()), case_sensitive=False),
 )
 @click.option(
     "--index_language",
@@ -189,7 +164,7 @@ def create(obj, index_name, service_type, index_language):
     index_name = f"search-{index_name}"
     connector = Connector(obj["config"]["elasticsearch"])
     configuration = connector.service_type_configuration(
-        source_class=SERVICE_TYPES[service_type]
+        source_class=_default_config()['sources'][service_type]
     )
 
     def prompt():

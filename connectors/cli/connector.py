@@ -32,11 +32,7 @@ class Connector:
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
 
-            connectors = []
-            async for connector in self.connector_index.all_connectors():
-                connectors.append(connector)
-
-            return connectors
+            return [connector async for connector in self.connector_index.all_connectors()]
 
         # TODO catch exceptions
         finally:
@@ -138,8 +134,6 @@ class Connector:
 
             connector = await self.connector_index.index(doc)
             return connector["_id"]
-        except Exception as e:
-            raise e
         finally:
             await self.connector_index.close()
 

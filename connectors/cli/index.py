@@ -17,7 +17,7 @@ class Index:
         return asyncio.run(self.__clean_index(index_name))
 
     def delete(self, index_name):
-        return asyncio.run(self.__delete_index(index_name)) is None
+        return asyncio.run(self.__delete_index(index_name))
 
     async def __list_indices(self):
         try:
@@ -37,7 +37,8 @@ class Index:
 
     async def __delete_index(self, index_name):
         try:
-            return await self.es_client.delete_indices([index_name])
+            await self.es_client.delete_indices([index_name])
+            return True
         except ApiError:
             return False
         finally:

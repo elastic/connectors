@@ -41,8 +41,6 @@ class Job:
             )
 
             return True
-        except Exception as e:
-            raise e
         finally:
             await self.sync_job_index.close()
             await self.connector_index.close()
@@ -57,11 +55,8 @@ class Job:
                 query=self.__job_list_query(connector_id, index_name, job_id),
                 sort=self.__job_list_sort(),
             )
-            formatted_jobs = []
-            async for job in jobs:
-                formatted_jobs.append(job)
 
-            return formatted_jobs
+            return [job async for job in jobs]
 
         # TODO catch exceptions
         finally:
