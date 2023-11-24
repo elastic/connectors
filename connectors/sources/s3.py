@@ -10,10 +10,16 @@ from contextlib import AsyncExitStack
 from functools import partial
 
 import aioboto3
+import fastjsonschema
 from aiobotocore.config import AioConfig
 from aiobotocore.utils import logger as aws_logger
 from botocore.exceptions import ClientError
+from fastjsonschema import JsonSchemaValueException
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger, set_extra_logger
 from connectors.source import BaseDataSource
 from connectors.utils import hash_id
@@ -105,7 +111,7 @@ class S3Client:
             buckets = self.configuration["buckets"]
         return buckets
 
-    async def get_bucket_objects(self, bucket):
+    async def get_bucket_objects(self, **kwargs):
         """Returns bucket list from list_buckets response
         Args:
             bucket (str): Name of bucket
@@ -114,6 +120,7 @@ class S3Client:
             s3_client: S3 client object
         """
         page_size = self.configuration["page_size"]
+        bucket = kwargs.get("bucket", "")
         region_name = await self.get_bucket_region(bucket)
         s3_client = await self.client(region=region_name)
         async with self.session.resource(
@@ -126,7 +133,12 @@ class S3Client:
                 bucket_obj = await s3.Bucket(bucket)
                 await asyncio.sleep(0)
 
-                async for obj_summary in bucket_obj.objects.page_size(page_size):
+                if "prefix" in kwargs:
+                    objects = bucket_obj.objects.filter(Prefix=kwargs["prefix"])
+                else:
+                    objects = bucket_obj.objects.page_size(page_size)
+
+                async for obj_summary in objects:
                     yield obj_summary, s3_client
             except Exception as exception:
                 self._logger.warning(
@@ -153,11 +165,49 @@ class S3Client:
         return region
 
 
+class S3AdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "bucket": {"type": "string", "minLength": 1},
+            "prefix": {"type": "string"},
+            "extension": {"type": "array"},
+        },
+        "required": ["bucket"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+        try:
+            S3AdvancedRulesValidator.SCHEMA(advanced_rules)
+            return SyncRuleValidationResult.valid_result(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES
+            )
+        except JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+
+
 class S3DataSource(BaseDataSource):
     """Amazon S3"""
 
     name = "Amazon S3"
     service_type = "s3"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Amazon S3.
@@ -170,6 +220,9 @@ class S3DataSource(BaseDataSource):
 
     def _set_internal_logger(self):
         self.s3_client.set_logger(self._logger)
+
+    def advanced_rules_validators(self):
+        return [S3AdvancedRulesValidator(self)]
 
     async def ping(self):
         """Verify the connection with AWS"""
@@ -203,6 +256,26 @@ class S3DataSource(BaseDataSource):
         }
         return document
 
+    async def advanced_sync(self, rule):
+        async def process_object(obj_summary, s3_client):
+            document = await self.format_document(
+                bucket_name=bucket, bucket_object=obj_summary
+            )
+            return document, partial(
+                self.get_content, doc=document, s3_client=s3_client
+            )
+
+        bucket = rule["bucket"]
+        prefix = rule.get("prefix", "")
+        async for obj_summary, s3_client in self.s3_client.get_bucket_objects(
+            bucket=bucket, prefix=prefix
+        ):
+            if not rule.get("extension"):
+                yield await process_object(obj_summary, s3_client)
+
+            elif self.get_file_extension(obj_summary.key) in rule.get("extension", []):
+                yield await process_object(obj_summary, s3_client)
+
     async def get_docs(self, filtering=None):
         """Get documents from Amazon S3
 
@@ -212,19 +285,25 @@ class S3DataSource(BaseDataSource):
         Yields:
             dictionary: Document from Amazon S3.
         """
-        bucket_list = await self.s3_client.get_bucket_list()
-        for bucket in bucket_list:
-            async for obj_summary, s3_client in self.s3_client.get_bucket_objects(
-                bucket
-            ):
-                document = await self.format_document(
-                    bucket_name=bucket, bucket_object=obj_summary
-                )
-                yield document, partial(
-                    self.get_content,
-                    doc=document,
-                    s3_client=s3_client,
-                )
+        if filtering and filtering.has_advanced_rules():
+            for rule in filtering.get_advanced_rules():
+                async for document, attachment in self.advanced_sync(rule=rule):
+                    yield document, attachment
+
+        else:
+            bucket_list = await self.s3_client.get_bucket_list()
+            for bucket in bucket_list:
+                async for obj_summary, s3_client in self.s3_client.get_bucket_objects(
+                    bucket=bucket
+                ):
+                    document = await self.format_document(
+                        bucket_name=bucket, bucket_object=obj_summary
+                    )
+                    yield document, partial(
+                        self.get_content,
+                        doc=document,
+                        s3_client=s3_client,
+                    )
 
     async def get_content(self, doc, s3_client, timestamp=None, doit=None):
         if not (doit):
@@ -272,6 +351,7 @@ class S3DataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "AWS Buckets",
                 "order": 1,
+                "tooltip": "buckets are ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "aws_access_key_id": {
