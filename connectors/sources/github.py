@@ -1667,7 +1667,7 @@ class GitHubDataSource(BaseDataSource):
             keys=["repository", "collaborators"],
         ):
             for user in (
-                response.get("data", {})
+                response.get("data", {})  # pyright: ignore
                 .get("repository", {})
                 .get("collaborators", {})
                 .get("edges", [])

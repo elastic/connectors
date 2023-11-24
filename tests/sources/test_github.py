@@ -886,7 +886,7 @@ async def test_fetch_repos_organization():
 @pytest.mark.asyncio
 async def test_fetch_repos_when_user_repos_is_available():
     async with create_github_source() as source:
-        source.github_client.repos = ["demo_user/demo_repo", ""]
+        source.github_client.repos = ["demo_user/demo_repo", "", "demo_repo"]
         source.github_client.post = AsyncMock(
             side_effect=[
                 {"data": {"viewer": {"login": "owner1"}}},
