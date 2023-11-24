@@ -13,6 +13,11 @@ import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub.aiohttp import GitHubAPI
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -53,6 +58,18 @@ FILE_SCHEMA = {
 }
 
 
+def _prefix_email(email):
+    return prefix_identity("email", email)
+
+
+def _prefix_username(user):
+    return prefix_identity("username", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
+
+
 class GithubQuery(Enum):
     USER_QUERY = """
         query {
@@ -64,6 +81,41 @@ class GithubQuery(Enum):
     REPOS_QUERY = f"""
     query ($login: String!, $cursor: String) {{
     user(login: $login) {{
+        repositories(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
+            hasNextPage
+            endCursor
+        }}
+        nodes {{
+            id
+            updatedAt
+            name
+            nameWithOwner
+            url
+            description
+            visibility
+            primaryLanguage {{
+            name
+            }}
+            defaultBranchRef {{
+            name
+            }}
+            isFork
+            stargazerCount
+            watchers {{
+            totalCount
+            }}
+            forkCount
+            createdAt
+            isArchived
+        }}
+        }}
+    }}
+    }}
+    """
+    ORG_REPOS_QUERY = f"""
+    query ($orgName: String!, $cursor: String) {{
+    organization(login: $orgName) {{
         repositories(first: {NODE_SIZE}, after: $cursor) {{
         pageInfo {{
             hasNextPage
@@ -507,6 +559,46 @@ class GithubQuery(Enum):
     }}
     }}
     """
+    ORG_MEMBERS_QUERY = f"""
+    query ($orgName: String!, $cursor: String) {{
+    organization(login: $orgName) {{
+        membersWithRole(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
+            hasNextPage
+            endCursor
+        }}
+        edges {{
+            node {{
+                id
+                login
+                name
+                email
+                updatedAt
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
+    COLLABORATORS_QUERY = f"""
+    query ($orgName: String!, $repoName: String!, $cursor: String) {{
+    repository(owner: $orgName, name: $repoName) {{
+        collaborators(first: {NODE_SIZE}, after: $cursor) {{
+        pageInfo {{
+            hasNextPage
+            endCursor
+        }}
+        edges {{
+            node {{
+                id
+                login
+                email
+            }}
+        }}
+        }}
+    }}
+    }}
+    """
 
 
 class ObjectType(Enum):
@@ -532,6 +624,8 @@ class GitHubClient:
         self.github_url = f"{configuration['host'].rstrip('/')}/api"
         self.repos = self.configuration["repositories"]
         self.github_token = self.configuration["token"]
+        self.repo_type = self.configuration["repo_type"]
+        self.org_name = self.configuration["org_name"]
         if self.ssl_enabled and self.certificate:
             self.ssl_ctx = ssl_context(certificate=self.certificate)
         else:
@@ -720,6 +814,24 @@ class GitHubClient:
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
 
+    async def get_org_repos(self):
+        repo_variables = {
+            "orgName": self.org_name,
+            "cursor": None,
+        }
+        async for response in self.paginated_api_call(
+            variables=repo_variables,
+            query=GithubQuery.ORG_REPOS_QUERY.value,
+            keys=["organization", "repositories"],
+        ):
+            for repo in (
+                response.get("data", {})  # pyright: ignore
+                .get("organization", {})
+                .get("repositories", {})
+                .get("nodes")
+            ):
+                yield repo
+
     async def get_user_repos(self):
         repo_variables = {
             "login": self.user,
@@ -748,6 +860,24 @@ class GitHubClient:
         repo_response = await self.post(query_data=query_data)
         return repo_response.get("data", {}).get(REPOSITORY_OBJECT)  # pyright: ignore
 
+    async def _fetch_all_members(self):
+        org_variables = {
+            "orgName": self.org_name,
+            "cursor": None,
+        }
+        async for response in self.paginated_api_call(
+            variables=org_variables,
+            query=GithubQuery.ORG_MEMBERS_QUERY.value,
+            keys=["organization", "membersWithRole"],
+        ):
+            for repo in (
+                response.get("data", {})  # pyright: ignore
+                .get("organization", {})
+                .get("membersWithRole", {})
+                .get("edges")
+            ):
+                yield repo.get("node")
+
     async def get_logged_in_user(self):
         query_data = {
             "query": GithubQuery.USER_QUERY.value,
@@ -766,6 +896,16 @@ class GitHubClient:
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
+
+    def bifurcate_repos(self, owner):
+        foreign_repos, configured_repos = [], []
+        for repo_name in self.repos:
+            if repo_name not in ["", None]:
+                if "/" in repo_name:
+                    foreign_repos.append(repo_name)
+                else:
+                    configured_repos.append(f"{owner}/{repo_name}")
+        return foreign_repos, configured_repos
 
 
 class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
@@ -836,6 +976,7 @@ class GitHubDataSource(BaseDataSource):
     name = "GitHub"
     service_type = "github"
     advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the GitHub instance.
@@ -846,8 +987,10 @@ class GitHubDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.github_client = GitHubClient(configuration=configuration)
         self.user_repos = {}
+        self.org_repos = {}
         self.foreign_repos = {}
         self.prev_repos = []
+        self.members = set()
 
     def _set_internal_logger(self):
         self.github_client.set_logger(self._logger)
@@ -886,31 +1029,49 @@ class GitHubDataSource(BaseDataSource):
                 "sensitive": True,
                 "type": "str",
             },
+            "repo_type": {
+                "display": "dropdown",
+                "label": "Repository Type",
+                "options": [
+                    {"label": "Organization", "value": "organization"},
+                    {"label": "Other", "value": "other"},
+                ],
+                "order": 4,
+                "tooltip": "The Document Level Security feature is not available for the Other Repository Type",
+                "type": "str",
+                "value": "other",
+            },
+            "org_name": {
+                "depends_on": [{"field": "repo_type", "value": "organization"}],
+                "label": "Organization Name",
+                "order": 5,
+                "type": "str",
+            },
             "repositories": {
                 "display": "textarea",
                 "label": "List of repositories",
-                "order": 4,
+                "order": 6,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 5,
+                "order": 7,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 6,
+                "order": 8,
                 "type": "str",
             },
             "retry_count": {
                 "display_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 7,
+                "order": 9,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -919,48 +1080,105 @@ class GitHubDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 8,
+                "order": 10,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "depends_on": [{"field": "repo_type", "value": "organization"}],
+                "label": "Enable document level security",
+                "order": 11,
+                "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if (
+            self._features is None
+            or not self._features.document_level_security_enabled()
+        ):
+            return False
+
+        return self.configuration["use_document_level_security"]
 
     async def get_invalid_repos(self):
         try:
             self._logger.debug(
                 "Checking if there are any inaccessible repositories configured"
             )
-            foreign_repos, configured_repos = [], []
             self.github_client.user = await self.github_client.get_logged_in_user()
+            if self.github_client.repo_type == "other":
+                foreign_repos, configured_repos = self.github_client.bifurcate_repos(
+                    owner=self.github_client.user
+                )
+                async for repo in self.github_client.get_user_repos():
+                    self.user_repos[repo["nameWithOwner"]] = repo
+                invalid_repos = list(
+                    set(configured_repos) - set(self.user_repos.keys())
+                )
 
-            for repo_name in self.github_client.repos:
-                if repo_name not in ["", None]:
-                    if "/" in repo_name:
-                        foreign_repos.append(repo_name)
-                    else:
-                        configured_repos.append(
-                            f"{self.github_client.user}/{repo_name}"
+                for repo_name in foreign_repos:
+                    try:
+                        self.foreign_repos[
+                            repo_name
+                        ] = await self.github_client.get_foreign_repo(
+                            repo_name=repo_name
                         )
-            async for repo in self.github_client.get_user_repos():
-                self.user_repos[repo["nameWithOwner"]] = repo
-            invalid_repos = list(set(configured_repos) - set(self.user_repos.keys()))
-
-            for repo_name in foreign_repos:
-                try:
-                    self.foreign_repos[
-                        repo_name
-                    ] = await self.github_client.get_foreign_repo(repo_name=repo_name)
-                except Exception:
-                    self._logger.debug(f"Detected invalid repository: {repo_name}.")
-                    invalid_repos.append(repo_name)
+                    except Exception:
+                        self._logger.debug(f"Detected invalid repository: {repo_name}.")
+                        invalid_repos.append(repo_name)
+            else:
+                foreign_repos, configured_repos = self.github_client.bifurcate_repos(
+                    owner=self.github_client.org_name
+                )
+                configured_repos.extend(foreign_repos)
+                async for repo in self.github_client.get_org_repos():
+                    self.org_repos[repo["nameWithOwner"]] = repo
+                invalid_repos = list(set(configured_repos) - set(self.org_repos.keys()))
             return invalid_repos
         except Exception as exception:
             self._logger.exception(
                 f"Error while checking for inaccessible repositories. Exception: {exception}."
             )
             raise
+
+    async def _user_access_control_doc(self, user):
+        user_id = user.get("id", "")
+        user_name = user.get("login", "")
+        user_email = user.get("email", "")
+
+        _prefixed_user_id = _prefix_user_id(user_id=user_id)
+        _prefixed_user_name = _prefix_username(user=user_name)
+        _prefixed_email = _prefix_email(email=user_email)
+        return {
+            "_id": user_id,
+            "identity": {
+                "user_id": _prefixed_user_id,
+                "user_name": _prefixed_user_name,
+                "email": _prefixed_email,
+            },
+            "created_at": user.get("updatedAt"),
+        } | es_access_control_query(
+            access_control=[_prefixed_user_id, _prefixed_user_name, _prefixed_email]
+        )
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        async for user in self.github_client._fetch_all_members():
+            yield await self._user_access_control_doc(user=user)
 
     async def _remote_validation(self):
         """Validate scope of the configured Token and accessibility of repositories
@@ -1049,6 +1267,20 @@ class GitHubDataSource(BaseDataSource):
             )
             yield repo_object
 
+    async def _get_org_repos(self):
+        if not self.org_repos:
+            async for repo_object in self.github_client.get_org_repos():
+                self.org_repos[repo_object["nameWithOwner"]] = repo_object
+        for repo_object in self.org_repos.values():
+            repo_object.update(
+                {
+                    "_id": repo_object.pop("id"),
+                    "_timestamp": repo_object.pop("updatedAt"),
+                    "type": ObjectType.REPOSITORY.value,
+                }
+            )
+            yield repo_object
+
     async def _get_configured_repos(self, configured_repos):
         for repo_name in configured_repos:
             if repo_name in ["", None]:
@@ -1056,7 +1288,12 @@ class GitHubDataSource(BaseDataSource):
 
             # Converting the local repository names to username/repo_name format.
             if "/" not in repo_name:
-                repo_name = f"{self.github_client.user}/{repo_name}"
+                owner = (
+                    self.github_client.user
+                    if self.github_client.repo_type == "other"
+                    else self.github_client.org_name
+                )
+                repo_name = f"{owner}/{repo_name}"
             repo_object = self.foreign_repos.get(repo_name) or self.user_repos.get(
                 repo_name
             )
@@ -1086,8 +1323,17 @@ class GitHubDataSource(BaseDataSource):
             if self.github_client.user is None:
                 self.github_client.user = await self.github_client.get_logged_in_user()
 
-            if self.github_client.repos == [WILDCARD]:
+            if (
+                self.github_client.repos == [WILDCARD]
+                and self.github_client.repo_type == "other"
+            ):
                 async for repo_object in self._get_personal_repos():
+                    yield repo_object
+            elif (
+                self.github_client.repos == [WILDCARD]
+                and self.github_client.repo_type == "organization"
+            ):
+                async for repo_object in self._get_org_repos():
                     yield repo_object
             else:
                 async for repo_object in self._get_configured_repos(
@@ -1397,6 +1643,46 @@ class GitHubDataSource(BaseDataSource):
         self.prev_repos.append(repo_name)
         return False
 
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+        return document
+
+    async def _fetch_access_control(self, repo_name):
+        owner, repo = self.github_client.get_repo_details(repo_name)
+        collaborator_variables = {
+            "orgName": owner,
+            "repoName": repo,
+            "cursor": None,
+        }
+        access_control = []
+        if len(self.members) <= 0:
+            async for user in self.github_client._fetch_all_members():
+                self.members.add(user.get("id"))
+        async for response in self.github_client.paginated_api_call(
+            variables=collaborator_variables,
+            query=GithubQuery.COLLABORATORS_QUERY.value,
+            keys=["repository", "collaborators"],
+        ):
+            for user in (
+                response.get("data", {})
+                .get("repository", {})
+                .get("collaborators", {})
+                .get("edges", [])
+            ):
+                user_id = user.get("node", {}).get("id")
+                user_name = user.get("node", {}).get("login")
+                user_email = user.get("node", {}).get("email")
+                if user_id in self.members:
+                    access_control.append(_prefix_user_id(user_id=user_id))
+                    if user_name:
+                        access_control.append(_prefix_username(user=user_name))
+                    if user_email:
+                        access_control.append(_prefix_email(email=user_email))
+        return access_control
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GitHub objects in async manner.
 
@@ -1463,7 +1749,20 @@ class GitHubDataSource(BaseDataSource):
             async for repo in self._fetch_repos():
                 if self.is_previous_repo(repo["nameWithOwner"]):
                     continue
-                yield repo, None
+                access_control = []
+                if self._dls_enabled():
+                    if repo.get("visibility").lower() == "public":
+                        async for user in self.github_client._fetch_all_members():
+                            access_control.append(
+                                _prefix_user_id(user_id=user.get("id"))
+                            )
+                    else:
+                        access_control = await self._fetch_access_control(
+                            repo_name=repo.get("nameWithOwner")
+                        )
+                yield self._decorate_with_access_control(
+                    document=repo, access_control=access_control
+                ), None
                 repo_name = repo.get("nameWithOwner")
                 default_branch = (
                     repo.get("defaultBranchRef", {}).get("name")
@@ -1474,18 +1773,24 @@ class GitHubDataSource(BaseDataSource):
                 async for pull_request in self._fetch_pull_requests(
                     repo_name=repo_name
                 ):
-                    yield pull_request, None
+                    yield self._decorate_with_access_control(
+                        document=pull_request, access_control=access_control
+                    ), None
 
                 async for issue in self._fetch_issues(repo_name=repo_name):
-                    yield issue, None
+                    yield self._decorate_with_access_control(
+                        document=issue, access_control=access_control
+                    ), None
 
                 if default_branch:
                     async for file_document, attachment_metadata in self._fetch_files(
                         repo_name=repo_name, default_branch=default_branch
                     ):
                         if file_document["type"] == BLOB:
-                            yield file_document, partial(
-                                self.get_content, attachment=attachment_metadata
-                            )
+                            yield self._decorate_with_access_control(
+                                document=file_document, access_control=access_control
+                            ), partial(self.get_content, attachment=attachment_metadata)
                         else:
-                            yield file_document, None
+                            yield self._decorate_with_access_control(
+                                document=file_document, access_control=access_control
+                            ), None
