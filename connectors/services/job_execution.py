@@ -82,8 +82,8 @@ class JobExecutionService(BaseService):
             es_config=self._override_es_config(connector),
         )
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
-            sync_job.log_warning(
-                f"{self.display_name.capitalize()} has reached the maximum concurrency of {self.max_concurrency}. Retry in {self.idling} seconds."
+            sync_job.log_info(
+                f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. It will retry in {self.idling} seconds. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
             )
 
     async def _run(self):

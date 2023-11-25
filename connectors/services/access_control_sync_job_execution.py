@@ -14,6 +14,7 @@ DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS = 1
 class AccessControlSyncJobExecutionService(JobExecutionService):
     name = "sync_access_control"
     display_name = "access control sync job execution"
+    max_concurrency_config = "service.max_concurrent_access_control_syncs"
     JOB_TYPES = JobType.ACCESS_CONTROL.value
 
     @cached_property
