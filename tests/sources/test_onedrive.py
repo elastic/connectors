@@ -901,7 +901,7 @@ async def test_get_content_with_extraction_service():
 
 
 @pytest.mark.asyncio
-async def test_get_data():
+async def test_json_batching():
     async_response, next_page_response = AsyncMock(), AsyncMock()
     result = []
     expected_result = [
@@ -920,12 +920,13 @@ async def test_get_data():
                 "aiohttp.ClientSession.post",
                 side_effect=[async_response, next_page_response],
             ):
-                async for file, _ in source.get_data(
-                    batched_users=[
-                        {"name": "user1", "id": "123"},
-                        {"name": "user1", "id": "231"},
+                async for response in source.json_batching(
+                    batched_apis=[
+                        {"method": "GET", "id": "123", "url": "/users/user1/delta"},
+                        {"method": "GET", "id": "231", "url": "/users/user2/delta"},
                     ]
                 ):
+                    file = response.get("body", {}).get("value", [])
                     result.append(file[0].get("id"))
 
     assert result == expected_result
@@ -936,13 +937,13 @@ async def test_get_data():
 )
 @patch.object(
     OneDriveDataSource,
-    "get_data",
+    "json_batching",
     side_effect=[
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES, "11"),
-                    (RESPONSE_USER2_FILES, "12"),
+                    ({"body": {"value": RESPONSE_USER1_FILES}}),
+                    ({"body": {"value": RESPONSE_USER2_FILES}}),
                 ],
             )
         )
@@ -1175,13 +1176,13 @@ async def test_get_access_control_dls_enabled():
 )
 @patch.object(
     OneDriveDataSource,
-    "get_data",
+    "json_batching",
     side_effect=[
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES, "11"),
-                    (RESPONSE_USER2_FILES, "12"),
+                    ({"body": {"value": RESPONSE_USER1_FILES}}),
+                    ({"body": {"value": RESPONSE_USER2_FILES}}),
                 ]
             )
         ),
@@ -1212,13 +1213,13 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch):
 )
 @patch.object(
     OneDriveDataSource,
-    "get_data",
+    "json_batching",
     side_effect=[
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES.copy(), "11"),
-                    (RESPONSE_USER2_FILES.copy(), "12"),
+                    ({"body": {"value": RESPONSE_USER1_FILES}}.copy()),
+                    ({"body": {"value": RESPONSE_USER2_FILES}}.copy()),
                 ]
             )
         ),
