@@ -7,7 +7,7 @@ from copy import deepcopy
 from datetime import datetime
 
 import fastjsonschema
-from bson import Decimal128, ObjectId
+from bson import DBRef, Decimal128, ObjectId
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -167,6 +167,8 @@ class MongoDataSource(BaseDataSource):
                 value = value.isoformat()
             elif isinstance(value, Decimal128):
                 value = value.to_decimal()
+            elif isinstance(value, DBRef):
+                value = _serialize(value.as_doc().to_dict())
             return value
 
         for key, value in doc.items():
