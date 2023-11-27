@@ -22,51 +22,6 @@ from connectors.utils import validate_index_name
 CONNECTORS_INDEX = ".elastic-connectors-v1"
 JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
-DEFAULT_FILTERING = [
-    {
-        "domain": "DEFAULT",
-        "draft": {
-            "advanced_snippet": {
-                "updated_at": "2023-01-31T16:41:27.341Z",
-                "created_at": "2023-01-31T16:38:49.244Z",
-                "value": {},
-            },
-            "rules": [
-                {
-                    "field": "_",
-                    "updated_at": "2023-01-31T16:41:27.341Z",
-                    "created_at": "2023-01-31T16:38:49.244Z",
-                    "rule": "regex",
-                    "id": "DEFAULT",
-                    "value": ".*",
-                    "order": 1,
-                    "policy": "include",
-                }
-            ],
-            "validation": {"state": "valid", "errors": []},
-        },
-        "active": {
-            "advanced_snippet": {
-                "updated_at": "2023-01-31T16:41:27.341Z",
-                "created_at": "2023-01-31T16:38:49.244Z",
-                "value": {},
-            },
-            "rules": [
-                {
-                    "field": "_",
-                    "updated_at": "2023-01-31T16:41:27.341Z",
-                    "created_at": "2023-01-31T16:38:49.244Z",
-                    "rule": "regex",
-                    "id": "DEFAULT",
-                    "value": ".*",
-                    "order": 1,
-                    "policy": "include",
-                }
-            ],
-            "validation": {"state": "valid", "errors": []},
-        },
-    }
-]
 DEFAULT_PIPELINE = {
     "version": 1,
     "description": "For testing",
@@ -331,7 +286,8 @@ def main(args=None):
     config_file = args.config_file
 
     if not os.path.exists(config_file):
-        raise IOError(f"config file at '{config_file}' does not exist")
+        msg = f"config file at '{config_file}' does not exist"
+        raise IOError(msg)
 
     config = load_config(config_file)
     connector_definition = None

@@ -703,7 +703,8 @@ async def test_validate_config():
             try:
                 await source.validate_config()
             except ConfigurableFieldValueError:
-                raise AssertionError("Should've been a valid config") from None
+                msg = "Should've been a valid config"
+                raise AssertionError(msg) from None
 
 
 @pytest.mark.asyncio
@@ -726,7 +727,8 @@ async def test_ping_for_successful_connection():
             try:
                 await source.ping()
             except Exception as e:
-                raise AssertionError("Ping should've been successful") from e
+                msg = "Ping should've been successful"
+                raise AssertionError(msg) from e
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+# ruff: noqa: T201
 """Module to responsible to generate confluence documents using the Flask framework.
 """
 import io
@@ -31,9 +32,8 @@ match DATA_SIZE:
         SPACE_OBJECT_COUNT = 250
         ATTACHMENT_COUNT = 7
     case _:
-        raise Exception(
-            f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
-        )
+        msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
+        raise Exception(msg)
 
 
 def get_num_docs():

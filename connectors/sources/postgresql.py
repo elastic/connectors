@@ -53,7 +53,11 @@ class PostgreSQLQueries(Queries):
 
     def table_primary_key(self, **kwargs):
         """Query to get the primary key"""
-        return f"SELECT c.column_name FROM information_schema.table_constraints tc JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name) JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema AND tc.table_name = c.table_name AND ccu.column_name = c.column_name WHERE constraint_type = 'PRIMARY KEY' and tc.table_name = '{kwargs['table']}' and tc.constraint_schema = '{kwargs['schema']}'"
+        return (
+            f"SELECT a.attname AS c FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
+            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{kwargs['schema']}.{kwargs['table']}'::regclass "
+            f"AND i.indisprimary"
+        )
 
     def table_data(self, **kwargs):
         """Query to get the table data"""
@@ -113,11 +117,11 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        tables_to_filter = set(
+        tables_to_filter = {
             table
             for query_info in advanced_rules
             for table in query_info.get("tables", [])
-        )
+        }
         tables = {
             table
             async for table in self.source.postgresql_client.get_tables_to_fetch(
@@ -444,9 +448,8 @@ class PostgreSQLDataSource(BaseDataSource):
             await self.postgresql_client.ping()
             self._logger.info("Successfully connected to Postgresql.")
         except Exception as e:
-            raise Exception(
-                f"Can't connect to Postgresql on {self.postgresql_client.host}."
-            ) from e
+            msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
+            raise Exception(msg) from e
 
     def row2doc(self, row, doc_id, table, timestamp):
         row.update(
@@ -538,7 +541,7 @@ class PostgreSQLDataSource(BaseDataSource):
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
         ):
-            doc_id = f"{self.database}_{self.schema}_{hash_id([table for table in tables], row, primary_key_columns)}"
+            doc_id = f"{self.database}_{self.schema}_{hash_id(list(tables), row, primary_key_columns)}"
 
             yield self.serialize(
                 doc=self.row2doc(

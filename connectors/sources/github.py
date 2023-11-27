@@ -571,7 +571,8 @@ class GitHubClient:
             f"Connector will attempt to retry after {retry_after} seconds."
         )
         await self._sleeps.sleep(retry_after)
-        raise Exception("Rate limit exceeded.")
+        msg = "Rate limit exceeded."
+        raise Exception(msg)
 
     @cached_property
     def _get_session(self):
@@ -633,14 +634,14 @@ class GitHubClient:
                         and "api rate limit exceeded" in error.get("message").lower()
                     ):
                         await self._put_to_sleep(resource_type="graphql")
-                raise Exception(
+                msg = (
                     f"Error while executing query. Exception: {json_response['errors']}"
                 )
+                raise Exception(msg)
         except ClientResponseError as exception:
             if exception.status == 401:
-                raise UnauthorizedException(
-                    "Your Github token is either expired or revoked. Please check again."
-                ) from exception
+                msg = "Your Github token is either expired or revoked. Please check again."
+                raise UnauthorizedException(msg) from exception
             else:
                 raise
         except Exception:
@@ -665,9 +666,8 @@ class GitHubClient:
             return await self._get_client.getitem(url=resource)
         except ClientResponseError as exception:
             if exception.status == 401:
-                raise UnauthorizedException(
-                    "Your Github token is either expired or revoked. Please check again."
-                ) from exception
+                msg = "Your Github token is either expired or revoked. Please check again."
+                raise UnauthorizedException(msg) from exception
             elif self.get_rate_limit_encountered(exception.status, exception):
                 await self._put_to_sleep("core")
             else:
@@ -813,9 +813,9 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.github_client.repos = set(
+        self.source.github_client.repos = {
             rule["repository"] for rule in advanced_rules
-        )
+        }
         invalid_repos = await self.source.get_invalid_repos()
 
         if len(invalid_repos) > 0:
@@ -973,15 +973,13 @@ class GitHubDataSource(BaseDataSource):
             query_data=query_data, need_headers=True
         )
         if "repo" not in headers.get("X-OAuth-Scopes"):  # pyright: ignore
-            raise ConfigurableFieldValueError(
-                "Configured token does not have required rights to fetch the content"
-            )
+            msg = "Configured token does not have required rights to fetch the content"
+            raise ConfigurableFieldValueError(msg)
         if self.github_client.repos != [WILDCARD]:
             invalid_repos = await self.get_invalid_repos()
             if invalid_repos:
-                raise ConfigurableFieldValueError(
-                    f"Inaccessible repositories '{', '.join(invalid_repos)}'."
-                )
+                msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
+                raise ConfigurableFieldValueError(msg)
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields

@@ -185,7 +185,7 @@ async def test_prepare_files(files, expected_files):
         async for file in source.prepare_files(
             client=source.google_drive_client(),
             files_page=files[0],
-            paths=dict(),
+            paths={},
             seen_ids=set(),
         ):
             processed_files.append(file)
@@ -596,7 +596,7 @@ async def test_get_docs_with_domain_wide_delegation():
         )
 
         mock_empty_response_future = asyncio.Future()
-        mock_empty_response_future.set_result(dict())
+        mock_empty_response_future.set_result({})
 
         mock_gdrive_client.get_all_folders = mock.MagicMock(
             return_value=mock_empty_response_future

@@ -60,7 +60,7 @@ if "OVERRIDE_URL" in os.environ:
     GRAPH_ACQUIRE_TOKEN_URL = override_url
 else:
     GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
-    GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"
+    GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
     BASE_URL = "https://graph.microsoft.com/v1.0"
 
 SCOPE = [
@@ -350,9 +350,8 @@ class GraphAPIToken:
                 username=self.username, password=self.password, scopes=SCOPE
             )
         if not token_metadata.get("access_token"):
-            raise TokenFetchFailed(
-                f"Failed to authorize to Graph API. Please verify, that provided details are valid. Error: {token_metadata.get('error_description')}"
-            )
+            msg = f"Failed to authorize to Graph API. Please verify, that provided details are valid. Error: {token_metadata.get('error_description')}"
+            raise TokenFetchFailed(msg)
 
         access_token = token_metadata.get("access_token")
         expires_in = int(token_metadata.get("expires_in", TOKEN_EXPIRES))
@@ -474,19 +473,18 @@ class MicrosoftTeamsClient:
                 f"Rate limited by Microsoft Teams. Retrying after {retry_seconds} seconds"
             )
             await self._sleeps.sleep(retry_seconds)
-            raise ThrottledError(
-                f"Service is throttled because too many requests have been made to {absolute_url}: Exception: {e}"
-            ) from e
+            msg = f"Service is throttled because too many requests have been made to {absolute_url}: Exception: {e}"
+            raise ThrottledError(msg) from e
         elif e.status == 403:
-            raise PermissionsMissing(
-                f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Microsoft Teams permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-            ) from e
+            msg = f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Microsoft Teams permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+            raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e
         elif e.status == 500:
-            raise InternalServerError(
+            msg = (
                 f"Received InternalServerError error for {absolute_url}: Exception: {e}"
-            ) from e
+            )
+            raise InternalServerError(msg) from e
         else:
             raise
 

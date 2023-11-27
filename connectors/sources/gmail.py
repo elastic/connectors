@@ -36,8 +36,6 @@ SUBJECT_LABEL = "Subject"
 
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 
-GMAIL_API_TIMEOUT = GOOGLE_DIRECTORY_TIMEOUT = 1 * 60  # 1 min
-
 
 class GMailAdvancedRulesValidator(AdvancedRulesValidator):
     MESSAGES_SCHEMA_DEFINITION = {
@@ -126,6 +124,7 @@ class GMailDataSource(BaseDataSource):
             "service_account_credentials": {
                 "display": "textarea",
                 "label": SERVICE_ACCOUNT_CREDENTIALS_LABEL,
+                "sensitive": True,
                 "order": 1,
                 "required": True,
                 "type": "str",
@@ -181,9 +180,8 @@ class GMailDataSource(BaseDataSource):
         subject = self.configuration["subject"]
 
         if not validate_email_address(subject):
-            raise ConfigurableFieldValueError(
-                f"Subject field value needs to be a valid email address. '{subject}' is invalid."
-            )
+            msg = f"Subject field value needs to be a valid email address. '{subject}' is invalid."
+            raise ConfigurableFieldValueError(msg)
 
         await self._validate_google_directory_auth()
         await self._validate_gmail_auth()
@@ -201,9 +199,8 @@ class GMailDataSource(BaseDataSource):
         try:
             await self._gmail_client(self.configuration["subject"]).ping()
         except AuthError as e:
-            raise ConfigurableFieldValueError(
-                f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
-            ) from e
+            msg = f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
+            raise ConfigurableFieldValueError(msg) from e
 
     async def _validate_google_directory_auth(self):
         """
@@ -219,9 +216,8 @@ class GMailDataSource(BaseDataSource):
         try:
             await self._google_directory_client.ping()
         except AuthError as e:
-            raise ConfigurableFieldValueError(
-                f"Google Directory authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for Google Directory are setup correctly."
-            ) from e
+            msg = f"Google Directory authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for Google Directory are setup correctly."
+            raise ConfigurableFieldValueError(msg) from e
 
     def advanced_rules_validators(self):
         return [GMailAdvancedRulesValidator()]

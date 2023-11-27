@@ -116,16 +116,20 @@ class InvalidIndexNameError(ValueError):
 def validate_index_name(name):
     for char in INVALID_CHARS:
         if char in name:
-            raise InvalidIndexNameError(f"Invalid character {char}")
+            msg = f"Invalid character {char}"
+            raise InvalidIndexNameError(msg)
 
     if name.startswith(INVALID_PREFIX):
-        raise InvalidIndexNameError(f"Invalid prefix {name[0]}")
-
-    if not name.islower():
-        raise InvalidIndexNameError("Must be lowercase")
+        msg = f"Invalid prefix {name[0]}"
+        raise InvalidIndexNameError(msg)
 
     if name in INVALID_NAME:
-        raise InvalidIndexNameError("Can't use that name")
+        msg = "Can't use that name"
+        raise InvalidIndexNameError(msg)
+
+    if not name.islower():
+        msg = "Must be lowercase"
+        raise InvalidIndexNameError(msg)
 
     return name
 
@@ -203,7 +207,8 @@ def convert_to_b64(source, target=None, overwrite=False):
     inplace = target is None
     temp_target = f"{source}.b64"
     if not inplace and not overwrite and os.path.exists(target):
-        raise IOError(f"{target} already exists.")
+        msg = f"{target} already exists."
+        raise IOError(msg)
 
     if _BASE64 is not None:
         if platform.system() == "Darwin":
@@ -217,7 +222,7 @@ def convert_to_b64(source, target=None, overwrite=False):
             # In Linuces, avoid line wrapping
             cmd = f"{_BASE64} -w 0 {source} > {temp_target}"
         logger.debug(f"Calling {cmd}")
-        subprocess.check_call(cmd, shell=True)
+        subprocess.check_call(cmd, shell=True)  # noqa S602
     else:
         # Pure Python version
         with open(source, "rb") as sf, open(temp_target, "wb") as tf:
@@ -340,9 +345,8 @@ class MemQueue(asyncio.Queue):
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
-            raise asyncio.QueueFull(
-                f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
-            )
+            msg = f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
+            raise asyncio.QueueFull(msg)
         super().put_nowait((item_size, item))
 
 
@@ -409,25 +413,6 @@ class ConcurrentTasks:
             task.cancel()
 
 
-def get_event_loop(uvloop=False):
-    if uvloop:
-        # activate uvloop if lib is present
-        try:
-            import uvloop
-
-            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-        except Exception:
-            pass
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.get_event_loop_policy().get_event_loop()
-        if loop is None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-    return loop
-
-
 class RetryStrategy(Enum):
     CONSTANT = 0
     LINEAR_BACKOFF = 1
@@ -465,9 +450,8 @@ def retryable(
                 func, retries, interval, strategy, processed_skipped_exceptions
             )
         else:
-            raise NotImplementedError(
-                f"Retryable decorator is not implemented for {func.__class__}."
-            )
+            msg = f"Retryable decorator is not implemented for {func.__class__}."
+            raise NotImplementedError(msg)
 
     return wrapper
 
@@ -639,7 +623,9 @@ def get_pem_format(key, postfix="-----END CERTIFICATE-----"):
 
 def hash_id(_id):
     # Collision probability: 1.47*10^-29
-    return hashlib.md5(_id.encode("utf8")).hexdigest()
+    # S105 rule considers this code unsafe, but we're not using it for security-related
+    # things, only to generate pseudo-ids for documents
+    return hashlib.md5(_id.encode("utf8")).hexdigest()  # noqa S105
 
 
 def truncate_id(_id):

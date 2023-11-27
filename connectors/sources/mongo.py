@@ -210,9 +210,8 @@ class MongoDataSource(BaseDataSource):
         self._logger.debug(f"Existing databases: {existing_database_names}")
 
         if configured_database_name not in existing_database_names:
-            raise ConfigurableFieldValueError(
-                f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
-            )
+            msg = f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
+            raise ConfigurableFieldValueError(msg)
 
         database = client[configured_database_name]
 
@@ -222,6 +221,5 @@ class MongoDataSource(BaseDataSource):
         )
 
         if configured_collection_name not in existing_collection_names:
-            raise ConfigurableFieldValueError(
-                f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
-            )
+            msg = f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
+            raise ConfigurableFieldValueError(msg)

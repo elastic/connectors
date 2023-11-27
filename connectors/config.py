@@ -79,6 +79,10 @@ def _default_config():
             "max_concurrent_access_control_syncs": 1,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
+            "telemetry": {
+                "enabled": True,
+                "interval": 3600,
+            },
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
@@ -125,9 +129,8 @@ def _ent_search_config(configuration):
 
         if es_field == "log_level":
             if es_field_value not in log_level_mappings:
-                raise ValueError(
-                    f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
-                )
+                msg = f"Unexpected log level: {es_field_value}. Allowed values: {', '.join(log_level_mappings.keys())}"
+                raise ValueError(msg)
             es_field_value = log_level_mappings[es_field_value]
 
         _nest_configs(configuration, connector_field, es_field_value)

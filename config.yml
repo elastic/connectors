@@ -171,6 +171,14 @@
 #service.log_level: INFO
 #
 #
+##  Whether telemetry is enabled
+#service.telemetry.enabled: true
+#
+#
+##  The interval (in seconds) to run telemetry job
+#service.telemetry.interval: 3600
+#
+#
 ## ------------------------------- Extraction Service ----------------------------------
 #
 ##  Local extraction service-related configurations.

@@ -7,13 +7,14 @@
 Demo of a standalone source
 """
 import functools
-import hashlib
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiofiles
+
 from connectors.source import BaseDataSource
-from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value
+from connectors.utils import TIKA_SUPPORTED_FILETYPES, get_base64_value, hash_id
 
 DEFAULT_DIR = os.environ.get("SYSTEM_DIR", os.path.dirname(__file__))
 
@@ -55,18 +56,19 @@ class DirectoryDataSource(BaseDataSource):
         return True
 
     def get_id(self, path):
-        return hashlib.md5(str(path).encode("utf8")).hexdigest()
+        return hash_id(str(path))
 
     async def _download(self, path, timestamp=None, doit=None):
         if not (doit and os.path.splitext(path)[-1] in TIKA_SUPPORTED_FILETYPES):
             return
 
         self._logger.info(f"Reading {path}")
-        with open(file=path, mode="rb") as f:
+        async with aiofiles.open(file=path, mode="rb") as f:
+            content = await f.read()
             return {
                 "_id": self.get_id(path),
                 "_timestamp": timestamp,
-                "_attachment": get_base64_value(f.read()),
+                "_attachment": get_base64_value(content),
             }
 
     async def get_docs(self, filtering=None):

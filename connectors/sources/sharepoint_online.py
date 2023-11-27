@@ -49,8 +49,6 @@ SPO_API_MAX_BATCH_SIZE = 20
 
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-DEFAULT_GROUPS = ["Visitors", "Owners", "Members"]
-
 if "OVERRIDE_URL" in os.environ:
     logger.warning("x" * 50)
     logger.warning(
@@ -236,17 +234,14 @@ class MicrosoftSecurityToken:
             # Error Code serves as a good starting point classifying these errors, see the messages below:
             match e.status:
                 case 400:
-                    raise TokenFetchFailed(
-                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
-                    ) from e
+                    msg = "Failed to authorize to Sharepoint REST API. Please verify, that provided Tenant Id, Tenant Name and Client ID are valid."
+                    raise TokenFetchFailed(msg) from e
                 case 401:
-                    raise TokenFetchFailed(
-                        "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
-                    ) from e
+                    msg = "Failed to authorize to Sharepoint REST API. Please verify, that provided Secret Value is valid."
+                    raise TokenFetchFailed(msg) from e
                 case _:
-                    raise TokenFetchFailed(
-                        f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
-                    ) from e
+                    msg = f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
+                    raise TokenFetchFailed(msg) from e
 
         self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
 
@@ -502,9 +497,8 @@ class MicrosoftAPISession:
         elif (
             e.status == 403 or e.status == 401
         ):  # Might work weird, but Graph returns 403 and REST returns 401
-            raise PermissionsMissing(
-                f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
-            ) from e
+            msg = f"Received Unauthorized response for {absolute_url}.\nVerify that the correct Graph API and Sharepoint permissions are granted to the app and admin consent is given. If the permissions and consent are correct, wait for several minutes and try again."
+            raise PermissionsMissing(msg) from e
         elif e.status == 404:
             raise NotFound from e  # We wanna catch it in the code that uses this and ignore in some cases
         elif e.status == 500:
@@ -946,6 +940,9 @@ class SharepointOnlineClient:
                         "Modified": site_page.get("Modified"),
                         "EditorId": site_page.get("EditorId"),
                         "odata.id": site_page.get("odata.id"),
+                        "OData__UIVersionString": site_page.get(
+                            "OData__UIVersionString"
+                        ),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
@@ -1019,9 +1016,8 @@ class SharepointOnlineClient:
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
         if self._tenant_name != actual_tenant_name:
-            raise InvalidSharepointTenant(
-                f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
-            )
+            msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
+            raise InvalidSharepointTenant(msg)
 
     async def close(self):
         await self._http_session.close()
@@ -1100,30 +1096,6 @@ def _prefix_user_id(user_id):
 
 def _prefix_email(email):
     return prefix_identity("email", email)
-
-
-def _postfix_group(group):
-    if group is None:
-        return None
-
-    return f"{group} Members"
-
-
-async def _emails_and_usernames_of_domain_group(
-    domain_group_id, group_identities_generator
-):
-    """Yield emails and/or usernames for a specific domain group.
-    This function yields both to reduce the number of remote calls made to the group owners or group members API.
-
-    Yields:
-        Tuple: tuple of the user's email and the user's username
-
-    """
-    async for identity in group_identities_generator(domain_group_id):
-        email = identity.get("mail")
-        username = identity.get("userPrincipalName")
-
-        yield email, username
 
 
 def _get_login_name(raw_login_name):
@@ -1293,9 +1265,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         tenant_details = await self.client.tenant_details()
 
         if tenant_details is None or tenant_details["NameSpaceType"] == "Unknown":
-            raise Exception(
-                f"Could not find tenant with name {self.configuration['tenant_name']}. Make sure that provided tenant name is valid."
-            )
+            msg = f"Could not find tenant with name {self.configuration['tenant_name']}. Make sure that provided tenant name is valid."
+            raise Exception(msg)
 
         # Check that we at least have permissions to fetch sites and actual site names are correct
         configured_root_sites = self.configuration["site_collections"]
@@ -1318,9 +1289,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         missing = [x for x in configured_root_sites if x not in retrieved_sites]
 
         if missing:
-            raise Exception(
-                f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
-            )
+            msg = f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
+            raise Exception(msg)
 
     def _site_path_from_web_url(self, web_url):
         url_parts = web_url.split("/sites/")
@@ -1579,16 +1549,31 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             return
 
-        ids_to_items = {
-            drive_item["id"]: drive_item for drive_item in drive_items_batch
+        def _is_item_deleted(drive_item):
+            return self.drive_item_operation(drive_item) == OP_DELETE
+
+        # Don't fetch access controls for deleted drive items
+        deleted_drive_items = [
+            drive_item
+            for drive_item in drive_items_batch
+            if _is_item_deleted(drive_item)
+        ]
+        for drive_item in deleted_drive_items:
+            yield drive_item
+
+        # Fetch access controls only for upserts
+        upsert_ids_to_items = {
+            drive_item["id"]: drive_item
+            for drive_item in drive_items_batch
+            if not _is_item_deleted(drive_item)
         }
-        drive_items_ids = list(ids_to_items.keys())
+        upsert_drive_items_ids = list(upsert_ids_to_items.keys())
 
         async for permissions_response in self.client.drive_items_permissions_batch(
-            drive_id, drive_items_ids
+            drive_id, upsert_drive_items_ids
         ):
             drive_item_id = permissions_response.get("id")
-            drive_item = ids_to_items.get(drive_item_id)
+            drive_item = upsert_ids_to_items.get(drive_item_id)
             permissions = permissions_response.get("body", {}).get("value", [])
 
             if drive_item:
@@ -1689,9 +1674,8 @@ class SharepointOnlineDataSource(BaseDataSource):
         timestamp = iso_zulu()
 
         if not self._sync_cursor:
-            raise SyncCursorEmpty(
-                "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
-            )
+            msg = "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
+            raise SyncCursorEmpty(msg)
 
         max_drive_item_age = None
 
@@ -1716,7 +1700,10 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site, site_access_control
                 ), None, OP_INDEX
 
-                async for site_drive in self.site_drives(site, check_timestamp=True):
+                # Edit operation on a drive_item doesn't update the
+                # lastModifiedDateTime of the parent site_drive. Therfore, we
+                # set check_timestamp to False when iterating over site_drives.
+                async for site_drive in self.site_drives(site, check_timestamp=False):
                     yield self._decorate_with_access_control(
                         site_drive, site_access_control
                     ), None, OP_INDEX

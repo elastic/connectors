@@ -28,11 +28,13 @@ RETRIES = 3
 RETRY_INTERVAL = 1
 
 BASE_URL = "https://<domain>.my.salesforce.com"
-API_VERSION = "v59.0"
-TOKEN_ENDPOINT = "/services/oauth2/token"
+API_VERSION = "v58.0"
+TOKEN_ENDPOINT = "/services/oauth2/token"  # noqa S105
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
+# https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
+CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -441,8 +443,11 @@ class SalesforceClient:
             params=params,
         )
 
-    async def _download(self, url):
-        response = await self._get(url)
+    async def _download(self, content_version_id):
+        endpoint = CONTENT_VERSION_DOWNLOAD_ENDPOINT.replace(
+            "<content_version_id>", content_version_id
+        )
+        response = await self._get(f"{self.base_url}{endpoint}")
         yield response
 
     async def _handle_client_response_error(self, response_body, e):
@@ -464,9 +469,8 @@ class SalesforceClient:
             error_codes = [x["errorCode"] for x in errors]
 
             if "REQUEST_LIMIT_EXCEEDED" in error_codes:
-                raise RateLimitedException(
-                    f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
-                ) from e
+                msg = f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
+                raise RateLimitedException(msg) from e
             elif any(
                 error in error_codes
                 for error in [
@@ -475,17 +479,16 @@ class SalesforceClient:
                     "MALFORMED_QUERY",
                 ]
             ):
-                raise InvalidQueryException(
-                    f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
-                ) from e
+                msg = f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
+                raise InvalidQueryException(msg) from e
             else:
-                raise ConnectorRequestError(
-                    f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
-                ) from e
+                msg = f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
+                raise ConnectorRequestError(msg) from e
         else:
-            raise SalesforceServerError(
+            msg = (
                 f"Salesforce experienced an internal server error. {exception_details}."
             )
+            raise SalesforceServerError(msg)
 
     def _handle_response_body_error(self, error_list):
         if error_list is None or len(error_list) < 1:
@@ -877,17 +880,14 @@ class SalesforceAPIToken:
                 # 400s have detailed error messages in body
                 error_message = response_body.get("error", "No error dscription found.")
                 if error_message == "invalid_client":
-                    raise InvalidCredentialsException(
-                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
-                    ) from e
+                    msg = f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
+                    raise InvalidCredentialsException(msg) from e
                 else:
-                    raise TokenFetchException(
-                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
-                    ) from e
+                    msg = f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
+                    raise TokenFetchException(msg) from e
             else:
-                raise TokenFetchException(
-                    f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
-                ) from e
+                msg = f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                raise TokenFetchException(msg) from e
 
     def clear(self):
         self._token = None
@@ -1390,21 +1390,21 @@ class SalesforceDataSource(BaseDataSource):
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
         for content_doc in content_docs:
-            download_url = (content_doc.get("LatestPublishedVersion", {}) or {}).get(
-                "VersionDataUrl"
-            )
-            if not download_url:
+            content_version_id = (
+                content_doc.get("LatestPublishedVersion", {}) or {}
+            ).get("Id")
+            if not content_version_id:
                 self._logger.debug(
-                    f"No download URL found for {content_doc.get('title')}, skipping."
+                    f"Couldn't find the latest content version for {content_doc.get('Title')}, skipping."
                 )
                 continue
 
             doc = self.doc_mapper.map_content_document(content_doc)
-            doc = await self.get_content(doc, download_url)
+            doc = await self.get_content(doc, content_version_id)
 
             yield doc, None
 
-    async def get_content(self, doc, download_url):
+    async def get_content(self, doc, content_version_id):
         file_size = doc["content_size"]
         filename = doc["title"]
         file_extension = self.get_file_extension(filename)
@@ -1419,7 +1419,7 @@ class SalesforceDataSource(BaseDataSource):
                 self.generic_chunked_download_func,
                 partial(
                     self.salesforce_client._download,
-                    download_url,
+                    content_version_id,
                 ),
             ),
             return_doc_if_failed=True,  # we still ingest on download failure for Salesforce

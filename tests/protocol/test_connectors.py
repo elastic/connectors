@@ -901,7 +901,7 @@ class Banana(BaseDataSource):
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_different_id():
+async def test_connector_prepare_different_id_invalid_source():
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -924,13 +924,19 @@ async def test_connector_prepare_different_id():
     index.update.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_connector_prepare_with_prepared_connector():
-    doc_id = "1"
+async def test_connector_prepare_with_prepared_connector(main_doc_id, this_doc_id):
     seq_no = 1
     primary_term = 2
     connector_doc = {
-        "_id": doc_id,
+        "_id": this_doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
         "_source": {
@@ -971,7 +977,7 @@ async def test_connector_prepare_with_prepared_connector():
         },
     }
     config = {
-        "connector_id": doc_id,
+        "connector_id": main_doc_id,
         "service_type": "banana",
     }
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
@@ -983,13 +989,128 @@ async def test_connector_prepare_with_prepared_connector():
     index.update.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_connector_prepare_with_connector_missing_field_properties_creates_them():
-    doc_id = "1"
+async def test_connector_prepare_with_connector_empty_config_creates_default(
+    main_doc_id, this_doc_id
+):
     seq_no = 1
     primary_term = 2
     connector_doc = {
-        "_id": doc_id,
+        "_id": this_doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {},
+            "features": Banana.features(),
+        },
+    }
+    config = {
+        "connector_id": main_doc_id,
+        "service_type": "banana",
+    }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    expected = Banana.get_simple_configuration()
+
+    # only updates fields with missing properties
+    await connector.prepare(config, sources)
+    index.update.assert_called_once_with(
+        doc_id=this_doc_id,
+        doc={"configuration": expected, "status": "needs_configuration"},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_fields_creates_them(
+    main_doc_id, this_doc_id
+):
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": this_doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
+            "features": Banana.features(),
+        },
+    }
+    config = {
+        "connector_id": main_doc_id,
+        "service_type": "banana",
+    }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    expected = Banana.get_simple_configuration()
+    del expected["two"]
+
+    # only updates fields with missing properties
+    await connector.prepare(config, sources)
+    index.update.assert_called_once_with(
+        doc_id=this_doc_id,
+        doc={"configuration": expected},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_field_properties_creates_them(
+    main_doc_id, this_doc_id
+):
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": this_doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
         "_source": {
@@ -1016,7 +1137,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
         },
     }
     config = {
-        "connector_id": doc_id,
+        "connector_id": main_doc_id,
         "service_type": "banana",
     }
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
@@ -1034,7 +1155,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
 
     await connector.prepare(config, sources)
     index.update.assert_called_once_with(
-        doc_id=doc_id,
+        doc_id=this_doc_id,
         doc={"configuration": expected},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
@@ -1831,8 +1952,23 @@ async def test_create_jobs_with_correct_target_index(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "job_types, job_type_query, remote_call",
+    [
+        (None, None, False),
+        ("", None, False),
+        (JobType.ACCESS_CONTROL.value, [JobType.ACCESS_CONTROL.value], True),
+        (
+            [JobType.FULL.value, JobType.INCREMENTAL.value],
+            [JobType.FULL.value, JobType.INCREMENTAL.value],
+            True,
+        ),
+    ],
+)
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
-async def test_pending_jobs(get_all_docs, set_env):
+async def test_pending_jobs(
+    get_all_docs, job_types, job_type_query, remote_call, set_env
+):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
@@ -1849,6 +1985,7 @@ async def test_pending_jobs(get_all_docs, set_env):
                     }
                 },
                 {"terms": {"connector.id": connector_ids}},
+                {"terms": {"job_type": job_type_query}},
             ]
         }
     }
@@ -1856,12 +1993,19 @@ async def test_pending_jobs(get_all_docs, set_env):
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [
-        job async for job in sync_job_index.pending_jobs(connector_ids=connector_ids)
+        job
+        async for job in sync_job_index.pending_jobs(
+            connector_ids=connector_ids, job_types=job_types
+        )
     ]
 
-    get_all_docs.assert_called_with(query=expected_query, sort=expected_sort)
-    assert len(jobs) == 1
-    assert jobs[0] == job
+    if remote_call:
+        get_all_docs.assert_called_with(query=expected_query, sort=expected_sort)
+        assert len(jobs) == 1
+        assert jobs[0] == job
+    else:
+        get_all_docs.assert_not_called()
+        assert len(jobs) == 0
 
 
 @pytest.mark.asyncio
@@ -1976,7 +2120,7 @@ def test_get_advanced_rules(filtering, expected_advanced_rules):
     assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
 
 
-def test_updated_configuration():
+def test_updated_configuration_fields():
     current = {
         "tenant_id": {"label": "Tenant ID", "order": 1, "type": "str", "value": "foo"},
         "tenant_name": {
@@ -2027,12 +2171,18 @@ def test_updated_configuration():
     }
     missing_configs = ["new_config"]
     connector = Connector(elastic_index=Mock(), doc_source={"_id": "test"})
-    result = connector.updated_configuration(missing_configs, current, simple_default)
+    result = connector.updated_configuration_fields(
+        missing_configs, current, simple_default
+    )
 
     # all keys included where there are changes (excludes 'tenant_name')
-    assert result.keys() == set(
-        ["new_config", "tenant_id", "client_id", "secret_value", "some_toggle"]
-    )
+    assert result.keys() == {
+        "new_config",
+        "tenant_id",
+        "client_id",
+        "secret_value",
+        "some_toggle",
+    }
 
     # order is adjusted
     assert result["client_id"]["order"] == 4
