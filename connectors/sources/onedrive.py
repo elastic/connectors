@@ -376,8 +376,11 @@ class OneDriveClient:
             "$filter": "accountEnabled eq true",
             "$select": "userPrincipalName,mail,transitiveMemberOf,id,createdDateTime",
         }
+        # This condition is executed only during access control sync where connector will fetch all the users (licensed and unlicensed).
         if include_groups:
             params["$expand"] = "transitiveMemberOf($select=id)"
+
+        # This condtion is executed during content sync where connector fetches only licensed accounts as unlicensed users won't have any files.
         else:
             params["$filter"] += " and assignedLicenses/$count ne 0&$count=true"
             header = {"ConsistencyLevel": "eventual"}
