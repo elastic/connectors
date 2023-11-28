@@ -16,19 +16,21 @@ from tests.commons import AsyncIterator
 
 @pytest.fixture(autouse=True)
 def mock_cli_config():
-    with patch('connectors.connectors_cli.load_config') as mock:
-        mock.return_value = {"elasticsearch": { "host": "http://localhost:9211/"} }
+    with patch("connectors.connectors_cli.load_config") as mock:
+        mock.return_value = {"elasticsearch": {"host": "http://localhost:9211/"}}
         yield mock
+
 
 @pytest.fixture(autouse=True)
 def mock_connector_es_client():
-    with patch('connectors.cli.connector.ESClient') as mock:
+    with patch("connectors.cli.connector.ESClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
+
 @pytest.fixture(autouse=True)
 def mock_job_es_client():
-    with patch('connectors.cli.job.ESClient') as mock:
+    with patch("connectors.cli.job.ESClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 

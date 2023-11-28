@@ -29,7 +29,6 @@ __all__ = ["main"]
 
 
 def load_config(ctx, config):
-    import pdb; pdb.set_trace()
     if config:
         return yaml.safe_load(config)
     elif os.path.isfile(CONFIG_FILE_PATH):
@@ -321,7 +320,6 @@ def job(obj):
     required=True,
 )
 def start(obj, i, t):
-    # import pdb; pdb.set_trace()
     job_cli = Job(config=obj["config"]["elasticsearch"])
     click.echo("Starting a job...")
     if job_cli.start(connector_id=i, job_type=t):
