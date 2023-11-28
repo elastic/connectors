@@ -1483,7 +1483,8 @@ class TestSharepointOnlineClient:
         async for _response in client.drive_items_permissions_batch(
             drive_id, drive_item_ids
         ):
-            raise Exception("we shouldn't get here")
+            msg = "we shouldn't get here"
+            raise Exception(msg)
 
     @pytest.mark.asyncio
     async def test_site_role_assignments(self, client, patch_scroll):
