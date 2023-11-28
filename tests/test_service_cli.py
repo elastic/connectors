@@ -91,7 +91,9 @@ def test_run_snowflake(mock_responses, set_env):
 
 
 @patch("connectors.service_cli.set_logger")
-@patch("connectors.service_cli.load_config", side_effect=Exception("something went wrong"))
+@patch(
+    "connectors.service_cli.load_config", side_effect=Exception("something went wrong")
+)
 def test_main_with_invalid_configuration(load_config, set_logger):
     args = mock.MagicMock()
     args.log_level = logging.DEBUG  # should be ignored!
