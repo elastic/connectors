@@ -1,12 +1,16 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
+from elasticsearch import ApiError
 
 from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH
 from connectors.connectors_cli import cli, login
 from connectors.protocol.connectors import Connector as ConnectorObject
+from connectors.protocol.connectors import JobStatus
+from connectors.protocol.connectors import SyncJob as SyncJobObject
 from tests.commons import AsyncIterator
 
 
@@ -120,6 +124,44 @@ def test_connector_list_one_connector():
     assert "connected" in result.output
 
 
+@pytest.fixture(autouse=True)
+def mock_es_client():
+    with patch("connectors.cli.connector.ESClient") as mock:
+        mock.return_value = AsyncMock()
+        yield mock
+
+
+@patch("click.confirm")
+def test_connector_create(patch_click_confirm):
+    runner = CliRunner()
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            "test_connector",
+            "mongodb",
+            "en",
+            "http://localhost/",
+            "username",
+            "password",
+            "database",
+            "collection",
+            "False",
+        ]
+    )
+
+    with patch(
+        "connectors.protocol.connectors.ConnectorIndex.index",
+        AsyncMock(return_value={"_id": "new_connector_id"}),
+    ) as patched_create:
+        result = runner.invoke(cli, ["connector", "create"], input=input_params)
+
+        patched_create.assert_called_once()
+        assert result.exit_code == 0
+
+        assert "has been created" in result.output
+
+
 def test_index_help_page():
     runner = CliRunner()
     result = runner.invoke(cli, ["index", "--help"])
@@ -139,10 +181,10 @@ def test_index_list_no_indexes():
 
 def test_index_list_one_index():
     runner = CliRunner()
-    indices = {"test_index": {"primaries": {"docs": {"count": 10}}}}
+    indices = {"indices": {"test_index": {"primaries": {"docs": {"count": 10}}}}}
 
     with patch(
-        "connectors.cli.index.Index.list_indices", MagicMock(return_value=indices)
+        "connectors.es.client.ESClient.list_indices", AsyncMock(return_value=indices)
     ):
         result = runner.invoke(cli, ["index", "list"])
 
@@ -165,6 +207,20 @@ def test_index_clean():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
+def test_index_clean_error():
+    runner = CliRunner()
+    index_name = "test_index"
+    with patch(
+        "connectors.es.client.ESClient.clean_index",
+        side_effect=ApiError(500, meta="meta", body="error"),
+    ):
+        result = runner.invoke(cli, ["index", "clean", index_name])
+
+        assert "Something went wrong." in result.output
+        assert result.exit_code == 0
+
+
+@patch("click.confirm", MagicMock(return_value=True))
 def test_index_delete():
     runner = CliRunner()
     index_name = "test_index"
@@ -175,4 +231,164 @@ def test_index_delete():
 
         assert "The index has been deleted" in result.output
         mocked_method.assert_called_once_with([index_name])
+        assert result.exit_code == 0
+
+
+@patch("click.confirm", MagicMock(return_value=True))
+def test_delete_index_error():
+    runner = CliRunner()
+    index_name = "test_index"
+    with patch(
+        "connectors.es.client.ESClient.delete_indices",
+        side_effect=ApiError(500, meta="meta", body="error"),
+    ):
+        result = runner.invoke(cli, ["index", "delete", index_name])
+
+        assert "Something went wrong." in result.output
+        assert result.exit_code == 0
+
+
+def test_job_help_page():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["job", "--help"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Options:" in result.output
+    assert "Commands:" in result.output
+
+
+def test_job_help_page_without_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["job"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Options:" in result.output
+    assert "Commands:" in result.output
+
+
+@patch("click.confirm", MagicMock(return_value=True))
+def test_job_cancel():
+    runner = CliRunner()
+    job_id = "test_job_id"
+
+    job_index = MagicMock()
+
+    doc = {
+        "_source": {
+            "connector": {
+                "index_name": "test_connector",
+                "service_type": "mongodb",
+                "last_sync_status": "error",
+                "status": "connected",
+            },
+            "status": "running",
+            "job_type": "full",
+        },
+        "_id": job_id,
+    }
+
+    job = SyncJobObject(job_index, doc)
+
+    with patch(
+        "connectors.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[job])
+    ):
+        with patch.object(job, "_terminate") as mocked_method:
+            result = runner.invoke(cli, ["job", "cancel", job_id])
+
+            mocked_method.assert_called_once_with(JobStatus.CANCELING)
+            assert "The job has been cancelled" in result.output
+            assert result.exit_code == 0
+
+
+@patch("click.confirm", MagicMock(return_value=True))
+def test_job_cancel_error():
+    runner = CliRunner()
+    job_id = "test_job_id"
+    with patch(
+        "connectors.cli.job.Job._Job__async_list_jobs",
+        side_effect=ApiError(500, meta="meta", body="error"),
+    ):
+        result = runner.invoke(cli, ["job", "cancel", job_id])
+
+        assert "Something went wrong." in result.output
+        assert result.exit_code == 0
+
+
+def test_job_list_no_jobs():
+    runner = CliRunner()
+    connector_id = "test_connector_id"
+
+    with patch(
+        "connectors.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[])
+    ):
+        result = runner.invoke(cli, ["job", "list", connector_id])
+
+        assert "No jobs found" in result.output
+        assert result.exit_code == 0
+
+
+@patch("click.confirm", MagicMock(return_value=True))
+def test_job_list_one_job():
+    runner = CliRunner()
+    job_id = "test_job_id"
+    connector_id = "test_connector_id"
+    index_name = "test_index_name"
+    status = "canceled"
+    deleted_document_count = 123
+    indexed_document_count = 123123
+    indexed_document_volume = 100500
+
+    job_index = MagicMock()
+
+    doc = {
+        "_source": {
+            "connector": {
+                "id": connector_id,
+                "index_name": index_name,
+                "service_type": "mongodb",
+                "last_sync_status": "error",
+                "status": "connected",
+            },
+            "status": status,
+            "deleted_document_count": deleted_document_count,
+            "indexed_document_count": indexed_document_count,
+            "indexed_document_volume": indexed_document_volume,
+            "job_type": "full",
+        },
+        "_id": job_id,
+    }
+
+    job = SyncJobObject(job_index, doc)
+
+    with patch(
+        "connectors.protocol.connectors.SyncJobIndex.get_all_docs", AsyncIterator([job])
+    ):
+        result = runner.invoke(cli, ["job", "list", connector_id])
+
+        assert job_id in result.output
+        assert connector_id in result.output
+        assert index_name in result.output
+        assert status in result.output
+        assert str(deleted_document_count) in result.output
+        assert str(indexed_document_count) in result.output
+        assert str(indexed_document_volume) in result.output
+        assert result.exit_code == 0
+
+
+@patch(
+    "connectors.protocol.connectors.ConnectorIndex.fetch_by_id",
+    AsyncMock(return_value=MagicMock()),
+)
+def test_job_start():
+    runner = CliRunner()
+    connector_id = "test_connector_id"
+
+    with patch(
+        "connectors.protocol.connectors.SyncJobIndex.create",
+        AsyncMock(return_value=True),
+    ) as patched_create:
+        result = runner.invoke(cli, ["job", "start", "-i", connector_id, "-t", "full"])
+
+        patched_create.assert_called_once()
+        assert "The job has been started" in result.output
         assert result.exit_code == 0

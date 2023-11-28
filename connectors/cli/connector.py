@@ -32,19 +32,14 @@ class Connector:
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
 
-            return [connector async for connector in self.connector_index.all_connectors()]
+            return [
+                connector async for connector in self.connector_index.all_connectors()
+            ]
 
         # TODO catch exceptions
         finally:
             await self.connector_index.close()
             await self.es_client.close()
-
-    async def ping(self):
-        if await self.es_client.ping():
-            await self.es_client.close()
-            return True
-        else:
-            return False
 
     def service_type_configuration(self, source_class):
         source_klass = get_source_klass(source_class)
@@ -84,13 +79,9 @@ class Connector:
         settings["auto_expand_replicas"] = "0-3"
         settings["number_of_shards"] = 2
 
-        try:
-            await self.es_client.client.indices.create(
-                index=index_name, mappings=mappings, settings=settings
-            )
-        except Exception as e:
-            # todo handle exception
-            raise e
+        await self.es_client.client.indices.create(
+            index=index_name, mappings=mappings, settings=settings
+        )
 
     async def __create_connector(
         self, index_name, service_type, configuration, language

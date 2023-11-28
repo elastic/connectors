@@ -22,8 +22,8 @@ from connectors.cli.auth import CONFIG_FILE_PATH, Auth
 from connectors.cli.connector import Connector
 from connectors.cli.index import Index
 from connectors.cli.job import Job
-from connectors.es.settings import Settings
 from connectors.config import _default_config
+from connectors.es.settings import Settings
 
 __all__ = ["main"]
 
@@ -81,13 +81,10 @@ cli.add_command(login)
 
 
 # Connector group
-@click.group(invoke_without_command=True, help="Connectors management")
+@click.group(invoke_without_command=False, help="Connectors management")
 @click.pass_context
 def connector(ctx):
-    # print help page if no subcommands provided
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
-        return
+    pass
 
 
 @click.command(name="list", help="List all existing connectors")
@@ -151,7 +148,7 @@ def validate_language(ctx, param, value):
 @click.option(
     "--service_type",
     prompt=f"{click.style('?', blink=True, fg='green')} Service type",
-    type=click.Choice(list(_default_config()['sources'].keys()), case_sensitive=False),
+    type=click.Choice(list(_default_config()["sources"].keys()), case_sensitive=False),
 )
 @click.option(
     "--index_language",
@@ -164,7 +161,7 @@ def create(obj, index_name, service_type, index_language):
     index_name = f"search-{index_name}"
     connector = Connector(obj["config"]["elasticsearch"])
     configuration = connector.service_type_configuration(
-        source_class=_default_config()['sources'][service_type]
+        source_class=_default_config()["sources"][service_type]
     )
 
     def prompt():
@@ -294,7 +291,7 @@ cli.add_command(index)
 
 
 # Job group
-@click.group(invoke_without_command=True, help="Sync jobs management")
+@click.group(invoke_without_command=False, help="Sync jobs management")
 @click.pass_obj
 def job(obj):
     pass
@@ -383,7 +380,7 @@ def cancel(obj, job_id):
     )
     click.echo("Canceling jobs...")
     if job_cli.cancel(job_id=job_id):
-        click.echo(click.style("The jobs is cancelling.", fg="green"))
+        click.echo(click.style("The job has been cancelled", fg="green"))
     else:
         click.echo("")
         click.echo(
