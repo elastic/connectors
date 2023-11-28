@@ -28,6 +28,18 @@ from connectors.es.settings import Settings
 __all__ = ["main"]
 
 
+def load_config(ctx, config):
+    import pdb; pdb.set_trace()
+    if config:
+        return yaml.safe_load(config)
+    elif os.path.isfile(CONFIG_FILE_PATH):
+        with open(CONFIG_FILE_PATH, "r") as f:
+            return yaml.safe_load(f.read())
+    else:
+        msg = f"{CONFIG_FILE_PATH} is not found"
+        raise FileNotFoundError(msg)
+
+
 # Main group
 @click.group(invoke_without_command=True)
 @click.version_option(__version__, "-v", "--version", message="%(version)s")
@@ -45,6 +57,8 @@ def cli(ctx, config):
     elif os.path.isfile(CONFIG_FILE_PATH):
         with open(CONFIG_FILE_PATH, "r") as f:
             ctx.obj["config"] = yaml.safe_load(f.read())
+    elif ctx.invoked_subcommand == "login":
+        pass
     else:
         msg = f"{CONFIG_FILE_PATH} is not found"
         raise FileNotFoundError(msg)
@@ -307,6 +321,7 @@ def job(obj):
     required=True,
 )
 def start(obj, i, t):
+    # import pdb; pdb.set_trace()
     job_cli = Job(config=obj["config"]["elasticsearch"])
     click.echo("Starting a job...")
     if job_cli.start(connector_id=i, job_type=t):
