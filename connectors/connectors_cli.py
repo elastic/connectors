@@ -34,6 +34,8 @@ def load_config(ctx, config):
     elif os.path.isfile(CONFIG_FILE_PATH):
         with open(CONFIG_FILE_PATH, "r") as f:
             return yaml.safe_load(f.read())
+    elif ctx.invoked_subcommand == "login":
+        pass
     else:
         msg = f"{CONFIG_FILE_PATH} is not found"
         raise FileNotFoundError(msg)
@@ -51,16 +53,7 @@ def cli(ctx, config):
         return
 
     ctx.ensure_object(dict)
-    if config:
-        ctx.obj["config"] = yaml.safe_load(config)
-    elif os.path.isfile(CONFIG_FILE_PATH):
-        with open(CONFIG_FILE_PATH, "r") as f:
-            ctx.obj["config"] = yaml.safe_load(f.read())
-    elif ctx.invoked_subcommand == "login":
-        pass
-    else:
-        msg = f"{CONFIG_FILE_PATH} is not found"
-        raise FileNotFoundError(msg)
+    ctx.obj["config"] = load_config(ctx, config)
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
