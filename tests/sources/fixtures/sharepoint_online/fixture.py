@@ -711,7 +711,8 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
             site_name, list_title, list_item_id
         )
     else:
-        raise Exception("Nope")
+        msg = "Nope"
+        raise Exception(msg)
 
 
 @app.route("/sites/<string:site_name>/_api/web/lists/GetByTitle('Site Pages')/items")

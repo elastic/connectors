@@ -20,7 +20,6 @@ from connectors.sources.mysql import (
     MySQLClient,
     MySqlDataSource,
     generate_id,
-    parse_tables_string_to_list_of_tables,
     row2doc,
 )
 from connectors.utils import iso_utc
@@ -178,11 +177,13 @@ class Cursor:
             self.first_call = False
             return [["table1"], ["table2"]]
         if self.is_connection_lost:
-            raise Exception("Incomplete Read Error")
+            msg = "Incomplete Read Error"
+            raise Exception(msg)
         return []
 
     async def scroll(self, *args, **kw):
-        raise Exception("Incomplete Read Error")
+        msg = "Incomplete Read Error"
+        raise Exception(msg)
 
     def execute(self, query):
         """This method returns future object"""
@@ -891,24 +892,6 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
 
         with pytest.raises(ConfigurableFieldValueError):
             await source._validate_tables_accessible(cursor)
-
-
-@pytest.mark.parametrize(
-    "tables_string, expected_tables_list",
-    [
-        (None, []),
-        ("", []),
-        ("table_1", ["table_1"]),
-        ("table_1, ", ["table_1"]),
-        ("`table_1,`,", ["`table_1,`"]),
-        ("table_1, table_2", ["table_1", "table_2"]),
-        ("`table_1,abc`", ["`table_1,abc`"]),
-        ("`table_1,abc`, table_2", ["`table_1,abc`", "table_2"]),
-        ("`table_1,abc`, `table_2,def`", ["`table_1,abc`", "`table_2,def`"]),
-    ],
-)
-def test_parse_tables_string_to_list(tables_string, expected_tables_list):
-    assert parse_tables_string_to_list_of_tables(tables_string) == expected_tables_list
 
 
 @pytest.mark.parametrize(

@@ -79,7 +79,8 @@ class StubService:
         self.running = True
         while self.running:
             if self.exploding:
-                raise Exception("Something went wrong")
+                msg = "Something went wrong"
+                raise Exception(msg)
             await asyncio.sleep(self.run_sleep_delay)
 
     def stop(self):

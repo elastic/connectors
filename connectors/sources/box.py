@@ -126,9 +126,8 @@ class AccessToken:
                         value=self.access_token, expiration_date=self.expired_at
                     )
         except Exception as exception:
-            raise TokenError(
-                f"Error while generating access token. Please verify that provided configurations are correct. Exception {exception}."
-            ) from exception
+            msg = f"Error while generating access token. Please verify that provided configurations are correct. Exception {exception}."
+            raise TokenError(msg) from exception
 
 
 class BoxClient:
@@ -152,7 +151,8 @@ class BoxClient:
             f"Connector will attempt to retry after {retry_after} seconds."
         )
         await self._sleeps.sleep(retry_after)
-        raise Exception("Rate limit exceeded.")
+        msg = "Rate limit exceeded."
+        raise Exception(msg)
 
     async def _handle_client_errors(self, exception):
         match exception.status:
@@ -163,7 +163,8 @@ class BoxClient:
                 retry_after = int(exception.headers.get("retry-after", 5))
                 await self._put_to_sleep(retry_after=retry_after)
             case 404:
-                raise NotFound(f"Resource Not Found. Error: {exception}")
+                msg = f"Resource Not Found. Error: {exception}"
+                raise NotFound(msg)
             case _:
                 raise
 

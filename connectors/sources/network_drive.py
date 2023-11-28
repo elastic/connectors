@@ -341,7 +341,9 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def get_directory_details(self):
-        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+        return list(
+            smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}", port=self.port)
+        )
 
     def find_matching_paths(self, advanced_rules):
         """
@@ -399,7 +401,9 @@ class NASDataSource(BaseDataSource):
         files = []
         loop = asyncio.get_running_loop()
         try:
-            files = await loop.run_in_executor(None, smbclient.scandir, path)
+            files = await loop.run_in_executor(
+                executor=None, func=partial(smbclient.scandir, path, port=self.port)
+            )
         except (SMBOSError, SMBException) as exception:
             self._logger.exception(
                 f"Error while scanning the path {path}. Error {exception}"
@@ -425,7 +429,7 @@ class NASDataSource(BaseDataSource):
         """
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb"
+                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
             ) as file:
                 file_content, chunk = BytesIO(), True
                 while chunk:
@@ -486,6 +490,7 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
+                port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL
@@ -581,9 +586,8 @@ class NASDataSource(BaseDataSource):
                         groups_info=user["groups"],
                     )
             else:
-                raise ConfigurableFieldValueError(
-                    "CSV file path cannot be empty. Please provide a valid csv file path."
-                )
+                msg = "CSV file path cannot be empty. Please provide a valid csv file path."
+                raise ConfigurableFieldValueError(msg)
         else:
             try:
                 self._logger.info(
@@ -610,7 +614,8 @@ class NASDataSource(BaseDataSource):
                         groups_members=groups_members,
                     )
             except ConnectionError as exception:
-                raise ConnectionError("Something went wrong") from exception
+                msg = "Something went wrong"
+                raise ConnectionError(msg) from exception
 
     async def get_entity_permission(self, file_path, file_type):
         if not self._dls_enabled():
@@ -652,9 +657,8 @@ class NASDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
             matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
             if len(invalid_rules) > 0:
-                raise InvalidRulesError(
-                    f"Following advanced rules are invalid: {invalid_rules}"
-                )
+                msg = f"Following advanced rules are invalid: {invalid_rules}"
+                raise InvalidRulesError(msg)
 
             for path in matched_paths:
                 async for file in self.get_files(path=path):

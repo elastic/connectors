@@ -78,18 +78,6 @@ def to_bool(value):
     return value
 
 
-def try_coerce(value):
-    coerced_value = to_float(value)
-
-    if isinstance(coerced_value, str):
-        coerced_value = to_datetime(value)
-
-    if isinstance(coerced_value, str):
-        coerced_value = to_bool(value)
-
-    return coerced_value
-
-
 class RuleMatchStats:
     """RuleMatchStats records how many documents a basic rule matched and which policy it used.
 
@@ -109,7 +97,8 @@ class RuleMatchStats:
                 policy=self.policy, matches_count=self.matches_count + other
             )
         else:
-            raise NotImplementedError(f"__add__ is not implemented for '{type(other)}'")
+            msg = f"__add__ is not implemented for '{type(other)}'"
+            raise NotImplementedError(msg)
 
     def __eq__(self, other):
         return self.policy == other.policy and self.matches_count == other.matches_count
@@ -208,9 +197,8 @@ class Rule(Enum):
             case "starts_with":
                 return Rule.STARTS_WITH
             case _:
-                raise InvalidRuleError(
-                    f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
-                )
+                msg = f"'{string}' is an unknown value for the enum Rule. Allowed rules: {Rule.RULES}."
+                raise InvalidRuleError(msg)
 
 
 class InvalidPolicyError(ValueError):
@@ -239,9 +227,8 @@ class Policy(Enum):
             case "exclude":
                 return Policy.EXCLUDE
             case _:
-                raise InvalidPolicyError(
-                    f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
-                )
+                msg = f"'{string}' is an unknown value for the enum Policy. Allowed policies: {Policy.POLICIES}"
+                raise InvalidPolicyError(msg)
 
 
 class BasicRule:
@@ -267,17 +254,6 @@ class BasicRule:
             field=basic_rule_json["field"],
             rule=Rule.from_string(basic_rule_json["rule"]),
             value=basic_rule_json["value"],
-        )
-
-    @classmethod
-    def default_rule(cls):
-        return cls(
-            id_=BasicRule.DEFAULT_RULE_ID,
-            order=0,
-            policy=Policy.INCLUDE,
-            field="_",
-            rule=Rule.EQUALS,
-            value=".*",
         )
 
     def matches(self, document):

@@ -1,4 +1,4 @@
-select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20"]
+select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20", "EM", "ISC", "S"]
 ignore = ["E501"]
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
@@ -16,7 +16,11 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 target-version = "py310"
 
 [per-file-ignores]
-"tests/*" = ["B017"]
+"connectors/*" = ["S608"]
+"scripts/verify.py" = [ "EM" ]
+"setup.py" = [ "EM" ]
+"tests/*" = ["B017", "S101", "S"]
+"tests/conftest.py" = [ "EM" ]
 
 [isort]
 known-first-party=["connectors", "tests"]

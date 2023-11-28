@@ -46,43 +46,37 @@ class AsyncIterator:
 
     def assert_not_called(self):
         if self.call_count != 0:
-            raise AssertionError(
-                f"Expected zero calls. Actual number of calls: {self.call_count}."
-            )
+            msg = f"Expected zero calls. Actual number of calls: {self.call_count}."
+            raise AssertionError(msg)
 
     def assert_called_once(self):
         if self.call_count != 1:
-            raise AssertionError(
-                f"Expected one call. Actual number of calls: {self.call_count}."
-            )
+            msg = f"Expected one call. Actual number of calls: {self.call_count}."
+            raise AssertionError(msg)
 
     def assert_called_once_with(self, *args, **kwargs):
         self.assert_called_once()
 
         if len(self.call_args) > 0 and self.call_args[0] != args:
-            raise AssertionError(
-                f"Expected args: {args}. Actual args: {self.call_args[0]}."
-            )
+            msg = f"Expected args: {args}. Actual args: {self.call_args[0]}."
+            raise AssertionError(msg)
 
         if len(self.call_kwargs) > 0 and self.call_kwargs[0] != kwargs:
-            raise AssertionError(
-                f"Expected kwargs: {kwargs}. Actual kwargs: {self.call_kwargs[0]}."
-            )
+            msg = f"Expected kwargs: {kwargs}. Actual kwargs: {self.call_kwargs[0]}."
+            raise AssertionError(msg)
 
 
 class WeightedFakeProvider:
     def __init__(self, seed=None, weights=None):
         self.seed = seed
         if weights and len(weights) != 4:
-            raise Exception(
-                f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}"
-            )
+            msg = f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}"
+            raise Exception(msg)
         self.weights = weights or [0.58, 0.3, 0.1, 0.02]
 
         if math.fsum(self.weights) != 1:
-            raise Exception(
-                f"Sum of weights should be equal to 1. Sum of provided weights {self.weights} is {math.fsum(self.weights)}"
-            )
+            msg = f"Sum of weights should be equal to 1. Sum of provided weights {self.weights} is {math.fsum(self.weights)}"
+            raise Exception(msg)
         self.fake_provider = FakeProvider(seed=seed)
 
     @cached_property

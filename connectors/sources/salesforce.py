@@ -29,7 +29,7 @@ RETRY_INTERVAL = 1
 
 BASE_URL = "https://<domain>.my.salesforce.com"
 API_VERSION = "v58.0"
-TOKEN_ENDPOINT = "/services/oauth2/token"
+TOKEN_ENDPOINT = "/services/oauth2/token"  # noqa S105
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
@@ -469,9 +469,8 @@ class SalesforceClient:
             error_codes = [x["errorCode"] for x in errors]
 
             if "REQUEST_LIMIT_EXCEEDED" in error_codes:
-                raise RateLimitedException(
-                    f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
-                ) from e
+                msg = f"Salesforce is rate limiting this account. {exception_details}, details: {', '.join(error_codes)}"
+                raise RateLimitedException(msg) from e
             elif any(
                 error in error_codes
                 for error in [
@@ -480,17 +479,16 @@ class SalesforceClient:
                     "MALFORMED_QUERY",
                 ]
             ):
-                raise InvalidQueryException(
-                    f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
-                ) from e
+                msg = f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
+                raise InvalidQueryException(msg) from e
             else:
-                raise ConnectorRequestError(
-                    f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
-                ) from e
+                msg = f"The request to Salesforce failed. {exception_details}, details: {', '.join(error_codes)}"
+                raise ConnectorRequestError(msg) from e
         else:
-            raise SalesforceServerError(
+            msg = (
                 f"Salesforce experienced an internal server error. {exception_details}."
             )
+            raise SalesforceServerError(msg)
 
     def _handle_response_body_error(self, error_list):
         if error_list is None or len(error_list) < 1:
@@ -882,17 +880,14 @@ class SalesforceAPIToken:
                 # 400s have detailed error messages in body
                 error_message = response_body.get("error", "No error dscription found.")
                 if error_message == "invalid_client":
-                    raise InvalidCredentialsException(
-                        f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
-                    ) from e
+                    msg = f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}"
+                    raise InvalidCredentialsException(msg) from e
                 else:
-                    raise TokenFetchException(
-                        f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
-                    ) from e
+                    msg = f"Could not fetch token from Salesforce: Status: {e.status}, message: {e.message}, details: {error_message}"
+                    raise TokenFetchException(msg) from e
             else:
-                raise TokenFetchException(
-                    f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
-                ) from e
+                msg = f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
+                raise TokenFetchException(msg) from e
 
     def clear(self):
         self._token = None

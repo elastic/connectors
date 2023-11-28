@@ -18,10 +18,6 @@ from connectors.logger import logger, set_extra_logger
 from connectors.utils import CancellableSleeps
 
 
-class PreflightCheckError(Exception):
-    pass
-
-
 class License(Enum):
     ENTERPRISE = "enterprise"
     PLATINUM = "platinum"
@@ -87,7 +83,7 @@ class ESClient:
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
         options["headers"] = config.get("headers", {})
-        options["headers"]["user-agent"] = f"elastic-connectors-python-{__version__}"
+        options["headers"]["user-agent"] = f"elastic-connectors-{__version__}"
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True
 

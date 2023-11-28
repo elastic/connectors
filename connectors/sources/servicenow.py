@@ -121,15 +121,14 @@ class ServiceNowClient:
     async def _read_response(self, response):
         fetched_response = await response.read()
         if fetched_response == b"":
-            raise InvalidResponse(
-                "Request to ServiceNow server returned an empty response."
-            )
+            msg = "Request to ServiceNow server returned an empty response."
+            raise InvalidResponse(msg)
         elif not response.headers["Content-Type"].startswith("application/json"):
             if response.headers.get("Connection") == "close":
-                raise Exception("Couldn't connect to ServiceNow instance")
-            raise InvalidResponse(
-                f"Cannot proceed due to unexpected response type '{response.headers['Content-Type']}'; response type must begin with 'application/json'."
-            )
+                msg = "Couldn't connect to ServiceNow instance"
+                raise Exception(msg)
+            msg = f"Cannot proceed due to unexpected response type '{response.headers['Content-Type']}'; response type must begin with 'application/json'."
+            raise InvalidResponse(msg)
         return fetched_response
 
     @retryable(
@@ -260,9 +259,8 @@ class ServiceNowClient:
         for response in json_response["serviced_requests"]:
             if response["status_code"] != 200:
                 error_message = json.loads(base64.b64decode(response["body"]))["error"]
-                raise InvalidResponse(
-                    f"Cannot proceed due to invalid status code {response['status_code']}; Message {error_message}."
-                )
+                msg = f"Cannot proceed due to invalid status code {response['status_code']}; Message {error_message}."
+                raise InvalidResponse(msg)
             yield json.loads(base64.b64decode(response["body"]))["result"]
 
     async def _api_call(self, url, params, actions, method):
@@ -489,9 +487,8 @@ class ServiceNowDataSource(BaseDataSource):
                 configured_service=self.servicenow_client.services.copy()
             )
         if self.invalid_services:
-            raise ConfigurableFieldValueError(
-                f"Services '{', '.join(self.invalid_services)}' are not available. Available services are: '{', '.join(set(self.servicenow_client.services)-set(self.invalid_services))}'"
-            )
+            msg = f"Services '{', '.join(self.invalid_services)}' are not available. Available services are: '{', '.join(set(self.servicenow_client.services) - set(self.invalid_services))}'"
+            raise ConfigurableFieldValueError(msg)
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields

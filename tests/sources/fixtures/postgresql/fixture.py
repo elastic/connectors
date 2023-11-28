@@ -73,7 +73,7 @@ def load():
                 )
             sql_query = (
                 f"INSERT INTO customers_{table}"
-                + "(name, age, description) VALUES ($1, $2, $3)"
+                "(name, age, description) VALUES ($1, $2, $3)"
             )
             await connect.executemany(sql_query, rows)
             inserted += batch_size

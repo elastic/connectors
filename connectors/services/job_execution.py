@@ -98,9 +98,8 @@ class JobExecutionService(BaseService):
 
     async def _sync(self, sync_job):
         if sync_job.service_type not in self.source_list:
-            raise DataSourceError(
-                f"Couldn't find data source class for {sync_job.service_type}"
-            )
+            msg = f"Couldn't find data source class for {sync_job.service_type}"
+            raise DataSourceError(msg)
         source_klass = get_source_klass(self.source_list[sync_job.service_type])
         connector_id = sync_job.connector_id
 

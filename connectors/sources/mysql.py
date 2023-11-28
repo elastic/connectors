@@ -35,14 +35,6 @@ MAX_POOL_SIZE = 10
 DEFAULT_FETCH_SIZE = 50
 RETRIES = 3
 RETRY_INTERVAL = 2
-DEFAULT_SSL_ENABLED = False
-
-
-def parse_tables_string_to_list_of_tables(tables_string):
-    if tables_string is None or len(tables_string) == 0:
-        return []
-
-    return SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN.findall(tables_string)
 
 
 def format_list(list_):
@@ -461,9 +453,8 @@ class MySqlDataSource(BaseDataSource):
         try:
             await cursor.execute(f"USE {self.database};")
         except aiomysql.Error as e:
-            raise ConfigurableFieldValueError(
-                f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
-            ) from e
+            msg = f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
+            raise ConfigurableFieldValueError(msg) from e
 
     async def _validate_tables_accessible(self, cursor):
         non_accessible_tables = []
@@ -476,9 +467,8 @@ class MySqlDataSource(BaseDataSource):
                 non_accessible_tables.append(table)
 
         if len(non_accessible_tables) > 0:
-            raise ConfigurableFieldValueError(
-                f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
-            )
+            msg = f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
+            raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         async with self.mysql_client() as client:

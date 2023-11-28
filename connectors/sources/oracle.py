@@ -347,14 +347,14 @@ class OracleDataSource(BaseDataSource):
             },
             "oracle_home": {
                 "default_value": DEFAULT_ORACLE_HOME,
-                "label": "Path of Oracle Service",
+                "label": "Path to Oracle Home",
                 "order": 10,
                 "required": False,
                 "type": "str",
             },
             "wallet_configuration_path": {
                 "default_value": "",
-                "label": "Path of Oracle Service configuration files",
+                "label": "Path to SSL Wallet configuration files",
                 "order": 11,
                 "required": False,
                 "type": "str",
@@ -371,9 +371,8 @@ class OracleDataSource(BaseDataSource):
             await self.oracle_client.ping()
             self._logger.info("Successfully connected to Oracle.")
         except Exception as e:
-            raise Exception(
-                f"Can't connect to Oracle on {self.oracle_client.host}"
-            ) from e
+            msg = f"Can't connect to Oracle on {self.oracle_client.host}"
+            raise Exception(msg) from e
 
     async def fetch_documents(self, table):
         """Fetches all the table entries and format them in Elasticsearch documents

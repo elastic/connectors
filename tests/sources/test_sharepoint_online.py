@@ -42,7 +42,6 @@ from connectors.sources.sharepoint_online import (
     SyncCursorEmpty,
     ThrottledError,
     TokenFetchFailed,
-    _emails_and_usernames_of_domain_group,
     _get_login_name,
     _prefix_email,
     _prefix_group,
@@ -1962,7 +1961,7 @@ class TestSharepointOnlineDataSource:
                 "Id": "4",
                 "odata.id": "11",
                 "GUID": "thats-not-a-guid",
-                "Modified": "2023-10-04T08:58:33Z",
+                "Modified": self.day_ago,
             }
         ]
 
@@ -2374,17 +2373,29 @@ class TestSharepointOnlineDataSource:
 
             operations[operation] += 1
 
-        assert len(docs) == sum(
-            [
-                len(self.site_collections),
-                sum([len(i) for i in self.drive_items_delta]),
-                len(self.site_drives),
-                len(self.site_pages),
-                len(self.site_lists),
-                len(self.site_list_items) - 1,  # one is too old
-                len(self.site_list_item_attachments),
-            ]
+        assert len(self.site_collections) == len(
+            [doc for doc in docs if doc["object_type"] == "site_collection"]
         )
+        assert len(self.site_drives) == len(
+            [doc for doc in docs if doc["object_type"] == "site_drive"]
+        )
+        assert len([doc for doc in docs if doc["object_type"] == "drive_item"]) == sum(
+            len(i) for i in self.drive_items_delta
+        )
+        assert len([doc for doc in docs if doc["object_type"] == "site_page"]) == len(
+            self.site_pages
+        )
+        assert len([doc for doc in docs if doc["object_type"] == "site_list"]) == len(
+            self.site_lists
+        )
+        # -2 because one item is too old (2 months ago), one item is Web Template Extensions and is always ignored
+        assert (
+            len([doc for doc in docs if doc["object_type"] == "list_item"])
+            == len(self.site_list_items) - 2
+        )
+        assert len(
+            [doc for doc in docs if doc["object_type"] == "list_item_attachment"]
+        ) == len(self.site_list_item_attachments)
         assert sync_cursor["cursor_timestamp"] == self.today  # cursor was updated
 
         assert (operations["delete"]) == deleted
@@ -3163,9 +3174,6 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online.ACCESS_CONTROL",
         ALLOW_ACCESS_CONTROL_PATCHED,
     )
-    @patch(
-        "connectors.sources.sharepoint_online.DEFAULT_GROUPS", DEFAULT_GROUPS_PATCHED
-    )
     async def test_decorate_with_access_control(
         self, _dls_enabled, document, access_control, expected_decorated_document
     ):
@@ -3326,40 +3334,6 @@ class TestSharepointOnlineDataSource:
                 user_access_control_docs.append(doc)
 
             assert len(user_access_control_docs) == 2
-
-    @pytest.mark.parametrize(
-        "group_identities_generator, expected_emails_and_usernames",
-        [
-            (AsyncIterator([]), []),
-            (
-                AsyncIterator([IDENTITY_WITH_MAIL_AND_PRINCIPAL_NAME]),
-                [IDENTITY_MAIL, IDENTITY_USER_PRINCIPAL_NAME],
-            ),
-        ],
-    )
-    @pytest.mark.asyncio
-    async def test_emails_and_usernames_of_domain_group(
-        self,
-        group_identities_generator,
-        expected_emails_and_usernames,
-    ):
-        actual_emails_and_usernames = []
-
-        async for email, username in _emails_and_usernames_of_domain_group(
-            "some id", group_identities_generator
-        ):
-            # ignore None values
-            if email:
-                actual_emails_and_usernames.append(email)
-
-            if username:
-                actual_emails_and_usernames.append(username)
-
-        assert len(actual_emails_and_usernames) == len(expected_emails_and_usernames)
-        assert all(
-            email_or_username in expected_emails_and_usernames
-            for email_or_username in actual_emails_and_usernames
-        )
 
     def test_prefix_group(self):
         group = "group"

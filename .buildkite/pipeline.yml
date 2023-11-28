@@ -234,8 +234,9 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-              - "connectors/sources/salesforce.py"
-              - "tests/sources/fixtures/salesforce/**"
+            - "connectors/sources/salesforce.py"
+            - "tests/sources/fixtures/salesforce/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Salesforce"
               command:
@@ -246,6 +247,7 @@ steps:
           - path: 
             - "connectors/sources/zoom.py"
             - "tests/sources/fixtures/zoom/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Zoom"
               command:
@@ -256,6 +258,7 @@ steps:
           - path: 
             - "connectors/sources/box.py"
             - "tests/sources/fixtures/box/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Box"
               command:
@@ -266,6 +269,7 @@ steps:
           - path: 
             - "connectors/sources/microsoft_teams.py"
             - "tests/sources/fixtures/microsoft_teams/**"
+            - "Dockerfile.ftest"
             config:
               label: "🔨 Microsoft Teams"
               command:
