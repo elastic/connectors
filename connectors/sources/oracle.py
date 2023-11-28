@@ -344,6 +344,7 @@ class OracleDataSource(BaseDataSource):
                 "order": 9,
                 "type": "str",
                 "value": DEFAULT_PROTOCOL,
+                "ui_restrictions": ["advanced"],
             },
             "oracle_home": {
                 "default_value": DEFAULT_ORACLE_HOME,
@@ -351,6 +352,7 @@ class OracleDataSource(BaseDataSource):
                 "order": 10,
                 "required": False,
                 "type": "str",
+                "ui_restrictions": ["advanced"],
             },
             "wallet_configuration_path": {
                 "default_value": "",
@@ -358,6 +360,7 @@ class OracleDataSource(BaseDataSource):
                 "order": 11,
                 "required": False,
                 "type": "str",
+                "ui_restrictions": ["advanced"],
             },
         }
 
