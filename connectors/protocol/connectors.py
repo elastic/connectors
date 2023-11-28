@@ -12,7 +12,6 @@ Main classes are :
 - SyncJob: represents a document in `.elastic-connectors-sync-jobs`
 
 """
-import re
 import socket
 from collections import UserDict
 from copy import deepcopy
