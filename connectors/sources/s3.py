@@ -351,7 +351,7 @@ class S3DataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "AWS Buckets",
                 "order": 1,
-                "tooltip": "buckets are ignored when Advanced Sync Rules are used.",
+                "tooltip": "AWS Buckets are ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "aws_access_key_id": {
