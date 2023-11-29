@@ -789,6 +789,11 @@ class SharepointOnlineClient:
             permissions_uri = f"/drives/{drive_id}/items/{item_id}/permissions"
             requests.append({"id": item_id, "method": "GET", "url": permissions_uri})
 
+        if not requests:
+            self._logger.debug(
+                "Skipping fetching empty batch of drive item permissions"
+            )
+            return
         try:
             batch_url = f"{GRAPH_API_URL}/$batch"
             batch_request = {"requests": requests}
