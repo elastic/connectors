@@ -133,7 +133,7 @@ class S3Client:
                 bucket_obj = await s3.Bucket(bucket)
                 await asyncio.sleep(0)
 
-                if "prefix" in kwargs:
+                if kwargs.get("prefix"):
                     objects = bucket_obj.objects.filter(Prefix=kwargs["prefix"])
                 else:
                     objects = bucket_obj.objects.page_size(page_size)
