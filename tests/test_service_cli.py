@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from connectors import __version__
-from connectors.cli import main, run
+from connectors.service_cli import main, run
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
@@ -90,8 +90,10 @@ def test_run_snowflake(mock_responses, set_env):
         assert "Cannot use the `list` action with other actions" in output
 
 
-@patch("connectors.cli.set_logger")
-@patch("connectors.cli.load_config", side_effect=Exception("something went wrong"))
+@patch("connectors.service_cli.set_logger")
+@patch(
+    "connectors.service_cli.load_config", side_effect=Exception("something went wrong")
+)
 def test_main_with_invalid_configuration(load_config, set_logger):
     args = mock.MagicMock()
     args.log_level = logging.DEBUG  # should be ignored!
