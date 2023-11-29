@@ -24,7 +24,7 @@ from connectors.utils import ConcurrentTasks
 class JobExecutionService(BaseService):
     name = "execute"
     display_name = "job execution"
-    JOB_TYPES = [
+    job_types = [
         JobType.ACCESS_CONTROL.value,
         JobType.FULL.value,
         JobType.INCREMENTAL.value,
@@ -45,7 +45,7 @@ class JobExecutionService(BaseService):
         raise NotImplementedError()
 
     def should_execute(self, connector, sync_job):
-        return False
+        raise NotImplementedError()
 
     async def _sync(self, sync_job):
         if sync_job.service_type not in self.source_list:
@@ -83,7 +83,7 @@ class JobExecutionService(BaseService):
         )
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
             sync_job.log_info(
-                f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. It will retry in {self.idling} seconds. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
+                f"{self.__class__.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.__class__.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
             )
 
     async def _run(self):
@@ -93,22 +93,24 @@ class JobExecutionService(BaseService):
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
             logger.debug(
-                f"Native support for {self.display_name} for {', '.join(native_service_types)}"
+                f"Native support for {self.__class__.display_name} for {', '.join(native_service_types)}"
             )
         else:
-            logger.debug(f"No native service types configured for {self.display_name}")
+            logger.debug(
+                f"No native service types configured for {self.__class__.display_name}"
+            )
 
         connector_ids = list(self.connectors.keys())
 
         logger.info(
-            f"{self.display_name.capitalize()} service started, listening to events from {self.es_config['host']}"
+            f"{self.__class__.display_name.capitalize()} service started, listening to events from {self.es_config['host']}"
         )
 
         try:
             while self.running:
                 try:
                     logger.debug(
-                        f"Polling every {self.idling} seconds for {self.display_name}"
+                        f"Polling every {self.idling} seconds for {self.__class__.display_name}"
                     )
                     supported_connector_ids = [
                         connector.id
@@ -125,7 +127,7 @@ class JobExecutionService(BaseService):
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(
                             connector_ids=supported_connector_ids,
-                            job_types=self.JOB_TYPES,
+                            job_types=self.__class__.job_types,
                         ):
                             await self._sync(sync_job)
                 except Exception as e:

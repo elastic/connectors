@@ -17,7 +17,7 @@ class ContentSyncJobExecutionService(JobExecutionService):
     name = "sync_content"
     display_name = "content sync job execution"
     max_concurrency_config = "service.max_concurrent_content_syncs"
-    JOB_TYPES = [JobType.FULL.value, JobType.INCREMENTAL.value]
+    job_types = [JobType.FULL.value, JobType.INCREMENTAL.value]
 
     @cached_property
     def max_concurrency(self):
