@@ -111,7 +111,7 @@ class S3Client:
             buckets = self.configuration["buckets"]
         return buckets
 
-    async def get_bucket_objects(self, **kwargs):
+    async def get_bucket_objects(self, bucket, **kwargs):
         """Returns bucket list from list_buckets response
         Args:
             bucket (str): Name of bucket
@@ -120,7 +120,6 @@ class S3Client:
             s3_client: S3 client object
         """
         page_size = self.configuration["page_size"]
-        bucket = kwargs.get("bucket", "")
         region_name = await self.get_bucket_region(bucket)
         s3_client = await self.client(region=region_name)
         async with self.session.resource(
@@ -134,7 +133,9 @@ class S3Client:
                 await asyncio.sleep(0)
 
                 if kwargs.get("prefix"):
-                    objects = bucket_obj.objects.filter(Prefix=kwargs["prefix"])
+                    objects = bucket_obj.objects.filter(
+                        Prefix=kwargs["prefix"]
+                    ).page_size(page_size)
                 else:
                     objects = bucket_obj.objects.page_size(page_size)
 
