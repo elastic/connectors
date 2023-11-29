@@ -335,6 +335,7 @@ class OracleDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
             },
             "oracle_protocol": {
+                "default_value": DEFAULT_PROTOCOL,
                 "display": "dropdown",
                 "label": "Oracle connection protocol",
                 "options": [
@@ -352,6 +353,7 @@ class OracleDataSource(BaseDataSource):
                 "order": 10,
                 "required": False,
                 "type": "str",
+                "value": DEFAULT_ORACLE_HOME,
                 "ui_restrictions": ["advanced"],
             },
             "wallet_configuration_path": {
