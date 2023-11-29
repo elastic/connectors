@@ -774,6 +774,8 @@ def batch_size(value):
                 [1, 2, 3],
             ],
         ),
+        ([], batch_size(20), []),
+        ([[]], batch_size(20), [[[]]]),
     ],
 )
 def test_iterable_batches_generator(iterable, batch_size_, expected_batches):

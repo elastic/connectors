@@ -1477,6 +1477,17 @@ class TestSharepointOnlineClient:
         assert len(responses) == 0
 
     @pytest.mark.asyncio
+    async def test_drive_items_permissions_batch_empty(self, client, patch_post):
+        drive_id = 1
+        drive_item_ids = []
+
+        async for _response in client.drive_items_permissions_batch(
+            drive_id, drive_item_ids
+        ):
+            msg = "we shouldn't get here"
+            raise Exception(msg)
+
+    @pytest.mark.asyncio
     async def test_site_role_assignments(self, client, patch_scroll):
         site_role_assignments_url = (
             f"https://{self.tenant_name}.sharepoint.com/sites/test"
