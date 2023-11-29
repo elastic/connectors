@@ -820,23 +820,23 @@ def batch_size(value):
 @pytest.mark.parametrize(
     "iterable, batch_size_, expected_batches",
     [
-        # ([1, 2, 3], batch_size(1), [[1], [2], [3]]),
-        # ([1, 2, 3], batch_size(2), [[1, 2], [3]]),
-        # (
-        #     [1, 2, 3],
-        #     batch_size(3),
-        #     [
-        #         [1, 2, 3],
-        #     ],
-        # ),
-        # (
-        #     [1, 2, 3],
-        #     batch_size(1000),
-        #     [
-        #         [1, 2, 3],
-        #     ],
-        # ),
-        # ([], batch_size(20), []),
+        ([1, 2, 3], batch_size(1), [[1], [2], [3]]),
+        ([1, 2, 3], batch_size(2), [[1, 2], [3]]),
+        (
+            [1, 2, 3],
+            batch_size(3),
+            [
+                [1, 2, 3],
+            ],
+        ),
+        (
+            [1, 2, 3],
+            batch_size(1000),
+            [
+                [1, 2, 3],
+            ],
+        ),
+        ([], batch_size(20), []),
         ([[]], batch_size(20), [[[]]]),
     ],
 )
