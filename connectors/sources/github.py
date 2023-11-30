@@ -1751,7 +1751,8 @@ class GitHubDataSource(BaseDataSource):
                     continue
                 access_control = []
                 if self._dls_enabled():
-                    if repo.get("visibility").lower() == "public":
+                    is_public_repo = repo.get("visibility").lower() == "public"
+                    if is_public_repo:
                         async for user in self.github_client._fetch_all_members():
                             access_control.append(
                                 _prefix_user_id(user_id=user.get("id"))
