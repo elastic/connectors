@@ -222,13 +222,9 @@ class SalesforceClient:
 
         def _add_id(query):
             lowered_query = query.lower()
-            if (
-                not (
-                    "fields(all)" in lowered_query
-                    or "fields(standard)" in lowered_query
-                )
-                and "id" not in lowered_query
-            ):
+            if not (
+                "fields(all)" in lowered_query or "fields(standard)" in lowered_query
+            ) and not re.search("\bid\b", lowered_query):
                 query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
 
             return query
