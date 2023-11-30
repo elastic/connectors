@@ -8,6 +8,8 @@ from elasticsearch import ApiError
 from connectors.es import ESClient
 from connectors.logger import logger
 
+from connectors.utils import retryable
+
 DEFAULT_PAGE_SIZE = 100
 
 
@@ -44,10 +46,12 @@ class ESIndex(ESClient):
         """
         raise NotImplementedError
 
+    @retryable(retries=10)
     async def fetch_by_id(self, doc_id):
         resp_body = await self.fetch_response_by_id(doc_id)
         return self._create_object(resp_body)
 
+    @retryable(retries=10)
     async def fetch_response_by_id(self, doc_id):
         if not self.serverless:
             await self.client.indices.refresh(index=self.index_name)
@@ -64,9 +68,11 @@ class ESIndex(ESClient):
 
         return resp.body
 
+    @retryable(retries=10)
     async def index(self, doc):
         return await self.client.index(index=self.index_name, document=doc)
 
+    @retryable(retries=10)
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
         return await self.client.update(
             index=self.index_name,
@@ -76,6 +82,7 @@ class ESIndex(ESClient):
             if_primary_term=if_primary_term,
         )
 
+    @retryable(retries=10)
     async def update_by_script(self, doc_id, script):
         return await self.client.update(
             index=self.index_name,
@@ -83,6 +90,7 @@ class ESIndex(ESClient):
             script=script,
         )
 
+    @retryable(retries=10)
     async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
