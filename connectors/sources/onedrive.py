@@ -37,7 +37,6 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     iso_utc,
-    iterable_batches_generator,
     retryable,
 )
 
@@ -669,43 +668,54 @@ class OneDriveDataSource(BaseDataSource):
         return permissions
 
     def _prepare_batch(self, request_id, url):
-        return {"id": str(request_id), "method": "GET", "url": url}
+        return {"id": str(request_id), "method": "GET", "url": url, "retry_count": "0"}
 
     def remove_processed_requests(self, batched_apis, processed_ids):
         return [api for api in batched_apis if api["id"] not in processed_ids]
 
+    def pop_batch_requests(self, batched_apis):
+        batch = batched_apis[: min(GRAPH_API_MAX_BATCH_SIZE, len(batched_apis))]
+        batched_apis[:] = batched_apis[len(batch) :]
+        return batch
+
+    def lookup_request_by_id(self, requests, response_id):
+        for request in requests:
+            if request.get("id") == response_id:
+                return request
+
     async def json_batching(self, batched_apis):
         while batched_apis:
+            requests = self.pop_batch_requests(batched_apis)
+
             batch_url = parse.urljoin(BASE_URL, ENDPOINTS[BATCH])
-            batch_request = json.dumps({"requests": batched_apis})
+            batch_request = json.dumps({"requests": requests})
             batch_response = {}
             async for batch_response in self.client.post(batch_url, batch_request):
                 batch_response = await batch_response.json()
 
-            processed_ids = []
-            next_page_requests = []
             for response in batch_response.get("responses", []):
-                if (
-                    response.get("status", 200) == 429
-                ):  # Rate limited request will not be counted as processed and will be retried.
-                    logger.warning(
-                        f"Batch request item throttled {response}. Retrying in separate batch"
-                    )
-                    continue
+                if response.get("status", 200) == 200:
+                    yield response
 
-                processed_ids.append(response.get("id"))
-                yield response
-
-                if next_url := response.get("body", {}).get("@odata.nextLink"):
-                    relative_url = next_url.split(BASE_URL)[1]
-                    next_page_requests.append(
-                        self._prepare_batch(
-                            request_id=response.get("id"), url=relative_url
+                    if next_url := response.get("body", {}).get("@odata.nextLink"):
+                        relative_url = next_url.split(BASE_URL)[1]
+                        batched_apis.append(
+                            self._prepare_batch(
+                                request_id=response.get("id"), url=relative_url
+                            )
                         )
+                elif response.get("status", 200) == 429:
+                    request = (
+                        self.lookup_request_by_id(requests, response.get("id")) or {}
                     )
+                    request["retry_count"] = str(int(request["retry_count"]) + 1)
 
-            batched_apis = self.remove_processed_requests(batched_apis, processed_ids)
-            batched_apis.extend(next_page_requests)
+                    if int(request["retry_count"]) > RETRIES:
+                        logger.error(
+                            f"Request {request} failed after {RETRIES} retries, giving up..."
+                        )
+                    else:
+                        batched_apis.append(request)
 
     def send_document_to_es(self, entity, download_url):
         entity = self.prepare_doc(entity)
@@ -727,6 +737,17 @@ class OneDriveDataSource(BaseDataSource):
         tasks = [process_item(item, semaphore) for item in items]
 
         return await asyncio.gather(*tasks)
+
+    def build_owned_files_url(self, users):
+        requests = []
+        for user in users:
+            user_id = user.get("id")
+            files_uri = (
+                f"{ENDPOINTS[DELTA].format(user_id=user_id)}?$select={ITEM_FIELDS}"
+            )
+
+            requests.append(self._prepare_batch(request_id=user_id, url=files_uri))
+        return requests
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch OneDrive objects in async manner
@@ -762,32 +783,20 @@ class OneDriveDataSource(BaseDataSource):
                         yield self.send_document_to_es(entity, download_url)
         else:
             async for users in self.client.list_users():
-                for batched_users in iterable_batches_generator(
-                    users, GRAPH_API_MAX_BATCH_SIZE
-                ):
-                    requests = []
-                    for user in batched_users:
-                        user_id = user.get("id")
-                        files_uri = f"{ENDPOINTS[DELTA].format(user_id=user_id)}?$select={ITEM_FIELDS}"
+                requests = self.build_owned_files_url(users)
 
-                        requests.append(
-                            self._prepare_batch(request_id=user_id, url=files_uri)
-                        )
-
-                    async for response in self.json_batching(batched_apis=requests):
-                        files = response.get("body", {}).get("value", [])
-                        if entities := [
-                            file for file in files if file.get("name") != "root"
-                        ]:
-                            if self._dls_enabled():
-                                entities = await self._bounbed_concurrent_tasks(
-                                    entities,
-                                    self.concurrent_downloads,
-                                    self._decorate_with_access_control,
-                                    user_id=response.get("id"),
-                                )
-                            for entity in entities:
-                                download_url = entity.get(
-                                    "@microsoft.graph.downloadUrl"
-                                )
-                                yield self.send_document_to_es(entity, download_url)
+                async for response in self.json_batching(batched_apis=requests):
+                    files = response.get("body", {}).get("value", [])
+                    if entities := [
+                        file for file in files if file.get("name") != "root"
+                    ]:
+                        if self._dls_enabled():
+                            entities = await self._bounbed_concurrent_tasks(
+                                entities,
+                                self.concurrent_downloads,
+                                self._decorate_with_access_control,
+                                user_id=response.get("id"),
+                            )
+                        for entity in entities:
+                            download_url = entity.get("@microsoft.graph.downloadUrl")
+                            yield self.send_document_to_es(entity, download_url)

@@ -901,6 +901,18 @@ async def test_get_content_with_extraction_service():
 
 
 @pytest.mark.asyncio
+async def test_lookup_request_by_id():
+    async with create_onedrive_source() as source:
+        requests = [
+            {"id": "1", "url": "user1/delta"},
+            {"id": "2", "url": "user2/delta"},
+        ]
+
+        result = source.lookup_request_by_id(requests, "2")
+        assert result == requests[1]
+
+
+@pytest.mark.asyncio
 async def test_json_batching():
     async_response, next_page_response = AsyncMock(), AsyncMock()
     result = []
