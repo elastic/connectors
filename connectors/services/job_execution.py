@@ -82,7 +82,7 @@ class JobExecutionService(BaseService):
             es_config=self._override_es_config(connector),
         )
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
-            sync_job.log_info(
+            sync_job.log_debug(
                 f"{self.__class__.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.__class__.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
             )
 
