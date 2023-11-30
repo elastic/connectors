@@ -244,6 +244,26 @@ async def test_fetch_blobs():
 
 
 @pytest.mark.asyncio
+async def test_fetch_blobs_negative():
+    """Tests the method responsible to yield blobs(negative) from Google Cloud Storage bucket."""
+
+    bucket_response = {
+        "kind": "storage#objects",
+        "items": [
+            {
+                "kind": "storage#object",
+                "id": "bucket_1",
+                "updated": "2011-10-12T00:01:00Z",
+                "name": "bucket_1",
+            }
+        ],
+    }
+    async with create_gcs_source() as source:
+        async for blob_result in source.fetch_blobs(buckets=bucket_response):
+            assert blob_result is None
+
+
+@pytest.mark.asyncio
 async def test_get_docs():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
