@@ -6,16 +6,20 @@
 from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest import mock
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import aioboto3
 import aiofiles
 import pytest
 from botocore.exceptions import ClientError, HTTPClientError
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
-from connectors.sources.s3 import S3DataSource
+from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
 from tests.sources.support import create_source
+
+ADVANCED_SNIPPET = "advanced_snippet"
 
 
 @asynccontextmanager
@@ -368,6 +372,43 @@ async def test_get_docs(mock_aws):
                 num += 1
 
 
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"bucket": "bucket1"},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering):
+    async with create_s3_source() as source:
+        source.s3_client.get_bucket_location = mock.Mock(
+            return_value=await create_fake_coroutine("ap-south-1")
+        )
+        with mock.patch(
+            "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
+        ), mock.patch("aiobotocore.client.AioBaseClient", S3Object), mock.patch(
+            "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
+            get_roles,
+        ):
+            num = 0
+            async for (doc, _) in source.get_docs(filtering):
+                assert doc["_id"] in (
+                    "70743168e14c18632702ee6e3e9b73fc",
+                    "9fbda540ca0a2441475aea7b8f37bdaf",
+                    "c5a8c684e7bbdc471a20613a6d8074e1",
+                    "e2819e8a4e921caaf0250548ffaddde4",
+                )
+                num += 1
+
+
 @pytest.mark.asyncio
 async def test_get_bucket_list():
     """Test get_bucket_list method of S3Client"""
@@ -441,3 +482,63 @@ async def test_close_with_client_session():
         await source.close()
         with pytest.raises(HTTPClientError):
             await source.ping()
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom pattern
+            [{"bucket": "bucket1"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom patterns
+            [{"bucket": "bucket1"}, {"bucket": "bucket2"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: extension in string
+            [{"bucket": "bucket1", "extension": ".jpg"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            {"bucket": ["a/b/c", ""]},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    async with create_source(S3DataSource) as source:
+        validation_result = await S3AdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
+        assert validation_result == expected_validation_result
