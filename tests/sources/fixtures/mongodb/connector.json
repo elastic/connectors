@@ -57,6 +57,28 @@
                 "order": 6,
                 "type": "bool",
                 "value": true
+            },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "SSL/TLS Connection",
+                "order": 7,
+                "type": "bool",
+                "value": false
+            },
+            "ssl_ca": {
+                "depends_on": [{"field": "ssl_enabled", "value": true}],
+                "label": "Certificate Authority (.pem)",
+                "order": 8,
+                "required": false,
+                "type": "str"
+            },
+            "tlsinsecure": {
+                "display": "toggle",
+                "depends_on": [{"field": "ssl_enabled", "value": true}],
+                "label": "tlsInsecure",
+                "order": 9,
+                "type": "bool",
+                "value": false
             }
         },
         "filtering": [

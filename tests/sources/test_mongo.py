@@ -21,7 +21,9 @@ from tests.sources.support import create_source
 
 
 @asynccontextmanager
-async def create_mongo_source(database="db", collection="col"):
+async def create_mongo_source(
+    database="db", collection="col", ssl_enabled=False, ssl_ca="", tlsinsecure=False
+):
     async with create_source(
         MongoDataSource,
         host="mongodb://127.0.0.1:27021",
@@ -30,6 +32,9 @@ async def create_mongo_source(database="db", collection="col"):
         direct_connection=True,
         database=database,
         collection=collection,
+        ssl_enabled=ssl_enabled,
+        ssl_ca=ssl_ca,
+        tlsinsecure=tlsinsecure,
     ) as source:
         yield source
 
@@ -339,3 +344,19 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
 async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
+
+
+@pytest.mark.asyncio
+@mock.patch("ssl.SSLContext.load_verify_locations")
+async def test_ssl_validation(mock_ssl):
+    mock_ssl.return_value = True
+    async with create_mongo_source(ssl_enabled=True, tlsinsecure=True) as source:
+        source.client.admin.command = Mock(return_value=True)
+        source.ping()
+
+    async with create_mongo_source(
+        ssl_enabled=True,
+        ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
+    ) as source:
+        source.client.admin.command = Mock(return_value=True)
+        source.ping()
