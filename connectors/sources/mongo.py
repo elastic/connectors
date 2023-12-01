@@ -102,7 +102,7 @@ class MongoDataSource(BaseDataSource):
         user = self.configuration["user"]
         password = self.configuration["password"]
         ssl_ca = self.configuration["ssl_ca"]
-        tlsinsecure = self.configuration["tlsinsecure"]
+        tls_insecure = self.configuration["tls_insecure"]
         self.certfile = ""
 
         if self.configuration["direct_connection"]:
@@ -120,7 +120,7 @@ class MongoDataSource(BaseDataSource):
                     cert.write(pem_certificates)
                     self.certfile = cert.name
                 client_params["tlsCAFile"] = self.certfile
-            client_params["tlsInsecure"] = tlsinsecure
+            client_params["tlsInsecure"] = tls_insecure
         else:
             client_params["tls"] = False
 
@@ -167,6 +167,7 @@ class MongoDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "SSL/TLS Connection",
                 "order": 7,
+                "tooltip": "This option establishes a secure connection to the MongoDB server using SSL/TLS encryption. Ensure that your MongoDB deployment supports SSL/TLS connections. Enable if MongoDB cluster uses DNS SRV records.",
                 "type": "bool",
                 "value": False,
             },
@@ -175,13 +176,15 @@ class MongoDataSource(BaseDataSource):
                 "label": "Certificate Authority (.pem)",
                 "order": 8,
                 "required": False,
+                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the MongoDB instance.",
                 "type": "str",
             },
-            "tlsinsecure": {
+            "tls_insecure": {
                 "display": "toggle",
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
-                "label": "tlsInsecure",
+                "label": "Disable certificate validations",
                 "order": 9,
+                "tooltip": "This option disables certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'. Enable it if certificates are missing.",
                 "type": "bool",
                 "value": False,
             },
@@ -199,7 +202,8 @@ class MongoDataSource(BaseDataSource):
                 os.remove(self.certfile)
             except Exception as exception:
                 self._logger.warning(
-                    f"Something went wrong while removing temporary certificate file. Exception: {exception}"
+                    f"Something went wrong while removing temporary certificate file. Exception: {exception}",
+                    exc_info=True,
                 )
 
     # TODO: That's a lot of work. Find a better way

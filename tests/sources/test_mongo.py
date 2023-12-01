@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from bson import DBRef, ObjectId
 from bson.decimal128 import Decimal128
+from pymongo.errors import ServerSelectionTimeoutError
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -22,7 +23,7 @@ from tests.sources.support import create_source
 
 @asynccontextmanager
 async def create_mongo_source(
-    database="db", collection="col", ssl_enabled=False, ssl_ca="", tlsinsecure=False
+    database="db", collection="col", ssl_enabled=False, ssl_ca="", tls_insecure=False
 ):
     async with create_source(
         MongoDataSource,
@@ -34,7 +35,7 @@ async def create_mongo_source(
         collection=collection,
         ssl_enabled=ssl_enabled,
         ssl_ca=ssl_ca,
-        tlsinsecure=tlsinsecure,
+        tls_insecure=tls_insecure,
     ) as source:
         yield source
 
@@ -345,18 +346,49 @@ async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
 
-
 @pytest.mark.asyncio
 @mock.patch("ssl.SSLContext.load_verify_locations")
-async def test_ssl_validation(mock_ssl):
+async def test_ssl_connection_with_invalid_certificate(mock_ssl):
     mock_ssl.return_value = True
-    async with create_mongo_source(ssl_enabled=True, tlsinsecure=True) as source:
-        source.client.admin.command = Mock(return_value=True)
-        source.ping()
-
     async with create_mongo_source(
         ssl_enabled=True,
-        ssl_ca="-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----",
+        ssl_ca="-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----",
     ) as source:
-        source.client.admin.command = Mock(return_value=True)
-        source.ping()
+        with mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+            side_effect=ServerSelectionTimeoutError(),
+        ):
+            with pytest.raises(ServerSelectionTimeoutError):
+                await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "certificate_value, tls_insecure",
+    [
+        (
+            # Connection Successful: Certificate: Valid, tls_insecure: False
+            "-----BEGIN CERTIFICATE----- Valid-Certificate -----END CERTIFICATE-----",
+            False,
+        ),
+        (
+            # Insecure Connection Successful: Certificate: Invalid, tls_insecure: True
+            "-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----",
+            True,
+        ),
+    ],
+)
+@mock.patch("ssl.SSLContext.load_verify_locations")
+async def test_ssl_with_successful_connection(mock_ssl, certificate_value, tls_insecure):
+    mock_ssl.return_value = True
+    async with create_mongo_source(
+        ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
+    ) as source:
+        with mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+            return_value=future_with_result(["db"]),
+        ), mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+            return_value=future_with_result(["col"]),
+        ):
+            await source.validate_config()

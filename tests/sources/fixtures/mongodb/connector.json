@@ -62,6 +62,7 @@
                 "display": "toggle",
                 "label": "SSL/TLS Connection",
                 "order": 7,
+                "tooltip": "This option establishes a secure connection to the MongoDB server using SSL/TLS encryption. Ensure that your MongoDB deployment supports SSL/TLS connections. Enable if MongoDB cluster uses DNS SRV records.",
                 "type": "bool",
                 "value": false
             },
@@ -70,13 +71,15 @@
                 "label": "Certificate Authority (.pem)",
                 "order": 8,
                 "required": false,
+                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the MongoDB instance.",
                 "type": "str"
             },
-            "tlsinsecure": {
+            "tls_insecure": {
                 "display": "toggle",
                 "depends_on": [{"field": "ssl_enabled", "value": true}],
-                "label": "tlsInsecure",
+                "label": "Disable certificate validations",
                 "order": 9,
+                "tooltip": "This option disables certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'. Enable it if certificates are missing.",
                 "type": "bool",
                 "value": false
             }
