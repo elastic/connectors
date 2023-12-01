@@ -150,7 +150,7 @@ def validate_language(ctx, param, value):
 @click.option(
     "--index_name",
     prompt=f"{click.style('?', blink=True, fg='green')} Index name",
-    help="Name of the index. If the index is native, `search-` will be prepended to the input.",
+    help="Name of the index. If the connector will be native, `search-` will be prepended to the index name.",
 )
 @click.option(
     "--service_type",
@@ -171,15 +171,13 @@ def validate_language(ctx, param, value):
     help="Create a native connector rather than a connector client.",
 )
 @click.option(
-    "--use_existing_index",
+    "--from_index",
     default=False,
     is_flag=True,
-    help="Create a connector for an index that already exists. Each index can only have one connector. All current docs for the index will be deleted during the first sync.",
+    help="Create a connector from an index that already exists. Each index can only have one connector. All current docs for the index will be deleted during the first sync.",
 )
 @click.pass_obj
-def create(
-    obj, index_name, service_type, index_language, is_native, use_existing_index
-):
+def create(obj, index_name, service_type, index_language, is_native, from_index):
     if is_native:
         index_name = f"search-{index_name}"
         click.echo(
@@ -201,32 +199,32 @@ def create(
 
     index_exists, connector_exists = index.index_or_connector_exists(index_name)
 
-    if index_exists and not use_existing_index:
+    if index_exists and not from_index:
         click.echo(
             click.style(
-                f"Index for {index_name} already exists. Include the flag `--use_existing_index` to create a connector for this index.",
+                f"Index for {index_name} already exists. Include the flag `--from_index` to create a connector for this index.",
                 fg="red",
             ),
             err=True,
         )
-        return
+        raise click.Abort()
 
-    if not index_exists and use_existing_index:
+    if not index_exists and from_index:
         click.echo(
             click.style(
-                "The flag `--use_existing_index` was provided but index doesn't exist.",
+                "The flag `--from_index` was provided but index doesn't exist.",
                 fg="red",
             ),
             err=True,
         )
-        return
+        raise click.Abort()
 
     if connector_exists:
         click.echo(
             click.style("This index is already a connector.", fg="red"),
             err=True,
         )
-        return
+        raise click.Abort()
 
     # first fill in the fields that do not depend on other fields
     for key, item in configuration.items():
@@ -251,7 +249,7 @@ def create(
         configuration,
         is_native,
         language=index_language,
-        use_existing_index=use_existing_index,
+        from_index=from_index,
     )
     click.echo(
         "Connector (name: "

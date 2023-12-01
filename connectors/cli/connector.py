@@ -54,7 +54,7 @@ class Connector:
         configuration,
         is_native,
         language=DEFAULT_LANGUAGE,
-        use_existing_index=False,
+        from_index=False,
     ):
         return asyncio.run(
             self.__create(
@@ -63,7 +63,7 @@ class Connector:
                 configuration,
                 is_native,
                 language,
-                use_existing_index,
+                from_index,
             )
         )
 
@@ -74,10 +74,10 @@ class Connector:
         configuration,
         is_native,
         language=DEFAULT_LANGUAGE,
-        use_existing_index=False,
+        from_index=False,
     ):
         try:
-            if use_existing_index:
+            if from_index:
                 return await self.__create_connector(
                     index_name, service_type, configuration, is_native, language
                 )

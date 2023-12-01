@@ -222,9 +222,7 @@ def test_connector_create_with_native_flags(
         if native_flag:
             args.append(native_flag)
 
-        result = runner.invoke(
-            cli, args, input=input_params
-        )
+        result = runner.invoke(cli, args, input=input_params)
 
         patched_create.assert_called_once()
         assert result.exit_code == 0
@@ -238,7 +236,7 @@ def test_connector_create_with_native_flags(
     "connectors.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[True, False]),
 )
-def test_connector_create_with_byoi(patch_click_confirm):
+def test_connector_create_from_index(patch_click_confirm):
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -261,7 +259,7 @@ def test_connector_create_with_byoi(patch_click_confirm):
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
-            cli, ["connector", "create", "--use_existing_index"], input=input_params
+            cli, ["connector", "create", "--from_index"], input=input_params
         )
 
         patched_create.assert_called_once()
@@ -271,14 +269,14 @@ def test_connector_create_with_byoi(patch_click_confirm):
 
 
 @pytest.mark.parametrize(
-    "index_exists, connector_exists, byoi_flag, expected_error",
+    "index_exists, connector_exists, from_index_flag, expected_error",
     (
         [True, False, False, "Index for test-connector already exists"],
         [
             False,
             False,
             True,
-            "The flag `--use_existing_index` was provided but index doesn't exist",
+            "The flag `--from_index` was provided but index doesn't exist",
         ],
         [False, True, False, "This index is already a connector"],
         [True, True, True, "This index is already a connector"],
@@ -286,7 +284,7 @@ def test_connector_create_with_byoi(patch_click_confirm):
 )
 @patch("click.confirm")
 def test_connector_create_fails_when_index_or_connector_exists(
-    patch_click_confirm, index_exists, connector_exists, byoi_flag, expected_error
+    patch_click_confirm, index_exists, connector_exists, from_index_flag, expected_error
 ):
     runner = CliRunner()
 
@@ -314,13 +312,13 @@ def test_connector_create_fails_when_index_or_connector_exists(
             AsyncMock(return_value={"_id": "new_connector_id"}),
         ) as patched_create:
             args = ["connector", "create"]
-            if byoi_flag:
-                args.append("--use_existing_index")
+            if from_index_flag:
+                args.append("--from_index")
 
             result = runner.invoke(cli, args, input=input_params)
 
             patched_create.assert_not_called()
-            assert result.exit_code == 0
+            assert result.exit_code == 1
 
             assert expected_error in result.output
 
