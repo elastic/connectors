@@ -164,10 +164,11 @@ def validate_language(ctx, param, value):
     callback=validate_language,
 )
 @click.option(
-    "--native/--not-native",
+    "--native",
     "is_native",
-    default=True,
-    help="Whether or not the connector will be a native connector. Defaults to True.",
+    default=False,
+    is_flag=True,
+    help="Create a native connector rather than a connector client.",
 )
 @click.option(
     "--use_existing_index",

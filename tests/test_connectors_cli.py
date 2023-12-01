@@ -185,8 +185,8 @@ def test_connector_create(patch_click_confirm):
     (
         ["--native", "test", "search-test"],
         ["--native", "search-test", "search-search-test"],
-        ["--not-native", "test", "test"],
-        ["--not-native", "search-test", "search-test"],
+        [None, "test", "test"],
+        [None, "search-test", "search-test"],
     ),
 )
 @patch("click.confirm")
@@ -218,8 +218,12 @@ def test_connector_create_with_native_flags(
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
+        args = ["connector", "create"]
+        if native_flag:
+            args.append(native_flag)
+
         result = runner.invoke(
-            cli, ["connector", "create", native_flag], input=input_params
+            cli, args, input=input_params
         )
 
         patched_create.assert_called_once()
@@ -269,7 +273,7 @@ def test_connector_create_with_byoi(patch_click_confirm):
 @pytest.mark.parametrize(
     "index_exists, connector_exists, byoi_flag, expected_error",
     (
-        [True, False, False, "Index for search-test-connector already exists"],
+        [True, False, False, "Index for test-connector already exists"],
         [
             False,
             False,
