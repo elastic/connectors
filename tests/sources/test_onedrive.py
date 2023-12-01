@@ -839,9 +839,8 @@ async def test_list_users():
         )
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch("aiohttp.ClientSession.get", return_value=async_response):
-                async for users in source.client.list_users():
-                    for user in users:
-                        response.append(user)
+                async for user in source.client.list_users():
+                    response.append(user)
 
             assert response == EXPECTED_USERS
 
@@ -945,7 +944,7 @@ async def test_json_batching():
 
 
 @patch.object(
-    OneDriveClient, "list_users", return_value=AsyncIterator([EXPECTED_USERS])
+    OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
 )
 @patch.object(
     OneDriveDataSource,
@@ -1108,7 +1107,7 @@ async def test_get_docs_with_advanced_rules(filtering):
             with patch.object(
                 OneDriveClient,
                 "list_users",
-                return_value=AsyncIterator([EXPECTED_USERS]),
+                return_value=AsyncIterator(EXPECTED_USERS),
             ):
                 async_response_user1 = AsyncMock()
                 async_response_user1.__aenter__ = AsyncMock(
@@ -1171,7 +1170,7 @@ async def test_get_access_control_dls_enabled():
             with patch.object(
                 OneDriveClient,
                 "list_users",
-                return_value=AsyncIterator([EXPECTED_USERS]),
+                return_value=AsyncIterator(EXPECTED_USERS),
             ):
                 user_access_control = []
                 async for user_doc in source.get_access_control():
@@ -1184,7 +1183,7 @@ async def test_get_access_control_dls_enabled():
 
 
 @patch.object(
-    OneDriveClient, "list_users", return_value=AsyncIterator([EXPECTED_USERS])
+    OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
 )
 @patch.object(
     OneDriveDataSource,
@@ -1221,7 +1220,7 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch):
 
 
 @patch.object(
-    OneDriveClient, "list_users", return_value=AsyncIterator([EXPECTED_USERS])
+    OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
 )
 @patch.object(
     OneDriveDataSource,
