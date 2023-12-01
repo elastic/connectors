@@ -8,8 +8,6 @@ from functools import cached_property
 from connectors.protocol import JobStatus, JobType
 from connectors.services.job_execution import JobExecutionService
 
-DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS = 1
-
 
 class AccessControlSyncJobExecutionService(JobExecutionService):
     name = "sync_access_control"
@@ -28,10 +26,7 @@ class AccessControlSyncJobExecutionService(JobExecutionService):
 
     @cached_property
     def max_concurrency(self):
-        return self.service_config.get(
-            "max_concurrent_access_control_syncs",
-            DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS,
-        )
+        return self.service_config.get("max_concurrent_access_control_syncs")
 
     def should_execute(self, connector, sync_job):
         if not connector.features.document_level_security_enabled():
