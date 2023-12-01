@@ -943,9 +943,7 @@ async def test_json_batching():
     assert result == expected_result
 
 
-@patch.object(
-    OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
-)
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
     OneDriveDataSource,
     "json_batching",
@@ -1182,9 +1180,7 @@ async def test_get_access_control_dls_enabled():
                 assert expected_user_access_control == user_access_control
 
 
-@patch.object(
-    OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
-)
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
     OneDriveDataSource,
     "json_batching",
@@ -1219,9 +1215,7 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch):
         assert len(downloads) == 2
 
 
-@patch.object(
-    OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
-)
+@patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
     OneDriveDataSource,
     "json_batching",
