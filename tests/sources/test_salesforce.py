@@ -492,9 +492,7 @@ CONNECTOR_RESPONSE_PAYLOAD = {
 
 EXPECTED_ACCOUNT_RESPONSE = {
     "_id": "account_id",
-    "created_at": "2023-12-12T00:00:00.000+0000",
     "_timestamp": "2023-12-12T00:00:00Z",
-    "source": "salesforce",
     "type": "Account",
     "url": "https://fake.my.salesforce.com/account_id",
     "owner": "Frodo",
@@ -678,6 +676,8 @@ def salesforce_query_callback(url, **kwargs):
             payload = deepcopy(CUSTOM_OBJECT_RESPONSE_PAYLOAD)
         case "Connector__c":
             payload = deepcopy(CONNECTOR_RESPONSE_PAYLOAD)
+        case _:
+            payload = {"records": []}
 
     if table_name != "CaseFeed":
         for record in payload["records"]:
@@ -903,9 +903,7 @@ async def test_get_accounts_when_success(mock_responses):
 
         expected_doc = {
             "_id": "account_id",
-            "created_at": "2023-12-12T00:00:00.000+0000",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "source": "salesforce",
             "type": "Account",
             "url": "https://fake.my.salesforce.com/account_id",
             "owner": "Frodo",
@@ -1035,13 +1033,27 @@ async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
+async def test_get_contacts_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_contacts():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_leads_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_leads():
+            assert record is None
+
+
+@pytest.mark.asyncio
 async def test_get_opportunities_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "opportunity_id",
-            "created_at": "2023-12-12T00:00:00.000+0000",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "source": "salesforce",
             "type": "Opportunity",
             "url": "https://fake.my.salesforce.com/opportunity_id",
             "owner": "Frodo",
@@ -1098,9 +1110,7 @@ async def test_get_contacts_when_success(mock_responses):
 
         expected_doc = {
             "_id": "contact_id",
-            "created_at": "2023-12-12T00:00:00.000+0000",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "source": "salesforce",
             "type": "Contact",
             "url": "https://fake.my.salesforce.com/contact_id",
             "owner": "Frodo",
@@ -1155,9 +1165,7 @@ async def test_get_leads_when_success(mock_responses):
 
         expected_doc = {
             "_id": "lead_id",
-            "created_at": None,
             "_timestamp": "2023-12-12T00:00:00Z",
-            "source": "salesforce",
             "type": "Lead",
             "url": "https://fake.my.salesforce.com/lead_id",
             "owner": "Frodo",
@@ -1208,9 +1216,7 @@ async def test_get_campaigns_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "campaign_id",
-            "created_at": None,
             "_timestamp": "2023-12-12T00:00:00Z",
-            "source": "salesforce",
             "type": "Campaign",
             "url": "https://fake.my.salesforce.com/campaign_id",
             "owner": "Saruman",
@@ -1272,9 +1278,7 @@ async def test_get_cases_when_success(mock_responses):
 
         expected_doc = {
             "_id": "case_id",
-            "created_at": "2023-08-01T00:00:00.000+0000",
             "_timestamp": "2023-08-11T00:00:00Z",
-            "source": "salesforce",
             "type": "Case",
             "url": "https://fake.my.salesforce.com/case_id",
             "owner": "Frodo",
@@ -1580,6 +1584,43 @@ async def test_modify_query(soql_query, modified_query):
         assert query == modified_query
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "soql_query, modified_query",
+    [
+        (
+            "SELECT Id, Name FROM Account",
+            "SELECT Id, Name, LastModifiedDate FROM Account",
+        ),
+        (
+            "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
+            "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
+        ),
+    ],
+)
+async def test_add_last_modified_date(soql_query, modified_query):
+    async with create_salesforce_source() as source:
+        query = source.salesforce_client._add_last_modified_date(soql_query)
+        assert query == modified_query
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "soql_query, modified_query",
+    [
+        ("SELECT Id, Name FROM Account", "SELECT Id, Name FROM Account"),
+        (
+            "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
+            "SELECT FIELDS(CUSTOM), LastModifiedDate, Id FROM Account LIMIT 200",
+        ),
+    ],
+)
+async def test_add_id(soql_query, modified_query):
+    async with create_salesforce_source() as source:
+        query = source.salesforce_client._add_id(soql_query)
+        assert query == modified_query
+
+
 @pytest.mark.parametrize(
     "filtering, expected_docs",
     [
@@ -1604,14 +1645,14 @@ async def test_modify_query(soql_query, modified_query):
                     ADVANCED_SNIPPET: {
                         "value": [
                             {
-                                "query": "SELECT FIELDS(CUSTOM) FROM Account",
+                                "query": "SELECT FIELDS(STANDARD) FROM Student",
                                 "language": "SOQL",
                             }
                         ]
                     }
                 }
             ),
-            [EXPECTED_ACCOUNT_RESPONSE, EXPECTED_CONTENT_RESPONSE],
+            [],
         ),
     ],
 )
@@ -1630,6 +1671,8 @@ async def test_get_docs_for_soql_query(mock_responses, filtering, expected_docs)
         resultant_docs = []
         async for record, _ in source.get_docs(filtering):
             resultant_docs.append(record)
+
+        assert expected_docs == resultant_docs
 
 
 @pytest.mark.parametrize(
@@ -1667,20 +1710,32 @@ async def test_get_docs_for_sosl_query(mock_responses, filtering):
 
 
 @pytest.mark.asyncio
-async def test_remote_validation():
+async def test_remote_validation(mock_responses):
     async with create_salesforce_source() as source:
-        filtering = Filter(
-            {
-                ADVANCED_SNIPPET: {
-                    "value": [
-                        {
-                            "query": "SELECT Id, Name FROM Account",
-                            "language": "SQL",
-                        }
-                    ]
-                }
-            }
+        filtering = [{"query": "SELECT Id, Name FROM Account", "language": "SOQL"}]
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
         )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+        result = await SalesforceAdvancedRulesValidator(source=source).validate(
+            advanced_rules=filtering
+        )
+        assert result.is_valid is True
+
+
+@pytest.mark.asyncio
+async def test_remote_validation_negative():
+    async with create_salesforce_source() as source:
+        filtering = [
+            {
+                "query": "SELECT Id, Name FROM Account",
+                "language": "SQL",
+            }
+        ]
         result = await SalesforceAdvancedRulesValidator(source=source).validate(
             advanced_rules=filtering
         )

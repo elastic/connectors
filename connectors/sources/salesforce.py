@@ -46,6 +46,7 @@ DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
 # https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
 CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
+OFFSET = 200
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -204,34 +205,31 @@ class SalesforceClient:
 
         return query
 
+    def _add_last_modified_date(self, query):
+        lowered_query = query.lower()
+        if (
+            not ("fields(all)" in lowered_query or "fields(standard)" in lowered_query)
+            and "lastmodifieddate" not in lowered_query
+        ):
+            query = re.sub(
+                r"(?i)SELECT (.*) FROM", r"SELECT \1, LastModifiedDate FROM", query
+            )
+
+        return query
+
+    def _add_id(self, query):
+        lowered_query = query.lower()
+        if not (
+            "fields(all)" in lowered_query or "fields(standard)" in lowered_query
+        ) and not re.search(r"\bid\b", lowered_query):
+            query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
+
+        return query
+
     async def get_sync_rules_results(self, rule):
-        def _add_last_modified_date(query):
-            lowered_query = query.lower()
-            if (
-                not (
-                    "fields(all)" in lowered_query
-                    or "fields(standard)" in lowered_query
-                )
-                and "lastmodifieddate" not in lowered_query
-            ):
-                query = re.sub(
-                    r"(?i)SELECT (.*) FROM", r"SELECT \1, LastModifiedDate FROM", query
-                )
-
-            return query
-
-        def _add_id(query):
-            lowered_query = query.lower()
-            if not (
-                "fields(all)" in lowered_query or "fields(standard)" in lowered_query
-            ) and not re.search("\bid\b", lowered_query):
-                query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
-
-            return query
-
         if rule["language"] == "SOQL":
-            query_with_id = _add_id(query=rule["query"])
-            query = _add_last_modified_date(query=query_with_id)
+            query_with_id = self._add_id(query=rule["query"])
+            query = self._add_last_modified_date(query=query_with_id)
 
             if "fields" not in query.lower():
                 async for records in self._yield_non_bulk_query_pages(soql_query=query):
@@ -267,11 +265,14 @@ class SalesforceClient:
             custom_objects.extend(records)
 
         for _object in custom_objects:
-            object_name = (
-                f"{_object['DeveloperName']}__kav"  # kav stands for Knowledge Article Version
-                if _object["DeveloperName"] == "Knowledge"
-                else f"{_object['DeveloperName']}__c"
-            )
+            if (
+                _object["DeveloperName"] == "Knowledge_kav"
+            ):  # kav stands for Knowledge Article Version
+                object_name = "Knowledge__kav"
+            elif _object["DeveloperName"] == "Knowledge":
+                object_name = f"{_object['DeveloperName']}__kav"
+            else:
+                object_name = f"{_object['DeveloperName']}__c"
 
             query = await self._custom_object_query(custom_object=object_name)
             async for records in self._yield_non_bulk_query_pages(query):
@@ -527,7 +528,7 @@ class SalesforceClient:
             return new_query
 
         url = f"{self.base_url}{QUERY_ENDPOINT}"
-        offset = 200
+        offset = OFFSET
 
         while True:
             response = await self._get_json(
@@ -541,7 +542,7 @@ class SalesforceClient:
                 break
 
             soql_query = modify_offset(soql_query, offset)
-            offset += 200
+            offset += OFFSET
 
     async def _yield_sosl_query_pages(self, sosl_query):
         """loops through SOSL query response pages and yields lists of records"""
@@ -1152,9 +1153,7 @@ class SalesforceDocMapper:
 
         return {
             "_id": _object.get("Id"),
-            "created_at": _object.get("CreatedDate"),
             "_timestamp": _format_datetime(datetime_=_object.get("LastModifiedDate")),
-            "source": "salesforce",
             "type": _object.get("attributes", {}).get("type"),
             "url": f"{self.base_url}/{_object.get('Id')}",
             "owner": owner.get("Name"),
