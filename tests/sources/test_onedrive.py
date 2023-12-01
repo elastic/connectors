@@ -9,7 +9,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from aiohttp import StreamReader
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
@@ -151,6 +151,7 @@ EXPECTED_FILES = [
 
 RESPONSE_USER1_FILES = [
     {
+        "@microsoft.graph.downloadUrl": "https://example-download-url-item-3",
         "createdDateTime": "2023-05-01T09:09:19Z",
         "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
         "lastModifiedDateTime": "2023-05-01T09:09:19Z",
@@ -162,6 +163,7 @@ RESPONSE_USER1_FILES = [
         "size": 10484,
     },
     {
+        "@microsoft.graph.downloadUrl": "https://example-download-url-item-1",
         "createdDateTime": "2023-05-01T09:09:31Z",
         "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
         "lastModifiedDateTime": "2023-05-01T09:10:21Z",
@@ -209,6 +211,7 @@ RESPONSE_USER2_FILES = [
         "size": 10484,
     },
     {
+        "@microsoft.graph.downloadUrl": "https://example-download-url-item-3",
         "createdDateTime": "2023-05-01T09:09:31Z",
         "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
         "lastModifiedDateTime": "2023-05-01T09:10:21Z",
@@ -391,6 +394,76 @@ EXPECTED_USER2_FILES_PERMISSION = [
         ],
     },
 ]
+
+RESPONSE_GROUPS = [{"name": "group1", "id": "123"}, {"name": "group2", "id": "234"}]
+
+BATCHED_RESPONSE = {
+    "responses": [
+        {
+            "id": "123",
+            "body": {
+                "value": [
+                    {
+                        "@microsoft.graph.downloadUrl": "https://example-download-url-item-3",
+                        "createdDateTime": "2023-05-01T09:09:19Z",
+                        "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+                        "lastModifiedDateTime": "2023-05-01T09:09:19Z",
+                        "name": "folder3",
+                        "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+                        "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+                        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+                        "parentReference": {"path": "/drive/root:/hello"},
+                        "size": 10484,
+                    },
+                ]
+            },
+        },
+        {
+            "id": "231",
+            "body": {
+                "@odata.nextLink": "https://graph.microsoft.com/v1.0/users/231/delta/next-page-token",
+                "value": [
+                    {
+                        "@microsoft.graph.downloadUrl": "https://example-download-url-item-1",
+                        "createdDateTime": "2023-05-01T09:09:31Z",
+                        "id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+                        "lastModifiedDateTime": "2023-05-01T09:10:21Z",
+                        "name": "doit.py",
+                        "eTag": '"{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
+                        "cTag": '"c:{2E301580-9Y39-4D32-A6D4-E34680133WE8},3"',
+                        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
+                        "parentReference": {"path": "/drive/root:/anc"},
+                        "size": 10484,
+                        "file": {"mimeType": "application/python"},
+                    },
+                ],
+            },
+        },
+    ]
+}
+
+NEXT_BATCH_RESPONSE = {
+    "responses": [
+        {
+            "id": "231",
+            "body": {
+                "value": [
+                    {
+                        "createdDateTime": "2023-05-01T09:09:19Z",
+                        "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+                        "lastModifiedDateTime": "2023-05-01T09:09:19Z",
+                        "name": "folder4",
+                        "eTag": '"{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+                        "cTag": '"c:{2E301580-9B39-4D32-A6D4-E34680133F84},3"',
+                        "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
+                        "parentReference": {"path": "/drive/root:/dummy"},
+                        "size": 10484,
+                    },
+                ]
+            },
+        },
+    ]
+}
 
 
 def token_retrieval_errors(message, error_code):
@@ -655,6 +728,87 @@ async def test_get_with_500_status():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_post_with_429_status():
+    initial_response = ClientPayloadError(None, None)
+    initial_response.status = 429
+    initial_response.message = "rate-limited"
+    initial_response.headers = {"Retry-After": 0.1}
+
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    async with create_onedrive_source() as source:
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch(
+                "aiohttp.ClientSession.post",
+                side_effect=[initial_response, retried_response],
+            ):
+                async for response in source.client.post(
+                    url="http://localhost:1000/sample"
+                ):
+                    result = await response.json()
+
+    assert result == payload
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_post_with_429_status_without_retry_after_header():
+    initial_response = ClientPayloadError(None, None)
+    initial_response.status = 429
+    initial_response.message = "rate-limited"
+
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    with patch("connectors.sources.onedrive.DEFAULT_RETRY_SECONDS", 0.3):
+        async with create_onedrive_source() as source:
+            with patch.object(AccessToken, "get", return_value="abc"):
+                with patch(
+                    "aiohttp.ClientSession.post",
+                    side_effect=[initial_response, retried_response],
+                ):
+                    async for response in source.client.post(
+                        url="http://localhost:1000/sample"
+                    ):
+                        result = await response.json()
+
+        assert result == payload
+
+
+@pytest.mark.asyncio
+async def test_list_groups():
+    async with create_onedrive_source() as source:
+        with patch.object(
+            OneDriveClient,
+            "paginated_api_call",
+            return_value=AsyncIterator([RESPONSE_GROUPS]),
+        ):
+            response = []
+            async for group in source.client.list_groups("user-1"):
+                response.append(group)
+
+        assert response == RESPONSE_GROUPS
+
+
+@pytest.mark.asyncio
+async def test_list_permissions():
+    async with create_onedrive_source() as source:
+        with patch.object(
+            OneDriveClient,
+            "paginated_api_call",
+            return_value=AsyncIterator([[RESPONSE_PERMISSION1]]),
+        ):
+            async for permission in source.client.list_file_permission(
+                "user-1", "file-1"
+            ):
+                assert permission == RESPONSE_PERMISSION1
+
+
+@pytest.mark.asyncio
 async def test_get_owned_files():
     async with create_onedrive_source() as source:
         async_response = AsyncMock()
@@ -745,27 +899,63 @@ async def test_get_content_with_extraction_service():
                         assert response == EXPECTED_CONTENT_EXTRACTED
 
 
+@pytest.mark.asyncio
+async def test_lookup_request_by_id():
+    async with create_onedrive_source() as source:
+        requests = [
+            {"id": "1", "url": "user1/delta"},
+            {"id": "2", "url": "user2/delta"},
+        ]
+
+        result = source.lookup_request_by_id(requests, "2")
+        assert result == requests[1]
+
+
+@pytest.mark.asyncio
+async def test_json_batching():
+    async_response, next_page_response = AsyncMock(), AsyncMock()
+    result = []
+    expected_result = [
+        "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+        "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
+        "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+    ]
+
+    async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(BATCHED_RESPONSE))
+    next_page_response.__aenter__ = AsyncMock(
+        return_value=JSONAsyncMock(NEXT_BATCH_RESPONSE)
+    )
+    async with create_onedrive_source() as source:
+        with patch.object(AccessToken, "get", return_value="abc"):
+            with patch(
+                "aiohttp.ClientSession.post",
+                side_effect=[async_response, next_page_response],
+            ):
+                async for response in source.json_batching(
+                    batched_apis=[
+                        {"method": "GET", "id": "123", "url": "/users/user1/delta"},
+                        {"method": "GET", "id": "231", "url": "/users/user2/delta"},
+                    ]
+                ):
+                    file = response.get("body", {}).get("value", [])
+                    result.append(file[0].get("id"))
+
+    assert result == expected_result
+
+
 @patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
-    OneDriveClient,
-    "get_owned_files",
+    OneDriveDataSource,
+    "json_batching",
     side_effect=[
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES[0], None),
-                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
-                ]
+                    ({"body": {"value": RESPONSE_USER1_FILES}}),
+                    ({"body": {"value": RESPONSE_USER2_FILES}}),
+                ],
             )
-        ),
-        (
-            AsyncIterator(
-                [
-                    (RESPONSE_USER2_FILES[0], None),
-                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
-                ]
-            )
-        ),
+        )
     ],
 )
 @pytest.mark.asyncio
@@ -913,7 +1103,9 @@ async def test_get_docs_with_advanced_rules(filtering):
     async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch.object(
-                OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
+                OneDriveClient,
+                "list_users",
+                return_value=AsyncIterator(EXPECTED_USERS),
             ):
                 async_response_user1 = AsyncMock()
                 async_response_user1.__aenter__ = AsyncMock(
@@ -974,7 +1166,9 @@ async def test_get_access_control_dls_enabled():
 
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch.object(
-                OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS)
+                OneDriveClient,
+                "list_users",
+                return_value=AsyncIterator(EXPECTED_USERS),
             ):
                 user_access_control = []
                 async for user_doc in source.get_access_control():
@@ -988,22 +1182,14 @@ async def test_get_access_control_dls_enabled():
 
 @patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
-    OneDriveClient,
-    "get_owned_files",
+    OneDriveDataSource,
+    "json_batching",
     side_effect=[
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES[0], None),
-                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
-                ]
-            )
-        ),
-        (
-            AsyncIterator(
-                [
-                    (RESPONSE_USER2_FILES[0], None),
-                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                    ({"body": {"value": RESPONSE_USER1_FILES}}),
+                    ({"body": {"value": RESPONSE_USER2_FILES}}),
                 ]
             )
         ),
@@ -1031,22 +1217,14 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch):
 
 @patch.object(OneDriveClient, "list_users", return_value=AsyncIterator(EXPECTED_USERS))
 @patch.object(
-    OneDriveClient,
-    "get_owned_files",
+    OneDriveDataSource,
+    "json_batching",
     side_effect=[
         (
             AsyncIterator(
                 [
-                    (RESPONSE_USER1_FILES[0], None),
-                    (RESPONSE_USER1_FILES[1], "https://download-docx"),
-                ]
-            )
-        ),
-        (
-            AsyncIterator(
-                [
-                    (RESPONSE_USER2_FILES[0], None),
-                    (RESPONSE_USER2_FILES[1], "https://downloadurl-py"),
+                    ({"body": {"value": RESPONSE_USER1_FILES}}.copy()),
+                    ({"body": {"value": RESPONSE_USER2_FILES}}.copy()),
                 ]
             )
         ),
@@ -1071,7 +1249,7 @@ async def test_get_docs_with_dls_enabled(users_patch, files_patch, permissions_p
             *EXPECTED_USER1_FILES_PERMISSION,
             *EXPECTED_USER2_FILES_PERMISSION,
         ]
-        source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
+        source.get_content = AsyncMock(side_effect=[EXPECTED_CONTENT, EXPECTED_CONTENT])
 
         documents, downloads = [], []
         async for item, content in source.get_docs():
