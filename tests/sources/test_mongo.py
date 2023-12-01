@@ -346,6 +346,7 @@ async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
 
+
 @pytest.mark.asyncio
 @mock.patch("ssl.SSLContext.load_verify_locations")
 async def test_ssl_connection_with_invalid_certificate(mock_ssl):
@@ -379,7 +380,9 @@ async def test_ssl_connection_with_invalid_certificate(mock_ssl):
     ],
 )
 @mock.patch("ssl.SSLContext.load_verify_locations")
-async def test_ssl_with_successful_connection(mock_ssl, certificate_value, tls_insecure):
+async def test_ssl_with_successful_connection(
+    mock_ssl, certificate_value, tls_insecure
+):
     mock_ssl.return_value = True
     async with create_mongo_source(
         ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
