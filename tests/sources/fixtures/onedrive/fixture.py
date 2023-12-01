@@ -169,6 +169,7 @@ class OneDriveAPI:
         self.app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])(
             self.get_access_token
         )
+        self.app.route("/$batch", methods=["POST"])(self.batched_uris)
         self.app.route("/users", methods=["GET"])(self.get_users)
         self.app.route("/drives", methods=["GET"])(self.get_drive)
         self.app.route("/users/<string:user_id>/drive/root/delta", methods=["GET"])(
@@ -192,6 +193,16 @@ class OneDriveAPI:
         response = make_response(res)
         response.headers["status_code"] = 200
         return response
+
+    def batched_uris(self):
+        payload = request.get_json()
+        response = []
+        for rest_request in payload["requests"]:
+            request_id = rest_request["id"]
+            response.append(
+                {"id": request_id, "body": self.get_root_drive_delta(request_id)}
+            )
+        return {"responses": response}
 
     def get_users(self):
         skip = int(request.args.get("$skip", 0))
