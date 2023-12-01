@@ -1049,6 +1049,30 @@ async def test_get_leads_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
+async def test_get_opportunities_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_opportunities():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_campaigns_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_campaigns():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_cases_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_cases():
+            assert record is None
+
+
+@pytest.mark.asyncio
 async def test_get_opportunities_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
