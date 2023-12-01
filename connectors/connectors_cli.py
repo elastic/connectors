@@ -149,7 +149,8 @@ def validate_language(ctx, param, value):
 @click.command(help="Creates a new connector and a search index")
 @click.option(
     "--index_name",
-    prompt=f"{click.style('?', blink=True, fg='green')} Search index name (search-)",
+    prompt=f"{click.style('?', blink=True, fg='green')} Index name",
+    help="Name of the index. If the index is native, `search-` will be prepended to the input.",
 )
 @click.option(
     "--service_type",
@@ -162,9 +163,29 @@ def validate_language(ctx, param, value):
     default="",
     callback=validate_language,
 )
+@click.option(
+    "--native/--not-native",
+    "is_native",
+    default=True,
+    help="Whether or not the connector will be a native connector. Defaults to True.",
+)
+@click.option(
+    "--use_existing_index",
+    default=False,
+    is_flag=True,
+    help="Create a connector for an index that already exists. Each index can only have one connector. All current docs for the index will be deleted during the first sync.",
+)
 @click.pass_obj
-def create(obj, index_name, service_type, index_language):
-    index_name = f"search-{index_name}"
+def create(
+    obj, index_name, service_type, index_language, is_native, use_existing_index
+):
+    if is_native:
+        index_name = f"search-{index_name}"
+        click.echo(
+            f"Prepending {click.style('search-', fg='green')} to index name because it will be a native connector. New index name is {click.style(index_name, fg='green')}."
+        )
+
+    index = Index(config=obj["config"]["elasticsearch"])
     connector = Connector(obj["config"]["elasticsearch"])
     configuration = connector.service_type_configuration(
         source_class=_default_config()["sources"][service_type]
@@ -176,6 +197,35 @@ def create(obj, index_name, service_type, index_language):
             default=item.get("value", None),
             hide_input=True if item.get("sensitive") is True else False,
         )
+
+    index_exists, connector_exists = index.index_or_connector_exists(index_name)
+
+    if index_exists and not use_existing_index:
+        click.echo(
+            click.style(
+                f"Index for {index_name} already exists. Include the flag `--use_existing_index` to create a connector for this index.",
+                fg="red",
+            ),
+            err=True,
+        )
+        return
+
+    if not index_exists and use_existing_index:
+        click.echo(
+            click.style(
+                "The flag `--use_existing_index` was provided but index doesn't exist.",
+                fg="red",
+            ),
+            err=True,
+        )
+        return
+
+    if connector_exists:
+        click.echo(
+            click.style("This index is already a connector.", fg="red"),
+            err=True,
+        )
+        return
 
     # first fill in the fields that do not depend on other fields
     for key, item in configuration.items():
@@ -194,14 +244,28 @@ def create(obj, index_name, service_type, index_language):
         ):
             configuration[key]["value"] = prompt()
 
-    result = connector.create(index_name, service_type, configuration, index_language)
+    result = connector.create(
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        language=index_language,
+        use_existing_index=use_existing_index,
+    )
     click.echo(
-        "Connector (ID: "
+        "Connector (name: "
+        + click.style(index_name, fg="green")
+        + ", ID: "
         + click.style(result[1], fg="green")
         + ", service_type: "
         + click.style(service_type, fg="green")
         + ") has been created!"
     )
+    if not is_native:
+        # TODO configure API key here
+        click.echo(
+            "This connector still requires an API key. Please configure this in Kibana."
+        )
 
 
 connector.add_command(create)

@@ -43,25 +43,49 @@ class Connector:
 
     def service_type_configuration(self, source_class):
         source_klass = get_source_klass(source_class)
-        configuration = source_klass.get_default_configuration()
+        configuration = source_klass.get_simple_configuration()
 
         return OrderedDict(sorted(configuration.items(), key=lambda x: x[1]["order"]))
 
     def create(
-        self, index_name, service_type, configuration, language=DEFAULT_LANGUAGE
+        self,
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        language=DEFAULT_LANGUAGE,
+        use_existing_index=False,
     ):
         return asyncio.run(
-            self.__create(index_name, service_type, configuration, language)
+            self.__create(
+                index_name,
+                service_type,
+                configuration,
+                is_native,
+                language,
+                use_existing_index,
+            )
         )
 
     async def __create(
-        self, index_name, service_type, configuration, language=DEFAULT_LANGUAGE
+        self,
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        language=DEFAULT_LANGUAGE,
+        use_existing_index=False,
     ):
         try:
+            if use_existing_index:
+                return await self.__create_connector(
+                    index_name, service_type, configuration, is_native, language
+                )
+
             return await asyncio.gather(
                 self.__create_search_index(index_name, language),
                 self.__create_connector(
-                    index_name, service_type, configuration, language
+                    index_name, service_type, configuration, is_native, language
                 ),
             )
         except Exception as e:
@@ -84,7 +108,7 @@ class Connector:
         )
 
     async def __create_connector(
-        self, index_name, service_type, configuration, language
+        self, index_name, service_type, configuration, is_native, language
     ):
         try:
             await self.es_client.ensure_exists(
@@ -92,13 +116,14 @@ class Connector:
             )
             timestamp = iso_utc()
 
+            # TODO features still required
             doc = {
                 "api_key_id": "",
                 "configuration": configuration,
                 "index_name": index_name,
                 "service_type": service_type,
                 "status": "configured",  # TODO use a predefined constant
-                "is_native": True,  # TODO make it optional
+                "is_native": is_native,
                 "language": language,
                 "last_access_control_sync_error": None,
                 "last_access_control_sync_scheduled_at": None,
