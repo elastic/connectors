@@ -102,9 +102,13 @@ class MongoDataSource(BaseDataSource):
         if self.configuration["direct_connection"]:
             client_params["directConnection"] = True
 
-        if len(user) > 0 or len(password) > 0:
+        # Check is user or password are not NoneType
+        if user:
             client_params["username"] = user
+        
+        if password:
             client_params["password"] = password
+
 
         self.client = AsyncIOMotorClient(host, **client_params)
 
