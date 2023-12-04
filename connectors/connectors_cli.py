@@ -255,11 +255,20 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
         "Connector (name: "
         + click.style(index_name, fg="green")
         + ", ID: "
-        + click.style(result[1], fg="green")
+        + click.style(result[1]["id"], fg="green")
         + ", service_type: "
         + click.style(service_type, fg="green")
+        + ", api_key: "
+        + click.style(result[1]["api_key"], fg="green")
         + ") has been created!"
     )
+
+    # "connectors:
+# -
+#   connector_id: "S7W0NIwBKBm_hdQY_C7k"
+#   service_type: "sharepoint_online"
+#   api_key: "VExXMU5Jd0JLQm1faGRRWURDNmw6WnZ5VUJYdVRRc1NHWV9FT0FhcVM4Zw==""
+
     if not is_native:
         # TODO configure API key here
         click.echo(
