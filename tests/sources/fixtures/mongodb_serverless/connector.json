@@ -76,9 +76,9 @@
     "tls_insecure": {
         "display": "toggle",
         "depends_on": [{"field": "ssl_enabled", "value": true}],
-        "label": "Disable certificate validations",
+        "label": "Skip certificate verification",
         "order": 9,
-        "tooltip": "This option disables certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'. Enable it if certificates are missing.",
+        "tooltip": "This option skips certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'.",
         "type": "bool",
         "value": false
     }

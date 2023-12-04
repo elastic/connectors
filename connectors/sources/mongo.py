@@ -182,9 +182,9 @@ class MongoDataSource(BaseDataSource):
             "tls_insecure": {
                 "display": "toggle",
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
-                "label": "Disable certificate validations",
+                "label": "Skip certificate verification",
                 "order": 9,
-                "tooltip": "This option disables certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'.",
+                "tooltip": "This option skips certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
                 "value": False,
