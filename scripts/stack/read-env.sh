@@ -21,5 +21,5 @@ echo "CONNECTORS_VERSION=$CONNECTORS_VERSION"
 
 if [ -z "$ELASTIC_PASSWORD"]
 then
-  export $(grep -E 'ELASTIC_PASSWORD' $1 | xargs)
+  export ELASTIC_PASSWORD="changeme"
 fi

@@ -19,24 +19,12 @@ source $CURDIR/read-env.sh $CURDIR/.env
 compose_file=$CURDIR/docker/docker-compose.yml
 echo "Using compose file at: $compose_file"
 
-### TODO - complete the configuration step
-### only if the user didn't manually create a config
-# run_configurator="no"
-# echo "Do you want to run the configurator?"
-# select ync in "Yes" "No" "Cancel"; do
-#   case $ync in
-#     Yes ) run_configurator="yes"; break;;
-#     No ) break;;
-#     Cancel ) popd; exit 1;;
-#   esac
-# done
-# if [ $run_configurator == "yes" ]; then
-#   source ./configure-stack.sh $SECURE_STATE_DIR
-# fi
+. $CURDIR/parse-params.sh
+parse_params $@
+eval set -- "$parsed_params"
 
 # for now, always update the images, make this an arg later
-update_images=true
-if [ "$update_images" = true ]
+if [ "${update_images:-}" = true ]
 then
   echo "Ensuring we have the latest images..."
   docker-compose -f $compose_file pull elasticsearch kibana elastic-connectors
@@ -57,8 +45,27 @@ docker-compose -f $compose_file up --detach kibana
 source $CURDIR/wait-for-kibana.sh
 source $CURDIR/update-kibana-user-password.sh
 
-echo "Starting Elastic Connectors..."
-docker-compose -f $compose_file up --detach elastic-connectors
+### TODO - complete the configuration step
+### only if the user didn't manually create a config
+# run_configurator="no"
+# echo "Do you want to run the configurator?"
+# select ync in "Yes" "No" "Cancel"; do
+#   case $ync in
+#     Yes ) run_configurator="yes"; break;;
+#     No ) break;;
+#     Cancel ) popd; exit 1;;
+#   esac
+# done
+# if [ $run_configurator == "yes" ]; then
+#   source ./configure-stack.sh $SECURE_STATE_DIR
+# fi
+
+if [ "${no_connectors:-}" == false ]; then
+  echo "Starting Elastic Connectors..."
+  docker-compose -f $compose_file up --detach elastic-connectors
+else
+  echo "... Connectors service is set to not start... skipping..."
+fi
 
 echo "Stack is running. You can log in at http://localhost:5601/"
 

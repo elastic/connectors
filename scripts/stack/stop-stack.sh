@@ -12,9 +12,12 @@ fi
 source $CURDIR/read-env.sh $CURDIR/.env
 compose_file=$CURDIR/docker/docker-compose.yml
 
-removeVolumes="true"
+. $CURDIR/parse-params.sh
+parse_params $@
+eval set -- "$parsed_params"
+
 echo "Stopping running containers..."
-if [[ "${removeVolumes:-}" == "true" ]]; then
+if [ "${remove_volumes:-}" == true ]; then
   echo ".. also removing data volumes..."
   docker-compose -f $compose_file down -v
 else
