@@ -184,6 +184,17 @@ class ESClient:
     async def list_indices(self):
         return await self.client.indices.stats(index="search-*")
 
+    async def index_exists(self, index_name):
+        return await self.client.indices.exists(index=index_name)
+
+    async def get_connector_doc(self, index_name):
+        response = await self.client.search(
+            index=".elastic-connectors",
+            body={"query": {"match": {"index_name": index_name}}},
+        )
+        hits = response["hits"]["hits"]
+        return hits[0] if len(hits) > 0 else None
+
 
 def with_concurrency_control(retries=3):
     def wrapper(func):
