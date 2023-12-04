@@ -9,16 +9,12 @@ import os
 from functools import partial
 from urllib.parse import quote
 
-import aiohttp
-from aiohttp.client_exceptions import ServerDisconnectedError
-
+import httpx
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
-    CancellableSleeps,
-    ssl_context,
-)
+from connectors.utils import (TIKA_SUPPORTED_FILETYPES, CancellableSleeps,
+                              ssl_context)
+from httpx_ntlm import HttpNtlmAuth
 
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
@@ -111,21 +107,23 @@ class SharepointServerClient:
         """
         if self.session:
             return self.session
-        self._logger.info("Generating aiohttp Client Session...")
+        self._logger.info("Generating httpx Client Session...")
         request_headers = {
             "accept": "application/json",
             "content-type": "application/json",
         }
-        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        auth = HttpNtlmAuth(
+            self.configuration["username"], self.configuration["password"]
+        )
+        timeout = httpx.Timeout(90, connect=30)
 
-        self.session = aiohttp.ClientSession(
-            auth=aiohttp.BasicAuth(
-                login=self.configuration["username"],
-                password=self.configuration["password"],
-            ),  # pyright: ignore
+        self.session = httpx.AsyncClient(
+            auth=auth,
             headers=request_headers,
             timeout=timeout,
-            raise_for_status=True,
+            event_hooks={
+                "response": [httpx.Response.raise_for_status]
+            },  # ensure raise_for_status on all responses
         )
         return self.session
 
@@ -156,7 +154,7 @@ class SharepointServerClient:
         self._sleeps.cancel()
         if self.session is None:
             return
-        await self.session.close()  # pyright: ignore
+        await self.session.aclose()  # pyright: ignore
         self.session = None
 
     async def _api_call(self, url_name, url="", **url_kwargs):
@@ -181,9 +179,9 @@ class SharepointServerClient:
 
         while True:
             try:
-                async with self._get_session().get(  # pyright: ignore
+                async with self._get_session().get(
                     url=url,
-                    ssl=self.ssl_ctx,  # pyright: ignore
+                    verify=self.ssl_ctx,
                     headers=headers,
                 ) as result:
                     if url_name == ATTACHMENT:
@@ -194,7 +192,7 @@ class SharepointServerClient:
             except Exception as exception:
                 if isinstance(
                     exception,
-                    ServerDisconnectedError,
+                    httpx.TransportError,
                 ):
                     await self.close_session()
                 if retry > self.retry_count:
