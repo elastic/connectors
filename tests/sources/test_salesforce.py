@@ -499,102 +499,92 @@ EXPECTED_ACCOUNT_RESPONSE = {
     "owner_url": "https://fake.my.salesforce.com/user_id",
     "title": "TLOTR",
     "description": "A story about the One Ring.",
-    "object": {
+    "Type": "Customer - Direct",
+    "Owner": {
         "attributes": {
-            "type": "Account",
-            "url": "/services/data/v59.0/sobjects/Account/account_id",
+            "type": "User",
+            "url": "/services/data/v59.0/sobjects/User/user_id",
         },
-        "Type": "Customer - Direct",
-        "Owner": {
-            "attributes": {
-                "type": "User",
-                "url": "/services/data/v59.0/sobjects/User/user_id",
-            },
-            "Id": "user_id",
-            "Name": "Frodo",
-            "Email": "frodo@tlotr.com",
-        },
-        "Id": "account_id",
-        "Rating": "Hot",
-        "Website": "www.tlotr.com",
-        "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
-        "CreatedDate": "2023-12-12T00:00:00.000+0000",
-        "Opportunities": {
-            "totalSize": 1,
-            "done": True,
-            "records": [
-                {
+        "Id": "user_id",
+        "Name": "Frodo",
+        "Email": "frodo@tlotr.com",
+    },
+    "Rating": "Hot",
+    "Website": "www.tlotr.com",
+    "CreatedDate": "2023-12-12T00:00:00.000+0000",
+    "Opportunities": {
+        "totalSize": 1,
+        "done": True,
+        "records": [
+            {
+                "attributes": {
+                    "type": "Opportunity",
+                    "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+                },
+                "Id": "opportunity_id",
+                "Name": "The Fellowship",
+                "StageName": "Closed Won",
+            }
+        ],
+    },
+    "BillingAddress": {
+        "city": "The Shire",
+        "country": "Middle Earth",
+        "postalCode": 111,
+        "state": "Eriador",
+        "street": "The Burrow under the Hill, Bag End, Hobbiton",
+    },
+    "ContentDocumentLinks": {
+        "records": [
+            {
+                "attributes": {
+                    "type": "ContentDocumentLink",
+                    "url": "/services/data/v59.0/sobjects/ContentDocumentLink/content_document_link_id",
+                },
+                "Id": "content_document_link_id",
+                "ContentDocument": {
                     "attributes": {
-                        "type": "Opportunity",
-                        "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+                        "type": "ContentDocument",
+                        "url": "/services/data/v59.0/sobjects/ContentDocument/content_document_id",
                     },
-                    "Id": "opportunity_id",
-                    "Name": "The Fellowship",
-                    "StageName": "Closed Won",
-                }
-            ],
-        },
-        "Name": "TLOTR",
-        "BillingAddress": {
-            "city": "The Shire",
-            "country": "Middle Earth",
-            "postalCode": 111,
-            "state": "Eriador",
-            "street": "The Burrow under the Hill, Bag End, Hobbiton",
-        },
-        "Description": "A story about the One Ring.",
-        "ContentDocumentLinks": {
-            "records": [
-                {
-                    "attributes": {
-                        "type": "ContentDocumentLink",
-                        "url": "/services/data/v59.0/sobjects/ContentDocumentLink/content_document_link_id",
-                    },
-                    "Id": "content_document_link_id",
-                    "ContentDocument": {
+                    "Id": "content_document_id",
+                    "Description": "A file about a ring.",
+                    "Title": "the_ring",
+                    "ContentSize": 1000,
+                    "FileExtension": "txt",
+                    "CreatedDate": "",
+                    "LatestPublishedVersion": {
                         "attributes": {
-                            "type": "ContentDocument",
-                            "url": "/services/data/v59.0/sobjects/ContentDocument/content_document_id",
+                            "type": "ContentVersion",
+                            "url": "/services/data/v59.0/sobjects/ContentVersion/content_version_id",
                         },
-                        "Id": "content_document_id",
-                        "Description": "A file about a ring.",
-                        "Title": "the_ring",
-                        "ContentSize": 1000,
-                        "FileExtension": "txt",
+                        "Id": "content_version_id",
                         "CreatedDate": "",
-                        "LatestPublishedVersion": {
-                            "attributes": {
-                                "type": "ContentVersion",
-                                "url": "/services/data/v59.0/sobjects/ContentVersion/content_version_id",
-                            },
-                            "Id": "content_version_id",
-                            "CreatedDate": "",
-                            "VersionNumber": "2",
-                        },
-                        "Owner": {
-                            "attributes": {
-                                "type": "User",
-                                "url": "/services/data/v59.0/sobjects/User/user_id",
-                            },
-                            "Id": "user_id",
-                            "Name": "Frodo",
-                            "Email": "frodo@tlotr.com",
-                        },
-                        "CreatedBy": {
-                            "attributes": {
-                                "type": "User",
-                                "url": "/services/data/v59.0/sobjects/User/user_id",
-                            },
-                            "Id": "user_id",
-                            "Name": "Frodo",
-                            "Email": "frodo@tlotr.com",
-                        },
-                        "LastModifiedDate": "",
-                        "linked_ids": ["account_id"],
+                        "VersionNumber": "2",
                     },
-                }
-            ]
-        },
+                    "Owner": {
+                        "attributes": {
+                            "type": "User",
+                            "url": "/services/data/v59.0/sobjects/User/user_id",
+                        },
+                        "Id": "user_id",
+                        "Name": "Frodo",
+                        "Email": "frodo@tlotr.com",
+                    },
+                    "CreatedBy": {
+                        "attributes": {
+                            "type": "User",
+                            "url": "/services/data/v59.0/sobjects/User/user_id",
+                        },
+                        "Id": "user_id",
+                        "Name": "Frodo",
+                        "Email": "frodo@tlotr.com",
+                    },
+                    "LastModifiedDate": "",
+                    "linked_ids": ["account_id"],
+                },
+            }
+        ]
     },
 }
 
@@ -896,6 +886,14 @@ async def test_get_queryable_fields(mock_responses):
 
 
 @pytest.mark.asyncio
+async def test_execute_non_paginated_query(mock_responses):
+    async with create_salesforce_source() as source:
+        with mock.patch.object(source.salesforce_client, "_get_json", return_value=ACCOUNT_RESPONSE_PAYLOAD):
+            response = await source.salesforce_client._execute_non_paginated_query(soql_query=None)
+            assert response == ACCOUNT_RESPONSE_PAYLOAD["records"]
+
+
+@pytest.mark.asyncio
 async def test_get_accounts_when_success(mock_responses):
     async with create_salesforce_source() as source:
         payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
@@ -910,52 +908,43 @@ async def test_get_accounts_when_success(mock_responses):
             "owner_url": "https://fake.my.salesforce.com/user_id",
             "title": "TLOTR",
             "description": "A story about the One Ring.",
-            "object": {
+            "Type": "Customer - Direct",
+            "Owner": {
                 "attributes": {
-                    "type": "Account",
-                    "url": "/services/data/v59.0/sobjects/Account/account_id",
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
                 },
-                "Type": "Customer - Direct",
-                "Owner": {
-                    "attributes": {
-                        "type": "User",
-                        "url": "/services/data/v59.0/sobjects/User/user_id",
-                    },
-                    "Id": "user_id",
-                    "Name": "Frodo",
-                    "Email": "frodo@tlotr.com",
-                },
-                "Id": "account_id",
-                "Rating": "Hot",
-                "Website": "www.tlotr.com",
-                "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
-                "CreatedDate": "2023-12-12T00:00:00.000+0000",
-                "Opportunities": {
-                    "totalSize": 1,
-                    "done": True,
-                    "records": [
-                        {
-                            "attributes": {
-                                "type": "Opportunity",
-                                "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
-                            },
-                            "Id": "opportunity_id",
-                            "Name": "The Fellowship",
-                            "StageName": "Closed Won",
-                        }
-                    ],
-                },
-                "Name": "TLOTR",
-                "BillingAddress": {
-                    "city": "The Shire",
-                    "country": "Middle Earth",
-                    "postalCode": 111,
-                    "state": "Eriador",
-                    "street": "The Burrow under the Hill, Bag End, Hobbiton",
-                },
-                "Description": "A story about the One Ring.",
+                "Id": "user_id",
+                "Name": "Frodo",
+                "Email": "frodo@tlotr.com",
+            },
+            "Rating": "Hot",
+            "Website": "www.tlotr.com",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "Opportunities": {
+                "totalSize": 1,
+                "done": True,
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "Opportunity",
+                            "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+                        },
+                        "Id": "opportunity_id",
+                        "Name": "The Fellowship",
+                        "StageName": "Closed Won",
+                    }
+                ],
+            },
+            "BillingAddress": {
+                "city": "The Shire",
+                "country": "Middle Earth",
+                "postalCode": 111,
+                "state": "Eriador",
+                "street": "The Burrow under the Hill, Bag End, Hobbiton",
             },
         }
+
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1084,28 +1073,19 @@ async def test_get_opportunities_when_success(mock_responses):
             "owner_url": "https://fake.my.salesforce.com/user_id",
             "title": "The Fellowship",
             "description": "A fellowship of the races of Middle Earth",
-            "object": {
+            "Owner": {
                 "attributes": {
-                    "type": "Opportunity",
-                    "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
                 },
-                "Description": "A fellowship of the races of Middle Earth",
-                "Owner": {
-                    "attributes": {
-                        "type": "User",
-                        "url": "/services/data/v59.0/sobjects/User/user_id",
-                    },
-                    "Id": "user_id",
-                    "Email": "frodo@tlotr.com",
-                    "Name": "Frodo",
-                },
-                "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
-                "Name": "The Fellowship",
-                "StageName": "Closed Won",
-                "CreatedDate": "2023-12-12T00:00:00.000+0000",
-                "Id": "opportunity_id",
+                "Id": "user_id",
+                "Email": "frodo@tlotr.com",
+                "Name": "Frodo",
             },
+            "StageName": "Closed Won",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
         }
+
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1141,27 +1121,18 @@ async def test_get_contacts_when_success(mock_responses):
             "owner_url": "https://fake.my.salesforce.com/user_id",
             "title": "Gandalf",
             "description": "The White",
-            "object": {
-                "attributes": {
-                    "type": "Contact",
-                    "url": "/services/data/v59.0/sobjects/Contact/contact_id",
-                },
-                "OwnerId": "user_id",
-                "Phone": "12345678",
-                "Name": "Gandalf",
-                "AccountId": "account_id",
-                "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
-                "Description": "The White",
-                "Title": "Wizard",
-                "CreatedDate": "2023-12-12T00:00:00.000+0000",
-                "LeadSource": "Partner Referral",
-                "PhotoUrl": "/services/images/photo/photo_id",
-                "Id": "contact_id",
-                "Email": "gandalf@tlotr.com",
-                "Account": {"Id": "account_id", "Name": "TLOTR"},
-                "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
-            },
+            "OwnerId": "user_id",
+            "Phone": "12345678",
+            "AccountId": "account_id",
+            "Title": "Wizard",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "LeadSource": "Partner Referral",
+            "PhotoUrl": "/services/images/photo/photo_id",
+            "Email": "gandalf@tlotr.com",
+            "Account": {"Id": "account_id", "Name": "TLOTR"},
+            "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
         }
+
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1196,34 +1167,25 @@ async def test_get_leads_when_success(mock_responses):
             "owner_url": "https://fake.my.salesforce.com/user_id",
             "title": "Sauron",
             "description": "Forger of the One Ring",
-            "object": {
-                "attributes": {
-                    "type": "Lead",
-                    "url": "/services/data/v59.0/sobjects/Lead/lead_id",
-                },
-                "Name": "Sauron",
-                "Status": "Working - Contacted",
-                "Company": "Mordor Inc.",
-                "Description": "Forger of the One Ring",
-                "Email": "sauron@tlotr.com",
-                "Phone": "09876543",
-                "Title": "Dark Lord",
-                "PhotoUrl": "/services/images/photo/photo_id",
-                "Rating": "Hot",
-                "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
-                "LeadSource": "Partner Referral",
-                "OwnerId": "user_id",
-                "ConvertedAccountId": None,
-                "ConvertedContactId": None,
-                "ConvertedOpportunityId": None,
-                "ConvertedDate": None,
-                "Id": "lead_id",
-                "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
-                "ConvertedAccount": {},
-                "ConvertedContact": {},
-                "ConvertedOpportunity": {},
-            },
+            "Status": "Working - Contacted",
+            "Company": "Mordor Inc.",
+            "Email": "sauron@tlotr.com",
+            "Phone": "09876543",
+            "Title": "Dark Lord",
+            "PhotoUrl": "/services/images/photo/photo_id",
+            "Rating": "Hot",
+            "LeadSource": "Partner Referral",
+            "OwnerId": "user_id",
+            "ConvertedAccountId": None,
+            "ConvertedContactId": None,
+            "ConvertedOpportunityId": None,
+            "ConvertedDate": None,
+            "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
+            "ConvertedAccount": {},
+            "ConvertedContact": {},
+            "ConvertedOpportunity": {},
         }
+
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1247,39 +1209,30 @@ async def test_get_campaigns_when_success(mock_responses):
             "owner_url": "https://fake.my.salesforce.com/user_id",
             "title": "Defend the Gap",
             "description": "Orcs are raiding the Gap of Rohan",
-            "object": {
+            "IsActive": True,
+            "Type": "War",
+            "Status": "planned",
+            "Parent": {
                 "attributes": {
-                    "type": "Campaign",
-                    "url": "/services/data/v59.0/sobjects/Campaign/campaign_id",
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
                 },
-                "Name": "Defend the Gap",
-                "IsActive": True,
-                "Type": "War",
-                "Description": "Orcs are raiding the Gap of Rohan",
-                "Status": "planned",
-                "Id": "campaign_id",
-                "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
-                "Parent": {
-                    "attributes": {
-                        "type": "User",
-                        "url": "/services/data/v59.0/sobjects/User/user_id",
-                    },
-                    "Id": "user_id",
-                    "Name": "Théoden",
-                },
-                "Owner": {
-                    "attributes": {
-                        "type": "User",
-                        "url": "/services/data/v59.0/sobjects/User/user_id",
-                    },
-                    "Id": "user_id",
-                    "Name": "Saruman",
-                    "Email": "saruman@tlotr.com",
-                },
-                "StartDate": "",
-                "EndDate": "",
+                "Id": "user_id",
+                "Name": "Théoden",
             },
+            "Owner": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Saruman",
+                "Email": "saruman@tlotr.com",
+            },
+            "StartDate": "",
+            "EndDate": "",
         }
+
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1309,151 +1262,143 @@ async def test_get_cases_when_success(mock_responses):
             "owner_url": "https://fake.my.salesforce.com/user_id",
             "title": None,
             "description": "The One Ring",
-            "object": {
+            "Status": "New",
+            "AccountId": "account_id",
+            "Subject": "It needs to be destroyed",
+            "Owner": {
                 "attributes": {
-                    "type": "Case",
-                    "url": "/services/data/v59.0/sobjects/Case/case_id",
+                    "type": "Name",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
                 },
-                "Status": "New",
-                "AccountId": "account_id",
-                "Description": "The One Ring",
-                "Subject": "It needs to be destroyed",
-                "Owner": {
-                    "attributes": {
-                        "type": "Name",
-                        "url": "/services/data/v59.0/sobjects/User/user_id",
-                    },
-                    "Email": "frodo@tlotr.com",
-                    "Name": "Frodo",
-                    "Id": "user_id",
+                "Email": "frodo@tlotr.com",
+                "Name": "Frodo",
+                "Id": "user_id",
+            },
+            "CreatedBy": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id_2",
                 },
-                "CreatedBy": {
-                    "attributes": {
-                        "type": "User",
-                        "url": "/services/data/v59.0/sobjects/User/user_id_2",
-                    },
-                    "Id": "user_id_2",
-                    "Email": "gandalf@tlotr.com",
-                    "Name": "Gandalf",
-                },
-                "Id": "case_id",
-                "EmailMessages": {
-                    "records": [
-                        {
-                            "attributes": {
-                                "type": "EmailMessage",
-                                "url": "/services/data/v59.0/sobjects/EmailMessage/email_message_id",
-                            },
-                            "CreatedDate": "2023-08-11T00:00:00.000+0000",
-                            "LastModifiedById": "user_id",
-                            "ParentId": "case_id",
-                            "MessageDate": "2023-08-01T00:00:00.000+0000",
-                            "TextBody": "Maybe I should do something?",
-                            "Subject": "Ring?!",
-                            "FromName": "Frodo",
-                            "FromAddress": "frodo@tlotr.com",
-                            "ToAddress": "gandalf@tlotr.com",
-                            "CcAddress": "elrond@tlotr.com",
-                            "BccAddress": "samwise@tlotr.com",
-                            "Status": "",
-                            "IsDeleted": False,
-                            "FirstOpenedDate": "2023-08-02T00:00:00.000+0000",
-                            "CreatedBy": {
-                                "attributes": {
-                                    "type": "Name",
-                                    "url": "/services/data/v59.0/sobjects/User/user_id",
-                                },
-                                "Name": "Frodo",
-                                "Id": "user_id",
-                                "Email": "frodo@tlotr.com",
-                            },
-                        }
-                    ]
-                },
-                "CaseComments": {
-                    "records": [
-                        {
-                            "attributes": {
-                                "type": "CaseComment",
-                                "url": "/services/data/v59.0/sobjects/CaseComment/case_comment_id",
-                            },
-                            "CreatedDate": "2023-08-03T00:00:00.000+0000",
-                            "LastModifiedById": "user_id_3",
-                            "CommentBody": "You have my axe",
-                            "LastModifiedDate": "2023-08-03T00:00:00.000+0000",
-                            "CreatedBy": {
-                                "attributes": {
-                                    "type": "Name",
-                                    "url": "/services/data/v59.0/sobjects/User/user_id_3",
-                                },
-                                "Name": "Gimli",
-                                "Id": "user_id_3",
-                                "Email": "gimli@tlotr.com",
-                            },
-                            "ParentId": "case_id",
-                            "Id": "case_comment_id",
-                        }
-                    ]
-                },
-                "CaseNumber": "00001234",
-                "ParentId": "",
-                "CreatedDate": "2023-08-01T00:00:00.000+0000",
-                "IsDeleted": False,
-                "IsClosed": False,
-                "LastModifiedDate": "2023-08-11T00:00:00.000+0000",
-                "Feeds": [
+                "Id": "user_id_2",
+                "Email": "gandalf@tlotr.com",
+                "Name": "Gandalf",
+            },
+            "EmailMessages": {
+                "records": [
                     {
                         "attributes": {
-                            "type": "CaseFeed",
-                            "url": "/services/data/v59.0/sobjects/CaseFeed/case_feed_id",
+                            "type": "EmailMessage",
+                            "url": "/services/data/v59.0/sobjects/EmailMessage/email_message_id",
                         },
+                        "CreatedDate": "2023-08-11T00:00:00.000+0000",
+                        "LastModifiedById": "user_id",
+                        "ParentId": "case_id",
+                        "MessageDate": "2023-08-01T00:00:00.000+0000",
+                        "TextBody": "Maybe I should do something?",
+                        "Subject": "Ring?!",
+                        "FromName": "Frodo",
+                        "FromAddress": "frodo@tlotr.com",
+                        "ToAddress": "gandalf@tlotr.com",
+                        "CcAddress": "elrond@tlotr.com",
+                        "BccAddress": "samwise@tlotr.com",
+                        "Status": "",
+                        "IsDeleted": False,
+                        "FirstOpenedDate": "2023-08-02T00:00:00.000+0000",
                         "CreatedBy": {
                             "attributes": {
                                 "type": "Name",
-                                "url": "/services/data/v59.0/sobjects/User/user_id_4",
+                                "url": "/services/data/v59.0/sobjects/User/user_id",
                             },
-                            "Id": "user_id_4",
-                            "Email": "galadriel@tlotr.com",
-                            "Name": "Galadriel",
+                            "Name": "Frodo",
+                            "Id": "user_id",
+                            "Email": "frodo@tlotr.com",
                         },
-                        "CommentCount": 2,
-                        "LastModifiedDate": "2023-08-09T00:00:00.000+0000",
-                        "Type": "TextPost",
-                        "Title": None,
-                        "IsDeleted": False,
-                        "LinkUrl": "https://fake.my.salesforce.com/case_feed_id",
-                        "CreatedDate": "2023-08-08T00:00:00.000+0000",
-                        "Id": "case_feed_id",
-                        "FeedComments": {
-                            "records": [
-                                {
-                                    "attributes": {
-                                        "type": "FeedComment",
-                                        "url": "/services/data/v59.0/sobjects/FeedComment/feed_comment_id",
-                                    },
-                                    "CreatedBy": {
-                                        "attributes": {
-                                            "type": "Name",
-                                            "url": "/services/data/v59.0/sobjects/User/user_id_4",
-                                        },
-                                        "Id": "user_id_4",
-                                        "Email": "galadriel@tlotr.com",
-                                        "Name": "Galadriel",
-                                    },
-                                    "IsDeleted": False,
-                                    "Id": "feed_comment_id",
-                                    "ParentId": "case_feed_id",
-                                    "LastEditById": "user_id_4",
-                                    "LastEditDate": "2023-08-08T00:00:00.000+0000",
-                                    "CommentBody": "I know what it is you saw",
-                                }
-                            ]
+                    }
+                ]
+            },
+            "CaseComments": {
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "CaseComment",
+                            "url": "/services/data/v59.0/sobjects/CaseComment/case_comment_id",
+                        },
+                        "CreatedDate": "2023-08-03T00:00:00.000+0000",
+                        "LastModifiedById": "user_id_3",
+                        "CommentBody": "You have my axe",
+                        "LastModifiedDate": "2023-08-03T00:00:00.000+0000",
+                        "CreatedBy": {
+                            "attributes": {
+                                "type": "Name",
+                                "url": "/services/data/v59.0/sobjects/User/user_id_3",
+                            },
+                            "Name": "Gimli",
+                            "Id": "user_id_3",
+                            "Email": "gimli@tlotr.com",
                         },
                         "ParentId": "case_id",
+                        "Id": "case_comment_id",
                     }
-                ],
+                ]
             },
+            "CaseNumber": "00001234",
+            "ParentId": "",
+            "CreatedDate": "2023-08-01T00:00:00.000+0000",
+            "IsDeleted": False,
+            "IsClosed": False,
+            "Feeds": [
+                {
+                    "attributes": {
+                        "type": "CaseFeed",
+                        "url": "/services/data/v59.0/sobjects/CaseFeed/case_feed_id",
+                    },
+                    "CreatedBy": {
+                        "attributes": {
+                            "type": "Name",
+                            "url": "/services/data/v59.0/sobjects/User/user_id_4",
+                        },
+                        "Id": "user_id_4",
+                        "Email": "galadriel@tlotr.com",
+                        "Name": "Galadriel",
+                    },
+                    "CommentCount": 2,
+                    "LastModifiedDate": "2023-08-09T00:00:00.000+0000",
+                    "Type": "TextPost",
+                    "Title": None,
+                    "IsDeleted": False,
+                    "LinkUrl": "https://fake.my.salesforce.com/case_feed_id",
+                    "CreatedDate": "2023-08-08T00:00:00.000+0000",
+                    "Id": "case_feed_id",
+                    "FeedComments": {
+                        "records": [
+                            {
+                                "attributes": {
+                                    "type": "FeedComment",
+                                    "url": "/services/data/v59.0/sobjects/FeedComment/feed_comment_id",
+                                },
+                                "CreatedBy": {
+                                    "attributes": {
+                                        "type": "Name",
+                                        "url": "/services/data/v59.0/sobjects/User/user_id_4",
+                                    },
+                                    "Id": "user_id_4",
+                                    "Email": "galadriel@tlotr.com",
+                                    "Name": "Galadriel",
+                                },
+                                "IsDeleted": False,
+                                "Id": "feed_comment_id",
+                                "ParentId": "case_feed_id",
+                                "LastEditById": "user_id_4",
+                                "LastEditDate": "2023-08-08T00:00:00.000+0000",
+                                "CommentBody": "I know what it is you saw",
+                            }
+                        ]
+                    },
+                    "ParentId": "case_id",
+                }
+            ],
         }
+
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
