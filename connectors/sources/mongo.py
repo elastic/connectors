@@ -184,8 +184,9 @@ class MongoDataSource(BaseDataSource):
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "Disable certificate validations",
                 "order": 9,
-                "tooltip": "This option disables certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'. Enable it if certificates are missing.",
+                "tooltip": "This option disables certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'.",
                 "type": "bool",
+                "ui_restrictions": ["advanced"],
                 "value": False,
             },
         }
