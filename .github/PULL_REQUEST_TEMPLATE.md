@@ -23,6 +23,7 @@ items that may help during the review.-->
 - [ ] Added a label for each target release version (example: `v7.13.2`, `v7.14.0`, `v8.0.0`)
 - [ ] Considered corresponding documentation changes
 - [ ] Contributed any configuration settings changes to the configuration reference
+- [ ] if you added or changed Rich Configurable Fields for a Native Connector, you made a corresponding PR in [Kibana](https://github.com/elastic/kibana/blob/main/packages/kbn-search-connectors/types/native_connectors.ts)
 
 #### Changes Requiring Extra Attention
 
