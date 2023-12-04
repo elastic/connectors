@@ -41,10 +41,29 @@
                         "type": "str",
                         "value": "changeme"
                 },
+                "repo_type": {
+                        "display": "dropdown",
+                        "label": "Repository Type",
+                        "options": [
+                            {"label": "Organization", "value": "organization"},
+                            {"label": "Other", "value": "other"}
+                        ],
+                        "order": 4,
+                        "tooltip": "The Document Level Security feature is not available for the Other Repository Type",
+                        "type": "str",
+                        "value": "other"
+                },
+                "org_name": {
+                        "depends_on": [{"field": "repo_type", "value": "organization"}],
+                        "label": "Organization Name",
+                        "order": 5,
+                        "type": "str",
+                        "value": "demo_org"
+                },
                 "repositories": {
                         "display": "textarea",
                         "label": "List of repositories",
-                        "order": 4,
+                        "order": 6,
                         "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                         "type": "list",
                         "value": "*"
@@ -52,14 +71,14 @@
                 "ssl_enabled": {
                         "display": "toggle",
                         "label": "Enable SSL",
-                        "order": 5,
+                        "order": 7,
                         "type": "bool",
                         "value": false
                 },
                 "ssl_ca": {
                         "depends_on": [{"field": "ssl_enabled", "value": true}],
                         "label": "SSL certificate",
-                        "order": 6,
+                        "order": 8,
                         "type": "str",
                         "value": ""
                 },
@@ -67,7 +86,7 @@
                         "display_value": 3,
                         "display": "numeric",
                         "label": "Maximum retries per request",
-                        "order": 7,
+                        "order": 9,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -80,13 +99,22 @@
                         "display": "toggle",
                         "label": "Use text extraction service",
                         "options": [],
-                        "order": 8,
+                        "order": 10,
                         "required": true,
                         "sensitive": false,
                         "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                         "type": "bool",
                         "ui_restrictions": [],
                         "validations": [],
+                        "value": false
+                },
+                "use_document_level_security": {
+                        "display": "toggle",
+                        "depends_on": [{"field": "repo_type", "value": "organization"}],
+                        "label": "Enable document level security",
+                        "order": 11,
+                        "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                        "type": "bool",
                         "value": false
                 }
         },
