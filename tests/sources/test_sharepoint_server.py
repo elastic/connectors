@@ -158,13 +158,6 @@ async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_ra
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
-    async with create_sps_source(ssl_enabled=True) as source:
-        with pytest.raises(ConfigurableFieldValueError):
-            await source.validate_config()
-
-
-@pytest.mark.asyncio
 async def test_api_call_for_exception():
     """This function test _api_call when credentials are incorrect"""
     async with create_sps_source(retry_count=0) as source:

@@ -95,10 +95,10 @@ class SharepointServerClient:
         self.site_collections = self.configuration["site_collections"]
 
         self.session = None
-        if self.ssl_enabled and self.certificate:
+        if self.certificate:
             self.ssl_ctx = ssl_context(certificate=self.certificate)
         else:
-            self.ssl_ctx = False
+            self.ssl_ctx = None if self.ssl_enabled else False
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -480,16 +480,16 @@ class SharepointServerDataSource(BaseDataSource):
             },
             "ssl_enabled": {
                 "display": "toggle",
-                "label": "Enable SSL",
+                "label": "Enable SSL certificate verification",
                 "order": 5,
                 "type": "bool",
-                "value": False,
+                "value": True,
             },
             "ssl_ca": {
-                "depends_on": [{"field": "ssl_enabled", "value": True}],
-                "label": "SSL certificate",
+                "label": "Self-signed SSL certificate",
                 "order": 6,
                 "type": "str",
+                "required": False,
             },
             "retry_count": {
                 "default_value": RETRIES,
