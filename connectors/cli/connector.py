@@ -83,7 +83,7 @@ class Connector:
                 )
 
             return await asyncio.gather(
-                self.__create_search_index(index_name, language),
+                # self.__create_search_index(index_name, language),
                 self.__create_connector(
                     index_name, service_type, configuration, is_native, language
                 ),
@@ -115,6 +115,8 @@ class Connector:
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             timestamp = iso_utc()
+
+            await self.__create_search_index(index_name, language)
 
             api_key = await self.__create_api_key(index_name)
 
