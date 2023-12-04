@@ -888,8 +888,12 @@ async def test_get_queryable_fields(mock_responses):
 @pytest.mark.asyncio
 async def test_execute_non_paginated_query(mock_responses):
     async with create_salesforce_source() as source:
-        with mock.patch.object(source.salesforce_client, "_get_json", return_value=ACCOUNT_RESPONSE_PAYLOAD):
-            response = await source.salesforce_client._execute_non_paginated_query(soql_query=None)
+        with mock.patch.object(
+            source.salesforce_client, "_get_json", return_value=ACCOUNT_RESPONSE_PAYLOAD
+        ):
+            response = await source.salesforce_client._execute_non_paginated_query(
+                soql_query=None
+            )
             assert response == ACCOUNT_RESPONSE_PAYLOAD["records"]
 
 
@@ -944,7 +948,6 @@ async def test_get_accounts_when_success(mock_responses):
                 "street": "The Burrow under the Hill, Bag End, Hobbiton",
             },
         }
-
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1086,7 +1089,6 @@ async def test_get_opportunities_when_success(mock_responses):
             "CreatedDate": "2023-12-12T00:00:00.000+0000",
         }
 
-
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
             status=200,
@@ -1132,7 +1134,6 @@ async def test_get_contacts_when_success(mock_responses):
             "Account": {"Id": "account_id", "Name": "TLOTR"},
             "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
         }
-
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1186,7 +1187,6 @@ async def test_get_leads_when_success(mock_responses):
             "ConvertedOpportunity": {},
         }
 
-
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
             status=200,
@@ -1232,7 +1232,6 @@ async def test_get_campaigns_when_success(mock_responses):
             "StartDate": "",
             "EndDate": "",
         }
-
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1398,7 +1397,6 @@ async def test_get_cases_when_success(mock_responses):
                 }
             ],
         }
-
 
         mock_responses.get(
             TEST_QUERY_MATCH_URL,

@@ -1166,7 +1166,7 @@ class SalesforceDocMapper:
         for field in ["attributes", "Id", "Name", "Description", "LastModifiedDate"]:
             if _object.get(field):
                 del _object[field]
-        
+
         return doc | _object
 
 
