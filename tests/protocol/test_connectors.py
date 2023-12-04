@@ -849,7 +849,6 @@ async def test_sync_job_done():
 )
 async def test_sync_job_fail(error, expected_message):
     source = {"_id": "1"}
-    input_error = error
     index = Mock()
     index.update = AsyncMock(return_value=1)
     expected_doc_source_update = {
