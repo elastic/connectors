@@ -16,6 +16,7 @@ import os
 import click
 import yaml
 from tabulate import tabulate
+import json
 
 from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH, Auth
@@ -176,8 +177,13 @@ def validate_language(ctx, param, value):
     is_flag=True,
     help="Create a connector from an index that already exists. Each index can only have one connector. All current docs for the index will be deleted during the first sync.",
 )
+@click.option(
+    "--from_file",
+    type=click.Path(exists=True),
+    help="Use a JSON file to supply the connector configuration.",
+)
 @click.pass_obj
-def create(obj, index_name, service_type, index_language, is_native, from_index):
+def create(obj, index_name, service_type, index_language, is_native, from_index, from_file):
     if is_native:
         index_name = f"search-{index_name}"
         click.echo(
@@ -190,7 +196,19 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
         source_class=_default_config()["sources"][service_type]
     )
 
+    connector_configuration = {}
+    if from_file:
+        with open(from_file) as fd:
+            connector_configuration = json.load(fd)
+
     def prompt():
+        if from_file:
+            if key in connector_configuration:
+                return connector_configuration[key]["value"]
+            else:
+                click.echo(f"{item['label']} is not found in {from_file}")
+                raise click.Abort()
+
         return click.prompt(
             f"{click.style('?', blink=True, fg='green')} {item['label']}",
             default=item.get("value", None),
@@ -265,7 +283,6 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
         click.echo(
             "This connector still requires an API key. Please configure this in Kibana."
         )
-
 
 connector.add_command(create)
 connector.add_command(list_connectors)
