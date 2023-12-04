@@ -93,6 +93,8 @@ class SharepointServerClient:
         self.session = None
         if self.ssl_enabled and self.certificate:
             self.ssl_ctx = ssl_context(certificate=self.certificate)
+        elif self.ssl_enabled:
+            self.ssl_ctx = True
         else:
             self.ssl_ctx = False
 
@@ -121,6 +123,7 @@ class SharepointServerClient:
             auth=auth,
             headers=request_headers,
             timeout=timeout,
+            verify=self.ssl_ctx,
             event_hooks={
                 "response": [httpx.Response.raise_for_status]
             },  # ensure raise_for_status on all responses
@@ -179,16 +182,13 @@ class SharepointServerClient:
 
         while True:
             try:
-                async with self._get_session().get(
-                    url=url,
-                    verify=self.ssl_ctx,
-                    headers=headers,
-                ) as result:
-                    if url_name == ATTACHMENT:
-                        yield result
-                    else:
-                        yield await result.json()
-                    break
+                response = self._get_session().get(url=url, headers=headers)
+                await response
+                if url_name == ATTACHMENT:
+                    yield response
+                else:
+                    yield response.json()
+                break
             except Exception as exception:
                 if isinstance(
                     exception,
