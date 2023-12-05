@@ -1,5 +1,7 @@
 import asyncio
+
 from elasticsearch import ApiError
+
 from connectors.es import ESClient
 
 

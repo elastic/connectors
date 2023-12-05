@@ -11,12 +11,13 @@ a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
 import asyncio
+import json
 import os
 
 import click
 import yaml
 from tabulate import tabulate
-import json
+
 from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH, Auth
 from connectors.cli.connector import Connector
@@ -189,12 +190,22 @@ def validate_language(ctx, param, value):
 )
 @click.option(
     "--connector-service-config",
-    type=click.Path(exists=True),
+    type=click.Path(),
     default="config.yml",
     help="Path to the connector service config file. Used in combination with --update-config flag.",
 )
 @click.pass_obj
-def create(obj, index_name, service_type, index_language, is_native, from_index, from_file, update_config, connector_service_config):
+def create(
+    obj,
+    index_name,
+    service_type,
+    index_language,
+    is_native,
+    from_index,
+    from_file,
+    update_config,
+    connector_service_config,
+):
     if is_native:
         index_name = f"search-{index_name}"
         click.echo(
@@ -215,7 +226,7 @@ def create(obj, index_name, service_type, index_language, is_native, from_index,
     def prompt():
         if from_file:
             if key in connector_configuration:
-                return connector_configuration[key]["value"]
+                return connector_configuration[key]
             else:
                 click.echo(f"{item['label']} is not found in {from_file}")
                 raise click.Abort()
@@ -280,15 +291,16 @@ def create(obj, index_name, service_type, index_language, is_native, from_index,
         language=index_language,
         from_index=from_index,
     )
+
     click.echo(
         "Connector (name: "
         + click.style(index_name, fg="green")
         + ", ID: "
-        + click.style(result[0]["id"], fg="green")
+        + click.style(result["id"], fg="green")
         + ", service_type: "
         + click.style(service_type, fg="green")
         + ", api_key: "
-        + click.style(result[0]["api_key"], fg="green")
+        + click.style(result["api_key"], fg="green")
         + ") has been created!"
     )
 
@@ -303,11 +315,13 @@ def create(obj, index_name, service_type, index_language, is_native, from_index,
             if "connectors" not in service_config:
                 service_config["connectors"] = []
 
-            service_config["connectors"].append({
-                "connector_id": result[0]["id"],
-                "service_type": service_type,
-                "api_key": result[0]["api_key"]
-            })
+            service_config["connectors"].append(
+                {
+                    "connector_id": result["id"],
+                    "service_type": service_type,
+                    "api_key": result["api_key"],
+                }
+            )
 
             with open(connector_service_config, "w") as f:
                 yaml.dump(service_config, f)
