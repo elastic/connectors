@@ -27,6 +27,7 @@ from connectors.utils import (
     ConcurrentTasks,
     InvalidIndexNameError,
     MemQueue,
+    NonBlockingBoundedSemaphore,
     RetryStrategy,
     UnknownRetryStrategyError,
     base64url_to_base64,
@@ -240,6 +241,19 @@ def test_decode_base64_value():
     assert expected_result == b"dummy"
 
 
+def test_try_acquire():
+    bound_value = 5
+    sem = NonBlockingBoundedSemaphore(bound_value)
+
+    for _ in range(bound_value):
+        assert sem.try_acquire()
+
+    assert not sem.try_acquire()
+
+    sem.release()
+    assert sem.try_acquire()
+
+
 @pytest.mark.asyncio
 async def test_concurrent_runner():
     results = []
@@ -257,6 +271,56 @@ async def test_concurrent_runner():
 
     await runner.join()
     assert results == list(range(10))
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_canceled():
+    results = []
+    tasks = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(1)
+        return i
+
+    runner = ConcurrentTasks(max_concurrency=10, results_callback=_results_callback)
+    for i in range(10):
+        tasks.append(await runner.put(functools.partial(coroutine, i)))
+
+    runner.cancel()
+    await runner.join()
+    assert len(tasks) == 10
+    for task in tasks:
+        assert task.cancelled()
+    assert len(results) == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_canceled_with_waiting_task():
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i, sleep_time):
+        await asyncio.sleep(sleep_time)
+        return i
+
+    runner = ConcurrentTasks(max_concurrency=10, results_callback=_results_callback)
+    for i in range(10):
+        await runner.put(functools.partial(coroutine, i, 1))  # long-running task
+
+    # create a task to put a waiting task so that it won't block
+    asyncio.create_task(runner.put(functools.partial(coroutine, 100, 0.1)))
+    runner.cancel()
+    # wait for the first 10 tasks to be canceled
+    await runner.join()
+    # wait for the 11th task to complete
+    await runner.join()
+    assert len(results) == 1
+    assert results[0] == 100
 
 
 @pytest.mark.asyncio
@@ -308,6 +372,80 @@ async def test_concurrent_runner_high_concurrency():
     await runner.join()
     assert results == list(range(1000))
     assert second_results == [3]
+
+
+@pytest.mark.parametrize(
+    "initial_capacity, expected_result",
+    [
+        (0, True),  # when pool is empty
+        (2, True),  # when pool is almost empty
+        (5, True),  # when pool is half full
+        (8, True),  # when pool is almost full
+        (10, False),  # when pool is full
+    ],
+)
+@pytest.mark.asyncio
+async def test_concurrent_runner_try_put(initial_capacity, expected_result):
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.1)
+        return i
+
+    runner = ConcurrentTasks(10, results_callback=_results_callback)
+    # fill the pool with initial capacity
+    for i in range(initial_capacity):
+        await runner.put(functools.partial(coroutine, i))
+
+    # try to put an additional task
+    task = runner.try_put(functools.partial(coroutine, 100))
+
+    await runner.join()
+
+    if expected_result:
+        assert task is not None
+        assert 100 in results
+    else:
+        assert task is None
+        assert 100 not in results
+
+
+@pytest.mark.asyncio
+async def test_concurrent_runner_join():
+    results = []
+
+    def _results_callback(result):
+        results.append(result)
+
+    async def coroutine(i):
+        await asyncio.sleep(0.2)
+        return i
+
+    runner = ConcurrentTasks(results_callback=_results_callback)
+    for i in range(3):
+        await runner.put(functools.partial(coroutine, i))
+
+    async def delayed_coroutine():
+        await asyncio.sleep(0.1)
+        await runner.put(functools.partial(coroutine, 3))
+
+    # put the 4th task after 0.1 second during the execution of the first 3 tasks
+    asyncio.create_task(delayed_coroutine())
+
+    # calling join will wait for the first 3 tasks to finish, the 4th task is not added yet
+    await runner.join()
+    assert len(results) == 3
+    # the fouth task should still in the pool
+    assert 3 not in results
+    assert len(runner) == 1
+
+    # wait for the 4th task to finish
+    await runner.join()
+    assert len(results) == 4
+    assert 3 in results
 
 
 @contextlib.contextmanager

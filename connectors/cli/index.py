@@ -19,6 +19,9 @@ class Index:
     def delete(self, index_name):
         return asyncio.run(self.__delete_index(index_name))
 
+    def index_or_connector_exists(self, index_name):
+        return asyncio.run(self.__index_or_connector_exists(index_name))
+
     async def __list_indices(self):
         try:
             return await self.es_client.list_indices()
@@ -41,5 +44,16 @@ class Index:
             return True
         except ApiError:
             return False
+        finally:
+            await self.es_client.close()
+
+    async def __index_or_connector_exists(self, index_name):
+        try:
+            index_exists, connector_doc = await asyncio.gather(
+                self.es_client.index_exists(index_name),
+                self.es_client.get_connector_doc(index_name),
+            )
+            connector_exists = False if connector_doc is None else True
+            return index_exists, connector_exists
         finally:
             await self.es_client.close()
