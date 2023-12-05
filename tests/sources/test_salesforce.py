@@ -493,12 +493,11 @@ CONNECTOR_RESPONSE_PAYLOAD = {
 EXPECTED_ACCOUNT_RESPONSE = {
     "_id": "account_id",
     "_timestamp": "2023-12-12T00:00:00Z",
-    "type": "Account",
     "url": "https://fake.my.salesforce.com/account_id",
-    "owner": "Frodo",
-    "owner_url": "https://fake.my.salesforce.com/user_id",
-    "title": "TLOTR",
-    "description": "A story about the One Ring.",
+    "attributes": {
+        "type": "Account",
+        "url": "/services/data/v59.0/sobjects/Account/account_id",
+    },
     "Type": "Customer - Direct",
     "Owner": {
         "attributes": {
@@ -509,8 +508,10 @@ EXPECTED_ACCOUNT_RESPONSE = {
         "Name": "Frodo",
         "Email": "frodo@tlotr.com",
     },
+    "Id": "account_id",
     "Rating": "Hot",
     "Website": "www.tlotr.com",
+    "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
     "CreatedDate": "2023-12-12T00:00:00.000+0000",
     "Opportunities": {
         "totalSize": 1,
@@ -527,6 +528,7 @@ EXPECTED_ACCOUNT_RESPONSE = {
             }
         ],
     },
+    "Name": "TLOTR",
     "BillingAddress": {
         "city": "The Shire",
         "country": "Middle Earth",
@@ -534,6 +536,7 @@ EXPECTED_ACCOUNT_RESPONSE = {
         "state": "Eriador",
         "street": "The Burrow under the Hill, Bag End, Hobbiton",
     },
+    "Description": "A story about the One Ring.",
     "ContentDocumentLinks": {
         "records": [
             {
@@ -906,12 +909,11 @@ async def test_get_accounts_when_success(mock_responses):
         expected_doc = {
             "_id": "account_id",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "type": "Account",
             "url": "https://fake.my.salesforce.com/account_id",
-            "owner": "Frodo",
-            "owner_url": "https://fake.my.salesforce.com/user_id",
-            "title": "TLOTR",
-            "description": "A story about the One Ring.",
+            "attributes": {
+                "type": "Account",
+                "url": "/services/data/v59.0/sobjects/Account/account_id",
+            },
             "Type": "Customer - Direct",
             "Owner": {
                 "attributes": {
@@ -922,8 +924,10 @@ async def test_get_accounts_when_success(mock_responses):
                 "Name": "Frodo",
                 "Email": "frodo@tlotr.com",
             },
+            "Id": "account_id",
             "Rating": "Hot",
             "Website": "www.tlotr.com",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "CreatedDate": "2023-12-12T00:00:00.000+0000",
             "Opportunities": {
                 "totalSize": 1,
@@ -940,6 +944,7 @@ async def test_get_accounts_when_success(mock_responses):
                     }
                 ],
             },
+            "Name": "TLOTR",
             "BillingAddress": {
                 "city": "The Shire",
                 "country": "Middle Earth",
@@ -947,6 +952,7 @@ async def test_get_accounts_when_success(mock_responses):
                 "state": "Eriador",
                 "street": "The Burrow under the Hill, Bag End, Hobbiton",
             },
+            "Description": "A story about the One Ring.",
         }
 
         mock_responses.get(
@@ -1070,12 +1076,12 @@ async def test_get_opportunities_when_success(mock_responses):
         expected_doc = {
             "_id": "opportunity_id",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "type": "Opportunity",
             "url": "https://fake.my.salesforce.com/opportunity_id",
-            "owner": "Frodo",
-            "owner_url": "https://fake.my.salesforce.com/user_id",
-            "title": "The Fellowship",
-            "description": "A fellowship of the races of Middle Earth",
+            "attributes": {
+                "type": "Opportunity",
+                "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+            },
+            "Description": "A fellowship of the races of Middle Earth",
             "Owner": {
                 "attributes": {
                     "type": "User",
@@ -1085,8 +1091,11 @@ async def test_get_opportunities_when_success(mock_responses):
                 "Email": "frodo@tlotr.com",
                 "Name": "Frodo",
             },
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "Name": "The Fellowship",
             "StageName": "Closed Won",
             "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "Id": "opportunity_id",
         }
 
         mock_responses.get(
@@ -1117,19 +1126,22 @@ async def test_get_contacts_when_success(mock_responses):
         expected_doc = {
             "_id": "contact_id",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "type": "Contact",
             "url": "https://fake.my.salesforce.com/contact_id",
-            "owner": "Frodo",
-            "owner_url": "https://fake.my.salesforce.com/user_id",
-            "title": "Gandalf",
-            "description": "The White",
+            "attributes": {
+                "type": "Contact",
+                "url": "/services/data/v59.0/sobjects/Contact/contact_id",
+            },
             "OwnerId": "user_id",
             "Phone": "12345678",
+            "Name": "Gandalf",
             "AccountId": "account_id",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "Description": "The White",
             "Title": "Wizard",
             "CreatedDate": "2023-12-12T00:00:00.000+0000",
             "LeadSource": "Partner Referral",
             "PhotoUrl": "/services/images/photo/photo_id",
+            "Id": "contact_id",
             "Email": "gandalf@tlotr.com",
             "Account": {"Id": "account_id", "Name": "TLOTR"},
             "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
@@ -1162,25 +1174,28 @@ async def test_get_leads_when_success(mock_responses):
         expected_doc = {
             "_id": "lead_id",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "type": "Lead",
             "url": "https://fake.my.salesforce.com/lead_id",
-            "owner": "Frodo",
-            "owner_url": "https://fake.my.salesforce.com/user_id",
-            "title": "Sauron",
-            "description": "Forger of the One Ring",
+            "attributes": {
+                "type": "Lead",
+                "url": "/services/data/v59.0/sobjects/Lead/lead_id",
+            },
+            "Name": "Sauron",
             "Status": "Working - Contacted",
             "Company": "Mordor Inc.",
+            "Description": "Forger of the One Ring",
             "Email": "sauron@tlotr.com",
             "Phone": "09876543",
             "Title": "Dark Lord",
             "PhotoUrl": "/services/images/photo/photo_id",
             "Rating": "Hot",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "LeadSource": "Partner Referral",
             "OwnerId": "user_id",
             "ConvertedAccountId": None,
             "ConvertedContactId": None,
             "ConvertedOpportunityId": None,
             "ConvertedDate": None,
+            "Id": "lead_id",
             "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
             "ConvertedAccount": {},
             "ConvertedContact": {},
@@ -1203,15 +1218,18 @@ async def test_get_campaigns_when_success(mock_responses):
         expected_doc = {
             "_id": "campaign_id",
             "_timestamp": "2023-12-12T00:00:00Z",
-            "type": "Campaign",
             "url": "https://fake.my.salesforce.com/campaign_id",
-            "owner": "Saruman",
-            "owner_url": "https://fake.my.salesforce.com/user_id",
-            "title": "Defend the Gap",
-            "description": "Orcs are raiding the Gap of Rohan",
+            "attributes": {
+                "type": "Campaign",
+                "url": "/services/data/v59.0/sobjects/Campaign/campaign_id",
+            },
+            "Name": "Defend the Gap",
             "IsActive": True,
             "Type": "War",
+            "Description": "Orcs are raiding the Gap of Rohan",
             "Status": "planned",
+            "Id": "campaign_id",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "Parent": {
                 "attributes": {
                     "type": "User",
@@ -1255,14 +1273,14 @@ async def test_get_cases_when_success(mock_responses):
         expected_doc = {
             "_id": "case_id",
             "_timestamp": "2023-08-11T00:00:00Z",
-            "type": "Case",
             "url": "https://fake.my.salesforce.com/case_id",
-            "owner": "Frodo",
-            "owner_url": "https://fake.my.salesforce.com/user_id",
-            "title": None,
-            "description": "The One Ring",
+            "attributes": {
+                "type": "Case",
+                "url": "/services/data/v59.0/sobjects/Case/case_id",
+            },
             "Status": "New",
             "AccountId": "account_id",
+            "Description": "The One Ring",
             "Subject": "It needs to be destroyed",
             "Owner": {
                 "attributes": {
@@ -1282,6 +1300,7 @@ async def test_get_cases_when_success(mock_responses):
                 "Email": "gandalf@tlotr.com",
                 "Name": "Gandalf",
             },
+            "Id": "case_id",
             "EmailMessages": {
                 "records": [
                     {
@@ -1345,6 +1364,7 @@ async def test_get_cases_when_success(mock_responses):
             "CreatedDate": "2023-08-01T00:00:00.000+0000",
             "IsDeleted": False,
             "IsClosed": False,
+            "LastModifiedDate": "2023-08-11T00:00:00.000+0000",
             "Feeds": [
                 {
                     "attributes": {
@@ -1466,7 +1486,7 @@ async def test_get_all_with_content_docs_when_success(
 
         content_document_records = []
         async for record, _ in source.get_docs():
-            if record["type"] == "content_document":
+            if record.get("type") == "content_document":
                 content_document_records.append(record)
         TestCase().assertCountEqual(content_document_records, [expected_doc])
 
@@ -1520,7 +1540,7 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
 
             content_document_records = []
             async for record, _ in source.get_docs():
-                if record["type"] == "content_document":
+                if record.get("type") == "content_document":
                     content_document_records.append(record)
 
             TestCase().assertCountEqual(content_document_records, [expected_doc])

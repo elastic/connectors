@@ -1147,27 +1147,11 @@ class SalesforceDocMapper:
                 "%Y-%m-%dT%H:%M:%SZ"
             )
 
-        owner = _object.get("Owner", {}) or {}
-        owner_id = owner.get("Id")
-        owner_url = f"{self.base_url}/{owner_id}" if owner_id else ""
-
-        doc = {
+        return {
             "_id": _object.get("Id"),
             "_timestamp": _format_datetime(datetime_=_object.get("LastModifiedDate")),
-            "type": _object.get("attributes", {}).get("type"),
             "url": f"{self.base_url}/{_object.get('Id')}",
-            "owner": owner.get("Name"),
-            "owner_url": owner_url,
-            "title": _object.get("Name"),
-            "description": _object.get("Description"),
-        }
-
-        # remove redundant fields from salesforce object
-        for field in ["attributes", "Id", "Name", "Description", "LastModifiedDate"]:
-            if _object.get(field):
-                del _object[field]
-
-        return doc | _object
+        } | _object
 
 
 class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
