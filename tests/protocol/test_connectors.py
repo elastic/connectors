@@ -838,20 +838,28 @@ async def test_sync_job_done():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_fail():
+@pytest.mark.parametrize(
+    "error, expected_message",
+    [
+        ("something wrong", "something wrong"),
+        (Exception(), "Exception"),
+        (Exception("something wrong"), "Exception: something wrong"),
+        (123, "123"),
+    ],
+)
+async def test_sync_job_fail(error, expected_message):
     source = {"_id": "1"}
-    message = "something wrong"
     index = Mock()
     index.update = AsyncMock(return_value=1)
     expected_doc_source_update = {
         "last_seen": ANY,
         "completed_at": ANY,
         "status": JobStatus.ERROR.value,
-        "error": message,
+        "error": expected_message,
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
-    await sync_job.fail(message)
+    await sync_job.fail(error)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 

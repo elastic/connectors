@@ -300,9 +300,17 @@ class SyncJob(ESDocument):
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
         )
 
-    async def fail(self, message, ingestion_stats=None, connector_metadata=None):
+    async def fail(self, error, ingestion_stats=None, connector_metadata=None):
+        if isinstance(error, str):
+            message = error
+        elif isinstance(error, Exception):
+            message = f"{error.__class__.__name__}"
+            if str(error):
+                message += f": {str(error)}"
+        else:
+            message = str(error)
         await self._terminate(
-            JobStatus.ERROR, str(message), ingestion_stats, connector_metadata
+            JobStatus.ERROR, message, ingestion_stats, connector_metadata
         )
 
     async def cancel(self, ingestion_stats=None, connector_metadata=None):
