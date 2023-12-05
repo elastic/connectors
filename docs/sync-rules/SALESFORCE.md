@@ -2,6 +2,11 @@
 
 See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
+The advanced sync rules consists of a set of rules where each rule have these 2 parameters:
+
+1. `query` : The salesforce query to fetch the documents
+2. `language` : Salesforce query language. Allowed values are **SOQL** and **SOSL**.
+
 ### Example advanced sync rules
 
 #### Two rules for indexing content based on the query language specified i.e. SOQL and SOSL.
@@ -19,7 +24,7 @@ See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 ]
 ```
 
-#### Two rules for indexing data for standard and custom object using SOQL query
+#### Rules for indexing data for standard and custom object using SOQL query
 
 ```json
 [
