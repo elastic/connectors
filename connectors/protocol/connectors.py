@@ -61,6 +61,7 @@ __all__ = [
     "Filtering",
     "Sort",
     "SyncJob",
+    "CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX",
 ]
 
 
@@ -68,6 +69,7 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 CONCRETE_CONNECTORS_INDEX = CONNECTORS_INDEX + "-v1"
 CONCRETE_JOBS_INDEX = JOBS_INDEX + "-v1"
+CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
