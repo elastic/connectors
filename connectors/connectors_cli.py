@@ -17,7 +17,7 @@ import os
 import click
 import yaml
 from tabulate import tabulate
-import json
+
 from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH, Auth
 from connectors.cli.connector import Connector
