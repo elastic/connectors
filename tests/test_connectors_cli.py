@@ -146,6 +146,10 @@ def test_connector_list_one_connector():
 
 
 @patch("click.confirm")
+@patch(
+    "connectors.cli.index.Index.index_or_connector_exists",
+    MagicMock(return_value=[False, False]),
+)
 def test_connector_create(patch_click_confirm):
     runner = CliRunner()
 
@@ -174,6 +178,149 @@ def test_connector_create(patch_click_confirm):
         assert result.exit_code == 0
 
         assert "has been created" in result.output
+
+
+@pytest.mark.parametrize(
+    "native_flag, input_index_name, expected_index_name",
+    (
+        ["--native", "test", "search-test"],
+        ["--native", "search-test", "search-search-test"],
+        [None, "test", "test"],
+        [None, "search-test", "search-test"],
+    ),
+)
+@patch("click.confirm")
+@patch(
+    "connectors.cli.index.Index.index_or_connector_exists",
+    MagicMock(return_value=[False, False]),
+)
+def test_connector_create_with_native_flags(
+    patch_click_confirm, native_flag, input_index_name, expected_index_name
+):
+    runner = CliRunner()
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            input_index_name,
+            "mongodb",
+            "en",
+            "http://localhost/",
+            "username",
+            "password",
+            "database",
+            "collection",
+            "False",
+        ]
+    )
+
+    with patch(
+        "connectors.protocol.connectors.ConnectorIndex.index",
+        AsyncMock(return_value={"_id": "new_connector_id"}),
+    ) as patched_create:
+        args = ["connector", "create"]
+        if native_flag:
+            args.append(native_flag)
+
+        result = runner.invoke(cli, args, input=input_params)
+
+        patched_create.assert_called_once()
+        assert result.exit_code == 0
+
+        assert "has been created" in result.output
+        assert expected_index_name in result.output
+
+
+@patch("click.confirm")
+@patch(
+    "connectors.cli.index.Index.index_or_connector_exists",
+    MagicMock(return_value=[True, False]),
+)
+def test_connector_create_from_index(patch_click_confirm):
+    runner = CliRunner()
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            "test-connector",
+            "mongodb",
+            "en",
+            "http://localhost/",
+            "username",
+            "password",
+            "database",
+            "collection",
+            "False",
+        ]
+    )
+
+    with patch(
+        "connectors.protocol.connectors.ConnectorIndex.index",
+        AsyncMock(return_value={"_id": "new_connector_id"}),
+    ) as patched_create:
+        result = runner.invoke(
+            cli, ["connector", "create", "--from_index"], input=input_params
+        )
+
+        patched_create.assert_called_once()
+        assert result.exit_code == 0
+
+        assert "has been created" in result.output
+
+
+@pytest.mark.parametrize(
+    "index_exists, connector_exists, from_index_flag, expected_error",
+    (
+        [True, False, False, "Index for test-connector already exists"],
+        [
+            False,
+            False,
+            True,
+            "The flag `--from_index` was provided but index doesn't exist",
+        ],
+        [False, True, False, "This index is already a connector"],
+        [True, True, True, "This index is already a connector"],
+    ),
+)
+@patch("click.confirm")
+def test_connector_create_fails_when_index_or_connector_exists(
+    patch_click_confirm, index_exists, connector_exists, from_index_flag, expected_error
+):
+    runner = CliRunner()
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            "test-connector",
+            "mongodb",
+            "en",
+            "http://localhost/",
+            "username",
+            "password",
+            "database",
+            "collection",
+            "False",
+        ]
+    )
+
+    with patch(
+        "connectors.cli.index.Index.index_or_connector_exists",
+        MagicMock(return_value=[index_exists, connector_exists]),
+    ):
+        with patch(
+            "connectors.protocol.connectors.ConnectorIndex.index",
+            AsyncMock(return_value={"_id": "new_connector_id"}),
+        ) as patched_create:
+            args = ["connector", "create"]
+            if from_index_flag:
+                args.append("--from_index")
+
+            result = runner.invoke(cli, args, input=input_params)
+
+            patched_create.assert_not_called()
+            assert result.exit_code == 1
+
+            assert expected_error in result.output
 
 
 def test_index_help_page():

@@ -250,3 +250,40 @@ async def test_auth_conflict_logs_message(patch_logger):
 def test_es_client_with_auth(config, expected_auth_header):
     es_client = ESClient(config)
     assert es_client.client._headers["Authorization"] == expected_auth_header
+
+
+@pytest.mark.asyncio
+async def test_index_exists():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    index_name = "search-mongo"
+    es_client = ESClient(config)
+    es_client.client = Mock()
+    es_client.client.indices.exists = AsyncMock()
+
+    await es_client.index_exists(index_name=index_name)
+    es_client.client.indices.exists.assert_awaited_with(index=index_name)
+
+
+@pytest.mark.asyncio
+async def test_get_connector_doc():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    index_name = "search-mongo"
+    doc = {"_id": "1", "index_name": index_name}
+
+    es_client = ESClient(config)
+    es_client.client = Mock()
+    es_client.client.search = AsyncMock(
+        return_value={"hits": {"total": {"value": 1}, "hits": [doc]}}
+    )
+
+    response = await es_client.get_connector_doc(index_name=index_name)
+    es_client.client.search.assert_awaited_once()
+    assert response == doc
