@@ -3,8 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import os
 from copy import deepcopy
 from datetime import datetime
+from tempfile import NamedTemporaryFile
 
 import fastjsonschema
 from bson import DBRef, Decimal128, ObjectId
@@ -16,6 +18,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.utils import get_pem_format
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
@@ -98,6 +101,9 @@ class MongoDataSource(BaseDataSource):
         host = self.configuration["host"]
         user = self.configuration["user"]
         password = self.configuration["password"]
+        ssl_ca = self.configuration["ssl_ca"]
+        tls_insecure = self.configuration["tls_insecure"]
+        self.certfile = ""
 
         if self.configuration["direct_connection"]:
             client_params["directConnection"] = True
@@ -105,6 +111,18 @@ class MongoDataSource(BaseDataSource):
         if len(user) > 0 or len(password) > 0:
             client_params["username"] = user
             client_params["password"] = password
+
+        if self.configuration["ssl_enabled"]:
+            client_params["tls"] = True
+            if ssl_ca:
+                pem_certificates = get_pem_format(key=ssl_ca)
+                with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
+                    cert.write(pem_certificates)
+                    self.certfile = cert.name
+                client_params["tlsCAFile"] = self.certfile
+            client_params["tlsInsecure"] = tls_insecure
+        else:
+            client_params["tls"] = False
 
         self.client = AsyncIOMotorClient(host, **client_params)
 
@@ -145,6 +163,32 @@ class MongoDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "SSL/TLS Connection",
+                "order": 7,
+                "tooltip": "This option establishes a secure connection to the MongoDB server using SSL/TLS encryption. Ensure that your MongoDB deployment supports SSL/TLS connections. Enable if MongoDB cluster uses DNS SRV records.",
+                "type": "bool",
+                "value": False,
+            },
+            "ssl_ca": {
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
+                "label": "Certificate Authority (.pem)",
+                "order": 8,
+                "required": False,
+                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the MongoDB instance.",
+                "type": "str",
+            },
+            "tls_insecure": {
+                "display": "toggle",
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
+                "label": "Skip certificate verification",
+                "order": 9,
+                "tooltip": "This option skips certificate validation for TLS/SSL connections to your MongoDB server. We strongly recommend setting this option to 'disable'.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
         }
 
     def advanced_rules_validators(self):
@@ -152,6 +196,16 @@ class MongoDataSource(BaseDataSource):
 
     async def ping(self):
         await self.client.admin.command("ping")
+
+    async def close(self):
+        if os.path.exists(self.certfile):
+            try:
+                os.remove(self.certfile)
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while removing temporary certificate file. Exception: {exception}",
+                    exc_info=True,
+                )
 
     # TODO: That's a lot of work. Find a better way
     def serialize(self, doc):
