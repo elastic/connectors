@@ -3,7 +3,6 @@
 set -eo pipefail
 
 export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-
 if ! which docker-compose > /dev/null; then
     echo "Could not find 'docker-compose'. Make sure it is installed and available via your PATH"
     exit 2
@@ -31,8 +30,15 @@ then
 fi
 
 # create network
-echo "Creating network..."
-docker network create --attachable "connectors_stack_net"
+set +eo pipefail
+NET_EXISTS=$(docker network ls | grep connectors_stack_net)
+set -eo pipefail
+if [[ "${NET_EXISTS:-}" != "" ]]; then
+  echo "Docker network 'connectors_stack_net' already exists"
+else
+  echo "Creating network..."
+  docker network create --attachable "connectors_stack_net"
+fi
 
 # Start Elasticsearch
 echo "Starting Elasticsearch..."
@@ -45,20 +51,20 @@ docker-compose -f $compose_file up --detach kibana
 source $CURDIR/wait-for-kibana.sh
 source $CURDIR/update-kibana-user-password.sh
 
-### TODO - complete the configuration step
-### only if the user didn't manually create a config
-# run_configurator="no"
-# echo "Do you want to run the configurator?"
-# select ync in "Yes" "No" "Cancel"; do
-#   case $ync in
-#     Yes ) run_configurator="yes"; break;;
-#     No ) break;;
-#     Cancel ) popd; exit 1;;
-#   esac
-# done
-# if [ $run_configurator == "yes" ]; then
-#   source ./configure-stack.sh $SECURE_STATE_DIR
-# fi
+run_configurator="no"
+if [[ "${bypass_config:-}" == false ]]; then
+  echo "Do you want to run the configurator?"
+  select ync in "Yes" "No" "Cancel"; do
+    case $ync in
+      Yes ) run_configurator="yes"; break;;
+      No ) break;;
+      Cancel ) popd; exit 1;;
+    esac
+  done
+  if [ $run_configurator == "yes" ]; then
+    source ./configure-stack.sh $SECURE_STATE_DIR
+  fi
+fi
 
 if [ "${no_connectors:-}" == false ]; then
   echo "Starting Elastic Connectors..."

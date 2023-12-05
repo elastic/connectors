@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -xo pipefail
 
@@ -33,20 +33,28 @@ if [ $PYTHON_EXECUTABLE == "" ]; then
     exit 2
 fi
 
+pushd $PROJECT_ROOT
+    CONNECTORS_EXE="${PROJECT_ROOT}/bin/connectors"
+    if [ ! -f "$CONNECTORS_EXE" ]; then
+        echo "Could not find a connectors executable, running 'make clean install'"
+        make clean install
+    fi
+popd
+
 # set up and activate our virtual env
-keep_venv="true"
-if [ ! -d ./venv ]; then
-    $PYTHON_EXECUTABLE -m venv venv
-    keep_venv="false"
-fi
+# keep_venv="true"
+# if [ ! -d ./venv ]; then
+#     $PYTHON_EXECUTABLE -m venv venv
+#     keep_venv="false"
+# fi
 
-source ./venv/bin/activate
-$PYTHON_EXECUTABLE -m ensurepip --default-pip
-$PYTHON_EXECUTABLE -m pip install -r requirements.txt
+# source ./venv/bin/activate
+# $PYTHON_EXECUTABLE -m ensurepip --default-pip
+# $PYTHON_EXECUTABLE -m pip install -r requirements.txt
 
-$PYTHON_EXECUTABLE configure_stack.py "$OUTPUT_DIR/created_config.yml"
+# $PYTHON_EXECUTABLE configure_stack.py "$OUTPUT_DIR/created_config.yml"
 
-deactivate
-if [ $keep_venv == "false" ]; then
-    rm -r ./venv
-fi
+# deactivate
+# if [ $keep_venv == "false" ]; then
+#     rm -r ./venv
+# fi

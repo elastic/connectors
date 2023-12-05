@@ -1,5 +1,15 @@
 #!/bin/bash
 
+function realpath {
+  echo "$(cd "$(dirname "$1")"; pwd)"/"$(basename "$1")";
+}
+
+if [[ "${CURDIR:-}" != "" && "${PROJECT_ROOT:-}" == "" ]]; then
+  SCRIPT_DIR=$(realpath "$(dirname "$CURDIR")")
+  export PROJECT_ROOT=$(realpath "$(dirname "$SCRIPT_DIR")")
+  echo "set PROJECT_ROOT to $PROJECT_ROOT"
+fi
+
 # Fallback to .env file # if not already set
 if [ -z "$ELASTICSEARCH_VERSION" ]
 then
