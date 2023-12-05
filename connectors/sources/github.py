@@ -4,12 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
+import json
 import time
 from enum import Enum
 from functools import cached_property, partial
 
 import aiohttp
-import json
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
 from gidgethub.aiohttp import GitHubAPI
@@ -712,7 +712,9 @@ class GitHubClient:
             dictionary: Client response
         """
         url = f"{self.github_url}/graphql"
-        self._logger.debug(f"Sending POST to {url} with body: '{json.dumps(query_data)}'")
+        self._logger.debug(
+            f"Sending POST to {url} with body: '{json.dumps(query_data)}'"
+        )
         try:
             async with self._get_session.post(
                 url=url, json=query_data, ssl=self.ssl_ctx
@@ -1151,7 +1153,8 @@ class GitHubDataSource(BaseDataSource):
             return invalid_repos
         except Exception as exception:
             self._logger.exception(
-                f"Error while checking for inaccessible repositories. Exception: {exception}.", exc_info=True
+                f"Error while checking for inaccessible repositories. Exception: {exception}.",
+                exc_info=True,
             )
             raise
 
@@ -1351,7 +1354,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the repository. Exception: {exception}", exc_info=True
+                f"Something went wrong while fetching the repository. Exception: {exception}",
+                exc_info=True,
             )
 
     async def _fetch_remaining_data(
@@ -1443,7 +1447,9 @@ class GitHubDataSource(BaseDataSource):
         response_key=(REPOSITORY_OBJECT, "pullRequests"),
         filter_query=None,
     ):
-        self._logger.info(f"Fetching pull requests from '{repo_name}' with response_key '{response_key}' and filter query: '{filter_query}'")
+        self._logger.info(
+            f"Fetching pull requests from '{repo_name}' with response_key '{response_key}' and filter query: '{filter_query}'"
+        )
         try:
             query = (
                 GithubQuery.SEARCH_QUERY.value
@@ -1473,7 +1479,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the pull requests. Exception: {exception}", exc_info=True
+                f"Something went wrong while fetching the pull requests. Exception: {exception}",
+                exc_info=True,
             )
 
     async def _extract_issues(self, response, owner, repo, response_key):
@@ -1498,7 +1505,9 @@ class GitHubDataSource(BaseDataSource):
         response_key=(REPOSITORY_OBJECT, "issues"),
         filter_query=None,
     ):
-        self._logger.info(f"Fetching issues from repo: {repo_name} with response_key: '{response_key}' and filter_query: '{filter_query}'")
+        self._logger.info(
+            f"Fetching issues from repo: {repo_name} with response_key: '{response_key}' and filter_query: '{filter_query}'"
+        )
         try:
             query = (
                 GithubQuery.SEARCH_QUERY.value
@@ -1525,7 +1534,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the issues. Exception: {exception}", exc_info=True
+                f"Something went wrong while fetching the issues. Exception: {exception}",
+                exc_info=True,
             )
 
     async def _fetch_last_commit_timestamp(self, repo_name, path):
@@ -1537,7 +1547,9 @@ class GitHubDataSource(BaseDataSource):
         return commit["commit"]["committer"]["date"]
 
     async def _fetch_files(self, repo_name, default_branch):
-        self._logger.info(f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')")
+        self._logger.info(
+            f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')"
+        )
         try:
             file_tree = await self.github_client.get_github_item(
                 resource=self.github_client.endpoints["TREE"].format(
@@ -1576,7 +1588,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}", exc_info=True
+                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}",
+                exc_info=True,
             )
 
     async def get_content(self, attachment, timestamp=None, doit=False):
