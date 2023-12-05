@@ -1,5 +1,4 @@
 import asyncio
-import re
 from collections import OrderedDict
 
 from connectors.es.client import ESClient
@@ -7,6 +6,7 @@ from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
+    CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
     ConnectorIndex,
 )
 from connectors.source import get_source_klass
@@ -206,7 +206,7 @@ class Connector:
         ]
 
     async def __create_api_key(self, name):
-        acl_index_name = re.sub(r"^(?:search-)?(.*)$", r".search-acl-filter-\1", name)
+        acl_index_name = f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{name}"
         metadata = {"created_by": "Connectors CLI"}
         role_descriptors = {
             f"{name}-connector-role": {
