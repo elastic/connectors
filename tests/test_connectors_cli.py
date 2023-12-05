@@ -364,6 +364,7 @@ def test_connector_create_from_file():
                             "database": "test",
                             "collection": "test",
                             "direct_connection": False,
+                            "ssl_enabled": False,
                         }
                     )
                 )

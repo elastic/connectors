@@ -78,13 +78,8 @@ class Connector:
         from_index=False,
     ):
         try:
-            if from_index:
-                return await self.__create_connector(
-                    index_name, service_type, configuration, is_native, language
-                )
-
             return await self.__create_connector(
-                index_name, service_type, configuration, is_native, language
+                index_name, service_type, configuration, is_native, language, from_index
             )
         except Exception as e:
             raise e
@@ -106,7 +101,7 @@ class Connector:
         )
 
     async def __create_connector(
-        self, index_name, service_type, configuration, is_native, language
+        self, index_name, service_type, configuration, is_native, language, from_index
     ):
         try:
             await self.es_client.ensure_exists(
@@ -114,7 +109,8 @@ class Connector:
             )
             timestamp = iso_utc()
 
-            await self.__create_search_index(index_name, language)
+            if not from_index:
+                await self.__create_search_index(index_name, language)
 
             api_key = await self.__create_api_key(index_name)
 
