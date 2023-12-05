@@ -1,4 +1,4 @@
-### Setting up the Dropbox connector
+### Setting up the Salesforce connector
 
 See the [Developer guide](../../docs/DEVELOPING.md) for setting up connectors.
 
