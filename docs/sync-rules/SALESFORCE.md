@@ -9,7 +9,7 @@ Advanced Sync Rules help filter data in Salesforce before indexing into Elastics
 
 ### Advanced sync rules examples
 
-### Indexing documents based on the query and language specified.
+### Fetching documents based on the query and language specified.
 
 #### Example
 Fetch documents using SOQL query
@@ -35,7 +35,7 @@ Fetch documents using SOSL query
 ]
 ```
 
-### Indexing standard and custom objects using SOQL and SOSL query
+### Fetching standard and custom objects using SOQL and SOSL query
 
 #### Example
 Fetch documents for standard objects via SOQL and SOSL query
@@ -69,7 +69,7 @@ Fetch documents for custom objects via SOQL and SOSL query
 ]
 ```
 
-### Indexing documents with all standard and custom fields / only custom fields / only standard fields
+### Fetching documents with all standard and custom fields / only custom fields / only standard fields
 
 #### Example
 Fetch documents with all standard and custom for Account object
