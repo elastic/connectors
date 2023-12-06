@@ -1,0 +1,1103 @@
+{
+	"info": {
+		"_postman_id": "21004caa-09a2-418f-91c3-2b191759bc6b",
+		"name": "Connectors API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "31300999"
+	},
+	"item": [
+		{
+			"name": "Check In Connector",
+			"item": [
+				{
+					"name": "Check In",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_check_in",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_check_in"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Create a new Connector",
+			"item": [
+				{
+					"name": "Put Connector",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"index_name\": \"search-test-index\",\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Post Connector",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"index_name\": \"search-test-index\",\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Delete a Connector",
+			"item": [
+				{
+					"name": "Delete Connector",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Get a Connector",
+			"item": [
+				{
+					"name": "Get a Connector",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "List Connectors",
+			"item": [
+				{
+					"name": "List Connectors",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Connectors with PageParams",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector?from=0&size=1",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "0"
+								},
+								{
+									"key": "size",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Sync Jobs",
+			"item": [
+				{
+					"name": "Cancel a Sync Job",
+					"item": [
+						{
+							"name": "Cancel a Sync Job",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/HIC-JYwB9RqKhB7x_hIE/_cancel",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"HIC-JYwB9RqKhB7x_hIE",
+										"_cancel"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Check In Sync Job",
+					"item": [
+						{
+							"name": "Check In",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/kj09NYwB0fRk2ToyCbQK/_check_in",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"kj09NYwB0fRk2ToyCbQK",
+										"_check_in"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Create a new Sync Job",
+					"item": [
+						{
+							"name": "Full Syncs",
+							"item": [
+								{
+									"name": "Create a new full sync job (on-demand)",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"id\": \"k3SjP4wBQA7OVMDE2gxn\",\n    \"job_type\": \"full\",\n    \"trigger_method\": \"scheduled\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+											"host": [
+												"{{ES_HOST_PORT}}"
+											],
+											"path": [
+												"_connector",
+												"_sync_job"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create a new full sync job (scheduled)",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"id\": \"k3SjP4wBQA7OVMDE2gxn\",\n    \"job_type\": \"full\",\n    \"trigger_method\": \"on_demand\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+											"host": [
+												"{{ES_HOST_PORT}}"
+											],
+											"path": [
+												"_connector",
+												"_sync_job"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Access Control Syncs",
+							"item": [
+								{
+									"name": "Create a new access control sync job (on-demand)",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"access_control\",\n    \"trigger_method\": \"on_demand\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+											"host": [
+												"{{ES_HOST_PORT}}"
+											],
+											"path": [
+												"_connector",
+												"_sync_job"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create a new access control sync job (scheduled)",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"access_control\",\n    \"trigger_method\": \"scheduled\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+											"host": [
+												"{{ES_HOST_PORT}}"
+											],
+											"path": [
+												"_connector",
+												"_sync_job"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Incremental Syncs",
+							"item": [
+								{
+									"name": "Create a new incremental sync job (on-demand)",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"incremental\",\n    \"trigger_method\": \"on_demand\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+											"host": [
+												"{{ES_HOST_PORT}}"
+											],
+											"path": [
+												"_connector",
+												"_sync_job"
+											]
+										}
+									},
+									"response": []
+								},
+								{
+									"name": "Create a new incremental sync job (scheduled)",
+									"request": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"incremental\",\n    \"trigger_method\": \"scheduled\"\n}",
+											"options": {
+												"raw": {
+													"language": "json"
+												}
+											}
+										},
+										"url": {
+											"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+											"host": [
+												"{{ES_HOST_PORT}}"
+											],
+											"path": [
+												"_connector",
+												"_sync_job"
+											]
+										}
+									},
+									"response": []
+								}
+							]
+						},
+						{
+							"name": "Create connector sync job with missing trigger method field",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"full\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create connector sync job with missing job type field",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"connector-id\",\n    \"trigger_method\": \"on_demand\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create connector sync job with wrong job type",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"non-existing\",\n    \"trigger_method\": \"on_demand\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create connector sync job with non-existing connector id",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"non-existing-connector-id\",\n    \"job_type\": \"full\",\n    \"trigger_method\": \"on_demand\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Create connector sync job with wrong trigger method",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id\": \"connector-id\",\n    \"job_type\": \"full\",\n    \"trigger_method\": \"non-existing\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Delete a Sync Job",
+					"item": [
+						{
+							"name": "Delete a Sync Job by id",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/zQ_3IIwBWxMkcWMIH32S",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"zQ_3IIwBWxMkcWMIH32S"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Get Sync Job",
+					"item": [
+						{
+							"name": "Get a Sync Job",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/PcIBNIwBYKNFz5xUUGdn",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"PcIBNIwBYKNFz5xUUGdn"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "List Sync Jobs",
+					"item": [
+						{
+							"name": "List Sync Jobs (default page params)",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Sync Jobs (from and size)",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"method": "GET",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": ""
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job?from=0&size=2",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									],
+									"query": [
+										{
+											"key": "from",
+											"value": "0"
+										},
+										{
+											"key": "size",
+											"value": "2"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List pending Sync Jobs",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job?status=pending",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "pending"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "List Sync Jobs for connector",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job?connector_id=k3SjP4wBQA7OVMDE2gxn",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job"
+									],
+									"query": [
+										{
+											"key": "connector_id",
+											"value": "k3SjP4wBQA7OVMDE2gxn"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Set error for sync job",
+					"item": [
+						{
+							"name": "Set error for sync job",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"error\": \"some-error\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/rpUONIwBMzf7c5j283rp/_error",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"rpUONIwBMzf7c5j283rp",
+										"_error"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Update ingestion stats for sync job",
+					"item": [
+						{
+							"name": "Update ingestion stats (only required params)",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"deleted_document_count\": 10,\n    \"indexed_document_count\": 20,\n    \"indexed_document_volume\": 1000\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/-vv7NIwBDEXNvQW_TUy9/_stats",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"-vv7NIwBDEXNvQW_TUy9",
+										"_stats"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update ingestion stats (with total document count)",
+							"request": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"deleted_document_count\": 10,\n    \"indexed_document_count\": 20,\n    \"indexed_document_volume\": 1000,\n    \"total_document_count\": 2000\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{ES_HOST_PORT}}/_connector/_sync_job/-vv7NIwBDEXNvQW_TUy9/_stats",
+									"host": [
+										"{{ES_HOST_PORT}}"
+									],
+									"path": [
+										"_connector",
+										"_sync_job",
+										"-vv7NIwBDEXNvQW_TUy9",
+										"_stats"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Update Configuration",
+			"item": [
+				{
+					"name": "Update Configuration",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"configuration\": {\n        \"some_field\": {\n            \"default_value\": null,\n            \"depends_on\": [],\n            \"display\": \"numeric\",\n            \"label\": \"Very important field\",\n            \"options\": [],\n            \"order\": 4,\n            \"required\": true,\n            \"sensitive\": false,\n            \"tooltip\": \"Wow, this tooltip is useful.\",\n            \"type\": \"int\",\n            \"ui_restrictions\": [],\n            \"validations\": [\n                {\n                    \"constraint\": 0,\n                    \"type\": \"greater_than\"\n                }\n            ],\n            \"value\": 132\n        },\n        \"another_field\": {\n            \"default_value\": null,\n            \"depends_on\": [\n                {\n                    \"field\": \"some_field\",\n                    \"value\": 123\n                }\n            ],\n            \"display\": \"textbox\",\n            \"label\": \"Very important field\",\n            \"options\": [],\n            \"order\": 4,\n            \"required\": true,\n            \"sensitive\": false,\n            \"tooltip\": \"Wow, this tooltip is useful.\",\n            \"type\": \"str\",\n            \"ui_restrictions\": [],\n            \"validations\": [\n                {\n                    \"constraint\": 0,\n                    \"type\": \"greater_than\"\n                }\n            ],\n            \"value\": \"hello\"\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_configuration",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_configuration"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Connector Scheduling",
+			"item": [
+				{
+					"name": "Update Scheduling",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"scheduling\": {\n        \"access_control\": {\n            \"enabled\": true,\n            \"interval\": \"0 10 0 * * ?\"\n        },\n        \"full\": {\n            \"enabled\": false,\n            \"interval\": \"0 20 0 * * ?\"\n        },\n        \"incremental\": {\n            \"enabled\": false,\n            \"interval\": \"0 30 0 * * ?\"\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_scheduling",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_scheduling"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Error",
+			"item": [
+				{
+					"name": "Update Error",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"error\": \"oh no!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_error",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_error"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Ingestion Pipeline",
+			"item": [
+				{
+					"name": "Update Pipeline",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"pipeline\": {\n        \"extract_binary_content\": true,\n        \"name\": \"test-pipeline\",\n        \"reduce_whitespace\": true,\n        \"run_ml_inference\": false\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_pipeline",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_pipeline"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Last Sync Stats",
+			"item": [
+				{
+					"name": "Update Last Sync Stats",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"last_access_control_sync_error\": \"some error\",\n    \"last_access_control_sync_scheduled_at\": \"2023-11-09T15:13:08.231Z\",\n    \"last_access_control_sync_status\": \"pending\",\n    \"last_deleted_document_count\": 42,\n    \"last_incremental_sync_scheduled_at\": \"2023-11-09T15:13:08.231Z\",\n    \"last_indexed_document_count\": 42,\n    \"last_sync_error\": \"some error\",\n    \"last_sync_scheduled_at\": \"2024-11-09T15:13:08.231Z\",\n    \"last_sync_status\": \"completed\",\n    \"last_synced\": \"2024-11-09T15:13:08.231Z\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_last_sync",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_last_sync"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Name / Description",
+			"item": [
+				{
+					"name": "Update Name / Description",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"my-connector\",\n    \"description\": \"some description\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_name",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_name"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Filtering",
+			"item": [
+				{
+					"name": "Update Filtering",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"filtering\": [\n        {\n            \"active\": {\n                \"advanced_snippet\": {\n                    \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"value\": {}\n                },\n                \"rules\": [\n                    {\n                        \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"field\": \"_\",\n                        \"id\": \"DEFAULT\",\n                        \"order\": 0,\n                        \"policy\": \"include\",\n                        \"rule\": \"regex\",\n                        \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"value\": \".*\"\n                    }\n                ],\n                \"validation\": {\n                    \"errors\": [],\n                    \"state\": \"valid\"\n                }\n            },\n            \"domain\": \"DEFAULT\",\n            \"draft\": {\n                \"advanced_snippet\": {\n                    \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"value\": {}\n                },\n                \"rules\": [\n                    {\n                        \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"field\": \"_\",\n                        \"id\": \"DEFAULT\",\n                        \"order\": 0,\n                        \"policy\": \"include\",\n                        \"rule\": \"regex\",\n                        \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"value\": \".*\"\n                    }\n                ],\n                \"validation\": {\n                    \"errors\": [],\n                    \"state\": \"valid\"\n                }\n            }\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/1234/_filtering",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"1234",
+								"_filtering"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{
+				"key": "password",
+				"value": "{{ES_PASSWORD}}",
+				"type": "string"
+			},
+			{
+				"key": "username",
+				"value": "{{ES_USER}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "ES_HOST_PORT",
+			"value": "localhost:9200"
+		}
+	]
+}
