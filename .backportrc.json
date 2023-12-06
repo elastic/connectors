@@ -1,6 +1,7 @@
 {
   "targetBranchChoices": [
     { "name": "main", "checked": true },
+    "8.12",
     "8.11",
     "8.10",
     "pre-8.10-stable",
@@ -9,7 +10,7 @@
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v8.12.0(.0)?$": "main",
+    "^v8.13.0(.0)?$": "main",
     "^vpre-8.10-stable$": "pre-8.10-stable",
     "^v(\\d+).(\\d+)(.\\d+)+$": "$1.$2"
   },

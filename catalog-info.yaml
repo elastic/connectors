@@ -97,7 +97,11 @@ spec:
         Daily 8_11:
           branch: '8.11'
           cronline: '@daily'
-          message: "Runs daily `8.11` e2e test"          
+          message: "Runs daily `8.11` e2e test"   
+        Daily 8_12:
+          branch: '8.12'
+          cronline: '@daily'
+          message: "Runs daily `8.12` e2e test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -186,6 +190,10 @@ spec:
           message: "Runs daily `8.10` e2e aarch64 test"
         Daily 8_11:
           branch: '8.11'
+          cronline: '@daily'
+          message: "Runs daily `8.11` e2e aarch64 test"
+        Daily 8_12:
+          branch: '8.12'
           cronline: '@daily'
           message: "Runs daily `8.11` e2e aarch64 test"
         Daily main:
