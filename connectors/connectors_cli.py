@@ -149,17 +149,17 @@ def validate_language(ctx, param, value):
 
 @click.command(help="Creates a new connector and a search index")
 @click.option(
-    "--index_name",
+    "--index-name",
     prompt=f"{click.style('?', blink=True, fg='green')} Index name",
     help="Name of the index. If the connector will be native, `search-` will be prepended to the index name.",
 )
 @click.option(
-    "--service_type",
+    "--service-type",
     prompt=f"{click.style('?', blink=True, fg='green')} Service type",
     type=click.Choice(list(_default_config()["sources"].keys()), case_sensitive=False),
 )
 @click.option(
-    "--index_language",
+    "--index-language",
     prompt=f"{click.style('?', blink=True, fg='green')} Index language (leave empty for universal) {language_keys}",
     default="",
     callback=validate_language,
@@ -172,13 +172,13 @@ def validate_language(ctx, param, value):
     help="Create a native connector rather than a connector client.",
 )
 @click.option(
-    "--from_index",
+    "--from-index",
     default=False,
     is_flag=True,
     help="Create a connector from an index that already exists. Each index can only have one connector. All current docs for the index will be deleted during the first sync.",
 )
 @click.option(
-    "--from_file",
+    "--from-file",
     type=click.Path(exists=True),
     help="Use a JSON file to supply the connector configuration.",
 )
@@ -242,7 +242,7 @@ def create(
     if index_exists and not from_index:
         click.echo(
             click.style(
-                f"Index for {index_name} already exists. Include the flag `--from_index` to create a connector for this index.",
+                f"Index for {index_name} already exists. Include the flag `--from-index` to create a connector for this index.",
                 fg="red",
             ),
             err=True,
@@ -252,7 +252,7 @@ def create(
     if not index_exists and from_index:
         click.echo(
             click.style(
-                "The flag `--from_index` was provided but index doesn't exist.",
+                "The flag `--from-index` was provided but index doesn't exist.",
                 fg="red",
             ),
             err=True,
