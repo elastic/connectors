@@ -352,7 +352,7 @@ def test_connector_create_from_file():
     with patch(
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
-    ):
+    ) as patched_create:
         with runner.isolated_filesystem():
             with open("mongodb.json", "w") as f:
                 f.write(
@@ -374,7 +374,7 @@ def test_connector_create_from_file():
                 input=input_params,
             )
 
-            # patched_create.assert_called_once()
+            patched_create.assert_called_once()
             assert result.exit_code == 0
 
             assert "has been created" in result.output
