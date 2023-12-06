@@ -1292,6 +1292,7 @@ class GitHubDataSource(BaseDataSource):
     async def _get_configured_repos(self, configured_repos):
         self._logger.info(f"Fetching configured repos: '{configured_repos}'")
         for repo_name in configured_repos:
+            self._logger.info(f"Fetching repo: '{repo_name}'")
             if repo_name in ["", None]:
                 continue
 
