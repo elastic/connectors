@@ -8,7 +8,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from aiogoogle import Aiogoogle
@@ -615,9 +615,7 @@ async def test_api_call_for_attribute_error(catch_stdout):
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     async with create_gcs_source() as source:
-        with mock.patch.object(
-            Aiogoogle, "discover", side_effect=AttributeError
-        ):
+        with mock.patch.object(Aiogoogle, "discover", side_effect=AttributeError):
             with pytest.raises(AttributeError):
                 async for resp in source._google_storage_client.api_call(
                     resource="buckets_dummy",
