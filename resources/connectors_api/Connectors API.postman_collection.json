@@ -1098,6 +1098,16 @@
 		{
 			"key": "ES_HOST_PORT",
 			"value": "localhost:9200"
+		},
+		{
+			"key": "ES_USER",
+			"value": "elastic",
+			"type": "string"
+		},
+		{
+			"key": "ES_PASSWORD",
+			"value": "password",
+			"type": "string"
 		}
 	]
 }
