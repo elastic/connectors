@@ -197,7 +197,7 @@ class SyncJobRunner:
         logger.debug("Preparing the content index")
 
         await self.elastic_server.prepare_content_index(
-            index=self.sync_job.index_name, language_code=self.sync_job.language
+            index_name=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
         content_extraction_enabled = (
