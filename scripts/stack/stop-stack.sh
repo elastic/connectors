@@ -23,6 +23,3 @@ if [ "${remove_volumes:-}" == true ]; then
 else
   docker-compose -f $compose_file down
 fi
-
-echo "Removing network..."
-docker network rm "connectors_stack_net"

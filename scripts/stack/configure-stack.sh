@@ -37,7 +37,7 @@ pushd $PROJECT_ROOT
     CONNECTORS_EXE="${PROJECT_ROOT}/bin/connectors"
     if [ ! -f "$CONNECTORS_EXE" ]; then
         echo "Could not find a connectors executable, running 'make clean install'"
-        make clean install
+        make clean install PYTHON=$PYTHON_EXECUTABLE
     fi
 popd
 

@@ -29,17 +29,6 @@ then
   docker-compose -f $compose_file pull elasticsearch kibana elastic-connectors
 fi
 
-# create network
-set +eo pipefail
-NET_EXISTS=$(docker network ls | grep connectors_stack_net)
-set -eo pipefail
-if [[ "${NET_EXISTS:-}" != "" ]]; then
-  echo "Docker network 'connectors_stack_net' already exists"
-else
-  echo "Creating network..."
-  docker network create --attachable "connectors_stack_net"
-fi
-
 # Start Elasticsearch
 echo "Starting Elasticsearch..."
 docker-compose -f $compose_file up --detach elasticsearch
