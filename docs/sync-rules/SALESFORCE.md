@@ -72,7 +72,7 @@ Fetch documents for custom objects via SOQL and SOSL query
 ### Fetching documents with all standard and custom fields / only custom fields / only standard fields
 
 #### Example
-Fetch documents with all standard and custom for Account object
+Fetch documents with all standard and custom fields for Account object
 
 ```json
 [
