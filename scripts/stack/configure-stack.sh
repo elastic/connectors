@@ -62,7 +62,7 @@ pushd $PROJECT_ROOT
         done
 
         if [ $keep_configuring == true ]; then
-            $CONNECTORS_EXE --config "$CONFIG_FILE" --update-config connector create
+            $CONNECTORS_EXE --config "${CONFIG_FILE}" connector create --connector-service-config "$CONFIG_FILE" --update-config
         fi
     done
 popd

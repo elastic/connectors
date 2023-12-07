@@ -14,10 +14,7 @@
 ##      - connector_id: changeme # the ID of the connector.
 ##        service_type: changeme # The service type of the connector.
 ##        api_key: changeme # The Elasticsearch API key used to write data into the content index.
-connectors:
-  - connector_id: 1234
-    service_type: github
-    api_key: abcd1234
+connectors: []
 #
 #
 ##  The ID of the connector.
