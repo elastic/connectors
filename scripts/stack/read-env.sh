@@ -29,7 +29,7 @@ then
 fi
 echo "CONNECTORS_VERSION=$CONNECTORS_VERSION"
 
-if [ -z "$ELASTIC_PASSWORD"]
+if [ -z "$ELASTIC_PASSWORD" ]
 then
   export ELASTIC_PASSWORD="changeme"
 fi

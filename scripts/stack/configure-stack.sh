@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -xo pipefail
+set -o pipefail
 
 OUTPUT_DIR=${1:-}
 if [[ ${OUTPUT_DIR:-} == "" ]]; then
@@ -39,22 +39,23 @@ pushd $PROJECT_ROOT
         echo "Could not find a connectors executable, running 'make clean install'"
         make clean install PYTHON=$PYTHON_EXECUTABLE
     fi
+
+    keep_configuring=true
+    while [ $keep_configuring == true ]; do
+        echo
+        echo "Currently configured connectors:"
+        $CONNECTORS_EXE --config scripts/stack/connectors-config/config.yml connector list
+        echo
+        echo "Do you want to set up a new connector?"
+        select ync in "Yes" "No" "Cancel"; do
+            case $ync in
+            Yes ) break;;
+            No ) keep_configuring=false; break;;
+            Cancel ) popd; exit 1;;
+            esac
+        done
+        if [ $keep_configuring == true ]; then
+            $CONNECTORS_EXE --config scripts/stack/connectors-config/config.yml connector create
+        fi
+    done
 popd
-
-# set up and activate our virtual env
-# keep_venv="true"
-# if [ ! -d ./venv ]; then
-#     $PYTHON_EXECUTABLE -m venv venv
-#     keep_venv="false"
-# fi
-
-# source ./venv/bin/activate
-# $PYTHON_EXECUTABLE -m ensurepip --default-pip
-# $PYTHON_EXECUTABLE -m pip install -r requirements.txt
-
-# $PYTHON_EXECUTABLE configure_stack.py "$OUTPUT_DIR/created_config.yml"
-
-# deactivate
-# if [ $keep_venv == "false" ]; then
-#     rm -r ./venv
-# fi
