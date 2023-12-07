@@ -10,7 +10,7 @@ fi
 
 pushd "$CURDIR"
 
-SECURE_STATE_DIR="$(mktemp -d)"
+export SECURE_STATE_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$SECURE_STATE_DIR"' EXIT
 
 # Make sure ES_VERSION and ENT_VERSION are set
@@ -42,12 +42,12 @@ source $CURDIR/update-kibana-user-password.sh
 
 run_configurator="no"
 if [[ "${bypass_config:-}" == false ]]; then
-  echo "Do you want to run the configurator?"
-  select ync in "Yes" "No" "Cancel"; do
-    case $ync in
-      Yes ) run_configurator="yes"; break;;
-      No ) break;;
-      Cancel ) popd; exit 1;;
+  while true; do
+    read -p "Do you want to run the configurator? (y/n) " yn
+    case $yn in
+      [yY] ) run_configurator="yes"; break;;
+      [nN] ) break;;
+      * ) echo "invalid response";;
     esac
   done
   if [ $run_configurator == "yes" ]; then

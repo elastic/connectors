@@ -8,6 +8,11 @@ if [[ ${OUTPUT_DIR:-} == "" ]]; then
     exit 2
 fi
 
+if [[ ${SECURE_STATE_DIR:-} == "" ]]; then
+    export SECURE_STATE_DIR="$(mktemp -d)"
+    trap 'rm -rf -- "$SECURE_STATE_DIR"' EXIT
+fi
+
 if [[ ${CURDIR:-} == "" ]]; then
     export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 fi
@@ -34,6 +39,7 @@ if [ $PYTHON_EXECUTABLE == "" ]; then
 fi
 
 pushd $PROJECT_ROOT
+    CONFIG_FILE="${PROJECT_ROOT}/scripts/stack/connectors-config/config.yml"
     CONNECTORS_EXE="${PROJECT_ROOT}/bin/connectors"
     if [ ! -f "$CONNECTORS_EXE" ]; then
         echo "Could not find a connectors executable, running 'make clean install'"
@@ -44,18 +50,19 @@ pushd $PROJECT_ROOT
     while [ $keep_configuring == true ]; do
         echo
         echo "Currently configured connectors:"
-        $CONNECTORS_EXE --config scripts/stack/connectors-config/config.yml connector list
+        $CONNECTORS_EXE --config "$CONFIG_FILE" connector list
         echo
-        echo "Do you want to set up a new connector?"
-        select ync in "Yes" "No" "Cancel"; do
-            case $ync in
-            Yes ) break;;
-            No ) keep_configuring=false; break;;
-            Cancel ) popd; exit 1;;
+        while true; do
+            read -p "Do you want to set up a new connector? (y/N) " yn
+            case $yn in
+                [yY] ) break;;
+                [nN] ) keep_configuring=false; break;;
+                * ) keep_configuring=false; break;;
             esac
         done
+
         if [ $keep_configuring == true ]; then
-            $CONNECTORS_EXE --config scripts/stack/connectors-config/config.yml connector create
+            $CONNECTORS_EXE --config "$CONFIG_FILE" --update-config connector create
         fi
     done
 popd

@@ -3,6 +3,17 @@
 #### WORK IN PROGRESS
 
 
+#### run-stack
+
+Command line options:
+* `-u | --update-images`: perform a fresh pull on the docker images
+* `-n | --no-connectors`: do not run or configure connectors
+* `-x | --no-configuration`: do not ask to run the connectors configuration
+
+#### stop-stack
+
+Command line options:
+* `-v | --remove-volumes`: delete all data volumes on stop
 
 ### Manual Configuration
 
