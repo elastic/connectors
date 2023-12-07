@@ -1,9 +1,13 @@
 # Full Elastic Stack with Connectors
 
-#### WORK IN PROGRESS
+### Prerequisites
 
+
+### Script commands
 
 #### run-stack
+
+`scripts/stack/run-stack.sh`
 
 Command line options:
 * `-u | --update-images`: perform a fresh pull on the docker images
@@ -12,8 +16,20 @@ Command line options:
 
 #### stop-stack
 
+`scripts/stack/stop-stack.sh`
+
 Command line options:
 * `-v | --remove-volumes`: delete all data volumes on stop
+
+### Prompted Configuration
+
+If you run the `run-stack.sh` command without any flags, by default the script will
+ask if you want to set up the connectors configuration. If you enter "y" to run
+the configurator, it will take you through a set of prompts using the
+[Connectors CLI](../../connectors/connectors_cli.py) to create a new index and connector.
+
+The resulting configuration will be saved to the [config.yml](./connectors-config/config.yml)
+file that is used to start the Connectors container.
 
 ### Manual Configuration
 
