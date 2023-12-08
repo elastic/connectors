@@ -186,7 +186,7 @@ def validate_language(ctx, param, value):
     "--update-config",
     default=False,
     is_flag=True,
-    help="Update the config file with the new non-connector.",
+    help="Update the config file with the new non-native connector configuration.",
 )
 @click.option(
     "--connector-service-config",
