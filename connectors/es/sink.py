@@ -633,10 +633,6 @@ class SyncOrchestrator(ESClient):
 
     async def prepare_content_index(self, index, language_code=None):
         """Creates the index, given a mapping if it does not exists."""
-        if not index.startswith("search-"):
-            msg = f"Index name {index} is invalid. Index name must start with 'search-'"
-            raise ContentIndexNameInvalid(msg)
-
         self._logger.debug(f"Checking index {index}")
 
         expand_wildcards = "open"

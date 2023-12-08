@@ -6,6 +6,7 @@ from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
+    CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
     ConnectorIndex,
 )
 from connectors.source import get_source_klass
@@ -43,26 +44,42 @@ class Connector:
 
     def service_type_configuration(self, source_class):
         source_klass = get_source_klass(source_class)
-        configuration = source_klass.get_default_configuration()
+        configuration = source_klass.get_simple_configuration()
 
         return OrderedDict(sorted(configuration.items(), key=lambda x: x[1]["order"]))
 
     def create(
-        self, index_name, service_type, configuration, language=DEFAULT_LANGUAGE
+        self,
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        language=DEFAULT_LANGUAGE,
+        from_index=False,
     ):
         return asyncio.run(
-            self.__create(index_name, service_type, configuration, language)
+            self.__create(
+                index_name,
+                service_type,
+                configuration,
+                is_native,
+                language,
+                from_index,
+            )
         )
 
     async def __create(
-        self, index_name, service_type, configuration, language=DEFAULT_LANGUAGE
+        self,
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        language=DEFAULT_LANGUAGE,
+        from_index=False,
     ):
         try:
-            return await asyncio.gather(
-                self.__create_search_index(index_name, language),
-                self.__create_connector(
-                    index_name, service_type, configuration, language
-                ),
+            return await self.__create_connector(
+                index_name, service_type, configuration, is_native, language, from_index
             )
         except Exception as e:
             raise e
@@ -84,7 +101,7 @@ class Connector:
         )
 
     async def __create_connector(
-        self, index_name, service_type, configuration, language
+        self, index_name, service_type, configuration, is_native, language, from_index
     ):
         try:
             await self.es_client.ensure_exists(
@@ -92,13 +109,19 @@ class Connector:
             )
             timestamp = iso_utc()
 
+            if not from_index:
+                await self.__create_search_index(index_name, language)
+
+            api_key = await self.__create_api_key(index_name)
+
+            # TODO features still required
             doc = {
-                "api_key_id": "",
+                "api_key_id": api_key["id"],
                 "configuration": configuration,
                 "index_name": index_name,
                 "service_type": service_type,
                 "status": "configured",  # TODO use a predefined constant
-                "is_native": True,  # TODO make it optional
+                "is_native": is_native,
                 "language": language,
                 "last_access_control_sync_error": None,
                 "last_access_control_sync_scheduled_at": None,
@@ -124,7 +147,7 @@ class Connector:
             }
 
             connector = await self.connector_index.index(doc)
-            return connector["_id"]
+            return {"id": connector["_id"], "api_key": api_key["encoded"]}
         finally:
             await self.connector_index.close()
 
@@ -181,3 +204,30 @@ class Connector:
                 },
             }
         ]
+
+    async def __create_api_key(self, name):
+        acl_index_name = f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{name}"
+        metadata = {"created_by": "Connectors CLI"}
+        role_descriptors = {
+            f"{name}-connector-role": {
+                "cluster": ["monitor"],
+                "index": [
+                    {
+                        "names": [
+                            name,
+                            acl_index_name,
+                            f"{CONCRETE_CONNECTORS_INDEX}*",
+                        ],
+                        "privileges": ["all"],
+                    },
+                ],
+            },
+        }
+        try:
+            return await self.es_client.client.security.create_api_key(
+                name=f"{name}-connector",
+                role_descriptors=role_descriptors,
+                metadata=metadata,
+            )
+        finally:
+            await self.es_client.close()
