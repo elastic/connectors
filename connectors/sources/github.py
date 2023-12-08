@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
+import json
 import time
 from enum import Enum
 from functools import cached_property, partial
@@ -711,6 +712,9 @@ class GitHubClient:
             dictionary: Client response
         """
         url = f"{self.github_url}/graphql"
+        self._logger.debug(
+            f"Sending POST to {url} with body: '{json.dumps(query_data)}'"
+        )
         try:
             async with self._get_session.post(
                 url=url, json=query_data, ssl=self.ssl_ctx
@@ -756,6 +760,7 @@ class GitHubClient:
         Returns:
             dict/list: Response of the request
         """
+        self._logger.debug(f"Getting github item: {resource}")
         try:
             return await self._get_client.getitem(url=resource)
         except ClientResponseError as exception:
@@ -1148,7 +1153,8 @@ class GitHubDataSource(BaseDataSource):
             return invalid_repos
         except Exception as exception:
             self._logger.exception(
-                f"Error while checking for inaccessible repositories. Exception: {exception}."
+                f"Error while checking for inaccessible repositories. Exception: {exception}.",
+                exc_info=True,
             )
             raise
 
@@ -1254,6 +1260,7 @@ class GitHubDataSource(BaseDataSource):
         }
 
     async def _get_personal_repos(self):
+        self._logger.info("Fetching personal repos")
         if not self.user_repos:
             async for repo_object in self.github_client.get_user_repos():
                 self.user_repos[repo_object["nameWithOwner"]] = repo_object
@@ -1268,6 +1275,7 @@ class GitHubDataSource(BaseDataSource):
             yield repo_object
 
     async def _get_org_repos(self):
+        self._logger.info("Fetching org repos")
         if not self.org_repos:
             async for repo_object in self.github_client.get_org_repos():
                 self.org_repos[repo_object["nameWithOwner"]] = repo_object
@@ -1282,7 +1290,9 @@ class GitHubDataSource(BaseDataSource):
             yield repo_object
 
     async def _get_configured_repos(self, configured_repos):
+        self._logger.info(f"Fetching configured repos: '{configured_repos}'")
         for repo_name in configured_repos:
+            self._logger.info(f"Fetching repo: '{repo_name}'")
             if repo_name in ["", None]:
                 continue
 
@@ -1319,6 +1329,7 @@ class GitHubDataSource(BaseDataSource):
             yield repo_object
 
     async def _fetch_repos(self):
+        self._logger.info("Fetching repos")
         try:
             if self.github_client.user is None:
                 self.github_client.user = await self.github_client.get_logged_in_user()
@@ -1344,7 +1355,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the repository. Exception: {exception}"
+                f"Something went wrong while fetching the repository. Exception: {exception}",
+                exc_info=True,
             )
 
     async def _fetch_remaining_data(
@@ -1436,6 +1448,9 @@ class GitHubDataSource(BaseDataSource):
         response_key=(REPOSITORY_OBJECT, "pullRequests"),
         filter_query=None,
     ):
+        self._logger.info(
+            f"Fetching pull requests from '{repo_name}' with response_key '{response_key}' and filter query: '{filter_query}'"
+        )
         try:
             query = (
                 GithubQuery.SEARCH_QUERY.value
@@ -1465,7 +1480,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the pull requests. Exception: {exception}"
+                f"Something went wrong while fetching the pull requests. Exception: {exception}",
+                exc_info=True,
             )
 
     async def _extract_issues(self, response, owner, repo, response_key):
@@ -1490,6 +1506,9 @@ class GitHubDataSource(BaseDataSource):
         response_key=(REPOSITORY_OBJECT, "issues"),
         filter_query=None,
     ):
+        self._logger.info(
+            f"Fetching issues from repo: {repo_name} with response_key: '{response_key}' and filter_query: '{filter_query}'"
+        )
         try:
             query = (
                 GithubQuery.SEARCH_QUERY.value
@@ -1516,7 +1535,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the issues. Exception: {exception}"
+                f"Something went wrong while fetching the issues. Exception: {exception}",
+                exc_info=True,
             )
 
     async def _fetch_last_commit_timestamp(self, repo_name, path):
@@ -1528,6 +1548,9 @@ class GitHubDataSource(BaseDataSource):
         return commit["commit"]["committer"]["date"]
 
     async def _fetch_files(self, repo_name, default_branch):
+        self._logger.info(
+            f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')"
+        )
         try:
             file_tree = await self.github_client.get_github_item(
                 resource=self.github_client.endpoints["TREE"].format(
@@ -1566,7 +1589,8 @@ class GitHubDataSource(BaseDataSource):
             raise
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}"
+                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}",
+                exc_info=True,
             )
 
     async def get_content(self, attachment, timestamp=None, doit=False):
@@ -1693,6 +1717,7 @@ class GitHubDataSource(BaseDataSource):
             dict: Documents from GitHub.
         """
         if filtering and filtering.has_advanced_rules():
+            self._logger.info("Using advanced rules")
             advanced_rules = filtering.get_advanced_rules()
             for rule in advanced_rules:
                 repo = await anext(
