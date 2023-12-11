@@ -61,6 +61,7 @@ __all__ = [
     "Filtering",
     "Sort",
     "SyncJob",
+    "CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX",
 ]
 
 
@@ -68,6 +69,7 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 CONCRETE_CONNECTORS_INDEX = CONNECTORS_INDEX + "-v1"
 CONCRETE_JOBS_INDEX = JOBS_INDEX + "-v1"
+CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
@@ -300,9 +302,17 @@ class SyncJob(ESDocument):
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
         )
 
-    async def fail(self, message, ingestion_stats=None, connector_metadata=None):
+    async def fail(self, error, ingestion_stats=None, connector_metadata=None):
+        if isinstance(error, str):
+            message = error
+        elif isinstance(error, Exception):
+            message = f"{error.__class__.__name__}"
+            if str(error):
+                message += f": {str(error)}"
+        else:
+            message = str(error)
         await self._terminate(
-            JobStatus.ERROR, str(message), ingestion_stats, connector_metadata
+            JobStatus.ERROR, message, ingestion_stats, connector_metadata
         )
 
     async def cancel(self, ingestion_stats=None, connector_metadata=None):
