@@ -11,9 +11,9 @@ from unittest import TestCase, mock
 from unittest.mock import patch
 
 import pytest
-from aiohttp.client_exceptions import ClientConnectionError
 from aioresponses import CallbackResult
 
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
     API_VERSION,
@@ -22,6 +22,7 @@ from connectors.sources.salesforce import (
     InvalidCredentialsException,
     InvalidQueryException,
     RateLimitedException,
+    SalesforceAdvancedRulesValidator,
     SalesforceDataSource,
     SalesforceServerError,
     SalesforceSoqlBuilder,
@@ -33,9 +34,13 @@ TEST_DOMAIN = "fake"
 CONTENT_VERSION_ID = "content_version_id"
 TEST_BASE_URL = f"https://{TEST_DOMAIN}.my.salesforce.com"
 TEST_FILE_DOWNLOAD_URL = f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects/ContentVersion/{CONTENT_VERSION_ID}/VersionData"
-TEST_QUERY_MATCH_URL = re.compile(f"{TEST_BASE_URL}/services/data/{API_VERSION}/query*")
+TEST_QUERY_MATCH_URL = re.compile(
+    f"{TEST_BASE_URL}/services/data/{API_VERSION}/(tooling|query)*"
+)
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
+
+ADVANCED_SNIPPET = "advanced_snippet"
 
 ACCOUNT_RESPONSE_PAYLOAD = {
     "totalSize": 1,
@@ -59,8 +64,8 @@ ACCOUNT_RESPONSE_PAYLOAD = {
             "Id": "account_id",
             "Rating": "Hot",
             "Website": "www.tlotr.com",
-            "LastModifiedDate": "",
-            "CreatedDate": "",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
             "Opportunities": {
                 "totalSize": 1,
                 "done": True,
@@ -108,10 +113,10 @@ OPPORTUNITY_RESPONSE_PAYLOAD = {
                 "Email": "frodo@tlotr.com",
                 "Name": "Frodo",
             },
-            "LastModifiedDate": "",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "Name": "The Fellowship",
             "StageName": "Closed Won",
-            "CreatedDate": "",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
             "Id": "opportunity_id",
         },
     ],
@@ -128,10 +133,10 @@ CONTACT_RESPONSE_PAYLOAD = {
             "Phone": "12345678",
             "Name": "Gandalf",
             "AccountId": "account_id",
-            "LastModifiedDate": "",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "Description": "The White",
             "Title": "Wizard",
-            "CreatedDate": "",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
             "LeadSource": "Partner Referral",
             "PhotoUrl": "/services/images/photo/photo_id",
             "Id": "contact_id",
@@ -156,7 +161,7 @@ LEAD_RESPONSE_PAYLOAD = {
             "Title": "Dark Lord",
             "PhotoUrl": "/services/images/photo/photo_id",
             "Rating": "Hot",
-            "LastModifiedDate": "",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "LeadSource": "Partner Referral",
             "OwnerId": "user_id",
             "ConvertedAccountId": None,
@@ -181,6 +186,7 @@ CAMPAIGN_RESPONSE_PAYLOAD = {
             "Description": "Orcs are raiding the Gap of Rohan",
             "Status": "planned",
             "Id": "campaign_id",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
             "Parent": {
                 "attributes": {
                     "type": "User",
@@ -421,6 +427,190 @@ CACHED_SOBJECTS = {
     "Contact": {},
 }
 
+CUSTOM_OBJECT_RESPONSE_PAYLOAD = {
+    "size": 1,
+    "totalSize": 1,
+    "done": True,
+    "entityTypeName": "CustomObject",
+    "records": [
+        {
+            "attributes": {
+                "type": "CustomObject",
+                "url": "/services/data/v59.0/tooling/sobjects/CustomObject/custom_object_id",
+            },
+            "Id": "custom_object_id",
+            "DeveloperName": "Connector",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+        }
+    ],
+}
+
+SOSL_RESPONSE_PAYLOAD = {
+    "searchRecords": [
+        {
+            "attributes": {
+                "type": "Account",
+                "url": f"/services/data/{API_VERSION}/sobjects/Account/account_id",
+            },
+            "Type": "Customer - Direct",
+            "Owner": {
+                "attributes": {
+                    "type": "User",
+                    "url": f"/services/data/{API_VERSION}/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Alex Wilber",
+                "Email": "alex@tlotr.com",
+            },
+            "Id": "account_id",
+            "Rating": "Hot",
+            "Website": "www.tlotr.com",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "Name": "Alex Wilber",
+            "Description": "A story about the One Ring.",
+            "ContentDocumentLinks": CONTENT_DOCUMENT_LINKS_PAYLOAD,
+        }
+    ]
+}
+
+CONNECTOR_RESPONSE_PAYLOAD = {
+    "records": [
+        {
+            "attributes": {
+                "type": "CustomObject",
+                "url": "/services/data/v59.0/tooling/sobjects/CustomObject/custom_object_id",
+            },
+            "Id": "custom_object_id",
+            "DeveloperName": "Connector",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+        }
+    ]
+}
+
+EXPECTED_ACCOUNT_RESPONSE = {
+    "_id": "account_id",
+    "_timestamp": "2023-12-12T00:00:00Z",
+    "url": "https://fake.my.salesforce.com/account_id",
+    "attributes": {
+        "type": "Account",
+        "url": "/services/data/v59.0/sobjects/Account/account_id",
+    },
+    "Type": "Customer - Direct",
+    "Owner": {
+        "attributes": {
+            "type": "User",
+            "url": "/services/data/v59.0/sobjects/User/user_id",
+        },
+        "Id": "user_id",
+        "Name": "Frodo",
+        "Email": "frodo@tlotr.com",
+    },
+    "Id": "account_id",
+    "Rating": "Hot",
+    "Website": "www.tlotr.com",
+    "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+    "CreatedDate": "2023-12-12T00:00:00.000+0000",
+    "Opportunities": {
+        "totalSize": 1,
+        "done": True,
+        "records": [
+            {
+                "attributes": {
+                    "type": "Opportunity",
+                    "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+                },
+                "Id": "opportunity_id",
+                "Name": "The Fellowship",
+                "StageName": "Closed Won",
+            }
+        ],
+    },
+    "Name": "TLOTR",
+    "BillingAddress": {
+        "city": "The Shire",
+        "country": "Middle Earth",
+        "postalCode": 111,
+        "state": "Eriador",
+        "street": "The Burrow under the Hill, Bag End, Hobbiton",
+    },
+    "Description": "A story about the One Ring.",
+    "ContentDocumentLinks": {
+        "records": [
+            {
+                "attributes": {
+                    "type": "ContentDocumentLink",
+                    "url": "/services/data/v59.0/sobjects/ContentDocumentLink/content_document_link_id",
+                },
+                "Id": "content_document_link_id",
+                "ContentDocument": {
+                    "attributes": {
+                        "type": "ContentDocument",
+                        "url": "/services/data/v59.0/sobjects/ContentDocument/content_document_id",
+                    },
+                    "Id": "content_document_id",
+                    "Description": "A file about a ring.",
+                    "Title": "the_ring",
+                    "ContentSize": 1000,
+                    "FileExtension": "txt",
+                    "CreatedDate": "",
+                    "LatestPublishedVersion": {
+                        "attributes": {
+                            "type": "ContentVersion",
+                            "url": "/services/data/v59.0/sobjects/ContentVersion/content_version_id",
+                        },
+                        "Id": "content_version_id",
+                        "CreatedDate": "",
+                        "VersionNumber": "2",
+                    },
+                    "Owner": {
+                        "attributes": {
+                            "type": "User",
+                            "url": "/services/data/v59.0/sobjects/User/user_id",
+                        },
+                        "Id": "user_id",
+                        "Name": "Frodo",
+                        "Email": "frodo@tlotr.com",
+                    },
+                    "CreatedBy": {
+                        "attributes": {
+                            "type": "User",
+                            "url": "/services/data/v59.0/sobjects/User/user_id",
+                        },
+                        "Id": "user_id",
+                        "Name": "Frodo",
+                        "Email": "frodo@tlotr.com",
+                    },
+                    "LastModifiedDate": "",
+                    "linked_ids": ["account_id"],
+                },
+            }
+        ]
+    },
+}
+
+EXPECTED_CONTENT_RESPONSE = {
+    "_id": "content_document_id",
+    "content_size": 1000,
+    "created_at": "",
+    "created_by": "Frodo",
+    "created_by_email": "frodo@tlotr.com",
+    "description": "A file about a ring.",
+    "file_extension": "txt",
+    "last_updated": "",
+    "linked_ids": ["account_id"],
+    "owner": "Frodo",
+    "owner_email": "frodo@tlotr.com",
+    "title": "the_ring.txt",
+    "type": "content_document",
+    "url": "https://fake.my.salesforce.com/content_document_id",
+    "version_number": "2",
+    "version_url": "https://fake.my.salesforce.com/content_version_id",
+    "_attachment": "Y2h1bmsx",
+}
+
 
 @asynccontextmanager
 async def create_salesforce_source(
@@ -475,6 +665,12 @@ def salesforce_query_callback(url, **kwargs):
             payload = deepcopy(LEAD_RESPONSE_PAYLOAD)
         case "Opportunity":
             payload = deepcopy(OPPORTUNITY_RESPONSE_PAYLOAD)
+        case "CustomObject":
+            payload = deepcopy(CUSTOM_OBJECT_RESPONSE_PAYLOAD)
+        case "Connector__c":
+            payload = deepcopy(CONNECTOR_RESPONSE_PAYLOAD)
+        case _:
+            payload = {"records": []}
 
     if table_name != "CaseFeed":
         for record in payload["records"]:
@@ -693,6 +889,18 @@ async def test_get_queryable_fields(mock_responses):
 
 
 @pytest.mark.asyncio
+async def test_execute_non_paginated_query(mock_responses):
+    async with create_salesforce_source() as source:
+        with mock.patch.object(
+            source.salesforce_client, "_get_json", return_value=ACCOUNT_RESPONSE_PAYLOAD
+        ):
+            response = await source.salesforce_client._execute_non_paginated_query(
+                soql_query=None
+            )
+            assert response == ACCOUNT_RESPONSE_PAYLOAD["records"]
+
+
+@pytest.mark.asyncio
 async def test_get_accounts_when_success(mock_responses):
     async with create_salesforce_source() as source:
         payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
@@ -700,26 +908,51 @@ async def test_get_accounts_when_success(mock_responses):
 
         expected_doc = {
             "_id": "account_id",
-            "account_type": "Customer - Direct",
-            "address": "The Burrow under the Hill, Bag End, Hobbiton, The Shire, Eriador, 111, Middle Earth",
-            "body": "A story about the One Ring.",
-            "content_source_id": "account_id",
-            "created_at": "",
-            "last_updated": "",
-            "owner": "Frodo",
-            "owner_email": "frodo@tlotr.com",
-            "open_activities": "",
-            "open_activities_urls": "",
-            "opportunity_name": "The Fellowship",
-            "opportunity_status": "Closed Won",
-            "opportunity_url": f"{TEST_BASE_URL}/opportunity_id",
-            "rating": "Hot",
-            "source": "salesforce",
-            "tags": ["Customer - Direct"],
-            "title": "TLOTR",
-            "type": "account",
-            "url": f"{TEST_BASE_URL}/account_id",
-            "website_url": "www.tlotr.com",
+            "_timestamp": "2023-12-12T00:00:00Z",
+            "url": "https://fake.my.salesforce.com/account_id",
+            "attributes": {
+                "type": "Account",
+                "url": "/services/data/v59.0/sobjects/Account/account_id",
+            },
+            "Type": "Customer - Direct",
+            "Owner": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Frodo",
+                "Email": "frodo@tlotr.com",
+            },
+            "Id": "account_id",
+            "Rating": "Hot",
+            "Website": "www.tlotr.com",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "Opportunities": {
+                "totalSize": 1,
+                "done": True,
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "Opportunity",
+                            "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+                        },
+                        "Id": "opportunity_id",
+                        "Name": "The Fellowship",
+                        "StageName": "Closed Won",
+                    }
+                ],
+            },
+            "Name": "TLOTR",
+            "BillingAddress": {
+                "city": "The Shire",
+                "country": "Middle Earth",
+                "postalCode": 111,
+                "state": "Eriador",
+                "street": "The Burrow under the Hill, Bag End, Hobbiton",
+            },
+            "Description": "A story about the One Ring.",
         }
 
         mock_responses.get(
@@ -729,7 +962,7 @@ async def test_get_accounts_when_success(mock_responses):
         )
         async for record in source.salesforce_client.get_accounts():
             assert record == expected_record
-            assert source.doc_mapper.map_account(record) == expected_doc
+            assert source.doc_mapper.map_salesforce_objects(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -783,7 +1016,7 @@ async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
             status=405,
             payload=response_payload,
         )
-        with pytest.raises(ClientConnectionError):
+        with pytest.raises(InvalidQueryException):
             async for _ in source.salesforce_client.get_accounts():
                 # TODO confirm error message when error handling is improved
                 pass
@@ -798,22 +1031,71 @@ async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
+async def test_get_contacts_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_contacts():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_leads_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_leads():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_opportunities_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_opportunities():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_campaigns_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_campaigns():
+            assert record is None
+
+
+@pytest.mark.asyncio
+async def test_get_cases_when_not_queryable_yields_nothing(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
+        async for record in source.salesforce_client.get_cases():
+            assert record is None
+
+
+@pytest.mark.asyncio
 async def test_get_opportunities_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "opportunity_id",
-            "body": "A fellowship of the races of Middle Earth",
-            "content_source_id": "opportunity_id",
-            "created_at": "",
-            "last_updated": "",
-            "next_step": None,
-            "owner": "Frodo",
-            "owner_email": "frodo@tlotr.com",
-            "source": "salesforce",
-            "status": "Closed Won",
-            "title": "The Fellowship",
-            "type": "opportunity",
-            "url": f"{TEST_BASE_URL}/opportunity_id",
+            "_timestamp": "2023-12-12T00:00:00Z",
+            "url": "https://fake.my.salesforce.com/opportunity_id",
+            "attributes": {
+                "type": "Opportunity",
+                "url": "/services/data/v59.0/sobjects/Opportunity/opportunity_id",
+            },
+            "Description": "A fellowship of the races of Middle Earth",
+            "Owner": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Email": "frodo@tlotr.com",
+                "Name": "Frodo",
+            },
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "Name": "The Fellowship",
+            "StageName": "Closed Won",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "Id": "opportunity_id",
         }
 
         mock_responses.get(
@@ -823,7 +1105,7 @@ async def test_get_opportunities_when_success(mock_responses):
         )
         async for record in source.salesforce_client.get_opportunities():
             assert record == OPPORTUNITY_RESPONSE_PAYLOAD["records"][0]
-            assert source.doc_mapper.map_opportunity(record) == expected_doc
+            assert source.doc_mapper.map_salesforce_objects(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -843,22 +1125,26 @@ async def test_get_contacts_when_success(mock_responses):
 
         expected_doc = {
             "_id": "contact_id",
-            "account": "TLOTR",
-            "account_url": f"{TEST_BASE_URL}/account_id",
-            "body": "The White",
-            "created_at": "",
-            "email": "gandalf@tlotr.com",
-            "job_title": "Wizard",
-            "last_updated": "",
-            "lead_source": "Partner Referral",
-            "owner": "Frodo",
-            "owner_url": f"{TEST_BASE_URL}/user_id",
-            "phone": "12345678",
-            "source": "salesforce",
-            "thumbnail": f"{TEST_BASE_URL}/services/images/photo/photo_id",
-            "title": "Gandalf",
-            "type": "contact",
-            "url": f"{TEST_BASE_URL}/contact_id",
+            "_timestamp": "2023-12-12T00:00:00Z",
+            "url": "https://fake.my.salesforce.com/contact_id",
+            "attributes": {
+                "type": "Contact",
+                "url": "/services/data/v59.0/sobjects/Contact/contact_id",
+            },
+            "OwnerId": "user_id",
+            "Phone": "12345678",
+            "Name": "Gandalf",
+            "AccountId": "account_id",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "Description": "The White",
+            "Title": "Wizard",
+            "CreatedDate": "2023-12-12T00:00:00.000+0000",
+            "LeadSource": "Partner Referral",
+            "PhotoUrl": "/services/images/photo/photo_id",
+            "Id": "contact_id",
+            "Email": "gandalf@tlotr.com",
+            "Account": {"Id": "account_id", "Name": "TLOTR"},
+            "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
         }
 
         mock_responses.get(
@@ -868,7 +1154,7 @@ async def test_get_contacts_when_success(mock_responses):
         )
         async for record in source.salesforce_client.get_contacts():
             assert record == expected_record
-            assert source.doc_mapper.map_contact(record) == expected_doc
+            assert source.doc_mapper.map_salesforce_objects(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -887,30 +1173,33 @@ async def test_get_leads_when_success(mock_responses):
 
         expected_doc = {
             "_id": "lead_id",
-            "body": "Forger of the One Ring",
-            "company": "Mordor Inc.",
-            "converted_account": None,
-            "converted_account_url": None,
-            "converted_at": None,
-            "converted_contact": None,
-            "converted_contact_url": None,
-            "converted_opportunity": None,
-            "converted_opportunity_url": None,
-            "created_at": None,
-            "email": "sauron@tlotr.com",
-            "job_title": "Dark Lord",
-            "last_updated": "",
-            "lead_source": "Partner Referral",
-            "owner": "Frodo",
-            "owner_url": f"{TEST_BASE_URL}/user_id",
-            "phone": "09876543",
-            "rating": "Hot",
-            "source": "salesforce",
-            "status": "Working - Contacted",
-            "title": "Sauron",
-            "thumbnail": f"{TEST_BASE_URL}/services/images/photo/photo_id",
-            "type": "lead",
-            "url": f"{TEST_BASE_URL}/lead_id",
+            "_timestamp": "2023-12-12T00:00:00Z",
+            "url": "https://fake.my.salesforce.com/lead_id",
+            "attributes": {
+                "type": "Lead",
+                "url": "/services/data/v59.0/sobjects/Lead/lead_id",
+            },
+            "Name": "Sauron",
+            "Status": "Working - Contacted",
+            "Company": "Mordor Inc.",
+            "Description": "Forger of the One Ring",
+            "Email": "sauron@tlotr.com",
+            "Phone": "09876543",
+            "Title": "Dark Lord",
+            "PhotoUrl": "/services/images/photo/photo_id",
+            "Rating": "Hot",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "LeadSource": "Partner Referral",
+            "OwnerId": "user_id",
+            "ConvertedAccountId": None,
+            "ConvertedContactId": None,
+            "ConvertedOpportunityId": None,
+            "ConvertedDate": None,
+            "Id": "lead_id",
+            "Owner": {"Id": "user_id", "Name": "Frodo", "Email": "frodo@tlotr.com"},
+            "ConvertedAccount": {},
+            "ConvertedContact": {},
+            "ConvertedOpportunity": {},
         }
 
         mock_responses.get(
@@ -920,7 +1209,7 @@ async def test_get_leads_when_success(mock_responses):
         )
         async for record in source.salesforce_client.get_leads():
             assert record == expected_record
-            assert source.doc_mapper.map_lead(record) == expected_doc
+            assert source.doc_mapper.map_salesforce_objects(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -928,22 +1217,38 @@ async def test_get_campaigns_when_success(mock_responses):
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "campaign_id",
-            "body": "Orcs are raiding the Gap of Rohan",
-            "campaign_type": "War",
-            "created_at": None,
-            "end_date": "",
-            "last_updated": None,
-            "owner": "Saruman",
-            "owner_email": "saruman@tlotr.com",
-            "parent": "Théoden",
-            "parent_url": f"{TEST_BASE_URL}/user_id",
-            "source": "salesforce",
-            "start_date": "",
-            "status": "planned",
-            "state": "active",
-            "title": "Defend the Gap",
-            "type": "campaign",
-            "url": f"{TEST_BASE_URL}/campaign_id",
+            "_timestamp": "2023-12-12T00:00:00Z",
+            "url": "https://fake.my.salesforce.com/campaign_id",
+            "attributes": {
+                "type": "Campaign",
+                "url": "/services/data/v59.0/sobjects/Campaign/campaign_id",
+            },
+            "Name": "Defend the Gap",
+            "IsActive": True,
+            "Type": "War",
+            "Description": "Orcs are raiding the Gap of Rohan",
+            "Status": "planned",
+            "Id": "campaign_id",
+            "LastModifiedDate": "2023-12-12T00:00:00.000+0000",
+            "Parent": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Théoden",
+            },
+            "Owner": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
+                },
+                "Id": "user_id",
+                "Name": "Saruman",
+                "Email": "saruman@tlotr.com",
+            },
+            "StartDate": "",
+            "EndDate": "",
         }
 
         mock_responses.get(
@@ -953,7 +1258,7 @@ async def test_get_campaigns_when_success(mock_responses):
         )
         async for record in source.salesforce_client.get_campaigns():
             assert record == CAMPAIGN_RESPONSE_PAYLOAD["records"][0]
-            assert source.doc_mapper.map_campaign(record) == expected_doc
+            assert source.doc_mapper.map_salesforce_objects(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -967,31 +1272,150 @@ async def test_get_cases_when_success(mock_responses):
 
         expected_doc = {
             "_id": "case_id",
-            "account_id": "account_id",
-            "body": "I know what it is you saw\n\nThe One Ring\n\nRing?!\nMaybe I should do something?\n\nYou have my axe",
-            "created_at": "2023-08-01T00:00:00.000+0000",
-            "created_by": "Gandalf",
-            "created_by_email": "gandalf@tlotr.com",
-            "case_number": "00001234",
-            "is_closed": False,
-            "last_updated": "2023-08-11T00:00:00.000+0000",
-            "owner": "Frodo",
-            "owner_email": "frodo@tlotr.com",
-            "participant_emails": [
-                "elrond@tlotr.com",
-                "frodo@tlotr.com",
-                "galadriel@tlotr.com",
-                "gandalf@tlotr.com",
-                "gimli@tlotr.com",
-                "samwise@tlotr.com",
+            "_timestamp": "2023-08-11T00:00:00Z",
+            "url": "https://fake.my.salesforce.com/case_id",
+            "attributes": {
+                "type": "Case",
+                "url": "/services/data/v59.0/sobjects/Case/case_id",
+            },
+            "Status": "New",
+            "AccountId": "account_id",
+            "Description": "The One Ring",
+            "Subject": "It needs to be destroyed",
+            "Owner": {
+                "attributes": {
+                    "type": "Name",
+                    "url": "/services/data/v59.0/sobjects/User/user_id",
+                },
+                "Email": "frodo@tlotr.com",
+                "Name": "Frodo",
+                "Id": "user_id",
+            },
+            "CreatedBy": {
+                "attributes": {
+                    "type": "User",
+                    "url": "/services/data/v59.0/sobjects/User/user_id_2",
+                },
+                "Id": "user_id_2",
+                "Email": "gandalf@tlotr.com",
+                "Name": "Gandalf",
+            },
+            "Id": "case_id",
+            "EmailMessages": {
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "EmailMessage",
+                            "url": "/services/data/v59.0/sobjects/EmailMessage/email_message_id",
+                        },
+                        "CreatedDate": "2023-08-11T00:00:00.000+0000",
+                        "LastModifiedById": "user_id",
+                        "ParentId": "case_id",
+                        "MessageDate": "2023-08-01T00:00:00.000+0000",
+                        "TextBody": "Maybe I should do something?",
+                        "Subject": "Ring?!",
+                        "FromName": "Frodo",
+                        "FromAddress": "frodo@tlotr.com",
+                        "ToAddress": "gandalf@tlotr.com",
+                        "CcAddress": "elrond@tlotr.com",
+                        "BccAddress": "samwise@tlotr.com",
+                        "Status": "",
+                        "IsDeleted": False,
+                        "FirstOpenedDate": "2023-08-02T00:00:00.000+0000",
+                        "CreatedBy": {
+                            "attributes": {
+                                "type": "Name",
+                                "url": "/services/data/v59.0/sobjects/User/user_id",
+                            },
+                            "Name": "Frodo",
+                            "Id": "user_id",
+                            "Email": "frodo@tlotr.com",
+                        },
+                    }
+                ]
+            },
+            "CaseComments": {
+                "records": [
+                    {
+                        "attributes": {
+                            "type": "CaseComment",
+                            "url": "/services/data/v59.0/sobjects/CaseComment/case_comment_id",
+                        },
+                        "CreatedDate": "2023-08-03T00:00:00.000+0000",
+                        "LastModifiedById": "user_id_3",
+                        "CommentBody": "You have my axe",
+                        "LastModifiedDate": "2023-08-03T00:00:00.000+0000",
+                        "CreatedBy": {
+                            "attributes": {
+                                "type": "Name",
+                                "url": "/services/data/v59.0/sobjects/User/user_id_3",
+                            },
+                            "Name": "Gimli",
+                            "Id": "user_id_3",
+                            "Email": "gimli@tlotr.com",
+                        },
+                        "ParentId": "case_id",
+                        "Id": "case_comment_id",
+                    }
+                ]
+            },
+            "CaseNumber": "00001234",
+            "ParentId": "",
+            "CreatedDate": "2023-08-01T00:00:00.000+0000",
+            "IsDeleted": False,
+            "IsClosed": False,
+            "LastModifiedDate": "2023-08-11T00:00:00.000+0000",
+            "Feeds": [
+                {
+                    "attributes": {
+                        "type": "CaseFeed",
+                        "url": "/services/data/v59.0/sobjects/CaseFeed/case_feed_id",
+                    },
+                    "CreatedBy": {
+                        "attributes": {
+                            "type": "Name",
+                            "url": "/services/data/v59.0/sobjects/User/user_id_4",
+                        },
+                        "Id": "user_id_4",
+                        "Email": "galadriel@tlotr.com",
+                        "Name": "Galadriel",
+                    },
+                    "CommentCount": 2,
+                    "LastModifiedDate": "2023-08-09T00:00:00.000+0000",
+                    "Type": "TextPost",
+                    "Title": None,
+                    "IsDeleted": False,
+                    "LinkUrl": "https://fake.my.salesforce.com/case_feed_id",
+                    "CreatedDate": "2023-08-08T00:00:00.000+0000",
+                    "Id": "case_feed_id",
+                    "FeedComments": {
+                        "records": [
+                            {
+                                "attributes": {
+                                    "type": "FeedComment",
+                                    "url": "/services/data/v59.0/sobjects/FeedComment/feed_comment_id",
+                                },
+                                "CreatedBy": {
+                                    "attributes": {
+                                        "type": "Name",
+                                        "url": "/services/data/v59.0/sobjects/User/user_id_4",
+                                    },
+                                    "Id": "user_id_4",
+                                    "Email": "galadriel@tlotr.com",
+                                    "Name": "Galadriel",
+                                },
+                                "IsDeleted": False,
+                                "Id": "feed_comment_id",
+                                "ParentId": "case_feed_id",
+                                "LastEditById": "user_id_4",
+                                "LastEditDate": "2023-08-08T00:00:00.000+0000",
+                                "CommentBody": "I know what it is you saw",
+                            }
+                        ]
+                    },
+                    "ParentId": "case_id",
+                }
             ],
-            "participant_ids": ["user_id", "user_id_2", "user_id_3", "user_id_4"],
-            "participants": ["Frodo", "Galadriel", "Gandalf", "Gimli"],
-            "source": "salesforce",
-            "status": "New",
-            "title": "It needs to be destroyed",
-            "type": "case",
-            "url": f"{TEST_BASE_URL}/case_id",
         }
 
         mock_responses.get(
@@ -1006,7 +1430,7 @@ async def test_get_cases_when_success(mock_responses):
         )
         async for record in source.salesforce_client.get_cases():
             assert record == expected_record
-            assert source.doc_mapper.map_case(record) == expected_doc
+            assert source.doc_mapper.map_salesforce_objects(record) == expected_doc
 
 
 @pytest.mark.asyncio
@@ -1036,6 +1460,7 @@ async def test_get_all_with_content_docs_when_success(
                 "campaign_id",
                 "case_id",
                 "contact_id",
+                "custom_object_id",
                 "lead_id",
                 "opportunity_id",
             ],  # contains every SObject that is connected to this doc
@@ -1061,9 +1486,8 @@ async def test_get_all_with_content_docs_when_success(
 
         content_document_records = []
         async for record, _ in source.get_docs():
-            if record["type"] == "content_document":
+            if record.get("type") == "content_document":
                 content_document_records.append(record)
-
         TestCase().assertCountEqual(content_document_records, [expected_doc])
 
 
@@ -1092,6 +1516,7 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
                     "campaign_id",
                     "case_id",
                     "contact_id",
+                    "custom_object_id",
                     "lead_id",
                     "opportunity_id",
                 ],  # contains every SObject that is connected to this doc
@@ -1115,10 +1540,193 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
 
             content_document_records = []
             async for record, _ in source.get_docs():
-                if record["type"] == "content_document":
+                if record.get("type") == "content_document":
                     content_document_records.append(record)
 
             TestCase().assertCountEqual(content_document_records, [expected_doc])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "soql_query, modified_query",
+    [
+        ("SELECT Id, Name FROM Account", "SELECT Id, Name FROM Account"),
+        (
+            "SELECT FIELDS(ALL) FROM Account",
+            "SELECT FIELDS(ALL) FROM Account LIMIT 200 OFFSET 0",
+        ),
+        (
+            "SELECT FIELDS(CUSTOM) FROM Account LIMIT 200",
+            "SELECT FIELDS(CUSTOM) FROM Account LIMIT 200 OFFSET 0",
+        ),
+        (
+            "SELECT FIELDS(ALL) FROM Account LIMIT 200 OFFSET 0",
+            "SELECT FIELDS(ALL) FROM Account LIMIT 200 OFFSET 0",
+        ),
+    ],
+)
+async def test_modify_query(soql_query, modified_query):
+    async with create_salesforce_source() as source:
+        query = source.salesforce_client.modify_soql_query(soql_query)
+        assert query == modified_query
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "soql_query, modified_query",
+    [
+        (
+            "SELECT Id, Name FROM Account",
+            "SELECT Id, Name, LastModifiedDate FROM Account",
+        ),
+        (
+            "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
+            "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
+        ),
+    ],
+)
+async def test_add_last_modified_date(soql_query, modified_query):
+    async with create_salesforce_source() as source:
+        query = source.salesforce_client._add_last_modified_date(soql_query)
+        assert query == modified_query
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "soql_query, modified_query",
+    [
+        ("SELECT Id, Name FROM Account", "SELECT Id, Name FROM Account"),
+        (
+            "SELECT FIELDS(CUSTOM), LastModifiedDate FROM Account LIMIT 200",
+            "SELECT FIELDS(CUSTOM), LastModifiedDate, Id FROM Account LIMIT 200",
+        ),
+    ],
+)
+async def test_add_id(soql_query, modified_query):
+    async with create_salesforce_source() as source:
+        query = source.salesforce_client._add_id(soql_query)
+        assert query == modified_query
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_docs",
+    [
+        (
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "query": "SELECT Id, Name FROM Account",
+                                "language": "SOQL",
+                            }
+                        ]
+                    }
+                }
+            ),
+            [EXPECTED_ACCOUNT_RESPONSE, EXPECTED_CONTENT_RESPONSE],
+        ),
+        (
+            Filter(
+                {
+                    ADVANCED_SNIPPET: {
+                        "value": [
+                            {
+                                "query": "SELECT FIELDS(STANDARD) FROM Student",
+                                "language": "SOQL",
+                            }
+                        ]
+                    }
+                }
+            ),
+            [],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_for_soql_query(mock_responses, filtering, expected_docs):
+    async with create_salesforce_source() as source:
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+
+        resultant_docs = []
+        async for record, _ in source.get_docs(filtering):
+            resultant_docs.append(record)
+
+        assert expected_docs == resultant_docs
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {
+                            "query": r"FIND {Alex} in ALL FIELDS",
+                            "language": "SOSL",
+                        }
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_for_sosl_query(mock_responses, filtering):
+    async with create_salesforce_source() as source:
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, status=200, payload=SOSL_RESPONSE_PAYLOAD
+        )
+
+        resultant_docs = []
+        async for record, _ in source.get_docs(filtering):
+            resultant_docs.append(record)
+
+
+@pytest.mark.asyncio
+async def test_remote_validation(mock_responses):
+    async with create_salesforce_source() as source:
+        filtering = [{"query": "SELECT Id, Name FROM Account", "language": "SOQL"}]
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+        result = await SalesforceAdvancedRulesValidator(source=source).validate(
+            advanced_rules=filtering
+        )
+        assert result.is_valid is True
+
+
+@pytest.mark.asyncio
+async def test_remote_validation_negative():
+    async with create_salesforce_source() as source:
+        filtering = [
+            {
+                "query": "SELECT Id, Name FROM Account",
+                "language": "SQL",
+            }
+        ]
+        result = await SalesforceAdvancedRulesValidator(source=source).validate(
+            advanced_rules=filtering
+        )
+        assert result.is_valid is False
 
 
 @pytest.mark.asyncio

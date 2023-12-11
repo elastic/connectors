@@ -20,7 +20,6 @@ from connectors.es.sink import (
     OP_INDEX,
     OP_UPSERT,
     AsyncBulkRunningError,
-    ContentIndexNameInvalid,
     Extractor,
     ForceCanceledError,
     Sink,
@@ -48,15 +47,6 @@ SYNC_RULES_ENABLED = True
 SYNC_RULES_DISABLED = False
 CONTENT_EXTRACTION_ENABLED = True
 CONTENT_EXTRACTION_DISABLED = False
-
-
-@pytest.mark.asyncio
-async def test_prepare_content_index_raise_error_when_index_name_invalid():
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = SyncOrchestrator(config)
-
-    with pytest.raises(ContentIndexNameInvalid):
-        await es.prepare_content_index("lalalalalalalala woohooo")
 
 
 @pytest.mark.asyncio
