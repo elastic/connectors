@@ -9,7 +9,7 @@ import os
 import urllib.parse
 from functools import cached_property, partial
 
-from aiogoogle import Aiogoogle
+from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
@@ -285,10 +285,14 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     userProject=self._google_storage_client.user_project_id,
                 ):
                     yield blob
-            except Exception as exception:
-                self._logger.warning(
-                    f"Something went wrong while fetching blobs from {bucket['name']}. Error: {exception}"
-                )
+            except HTTPError as exception:
+                exception_log_msg = f"Permission denied for {bucket['name']} while fetching blobs. Exception: {exception}."
+                if exception.res.status_code == 403:
+                    self._logger.warning(exception_log_msg)
+                else:
+                    self._logger.error(
+                        f"Something went wrong while fetching blobssss from {bucket['name']}. Error: {exception}"
+                    )
 
     def prepare_blob_document(self, blob):
         """Apply key mappings to the blob document.
