@@ -1,7 +1,9 @@
+import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from elasticsearch import ApiError
 
@@ -236,6 +238,10 @@ def test_connector_create_with_native_flags(
     "connectors.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[True, False]),
 )
+@patch(
+    "connectors.cli.connector.Connector._Connector__create_api_key",
+    AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
+)
 def test_connector_create_from_index(patch_click_confirm):
     runner = CliRunner()
 
@@ -259,7 +265,7 @@ def test_connector_create_from_index(patch_click_confirm):
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
-            cli, ["connector", "create", "--from_index"], input=input_params
+            cli, ["connector", "create", "--from-index"], input=input_params
         )
 
         patched_create.assert_called_once()
@@ -276,7 +282,7 @@ def test_connector_create_from_index(patch_click_confirm):
             False,
             False,
             True,
-            "The flag `--from_index` was provided but index doesn't exist",
+            "The flag `--from-index` was provided but index doesn't exist",
         ],
         [False, True, False, "This index is already a connector"],
         [True, True, True, "This index is already a connector"],
@@ -313,7 +319,7 @@ def test_connector_create_fails_when_index_or_connector_exists(
         ) as patched_create:
             args = ["connector", "create"]
             if from_index_flag:
-                args.append("--from_index")
+                args.append("--from-index")
 
             result = runner.invoke(cli, args, input=input_params)
 
@@ -321,6 +327,109 @@ def test_connector_create_fails_when_index_or_connector_exists(
             assert result.exit_code == 1
 
             assert expected_error in result.output
+
+
+@patch(
+    "connectors.cli.connector.Connector._Connector__create_api_key",
+    AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
+)
+@patch(
+    "connectors.cli.index.Index.index_or_connector_exists",
+    MagicMock(return_value=[False, False]),
+)
+def test_connector_create_from_file():
+    runner = CliRunner()
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            "test-connector",
+            "mongodb",
+            "en",
+        ]
+    )
+
+    with patch(
+        "connectors.protocol.connectors.ConnectorIndex.index",
+        AsyncMock(return_value={"_id": "new_connector_id"}),
+    ) as patched_create:
+        with runner.isolated_filesystem():
+            with open("mongodb.json", "w") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "host": "localhost",
+                            "user": "test",
+                            "password": "test",
+                            "database": "test",
+                            "collection": "test",
+                            "direct_connection": False,
+                            "ssl_enabled": False,
+                        }
+                    )
+                )
+            result = runner.invoke(
+                cli,
+                ["connector", "create", "--from-file", "mongodb.json"],
+                input=input_params,
+            )
+
+            patched_create.assert_called_once()
+            assert result.exit_code == 0
+
+            assert "has been created" in result.output
+
+
+@patch(
+    "connectors.cli.connector.Connector._Connector__create_api_key",
+    AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
+)
+@patch(
+    "connectors.cli.index.Index.index_or_connector_exists",
+    MagicMock(return_value=[False, False]),
+)
+def test_connector_create_and_update_the_service_config():
+    runner = CliRunner()
+    connector_id = "new_connector_id"
+    service_type = "mongodb"
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            "test_connector",
+            service_type,
+            "en",
+            "http://localhost/",
+            "username",
+            "password",
+            "database",
+            "collection",
+            "False",
+        ]
+    )
+
+    with patch(
+        "connectors.protocol.connectors.ConnectorIndex.index",
+        AsyncMock(return_value={"_id": connector_id}),
+    ) as patched_create:
+        with runner.isolated_filesystem():
+            with open("config.yml", "w") as f:
+                f.write(yaml.dump({}))
+
+            result = runner.invoke(
+                cli, ["connector", "create", "--update-config"], input=input_params
+            )
+            config = yaml.load(open("config.yml"), Loader=yaml.FullLoader)[
+                "connectors"
+            ][0]
+
+            patched_create.assert_called_once()
+            assert os.path.exists("config.yml") is True
+            assert config["api_key"] == "encoded_api_key"
+            assert config["connector_id"] == connector_id
+            assert config["service_type"] == service_type
+            assert result.exit_code == 0
+            assert "has been created" in result.output
 
 
 def test_index_help_page():

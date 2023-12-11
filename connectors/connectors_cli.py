@@ -11,6 +11,7 @@ a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
 import asyncio
+import json
 import os
 
 import click
@@ -148,17 +149,17 @@ def validate_language(ctx, param, value):
 
 @click.command(help="Creates a new connector and a search index")
 @click.option(
-    "--index_name",
+    "--index-name",
     prompt=f"{click.style('?', blink=True, fg='green')} Index name",
     help="Name of the index. If the connector will be native, `search-` will be prepended to the index name.",
 )
 @click.option(
-    "--service_type",
+    "--service-type",
     prompt=f"{click.style('?', blink=True, fg='green')} Service type",
     type=click.Choice(list(_default_config()["sources"].keys()), case_sensitive=False),
 )
 @click.option(
-    "--index_language",
+    "--index-language",
     prompt=f"{click.style('?', blink=True, fg='green')} Index language (leave empty for universal) {language_keys}",
     default="",
     callback=validate_language,
@@ -171,18 +172,50 @@ def validate_language(ctx, param, value):
     help="Create a native connector rather than a connector client.",
 )
 @click.option(
-    "--from_index",
+    "--from-index",
     default=False,
     is_flag=True,
     help="Create a connector from an index that already exists. Each index can only have one connector. All current docs for the index will be deleted during the first sync.",
 )
+@click.option(
+    "--from-file",
+    type=click.Path(exists=True),
+    help="Use a JSON file to supply the connector configuration.",
+)
+@click.option(
+    "--update-config",
+    default=False,
+    is_flag=True,
+    help="Update the config file with the new non-native connector configuration.",
+)
+@click.option(
+    "--connector-service-config",
+    type=click.Path(),
+    default="config.yml",
+    help="Path to the connector service config file. Used in combination with --update-config flag.",
+)
 @click.pass_obj
-def create(obj, index_name, service_type, index_language, is_native, from_index):
+def create(
+    obj,
+    index_name,
+    service_type,
+    index_language,
+    is_native,
+    from_index,
+    from_file,
+    update_config,
+    connector_service_config,
+):
     if is_native:
         index_name = f"search-{index_name}"
         click.echo(
             f"Prepending {click.style('search-', fg='green')} to index name because it will be a native connector. New index name is {click.style(index_name, fg='green')}."
         )
+
+    connector_configuration = {}
+    if from_file:
+        with open(from_file) as fd:
+            connector_configuration = json.load(fd)
 
     index = Index(config=obj["config"]["elasticsearch"])
     connector = Connector(obj["config"]["elasticsearch"])
@@ -191,6 +224,13 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
     )
 
     def prompt():
+        if from_file:
+            if key in connector_configuration:
+                return connector_configuration[key]
+            else:
+                click.echo(f"{item['label']} is not found in {from_file}")
+                raise click.Abort()
+
         return click.prompt(
             f"{click.style('?', blink=True, fg='green')} {item['label']}",
             default=item.get("value", None),
@@ -202,7 +242,7 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
     if index_exists and not from_index:
         click.echo(
             click.style(
-                f"Index for {index_name} already exists. Include the flag `--from_index` to create a connector for this index.",
+                f"Index for {index_name} already exists. Include the flag `--from-index` to create a connector for this index.",
                 fg="red",
             ),
             err=True,
@@ -212,7 +252,7 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
     if not index_exists and from_index:
         click.echo(
             click.style(
-                "The flag `--from_index` was provided but index doesn't exist.",
+                "The flag `--from-index` was provided but index doesn't exist.",
                 fg="red",
             ),
             err=True,
@@ -251,20 +291,42 @@ def create(obj, index_name, service_type, index_language, is_native, from_index)
         language=index_language,
         from_index=from_index,
     )
+
     click.echo(
         "Connector (name: "
         + click.style(index_name, fg="green")
         + ", ID: "
-        + click.style(result[1], fg="green")
+        + click.style(result["id"], fg="green")
         + ", service_type: "
         + click.style(service_type, fg="green")
+        + ", api_key: "
+        + click.style(result["api_key"], fg="green")
         + ") has been created!"
     )
+
     if not is_native:
-        # TODO configure API key here
-        click.echo(
-            "This connector still requires an API key. Please configure this in Kibana."
-        )
+        if not update_config:
+            return
+        else:
+            service_config = yaml.safe_load(open(connector_service_config))
+            if not service_config:
+                service_config = {}
+
+            if "connectors" not in service_config:
+                service_config["connectors"] = []
+
+            service_config["connectors"].append(
+                {
+                    "connector_id": result["id"],
+                    "service_type": service_type,
+                    "api_key": result["api_key"],
+                }
+            )
+
+            with open(connector_service_config, "w") as f:
+                yaml.dump(service_config, f)
+
+            click.echo(f"New connector has been added to {connector_service_config}")
 
 
 connector.add_command(create)

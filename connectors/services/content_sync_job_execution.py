@@ -6,11 +6,8 @@
 
 from functools import cached_property
 
-from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.services.job_execution import JobExecutionService
-
-DEFAULT_MAX_CONCURRENT_CONTENT_SYNCS = 1
 
 
 class ContentSyncJobExecutionService(JobExecutionService):
@@ -30,22 +27,7 @@ class ContentSyncJobExecutionService(JobExecutionService):
 
     @cached_property
     def max_concurrency(self):
-        max_concurrent_content_syncs = self.service_config.get(
-            "max_concurrent_content_syncs"
-        )
-
-        if max_concurrent_content_syncs is not None:
-            return max_concurrent_content_syncs
-
-        if "max_concurrent_syncs" in self.service_config:
-            logger.warning(
-                "'max_concurrent_syncs' is deprecated. Use 'max_concurrent_content_syncs' in 'config.yml'."
-            )
-
-        # keep for backwards compatibility
-        return self.service_config.get(
-            "max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_CONTENT_SYNCS
-        )
+        return self.service_config.get("max_concurrent_content_syncs")
 
     def should_execute(self, connector, sync_job):
         if connector.last_sync_status == JobStatus.IN_PROGRESS:
