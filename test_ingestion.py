@@ -5,12 +5,15 @@ from faker import Faker
 import functools
 from datetime import datetime, timedelta
 import random
+import logging
 
 INDEX="testing-script-ingestion"
-BATCH_SIZE=350
+BATCH_SIZE=250
 MAX_PARALLEL_PROCESSES=25
 
 PROC = random.randint(0, 100000000)
+
+logging.basicConfig(level=logging.DEBUG)
 
 class IngestionStats:
     def __init__(self):
@@ -89,32 +92,53 @@ class IngesterPool:
         self.queue = Queue()
         self.coordinator = Coordinator(self)
         self.client = client
-        self.process_count = MAX_PARALLEL_PROCESSES
+        self.process_count = 5 # int((1 + MAX_PARALLEL_PROCESSES) / 2) # TODO: lalala why?
         self.ingesters = []
+        self.ingester_coros = []
 
-    async def run(self, yielder):
-       await self.watch() 
-
-       for doc in yielder:
-            await self.queue.put(doc)
+    async def run(self):
+        await self.watch() 
 
     async def watch(self):
-        for i in range(self.process_count):
-            ingester = Ingester(self, self.index, self.coordinator, self.client)
+        print(f"Watching with {self.process_count} process")
+        
+        for _ in range(self.process_count):
+            ingester = Ingester(self.index, self.coordinator, self.client)
             self.ingesters.append(ingester)
-            await ingester.watch(self.queue)
+            self.ingester_coros.append(asyncio.create_task(ingester.watch(self.queue)))
+
+        while len(self.ingester_coros) > 0:
+            await asyncio.gather(*self.ingester_coros)
+
+    async def allocate(self):
+        print(f"Allocating one more ingester")
+        ingester = Ingester(self.index, self.coordinator, self.client)
+        self.ingesters.append(ingester)
+
+        self.ingester_coros.append(asyncio.create_task(ingester.watch(self.queue)))
+
+
+    async def close(self):
+        for ingester in self.ingesters:
+            await ingester.close()
+
+        for ingester_coro in self.ingester_coros:
+            ingester_coro.cancel()
+
+        self.ingesters = []
 
 
 class Ingester:
     def __init__(self, index, coordinator, client):
         self.running = False
         self.flush_threshold = BATCH_SIZE
-        self.flush_timeout_threshold = datetime.timediff(seconds=1)
         self.index = index
         self.coordinator = coordinator
         self.client = client
+        self.watch_task = None
 
     async def watch(self, queue):
+        print(f"[INGESTER {self}] Watching over {queue}")
         self.running = True
 
         last_flush = datetime.now()
@@ -124,12 +148,17 @@ class Ingester:
             doc = await queue.pop()
 
             items.append(doc)
-            
-            if len(items) > self.flush_threshold:
-                self.flush(items)
 
-    async  def close(self):
+            if len(items) > self.flush_threshold:
+                await self.flush(items)
+                items = []
+                last_flush = datetime.now()
+                print(f"FLUSHED at {last_flush}")
+
+    async def close(self):
         self.running = False
+        if self.watch_task is not None:
+            self.watch_task.cancel()
 
     async def flush(self, items):
         ops = []
@@ -139,26 +168,30 @@ class Ingester:
                 ops.append({"index": {"_index": self.index, "_id": doc.pop("_id")}})
                 ops.append(doc)
 
-                resp = await self.client.bulk(operations=ops)
-                if resp['errors']:
-                    print(f"[INGESTER {self}] HAS ERRORS")
-                    self.coordinator.ingestion_failed(self)
-                    await asyncio.sleep(10)
-                else:
-                    self.coordinator.ingestion_succeeded(self)
-                    print(f"[INGESTER {self}] DONE, Errors: {resp['errors']}")
+            print(f"[INGESTER {self}] SENDING A BATCH")
+            resp = await self.client.bulk(operations=ops)
+            if resp['errors']:
+                print(f"[INGESTER {self}] HAS ERRORS")
+                await self.coordinator.ingestion_failed(self)
+                await asyncio.sleep(10)
+            else:
+                await self.coordinator.ingestion_succeeded(self)
+                print(f"[INGESTER {self}] DONE, Errors: {resp['errors']}")
         except ConnectionTimeout:
+                await self.coordinator.ingestion_failed(self)
                 print(f"[INGESTER {self}] Timed out!")
-                self.stats.failure()
                 await asyncio.sleep(10)
         except ApiError as e:
+            await self.coordinator.ingestion_failed(self)
             if e.status_code == 429:
                 # Slow down, cowboy!
                 print(f"[INGESTER {self}] Throttled!")
-                self.stats.failure()
                 await asyncio.sleep(10)
             else:
-                raise
+                print(e)
+        except Exception as e:
+            await self.coordinator.ingestion_failed(self)
+            print(f"[INGESTER {self}] Disconnected!")
 
 
 class Coordinator:
@@ -166,117 +199,55 @@ class Coordinator:
         self.min_process_count = 1
         self.max_process_count = MAX_PARALLEL_PROCESSES
         self.ingester_pool = ingester_pool
-
-    def ingestion_failed(self, ingester):
-        pass
-
-    def ingestion_succeeded(self, ingester):
-        pass
+        self.successful_batches = 0
+        self.failed_batches = 0
 
 
-class Ingester:
-    def __init__(self):
-        self.client = AsyncElasticsearch(
-            # ["http://elastic:changeme@localhost:9200"],
-            request_timeout=30,
-            retry_on_timeout=True
-        )
-        self.fake = Faker()
-        self.cached_random_text = self.fake.paragraph(nb_sentences=100)
-        self.parallel_process_count = MAX_PARALLEL_PROCESSES
-        self.stats = IngestionStats()
+    async def ingestion_failed(self, ingester):
+        self.failed_batches += 1
+        if self.failed_batches % 10 == 0:
+            print(f"Failed batches: {self.failed_batches}")
 
 
-    async def ensure_content_idx_exists(self, idx):
-        await self.client.indices.create(index=idx, ignore=400)
-        print(f"Ensured that index {idx} exists")
-
-
-    def get_random_record(self):
-        return {
-            "_id": self.fake.bothify(text='????-########'),
-            "text": self.cached_random_text
-        }
-
-
-    async def ingest(self, index, ingester_idx):
-        while True:
-            try:
-                if ingester_idx > self.parallel_process_count:
-                    await asyncio.sleep(10)
-                    await asyncio.sleep(10)
-                    print(f"[INGESTER {ingester_idx}] Not working")
-                    return
-
-                ops = []
-                for i in range(BATCH_SIZE):
-                    record = self.get_random_record()
-                    
-                    ops.append({"index": {"_index": index, "_id": record.pop("_id")}})
-                    ops.append(record)
-
-                print(f"[INGESTER {ingester_idx}] Ingesting yet another batch of {BATCH_SIZE} docs")
-                resp = await self.client.bulk(operations=ops)
-                if resp['errors']:
-                    print(f"[INGESTER {ingester_idx}] HAS ERRORS")
-                    self.stats.failure()
-                    await asyncio.sleep(10)
+    async def ingestion_succeeded(self, ingester):
+        self.successful_batches += 1
+        if self.successful_batches % 10 == 0:
+            print(f"Successful batches: {self.successful_batches}")
+            if self.failed_batches == 0:
+                if self.ingester_pool.process_count < self.max_process_count:
+                    await self.ingester_pool.allocate()
                 else:
-                    self.stats.success()
-                    print(f"[INGESTER {ingester_idx}] DONE, Errors: {resp['errors']}")
-            except ConnectionTimeout:
-                    print(f"[INGESTER {ingester_idx}] Timed out!")
-                    self.stats.failure()
-                    await asyncio.sleep(10)
-            except ApiError as e:
-                if e.status_code == 429:
-                    # Slow down, cowboy!
-                    print(f"[INGESTER {ingester_idx}] Throttled!")
-                    self.stats.failure()
-                    await asyncio.sleep(10)
-                else:
-                    raise
-
-
-    async def run(self):
-        ingest_coros = []
-        for i in range(self.parallel_process_count):
-            task = asyncio.create_task(self.ingest(INDEX, i))
-            ingest_coros.append(task)
-
-        ingest_coros.append(asyncio.create_task(self.monitor()))
-
-        await asyncio.gather(*ingest_coros)
-
-
-    async def monitor(self):
-        while True:
-            print(f"[STATS]: running {self.parallel_process_count} processes. Last resize: {self.stats.last_resize}")
-            await asyncio.sleep(1)
-            self.stats.export_stats(self.parallel_process_count)
-
-            if self.stats.should_downsize():
-                self.stats.track_resize()
-                self.parallel_process_count -= 1
-                print(f"[STATS]: downsized")
-            elif self.stats.should_upsize() and self.parallel_process_count < MAX_PARALLEL_PROCESSES:
-                self.stats.track_resize()
-                self.parallel_process_count += 1
-                print(f"[STATS]: upsized")
-
-
-
-    async def close(self):
-        await self.client.close()
+                    print(f"Already allocated max ingesters, skipping")
 
 
 async def main():
-    ingester = Ingester()
+    client = AsyncElasticsearch(
+        # ["http://elastic:changeme@localhost:9200"],
+        request_timeout=30,
+        retry_on_timeout=True
+    )
 
-    await ingester.ensure_content_idx_exists(INDEX)
-    await ingester.run()
+    await client.indices.create(index=INDEX, ignore=400)
+    print(f"Ensured that index {INDEX} exists")
 
-    resp = await ingester.client.search(
+    fake = Faker()
+    cached_large_text = fake.paragraph(nb_sentences=500)
+    
+    ingester_pool = IngesterPool(INDEX, client)
+
+    async def generator():
+        while True:
+            doc = {
+                "_id": fake.bothify(text='????-########'),
+                "text": cached_large_text,
+                "small_text": fake.paragraph(nb_sentences=1)
+            }
+            await asyncio.sleep(0)
+            await ingester_pool.queue.put(doc)
+
+    await asyncio.gather(ingester_pool.run(), generator())
+
+    resp = await client.search(
         index=INDEX,
         query={"match_all": {}},
         size=20,
@@ -284,7 +255,7 @@ async def main():
     print("Got results:")
     print(resp)
 
-    await ingester.close()
+    await ingester_pool.close()
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
