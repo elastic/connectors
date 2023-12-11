@@ -793,6 +793,9 @@ class Connector(ESDocument):
         if is_main_connector and self.features.features != source_klass.features():
             doc["features"] = source_klass.features()
             self.log_debug("Populated features")
+        elif self.native() and self.features.features.keys() != source_klass.features().keys():
+            doc["features"] = source_klass.features() | self.features.features
+            self.log_debug("Added features missing from Native definitions")
 
         if not doc:
             return

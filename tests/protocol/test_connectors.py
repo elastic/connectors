@@ -2204,3 +2204,43 @@ def test_updated_configuration_fields():
 
     # value is set for new configs
     assert result["new_config"]["value"] is True
+
+@pytest.mark.asyncio
+async def test_native_connector_missing_features():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "configuration": {},
+            "features": {
+                "foo": "bar"
+            }
+        },
+    }
+    config = {
+        "connector_id": doc_id,
+        "service_type": "banana",
+    }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(
+        side_effect=[connector_doc]
+    )
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config, sources)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "service_type": "banana",
+            "configuration": Banana.get_simple_configuration(),
+            "status": Status.NEEDS_CONFIGURATION.value,
+            "features": Banana.features() | {"foo": "bar"},
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
