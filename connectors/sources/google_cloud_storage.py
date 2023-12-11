@@ -291,7 +291,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     self._logger.warning(exception_log_msg)
                 else:
                     self._logger.error(
-                        f"Something went wrong while fetching blobssss from {bucket['name']}. Error: {exception}"
+                        f"Something went wrong while fetching blobs from {bucket['name']}. Error: {exception}"
                     )
 
     def prepare_blob_document(self, blob):

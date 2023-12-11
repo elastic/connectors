@@ -11,7 +11,7 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
-from aiogoogle import Aiogoogle
+from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
@@ -262,7 +262,9 @@ async def test_fetch_blobs_negative():
     }
     async with create_gcs_source() as source:
         with mock.patch.object(
-            Aiogoogle, "discover", side_effect=Exception("Something Went Wrong")
+            Aiogoogle,
+            "discover",
+            side_effect=HTTPError("Something Went Wrong", res=mock.MagicMock()),
         ):
             async for blob_result in source.fetch_blobs(buckets=bucket_response):
                 assert blob_result is None
