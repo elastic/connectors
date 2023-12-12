@@ -227,9 +227,14 @@ class AzureBlobStorageDataSource(BaseDataSource):
             container_name=container["name"],
             retry_total=self.retry_count,
         ) as container_client:
-            async for blob in container_client.list_blobs(include=["metadata"]):
-                yield self.prepare_blob_doc(
-                    blob=blob, container_metadata=container["metadata"]
+            try:
+                async for blob in container_client.list_blobs(include=["metadata"]):
+                    yield self.prepare_blob_doc(
+                        blob=blob, container_metadata=container["metadata"]
+                    )
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
                 )
 
     async def get_docs(self, filtering=None):
