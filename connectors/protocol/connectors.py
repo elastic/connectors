@@ -797,9 +797,13 @@ class Connector(ESDocument):
             self.native
             and self.features.features.keys() != source_klass.features().keys()
         ):
-            missing_features = source_klass.features().keys() - self.features.features.keys()
+            missing_features = (
+                source_klass.features().keys() - self.features.features.keys()
+            )
             doc["features"] = source_klass.features() | self.features.features
-            self.log_debug(f"Added missing features [{', '.join(missing_features)}] from Native definitions")
+            self.log_debug(
+                f"Added missing features [{', '.join(missing_features)}] from Native definitions"
+            )
 
         if not doc:
             return
