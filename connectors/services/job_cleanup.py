@@ -99,7 +99,7 @@ class JobCleanUpService(BaseService):
                 try:
                     connector_id = job.connector_id
 
-                    await job.fail(message=IDLE_JOB_ERROR)
+                    await job.fail(IDLE_JOB_ERROR)
                     marked_count += 1
 
                     try:

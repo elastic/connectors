@@ -79,5 +79,5 @@ async def test_cleanup_jobs(
 
     delete_indices.assert_called_with(indices=[to_be_deleted_index_name])
     delete_jobs.assert_called_with(job_ids=[sync_job.id, another_sync_job.id])
-    sync_job.fail.assert_called_with(message=IDLE_JOB_ERROR)
+    sync_job.fail.assert_called_with(IDLE_JOB_ERROR)
     connector.sync_done.assert_called_with(job=sync_job)
