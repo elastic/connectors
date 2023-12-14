@@ -38,7 +38,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.connection_string = None
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
-        self.container = self.configuration["container"]
+        self.containers = self.configuration["container"]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage
@@ -272,12 +272,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Azure Blob Storage
         """
-        if self.container == ["*"]:
+        if self.containers == ["*"]:
             async for container_data in self.get_container():
                 async for blob in self.get_blob(container=container_data):
                     yield blob, partial(self.get_content, blob)
         else:
-            for container in self.container:
+            for container in self.containers:
                 container_properties = await self.get_container_properties(
                     container=container
                 )

@@ -1,12 +1,12 @@
 {
   "api_key_id": null,
   "configuration": {
-    "bucket": {
+    "buckets": {
       "display": "textarea",
       "label": "Google Cloud Storage bucket",
       "order": 1,
       "type": "list",
-      "value": "test-bucket"
+      "value": "*"
     },
     "service_account_credentials": {
       "depends_on": [],

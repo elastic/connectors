@@ -214,7 +214,7 @@ async def test_get_doc():
 
     # Setup
     async with create_abs_source() as source:
-        source.container = ["*"]
+        source.containers = ["*"]
         source.get_container = Mock(
             return_value=AsyncIterator(
                 [
@@ -290,7 +290,7 @@ async def test_get_doc_for_specific_container():
 
     # Setup
     async with create_abs_source() as source:
-        source.container = ["container1"]
+        source.containers = ["container1"]
         source.get_blob = Mock(
             return_value=AsyncIterator(
                 [

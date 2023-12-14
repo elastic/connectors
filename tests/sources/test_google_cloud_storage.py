@@ -275,7 +275,7 @@ async def test_get_docs():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     async with create_gcs_source() as source:
-        source.configuration.get_field("bucket").value = ["*"]
+        source.configuration.get_field("buckets").value = ["*"]
         expected_response = {
             "kind": "storage#objects",
             "items": [
@@ -326,7 +326,7 @@ async def test_get_docs_with_specific_bucket():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     async with create_gcs_source() as source:
-        source.configuration.get_field("bucket").value = ["test_bucket"]
+        source.configuration.get_field("buckets").value = ["test_bucket"]
         expected_response = {
             "kind": "storage#objects",
             "items": [

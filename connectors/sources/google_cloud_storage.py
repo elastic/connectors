@@ -172,7 +172,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """
 
         return {
-            "bucket": {
+            "buckets": {
                 "display": "textarea",
                 "label": "Google Cloud Storage bucket",
                 "order": 1,
@@ -384,7 +384,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        if self.configuration["bucket"] == ["*"]:
+        if self.configuration["buckets"] == ["*"]:
             async for buckets in self.fetch_buckets():
                 if not buckets.get("items"):
                     continue
@@ -394,7 +394,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     for blob_document in self.get_blob_document(blobs=blobs):
                         yield blob_document, partial(self.get_content, blob_document)
         else:
-            for bucket in self.configuration["bucket"]:
+            for bucket in self.configuration["buckets"]:
                 async for blobs in self.fetch_blobs(
                     buckets={"items": [{"id": bucket, "name": bucket}]},
                 ):

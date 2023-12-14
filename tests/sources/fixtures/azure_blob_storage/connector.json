@@ -34,12 +34,12 @@
                         "type": "str",
                         "value": "http://127.0.0.1:10000/devstoreaccount1"
                 },
-                "container": {
+                "containers": {
                         "display": "textarea",
                         "label": "Azure Blob Storage container",
                         "order": 4,
                         "type": "list",
-                        "value": "test-container"
+                        "value": "*"
                 },
                 "retry_count": {
                         "default_value": 3,
