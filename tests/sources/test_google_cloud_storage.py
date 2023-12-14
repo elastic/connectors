@@ -320,6 +320,7 @@ async def test_get_docs():
                 async for blob_document in source.get_docs():
                     assert blob_document[0] == expected_blob_document
 
+
 @pytest.mark.asyncio
 async def test_get_docs_with_specific_bucket():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
