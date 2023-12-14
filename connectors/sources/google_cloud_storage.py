@@ -174,7 +174,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         return {
             "buckets": {
                 "display": "textarea",
-                "label": "Google Cloud Storage bucket",
+                "label": "Google Cloud Storage buckets",
                 "order": 1,
                 "type": "list",
             },

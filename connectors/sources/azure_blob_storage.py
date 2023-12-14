@@ -74,9 +74,9 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
-            "container": {
+            "containers": {
                 "display": "textarea",
-                "label": "Azure Blob Storage container",
+                "label": "Azure Blob Storage containers",
                 "order": 4,
                 "type": "list",
             },
