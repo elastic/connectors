@@ -214,6 +214,7 @@ async def test_get_doc():
 
     # Setup
     async with create_abs_source() as source:
+        source.container = ["*"]
         source.get_container = Mock(
             return_value=AsyncIterator(
                 [
@@ -247,6 +248,76 @@ async def test_get_doc():
                         "container": "container1",
                     }
                 ]
+            )
+        )
+        expected_response = [
+            {
+                "type": "blob",
+                "_id": "container1/blob1",
+                "timestamp": "2022-04-21T12:12:30",
+                "created at": "2022-04-21T12:12:30",
+                "content type": "plain/text",
+                "container metadata": "{'key1': 'value1'}",
+                "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+                "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+                "title": "blob1",
+                "tier": "private",
+                "size": 1000,
+                "container": "container1",
+            }
+        ]
+        actual_response = []
+
+        # Execute
+        async for document, _ in source.get_docs():
+            actual_response.append(document)
+
+        # Assert
+        assert actual_response == expected_response
+
+
+async def create_fake_coroutine(item):
+    """create a method for returning fake coroutine value for
+    Args:
+        item: Value for converting into coroutine
+    """
+    return item
+
+
+@pytest.mark.asyncio
+async def test_get_doc_for_specific_container():
+    """Test get_doc for specific container method of AzureBlobStorageDataSource Class"""
+
+    # Setup
+    async with create_abs_source() as source:
+        source.container = ["container1"]
+        source.get_blob = Mock(
+            return_value=AsyncIterator(
+                [
+                    {
+                        "type": "blob",
+                        "_id": "container1/blob1",
+                        "timestamp": "2022-04-21T12:12:30",
+                        "created at": "2022-04-21T12:12:30",
+                        "content type": "plain/text",
+                        "container metadata": "{'key1': 'value1'}",
+                        "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+                        "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+                        "title": "blob1",
+                        "tier": "private",
+                        "size": 1000,
+                        "container": "container1",
+                    }
+                ]
+            )
+        )
+
+        source.get_container_properties = Mock(
+            return_value=create_fake_coroutine(
+                {
+                    "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+                    "name": "container1",
+                }
             )
         )
         expected_response = [
@@ -590,3 +661,12 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
                 extraction_service_mock.assert_called_once()
                 assert actual_response == expected_output
                 assert "_attachment" not in actual_response
+
+
+@pytest.mark.asyncio
+async def test_get_container_properties_negative():
+    """Test get_container_properties negative method of AzureBlobStorageDataSource Class"""
+    async with create_abs_source() as source:
+        source.connection_string = source._configure_connection_string()
+        actual_document = await source.get_container_properties(container="container1")
+        assert actual_document is None

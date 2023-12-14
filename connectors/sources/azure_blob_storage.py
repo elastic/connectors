@@ -38,6 +38,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.connection_string = None
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
+        self.container = self.configuration["container"]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage
@@ -73,11 +74,17 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
+            "container": {
+                "display": "textarea",
+                "label": "Azure Blob Storage container",
+                "order": 4,
+                "type": "list",
+            },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 4,
+                "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -86,7 +93,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 5,
+                "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -97,7 +104,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 6,
+                "order": 7,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -237,12 +244,43 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
                 )
 
+    async def get_container_properties(self, container):
+        """Get containers properties from Azure Blob Storage via azure base client
+
+        Args:
+            container (string): Name of container
+
+        Yields:
+            dictionary: Container document with name & meta data
+        """
+        async with BlobServiceClient.from_connection_string(
+            conn_str=self.connection_string, retry_total=self.retry_count
+        ) as azure_base_client:
+            try:
+                container_client = azure_base_client.get_container_client(container)
+                container_properties = await container_client.get_container_properties()
+                return {"name": container, "metadata": container_properties.metadata}
+
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while fetching container properties for specified container {container}. Error: {exception}"
+                )
+
     async def get_docs(self, filtering=None):
         """Get documents from Azure Blob Storage
 
         Yields:
             dictionary: Documents from Azure Blob Storage
         """
-        async for container in self.get_container():
-            async for blob in self.get_blob(container=container):
-                yield blob, partial(self.get_content, blob)
+        if self.container == ["*"]:
+            async for container_data in self.get_container():
+                async for blob in self.get_blob(container=container_data):
+                    yield blob, partial(self.get_content, blob)
+        else:
+            for container in self.container:
+                container_properties = await self.get_container_properties(
+                    container=container
+                )
+                if container_properties:
+                    async for blob in self.get_blob(container=container_properties):
+                        yield blob, partial(self.get_content, blob)

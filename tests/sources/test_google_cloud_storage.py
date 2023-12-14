@@ -275,6 +275,57 @@ async def test_get_docs():
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     async with create_gcs_source() as source:
+        source.configuration.get_field("bucket").value = ["*"]
+        expected_response = {
+            "kind": "storage#objects",
+            "items": [
+                {
+                    "kind": "storage#object",
+                    "id": "bucket_1/blob_1/123123123",
+                    "updated": "2011-10-12T00:01:00Z",
+                    "name": "blob_1",
+                }
+            ],
+        }
+        expected_blob_document = {
+            "_id": "bucket_1/blob_1/123123123",
+            "component_count": None,
+            "content_encoding": None,
+            "content_language": None,
+            "created_at": None,
+            "last_updated": "2011-10-12T00:01:00Z",
+            "metadata": None,
+            "name": "blob_1",
+            "size": None,
+            "storage_class": None,
+            "_timestamp": "2011-10-12T00:01:00Z",
+            "type": None,
+            "url": "https://console.cloud.google.com/storage/browser/_details/None/blob_1;tab=live_object?project=dummy123",
+            "version": None,
+            "bucket_name": None,
+        }
+        dummy_url = "https://dummy.gcs.com/buckets/b1/objects"
+
+        expected_response_object = Response(
+            status_code=200,
+            url=dummy_url,
+            json=expected_response,
+            req=Request(method="GET", url=dummy_url),
+        )
+
+        with mock.patch.object(
+            Aiogoogle, "as_service_account", return_value=expected_response_object
+        ):
+            with mock.patch.object(ServiceAccountManager, "refresh"):
+                async for blob_document in source.get_docs():
+                    assert blob_document[0] == expected_blob_document
+
+@pytest.mark.asyncio
+async def test_get_docs_with_specific_bucket():
+    """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
+
+    async with create_gcs_source() as source:
+        source.configuration.get_field("bucket").value = ["test_bucket"]
         expected_response = {
             "kind": "storage#objects",
             "items": [

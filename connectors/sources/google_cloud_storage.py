@@ -172,11 +172,17 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """
 
         return {
+            "bucket": {
+                "display": "textarea",
+                "label": "Google Cloud Storage bucket",
+                "order": 1,
+                "type": "list",
+            },
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "Google Cloud service account JSON",
                 "sensitive": True,
-                "order": 1,
+                "order": 2,
                 "type": "str",
             },
             "use_text_extraction_service": {
@@ -378,11 +384,19 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        async for buckets in self.fetch_buckets():
-            if not buckets.get("items"):
-                continue
-            async for blobs in self.fetch_blobs(
-                buckets=buckets,
-            ):
-                for blob_document in self.get_blob_document(blobs=blobs):
-                    yield blob_document, partial(self.get_content, blob_document)
+        if self.configuration["bucket"] == ["*"]:
+            async for buckets in self.fetch_buckets():
+                if not buckets.get("items"):
+                    continue
+                async for blobs in self.fetch_blobs(
+                    buckets=buckets,
+                ):
+                    for blob_document in self.get_blob_document(blobs=blobs):
+                        yield blob_document, partial(self.get_content, blob_document)
+        else:
+            for bucket in self.configuration["bucket"]:
+                async for blobs in self.fetch_blobs(
+                    buckets={"items": [{"id": bucket, "name": bucket}]},
+                ):
+                    for blob_document in self.get_blob_document(blobs=blobs):
+                        yield blob_document, partial(self.get_content, blob_document)
