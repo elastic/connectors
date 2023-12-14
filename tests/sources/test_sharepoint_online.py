@@ -2654,7 +2654,8 @@ class TestSharepointOnlineDataSource:
     async def test_drive_items_batch_with_permissions_for_delta_delete_operation(
         self, patch_sharepoint_client
     ):
-        async with create_spo_source(use_document_level_security=True) as source:
+        async with create_source(SharepointOnlineDataSource) as source:
+            set_dls_enabled(source, True)
             drive_id = 1
             drive_item_ids = ["1", "2"]
             drive_items_batch = [
