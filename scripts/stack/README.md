@@ -2,6 +2,8 @@
 
 ### Prerequisites
 
+If you do not wish to use the default Elasticsearch username and password, you must set the username and password (or the API key)
+in the default [connectors config.yml](./connectors-config/config.yml) file before running the `run-stack.sh` script.
 
 ### Script commands
 
