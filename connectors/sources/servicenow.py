@@ -732,7 +732,7 @@ class ServiceNowDataSource(BaseDataSource):
             ):
                 roles[role.get("name")] = role.get("sys_id")
 
-            for role in DEFAULT_SERVICE_NAMES.get(table_name):
+            for role in DEFAULT_SERVICE_NAMES.get(table_name, []):
                 async for user in self._fetch_users_by_roles(roles[role]):
                     access_control.append(
                         _prefix_user_id(user_id=user.get("user", {}).get("value"))
