@@ -2656,7 +2656,7 @@ class TestSharepointOnlineDataSource:
 
     @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_when_dls_disabled(
-            self,
+        self,
     ):
         async with create_spo_source(use_document_level_security=False) as source:
             drive_id = 1
@@ -2665,7 +2665,7 @@ class TestSharepointOnlineDataSource:
             drive_items_without_permissions = []
 
             async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
-                    drive_id, drive_items_batch, "dummy_site_web_url"
+                drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
 

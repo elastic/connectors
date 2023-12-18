@@ -1548,7 +1548,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item (dict): drive item with or without permissions depending on the config value of `fetch_drive_item_permissions`
         """
 
-        if not self._dls_enabled() or not self.configuration["fetch_drive_item_permissions"]:
+        if (
+            not self._dls_enabled()
+            or not self.configuration["fetch_drive_item_permissions"]
+        ):
             for drive_item in drive_items_batch:
                 yield drive_item
 
