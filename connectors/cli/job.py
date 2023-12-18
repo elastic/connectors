@@ -31,6 +31,20 @@ class Job:
     def start(self, connector_id, job_type):
         return asyncio.run(self.__async_start(connector_id, job_type))
 
+    def job(self, job_id):
+        return asyncio.run(self.__async_job(job_id))
+
+    async def __async_job(self, job_id):
+        try:
+            await self.es_client.ensure_exists(
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+            )
+            job = await self.sync_job_index.fetch_by_id(job_id)
+            return job
+        finally:
+            await self.sync_job_index.close()
+            await self.es_client.close()
+
     async def __async_start(self, connector_id, job_type):
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)

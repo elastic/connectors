@@ -662,3 +662,51 @@ def test_job_start():
         patched_create.assert_called_once()
         assert "The job has been started" in result.output
         assert result.exit_code == 0
+
+
+def test_job_view():
+    runner = CliRunner()
+    job_id = "test_job_id"
+    connector_id = "test_connector_id"
+    index_name = "test_index_name"
+    status = "canceled"
+    deleted_document_count = 123
+    indexed_document_count = 123123
+    indexed_document_volume = 100500
+
+    job_index = MagicMock()
+
+    doc = {
+        "_source": {
+            "connector": {
+                "id": connector_id,
+                "index_name": index_name,
+                "service_type": "mongodb",
+                "last_sync_status": "error",
+                "status": "connected",
+            },
+            "status": status,
+            "deleted_document_count": deleted_document_count,
+            "indexed_document_count": indexed_document_count,
+            "indexed_document_volume": indexed_document_volume,
+            "job_type": "full",
+        },
+        "_id": job_id,
+    }
+
+    job = SyncJobObject(job_index, doc)
+
+    with patch(
+        "connectors.protocol.connectors.SyncJobIndex.fetch_by_id",
+        AsyncMock(return_value=job),
+    ):
+        result = runner.invoke(cli, ["job", "view", job_id])
+
+        assert job_id in result.output
+        assert connector_id in result.output
+        assert index_name in result.output
+        assert status in result.output
+        assert str(deleted_document_count) in result.output
+        assert str(indexed_document_count) in result.output
+        assert str(indexed_document_volume) in result.output
+        assert result.exit_code == 0
