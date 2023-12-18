@@ -257,7 +257,8 @@ async def test_get_docs_with_skipping_table_data():
         )
         response_list = []
         with mock.patch(
-            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES", ("incident",)
+            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES",
+            {"incident": ["sn_incident_read"]},
         ):
             with mock.patch.object(
                 ServiceNowClient,
@@ -273,8 +274,42 @@ async def test_get_docs_with_skipping_table_data():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_skipping_attachment_data():
+@pytest.mark.parametrize(
+    "dls_enabled, expected_response",
+    [
+        (
+            True,
+            {
+                "_allow_access_control": ["user_id_1, user_id_2"],
+                "_id": "id_1",
+                "_timestamp": "1212-12-12T12:12:12",
+                "sys_id": "id_1",
+                "sys_updated_on": "1212-12-12 12:12:12",
+                "sys_class_name": "incident",
+                "sys_user": "admin",
+                "type": "table_record",
+            },
+        ),
+        (
+            False,
+            {
+                "_id": "id_1",
+                "_timestamp": "1212-12-12T12:12:12",
+                "sys_id": "id_1",
+                "sys_updated_on": "1212-12-12 12:12:12",
+                "sys_class_name": "incident",
+                "sys_user": "admin",
+                "type": "table_record",
+            },
+        ),
+    ],
+)
+async def test_get_docs_with_skipping_attachment_data(dls_enabled, expected_response):
     async with create_service_now_source() as source:
+        source._dls_enabled = Mock(return_value=dls_enabled)
+        source._fetch_access_controls = mock.AsyncMock(
+            return_value=["user_id_1, user_id_2"]
+        )
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
                 res=SAMPLE_RESPONSE,
@@ -284,7 +319,8 @@ async def test_get_docs_with_skipping_attachment_data():
 
         response_list = []
         with mock.patch(
-            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES", ("incident",)
+            "connectors.sources.servicenow.DEFAULT_SERVICE_NAMES",
+            {"incident": ["sn_incident_read"]},
         ):
             with mock.patch.object(
                 ServiceNowClient,
@@ -310,15 +346,7 @@ async def test_get_docs_with_skipping_attachment_data():
                     response_list.append(response)
 
         assert (
-            {
-                "_id": "id_1",
-                "_timestamp": "1212-12-12T12:12:12",
-                "sys_id": "id_1",
-                "sys_updated_on": "1212-12-12 12:12:12",
-                "sys_class_name": "incident",
-                "sys_user": "admin",
-                "type": "table_record",
-            },
+            expected_response,
             None,
         ) in response_list
 
@@ -769,3 +797,116 @@ async def test_get_docs_with_advanced_rules(filtering):
                 "_timestamp": "1212-12-12T12:12:12",
             },
         ] == response_list
+
+
+@pytest.mark.asyncio
+async def test_get_access_control():
+    async with create_service_now_source() as source:
+        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
+        source._dls_enabled = Mock(return_value=True)
+        with mock.patch.object(
+            ServiceNowClient,
+            "get_data",
+            return_value=AsyncIterator(
+                [
+                    [
+                        {
+                            "sys_updated_on": "2023-10-10 05:21:45",
+                            "sys_id": "id_1",
+                            "email": "admin@email.com",
+                            "user_name": "demo.user",
+                        }
+                    ]
+                ]
+            ),
+        ):
+            async for user in source.get_access_control():
+                assert user["_id"] == "id_1"
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_service_now_source() as source:
+        source._dls_enabled = Mock(return_value=False)
+
+        access_control_list = []
+        async for access_control in source.get_access_control():
+            access_control_list.append(access_control)
+
+        assert len(access_control_list) == 0
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_control():
+    async with create_service_now_source() as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "role_1",
+                        },
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        {
+                            "sys_user_role": {"value": "role_id_1"},
+                        },
+                    ]
+                ),
+                AsyncIterator([{"user": {"value": "user_id_1"}}]),
+            ],
+        ):
+            access_control = await source._fetch_access_controls("service_name")
+            assert access_control == ["user_id:user_id_1"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_access_control_for_public():
+    async with create_service_now_source() as source:
+        with mock.patch.object(
+            ServiceNowDataSource,
+            "_table_data_generator",
+            side_effect=[
+                AsyncIterator(
+                    [
+                        {
+                            "sys_id": "role_id_1",
+                            "name": "public",
+                        },
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        {
+                            "sys_user_role": {"value": "role_id_1"},
+                        },
+                    ]
+                ),
+                AsyncIterator(
+                    [
+                        {
+                            "sys_updated_on": "2023-10-10 05:21:45",
+                            "sys_id": "user_id_1",
+                            "email": "admin@email.com",
+                            "user_name": "demo.user",
+                        },
+                        {
+                            "sys_updated_on": "2023-10-10 05:21:45",
+                            "sys_id": "user_id_2",
+                            "email": "admin@email.com",
+                            "user_name": "sample.user",
+                        },
+                    ]
+                ),
+                AsyncIterator([{"user": {"value": "user_id_1"}}]),
+            ],
+        ):
+            access_control = await source._fetch_access_controls("service_name")
+            assert sorted(access_control) == sorted(
+                ["user_id:user_id_1", "user_id:user_id_2"]
+            )
