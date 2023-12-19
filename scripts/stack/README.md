@@ -1,12 +1,18 @@
 # Full Elastic Stack with Connectors
 
-We want to enable a user to get up and running with a full stack with connectors within 10 minutes. To help facilitate this, we want to provide an example configuration, Docker Compose configuration, and a bash script to startup and run a stack including Elasticsearch, Kibana, and Connectors. Light documentation should be provided, and full additional documentation will come in a future story.
+We know that setting up the Connectors service may look a bit daunting, but to help with this, we pulled together a set of scripts to enable a user to get up and running with a full stack with connectors. Here, we provide an example configuration, Docker Compose configuration, and a bash script to startup and run a stack including Elasticsearch, Kibana, and Connectors.
 
-A brand new user wants to try out Connectors and ingesting their data into an Elasticsearch instance before deciding if they want to purchase an Elastic license. To get them up and running, the user should be able to go to a tutorial that instructs them on how to download a package containing a template configuration file, a sample Docker configuration file and a script to run the stack. The documentation details out the steps for configuring various connectors and the options for running the Docker compose script. Upon setting up the configuration for their needs, the user can run the start script to light up localized Elasticsearch, Kibana, and Connectors containers with sensible defaults that they can now test out.
+These scripts can be useful if you want to try out Connectors and ingesting their data into an Elasticsearch instance, or, as a starting place for adding Connectors to your production environment.
 
-An existing Elastic user wants to incorporate Connectors into their workflow. The user may already have an existing self managed cluster set up and only needs to add a Connectors instance to their cluster. Reading the documentation, and looking at the sample configuration files for the Connectors container and the Docker compose, the user should be able to then configure and add a Connectors node to their cluster.
+# Contents
 
-An existing Workplace Search user wants to start working with Connectors and working with Search Applications. Much like with the new user story above, having a robust set of documentation and an example configuration and script will help ease the transition into replacing Workplace Search connectors and searching across content with Connectors and Search Applications. As such, providing example configurations and a script to run will work as a first step for the user to orchestrate their application to suit their needs.
+* [Prerequisites](#prerequisites)
+* [Running the Stack](#running-the-stack)
+* [Prompted Configuration](#prompted-configuration)
+* [Manual Configuration](#manual-configuration)
+* [Script command reference](#script-command-reference)
+  * [run-stack.sh](#run-stacksh)
+  * [stop-stack.sh](#stop-stacksh)
 
 ## Prerequisites
 * Linux or MacOS (Windows is not currently supported)
@@ -47,27 +53,33 @@ To do this, in Kibana:
 
 ## Manual Configuration
 
-1. ensure your environment variables are set in `.env`
-2. First time run - set up a connector
-    1. run `run-stack.sh --no-connectors`
-    2. Content->Indices->Create a new Index
-    3. Choose "Connector"
+Instead of using the CLI based configurator while running the `run-stack.sh`
+script, you can choose to manually provide your connectors configurations and
+use those instead. To do this and still use the `run-stack.sh` script:
+
+1. Run the stack without the connectors service:
+    1. Run `./scripts/stack/run-stack.sh --no-connectors` to run the full stack without the Connectors service
+    2. From the main menu, go to "Content", "Indices", and create a new index for your connector
+    3. Choose the "Connector" index type
     4. Select the connector type
     5. Set the index name
-    6. Generate API Key
+    6. Generate a new API Key, and copy it somewhere safe
     7. Set Connector name and description (optional)
-    8. Copy the resulting connector_id, service_type, and api_key for your `connectors-config/config.yml`
-    9. when complete, temporarily stop the stack via `stop-stack.sh`
-3. edit the file in `connectors-config/config.yml`
-4. run `run-stack.sh` again, and go back to your connector
-   1. Content->indices
-   2. click on your index / connector name
-   3. go to the "configuration" tab
-   4. Complete the configuration and sync
+    8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `./scripts/stack/connectors-config/config.yml` fille
+    9. Repeat as necessary for all the connectors you wish too create
+2. when complete, temporarily stop the stack via `./scripts/stack/stop-stack.sh`
+3. run `./scripts/stack/run-stack.sh --no-configuration` again to run the full stack without prompting for configuration.
+    1. From the main menu, choose "Content" under the "Search" heading
+    2. Click on your index name
+    3. Click on the "Configuration" tab
+    4. Complete the configuration and optionally start your sync
+    5. Repeat these steps for all the connectors you created
 
 ## Script command reference
 
-### run-stack
+### run-stack.sh
+
+This is the main script that sets up and runs an Elasticsearch, Kibana, and Connectors stack.
 
 ```bash
 $ ./scripts/stack/run-stack.sh
@@ -81,7 +93,9 @@ Command line options:
 * `-n | --no-connectors`: do not run the connectors service or the connectors configuration
 * `-x | --no-configuration`: do not ask to run the connectors configuration, but still run the service
 
-### stop-stack
+### stop-stack.sh
+
+This script is used to stop the stack, and optionally remove any data volumes and reset the configuration file.
 
 ```bash
 $ ./scripts/stack/stop-stack.sh
@@ -89,3 +103,4 @@ $ ./scripts/stack/stop-stack.sh
 
 Command line options:
 * `-v | --remove-volumes`: delete all data volumes on stop
+* `-r | --reset-configuration`: resets the `config.yml` file from the `config.yml.example` file.

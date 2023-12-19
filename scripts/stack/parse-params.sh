@@ -15,6 +15,7 @@ parse_params() {
   remove_volumes=false
   no_connectors=false
   bypass_config=false
+  reset_config=-false
 
   #Boilerplate parameter parsing
   PARAMS=""
@@ -34,6 +35,10 @@ parse_params() {
         ;;
       -v|--remove-volumes)
         remove_volumes=true
+        shift 1
+        ;;
+      -r|--reset-configuration)
+        reset_config=true
         shift 1
         ;;
       --) # end argument parsing
