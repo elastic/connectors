@@ -32,7 +32,7 @@ __all__ = ["main"]
 
 def load_config(ctx, config):
     if config:
-        return configuration_loader(config.name)
+        return yaml.safe_load(config)
     elif os.path.isfile(CONFIG_FILE_PATH):
         with open(CONFIG_FILE_PATH, "r") as f:
             return yaml.safe_load(f.read())
@@ -56,6 +56,7 @@ def cli(ctx, config):
 
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(ctx, config)
+
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option("--host", prompt="Elastic host")
