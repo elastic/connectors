@@ -195,6 +195,7 @@ class Sink:
                     f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
                 )
                 return
+            raise
 
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
