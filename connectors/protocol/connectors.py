@@ -995,7 +995,9 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
-        await self.index(job_def)
+        api_response = await self.index(job_def)
+
+        return api_response['_id']
 
     async def pending_jobs(self, connector_ids, job_types):
         if not job_types:

@@ -652,15 +652,16 @@ def test_job_list_one_job():
 def test_job_start():
     runner = CliRunner()
     connector_id = "test_connector_id"
+    job_id = 'test_job_id'
 
     with patch(
         "connectors.protocol.connectors.SyncJobIndex.create",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=job_id),
     ) as patched_create:
         result = runner.invoke(cli, ["job", "start", "-i", connector_id, "-t", "full"])
 
         patched_create.assert_called_once()
-        assert "The job has been started" in result.output
+        assert f"The job {job_id} has been started" in result.output
         assert result.exit_code == 0
 
 

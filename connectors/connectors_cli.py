@@ -431,17 +431,30 @@ def job(obj):
 @click.command(help="Start a sync job.")
 @click.pass_obj
 @click.option("-i", help="Connector ID", required=True)
+
 @click.option(
     "-t",
     help="Job type",
     type=click.Choice(["full", "incremental", "access_control"], case_sensitive=False),
     required=True,
 )
-def start(obj, i, t):
+@click.option(
+    "-o",
+    "--format",
+    "output_format",
+    default="text",
+    help="Output format",
+    type=click.Choice(["json", "text"]),
+)
+def start(obj, i, t, output_format):
     job_cli = Job(config=obj["config"]["elasticsearch"])
-    click.echo("Starting a job...")
-    if job_cli.start(connector_id=i, job_type=t):
-        click.echo(click.style("The job has been started.", fg="green"))
+    job_id = job_cli.start(connector_id=i, job_type=t)
+
+    if job:
+        if output_format == "json":
+            click.echo(json.dumps({"id": job_id}, indent=4))
+        else:
+            click.echo("The job " + click.style(job_id, fg="green") + " has been started.")
     else:
         click.echo("")
         click.echo(
