@@ -2657,6 +2657,27 @@ class TestSharepointOnlineDataSource:
             )
 
     @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_when_dls_disabled(
+        self,
+    ):
+        async with create_spo_source(use_document_level_security=False) as source:
+            drive_id = 1
+            drive_items_batch = [{"id": "1"}, {"id": "2"}]
+
+            drive_items_without_permissions = []
+
+            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+                drive_id, drive_items_batch, "dummy_site_web_url"
+            ):
+                drive_items_without_permissions.append(drive_item_without_permissions)
+
+            assert len(drive_items_without_permissions) == len(drive_items_batch)
+            assert not any(
+                ACCESS_CONTROL in drive_item
+                for drive_item in drive_items_without_permissions
+            )
+
+    @pytest.mark.asyncio
     async def test_drive_items_batch_with_permissions_for_delta_delete_operation(
         self, patch_sharepoint_client
     ):
