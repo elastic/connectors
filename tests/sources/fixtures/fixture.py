@@ -5,28 +5,31 @@
 #
 # ruff: noqa: T201
 # ruff: noqa: T203
+import asyncio
+import functools
 import importlib
 import importlib.util
 import logging
 import os
 import pprint
 import signal
-import functools
 import sys
 import time
-import asyncio
 from argparse import ArgumentParser
 
 import requests
 from elastic_transport import ConnectionTimeout
-from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
+from elasticsearch import ApiError
 from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 
 from connectors.es.client import ESClient
 from connectors.logger import set_extra_logger
-from connectors.utils import retryable
-from connectors.utils import CancellableSleeps, time_to_sleep_between_retries, RetryStrategy
+from connectors.utils import (
+    RetryStrategy,
+    retryable,
+    time_to_sleep_between_retries,
+)
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
@@ -81,7 +84,6 @@ def _parser():
     return parser
 
 
-
 def retrying_transient_errors(retries=5):
     def wrapper(func):
         @functools.wraps(func)
@@ -94,7 +96,7 @@ def retrying_transient_errors(retries=5):
                     if retry >= retries:
                         raise
                     retry += 1
-                except (ApiError) as e:
+                except ApiError as e:
                     if e.status_code != 429:
                         raise
                     if retry >= retries:
@@ -103,20 +105,24 @@ def retrying_transient_errors(retries=5):
                 finally:
                     # TODO: 15 is arbitrary
                     # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
-                    time_to_sleep = time_to_sleep_between_retries(RetryStrategy.LINEAR_BACKOFF, 15, retry)
+                    time_to_sleep = time_to_sleep_between_retries(
+                        RetryStrategy.LINEAR_BACKOFF, 15, retry
+                    )
                     await asyncio.sleep(time_to_sleep)
 
         return wrapped
 
     return wrapper
 
+
 def _es_client():
     options = {
         "host": "http://127.0.0.1:9200",
         "username": "elastic",
-        "password": "changeme"
+        "password": "changeme",
     }
     return ESClient(options)
+
 
 @retrying_transient_errors()
 async def _wait_for_connectors_index(es_client):
@@ -136,6 +142,7 @@ async def _wait_for_connectors_index(es_client):
             logger.info(f"{CONNECTORS_INDEX} not present, waiting...")
             await asyncio.sleep(1)
 
+
 @retrying_transient_errors()
 async def _fetch_connector_metadata(es_client):
     # There's only one connector, so we just fetch it always
@@ -146,6 +153,7 @@ async def _fetch_connector_metadata(es_client):
     last_synced = connector["_source"]["last_synced"]
 
     return (connector_id, last_synced)
+
 
 async def _monitor_service(pid):
     es_client = _es_client()
@@ -178,6 +186,15 @@ async def _monitor_service(pid):
         await es_client.close()
 
 
+async def _exec_shell(cmd):
+    # Create subprocess
+    proc = await asyncio.create_subprocess_shell(cmd)
+
+    logger.debug(f"Executing cmd: {cmd}")
+    await proc.wait()
+    logger.debug(f"Successfully executed cmd: {cmd}")
+
+
 async def main(args=None):
     parser = _parser()
     args = parser.parse_args(args=args)
@@ -188,10 +205,10 @@ async def main(args=None):
     if action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if action == "start_stack":
-            os.system("docker compose pull")
-            os.system("docker compose up -d")
+            await _exec_shell("docker compose pull")
+            await _exec_shell("docker compose up -d")
         else:
-            os.system("docker compose down --volumes")
+            await _exec_shell("docker compose down --volumes")
         return
 
     if action == "monitor":
