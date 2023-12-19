@@ -652,7 +652,7 @@ def test_job_list_one_job():
 def test_job_start():
     runner = CliRunner()
     connector_id = "test_connector_id"
-    job_id = 'test_job_id'
+    job_id = "test_job_id"
 
     with patch(
         "connectors.protocol.connectors.SyncJobIndex.create",
