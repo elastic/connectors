@@ -189,10 +189,12 @@ class Sink:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Sink...")
             raise
-        except ForceCanceledError:
-            self._logger.error(
-                f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
-            )
+        except Exception as e:
+            if isinstance(e, ForceCanceledError) or self._canceled:
+                self._logger.warning(
+                    f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+                )
+                return
 
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -369,11 +371,13 @@ class Extractor:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Extractor...")
             raise
-        except ForceCanceledError:
-            self._logger.error(
-                f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
-            )
         except Exception as e:
+            if isinstance(e, ForceCanceledError) or self._canceled:
+                self._logger.warning(
+                    f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+                )
+                return
+
             self._logger.critical("Document extractor failed", exc_info=True)
             await self.put_doc("FETCH_ERROR")
             self.fetch_error = e

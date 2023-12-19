@@ -1169,6 +1169,25 @@ async def test_force_canceled_extractor_put_doc():
 
 
 @pytest.mark.asyncio
+async def test_force_canceled_extractor_with_other_errors(patch_logger):
+    queue = Mock()
+    queue.put = AsyncMock()
+    extractor = Extractor(
+        None,
+        queue,
+        INDEX,
+    )
+    generator = AsyncMock(side_effect=Exception("a non-ForceCanceledError"))
+
+    extractor.force_cancel()
+    # no error thrown
+    await extractor.run(generator, JobType.FULL)
+    patch_logger.assert_present(
+        "Extractor did not stop within 5 seconds of cancelation, force-canceling the task."
+    )
+
+
+@pytest.mark.asyncio
 async def test_sink_fetch_doc():
     expected_doc = {"id": 123}
     queue = Mock()
@@ -1207,6 +1226,28 @@ async def test_force_canceled_sink_fetch_doc():
     with pytest.raises(ForceCanceledError):
         await sink.fetch_doc()
         queue.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_force_canceled_sink_with_other_errors(patch_logger):
+    queue = Mock()
+    queue.get = AsyncMock(side_effect=Exception("a non-ForceCanceledError"))
+    sink = Sink(
+        None,
+        queue,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+    )
+
+    sink.force_cancel()
+    # no error thrown
+    await sink.run()
+    patch_logger.assert_present(
+        "Sink did not stop within 5 seconds of cancelation, force-canceling the task."
+    )
 
 
 @pytest.mark.parametrize(
