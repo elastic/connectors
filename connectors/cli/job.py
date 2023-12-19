@@ -48,13 +48,13 @@ class Job:
     async def __async_start(self, connector_id, job_type):
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
-            await self.sync_job_index.create(
+            job_id = await self.sync_job_index.create(
                 connector=connector,
                 trigger_method=JobTriggerMethod.ON_DEMAND,
                 job_type=JobType(job_type),
             )
 
-            return True
+            return job_id
         finally:
             await self.sync_job_index.close()
             await self.connector_index.close()
