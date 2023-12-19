@@ -437,11 +437,25 @@ def job(obj):
     type=click.Choice(["full", "incremental", "access_control"], case_sensitive=False),
     required=True,
 )
-def start(obj, i, t):
+@click.option(
+    "-o",
+    "--format",
+    "output_format",
+    default="text",
+    help="Output format",
+    type=click.Choice(["json", "text"]),
+)
+def start(obj, i, t, output_format):
     job_cli = Job(config=obj["config"]["elasticsearch"])
-    click.echo("Starting a job...")
-    if job_cli.start(connector_id=i, job_type=t):
-        click.echo(click.style("The job has been started.", fg="green"))
+    job_id = job_cli.start(connector_id=i, job_type=t)
+
+    if job:
+        if output_format == "json":
+            click.echo(json.dumps({"id": job_id}, indent=4))
+        else:
+            click.echo(
+                "The job " + click.style(job_id, fg="green") + " has been started."
+            )
     else:
         click.echo("")
         click.echo(
@@ -524,6 +538,49 @@ def cancel(obj, job_id):
 
 
 job.add_command(cancel)
+
+
+@click.command(help="Show information about a job", name="view")
+@click.pass_obj
+@click.argument("job_id")
+@click.option(
+    "-o",
+    "--format",
+    "output_format",
+    default="text",
+    help="Output format",
+    type=click.Choice(["json", "text"]),
+)
+def view_job(obj, job_id, output_format):
+    job_cli = Job(config=obj["config"]["elasticsearch"])
+    job = job_cli.job(job_id=job_id)
+    result = {
+        "job_id": job.id,
+        "connector_id": job.connector_id,
+        "index_name": job.index_name,
+        "job_status": job.status.value,
+        "job_type": job.job_type.value,
+        "documents_index,ed": job.indexed_document_count,
+        "volume_documents_indexed": job.indexed_document_volume,
+        "documents_deleted": job.deleted_document_count,
+    }
+    if job:
+        if output_format == "json":
+            click.echo(json.dumps(result, indent=4))
+        else:
+            click.echo(tabulate(result.items()))
+    else:
+        click.echo("")
+        click.echo(
+            click.style(
+                "Something went wrong. Please try again later or check your credentials",
+                fg="red",
+            ),
+            err=True,
+        )
+
+
+job.add_command(view_job)
 
 cli.add_command(job)
 
