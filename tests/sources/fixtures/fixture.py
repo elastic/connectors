@@ -147,6 +147,14 @@ async def _wait_for_connectors_index(es_client):
 async def _fetch_connector_metadata(es_client):
     # There's only one connector, so we just fetch it always
     response = await es_client.client.search(index=CONNECTORS_INDEX, size=1)
+    total_connectors = response["hits"]["total"]["value"]
+    if total_connectors == 0:
+        msg = "No connectors found in the deployment"
+        raise Exception(msg)
+    elif total_connectors > 1:
+        msg = f"Found {total_connectors} connectors in the deployment, expected only 1"
+        raise Exception(msg)
+
     connector = response["hits"]["hits"][0]
 
     connector_id = connector["_id"]
