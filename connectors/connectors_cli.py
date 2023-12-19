@@ -24,7 +24,6 @@ from connectors.cli.connector import Connector
 from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
-from connectors.config import load_config as configuration_loader
 from connectors.es.settings import Settings
 
 __all__ = ["main"]
