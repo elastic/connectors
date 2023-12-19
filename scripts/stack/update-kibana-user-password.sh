@@ -16,5 +16,5 @@ if [[ "${ELASTIC_PASSWORD:-}" == "" ]]; then
 fi
 
 echo "Updating Kibana password in Elasticsearch running on $ELASTICSEARCH_URL"
-change_payload="{ 'password' : '${ELASTIC_PASSWORD}' }"
-curl -u elastic:$ELASTIC_PASSWORD "$@" -X POST "${ELASTICSEARCH_URL}/_security/user/kibana_system/_password?pretty" -H 'Content-Type: application/json' -d $change_payload
+change_data="{ \"password\": \"${ELASTIC_PASSWORD}\" }"
+curl -u elastic:$ELASTIC_PASSWORD "$@" -X POST "${ELASTICSEARCH_URL}/_security/user/kibana_system/_password?pretty" -H 'Content-Type: application/json' -d"${change_data}"

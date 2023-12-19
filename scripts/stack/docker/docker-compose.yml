@@ -33,6 +33,8 @@ services:
       - elasticsearch
     networks:
       - connectors_stack_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
@@ -48,8 +50,7 @@ services:
     volumes:
       - ${CURDIR}/connectors-config:/config
     command: /app/bin/elastic-ingest -c /config/config.yml
-    networks:
-      - connectors_stack_net
+    network_mode: "host"
 
 volumes:
   es-data:
