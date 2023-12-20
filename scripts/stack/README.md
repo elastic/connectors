@@ -15,14 +15,16 @@ These scripts can be useful if you want to try out Connectors and ingesting thei
   * [stop-stack.sh](#stop-stacksh)
 
 ## Prerequisites
-* Linux or MacOS (Windows is not currently supported)
+* Linux or MacOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
 * Docker with Docker Compose Installed
+* It is recommended to run Docker with at least 4GB of available RAM.
 
 ## Running the Stack
 
 If you do not wish to use the default Elasticsearch username and password, you must set the username and password (or the API key)
-in the default [connectors config.yml](./connectors-config/config.yml) file before running the `run-stack.sh` script. You can also
-use a different password for the `elastic` user by specifying the environment variable `ELASTIC_PASSWORD` before running the script. E.g.:
+in the default [config.yml](./config.yml) file before running the `run-stack.sh` script. You can also
+use a different password for the `elastic` user by specifying the environment variable
+`ELASTIC_PASSWORD` before running the script. E.g.:
 
 ```bash
 $ ELASTIC_PASSWORD="my_new_password" ./scripts/stack/run-stack.sh
@@ -67,8 +69,7 @@ use those instead. To do this and still use the `run-stack.sh` script:
     7. Set Connector name and description (optional)
     8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `./scripts/stack/connectors-config/config.yml` fille
     9. Repeat as necessary for all the connectors you wish too create
-2. when complete, temporarily stop the stack via `./scripts/stack/stop-stack.sh`
-3. run `./scripts/stack/run-stack.sh --no-configuration` again to run the full stack without prompting for configuration.
+3. run `./scripts/stack/run-stack.sh --no-configuration --connectors-only` again to run the Connectors service without prompting for configuration. Once running:
     1. From the main menu, choose "Content" under the "Search" heading
     2. Click on your index name
     3. Click on the "Configuration" tab
@@ -104,4 +105,4 @@ $ ./scripts/stack/stop-stack.sh
 
 Command line options:
 * `-v | --remove-volumes`: delete all data volumes on stop
-* `-r | --reset-configuration`: resets the `config.yml` file from the `config.yml.example` file.
+* `-r | --reset-configuration`: removes the current configuration

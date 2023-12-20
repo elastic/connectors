@@ -26,9 +26,8 @@ fi
 
 if [ "${reset_config:-}" == true ]; then
   config_path="$PROJECT_ROOT/scripts/stack/connectors-config"
-  echo "... resetting configuration file"
+  echo "... removing configuration file..."
   if [ -d "$config_path" ]; then
     rm -rf "$config_path"
-    source "$CURDIR/copy-config.sh"
   fi
 fi
