@@ -39,6 +39,12 @@ The framework implements common functionalities out of the box, so developers ca
 
 The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
 
+## Running a self-managed stack
+
+This repo provides a [set of scripts](./scripts/stack) to allow a user to set up a full Elasticsearch, Kibana, and Connectors service stack using Docker.
+This is useful to get up and running with the Connectors framework with minimal effort, and provides a guided set of prompts for setup and configuration.
+For more information, instructions, and options, see the [README file](./scripts/stack/README.md) in the stack folder.
+
 ### Framework use cases
 
 The framework serves two distinct, but related use cases:
