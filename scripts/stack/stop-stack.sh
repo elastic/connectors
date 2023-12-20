@@ -26,13 +26,9 @@ fi
 
 if [ "${reset_config:-}" == true ]; then
   config_path="$PROJECT_ROOT/scripts/stack/connectors-config"
-  config_file="$config_path/config.yml"
-  orig_config="$config_path/config.yml.example"
   echo "... resetting configuration file"
-  if [ ! -f "$orig_config" ]; then
-    echo "! Cannot find original config file at $orig_config"
-    exit 2
+  if [ -d "$config_path" ]; then
+    rm -rf "$config_path"
+    source "$CURDIR/copy-config.sh"
   fi
-
-  cp "$orig_config" "$config_file"
 fi

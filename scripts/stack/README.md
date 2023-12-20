@@ -92,6 +92,7 @@ Command line options:
 * `-u | --update-images`: perform a fresh pull on the docker images
 * `-n | --no-connectors`: do not run the connectors service or the connectors configuration
 * `-x | --no-configuration`: do not ask to run the connectors configuration, but still run the service
+* `-c | --connectors-only`: only start the connectors service. Useful if Elasticsearch and Kibana are already running
 
 ### stop-stack.sh
 

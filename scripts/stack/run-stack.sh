@@ -10,9 +10,6 @@ fi
 
 pushd "$CURDIR"
 
-export SECURE_STATE_DIR="$(mktemp -d)"
-trap 'rm -rf -- "$SECURE_STATE_DIR"' EXIT
-
 # Make sure ES_VERSION and ENT_VERSION are set
 source $CURDIR/read-env.sh $CURDIR/.env
 compose_file=$CURDIR/docker/docker-compose.yml
@@ -29,16 +26,18 @@ then
   docker-compose -f $compose_file pull elasticsearch kibana elastic-connectors
 fi
 
-# Start Elasticsearch
-echo "Starting Elasticsearch..."
-docker-compose -f $compose_file up --detach elasticsearch
-source $CURDIR/wait-for-elasticsearch.sh
+if [[ "${connectors_only}" != true ]]; then
+  # Start Elasticsearch
+  echo "Starting Elasticsearch..."
+  docker-compose -f $compose_file up --detach elasticsearch
+  source $CURDIR/wait-for-elasticsearch.sh
 
-# Start Kibana
-echo "Starting Kibana..."
-docker-compose -f $compose_file up --detach kibana
-source $CURDIR/wait-for-kibana.sh
-source $CURDIR/update-kibana-user-password.sh
+  # Start Kibana
+  echo "Starting Kibana..."
+  docker-compose -f $compose_file up --detach kibana
+  source $CURDIR/wait-for-kibana.sh
+  source $CURDIR/update-kibana-user-password.sh
+fi
 
 run_configurator="no"
 if [[ "${bypass_config:-}" == false ]]; then
@@ -51,12 +50,22 @@ if [[ "${bypass_config:-}" == false ]]; then
     esac
   done
   if [ $run_configurator == "yes" ]; then
-    source ./configure-stack.sh $SECURE_STATE_DIR
+    source ./copy-config.sh
+    source ./configure-connectors.sh $SECURE_STATE_DIR
   fi
 fi
 
 if [ "${no_connectors:-}" == false ]; then
   echo "Starting Elastic Connectors..."
+
+  config_dir="$PROJECT_ROOT/scripts/stack/connectors-config"
+  script_config="$config_dir/config.yml"
+  if [ ! -f "$script_config" ]; then
+    echo "Could not find a connectors configuration at: $script_config"
+    echo "Exiting..."
+    exit 2
+  fi
+
   docker-compose -f $compose_file up --detach elastic-connectors
 else
   echo "... Connectors service is set to not start... skipping..."

@@ -33,3 +33,12 @@ if [ -z "$ELASTIC_PASSWORD" ]
 then
   export ELASTIC_PASSWORD="changeme"
 fi
+
+uname_value=`uname`
+case "${uname_value:none}" in
+  Linux*) machine_os="Linux";;
+  Darwin*) machine_os="MacOS";;
+  FreeBSD*) machine_os="FreeBSD";;
+  *) machine_os="UNKNOWN:${uname_value}"
+esac
+export MACHINE_OS="$machine_os"

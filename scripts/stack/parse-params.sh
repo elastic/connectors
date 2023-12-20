@@ -1,19 +1,10 @@
 #!/bin/bash
 
 parse_params() {
-  # If the first parameter is docker-compose, then instead of executing as normally, attempt to run the command
-  # as a docker-compose command
-  if [ "$1" = "docker-compose" ]
-  then
-    shift 1
-    echo $@
-    docker-compose -f $compose_file $@
-    exit 0
-  fi
-
   update_images=false
   remove_volumes=false
   no_connectors=false
+  connectors_only=false
   bypass_config=false
   reset_config=-false
 
@@ -27,6 +18,10 @@ parse_params() {
         ;;
       -x|--no-configuration)
         bypass_config=true
+        shift 1
+        ;;
+      -c|--connectors-only)
+        connectors_only=true
         shift 1
         ;;
       -u|--update-images)
