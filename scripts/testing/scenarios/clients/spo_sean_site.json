@@ -1,0 +1,15 @@
+{
+  "tenant_id": "vault:connectors/sharepoint-online:TenantID",
+  "tenant_name": "vault:connectors/sharepoint-online:Tenant Name",
+  "use_text_extraction_service": false,
+  "fetch_drive_item_permissions": true,
+  "fetch_subsites": true,
+  "client_id": "vault:connectors/sharepoint-online:ClientID",
+  "fetch_unique_page_permissions": true,
+  "secret_value": "vault:connectors/sharepoint-online:SecretValue",
+  "enumerate_all_sites": false,
+  "fetch_unique_list_item_permissions": true,
+  "fetch_unique_list_permissions": true,
+  "site_collections": "Sean'sTeamSite",
+  "use_document_level_security": false
+}
