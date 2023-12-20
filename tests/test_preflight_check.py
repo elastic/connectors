@@ -45,9 +45,11 @@ def mock_index(mock_responses, index, doc_id, repeat=False):
     status = 200
     mock_responses.put(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
 
+
 def mock_create_index(mock_responses, index, repeat=False):
     status = 200
     mock_responses.put(f"{host}/{index}", status=status, repeat=repeat)
+
 
 def mock_delete(mock_responses, index, doc_id, repeat=False):
     status = 200
@@ -77,7 +79,6 @@ async def test_connectors_index_missing(mocker, mock_responses):
 
 @pytest.mark.asyncio
 async def test_jobs_index_missing(mocker, mock_responses):
-    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=True)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
