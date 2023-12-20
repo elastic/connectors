@@ -540,12 +540,14 @@ class ServiceNowDataSource(BaseDataSource):
         )
 
     async def _fetch_all_users(self):
+        self._logger.debug("Fetching all users.")
         async for user in self._table_data_generator(
             service_name="sys_user", params={}
         ):
             yield user
 
     async def _fetch_users_by_roles(self, role):
+        self._logger.debug(f"Fetching users with role: {role}.")
         role_user_params = {"sysparm_query": f"role={role}"}
         async for user in self._table_data_generator(
             service_name="sys_user_has_role", params=role_user_params
@@ -640,7 +642,7 @@ class ServiceNowDataSource(BaseDataSource):
                         access_control=table_access_control,
                     )
                     await self.queue.put(
-                        (  # pyright: ignore
+                        (
                             attachment_with_access_control,
                             partial(
                                 self.get_content,
@@ -653,7 +655,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
-        await self.queue.put(EndSignal.ATTACHMENT)  # pyright: ignore
+        await self.queue.put(EndSignal.ATTACHMENT)
 
     async def _attachment_metadata_producer(self, record_ids, table_access_control):
         attachment_apis = self.servicenow_client.get_attachment_apis(
@@ -673,7 +675,7 @@ class ServiceNowDataSource(BaseDataSource):
             )
             self.task_count += 1
 
-        await self.queue.put(EndSignal.RECORD)  # pyright: ignore
+        await self.queue.put(EndSignal.RECORD)
 
     async def _yield_table_data(self, batched_apis):
         try:
@@ -686,7 +688,8 @@ class ServiceNowDataSource(BaseDataSource):
                     yield serialized_table_data
         except Exception as exception:
             self._logger.warning(
-                f"Skipping batch data for {batched_apis}. Exception: {exception}."
+                f"Skipping batch data for {batched_apis}. Exception: {exception}.",
+                exc_info=True,
             )
 
     async def _fetch_table_data(self, batched_apis, table_access_control):
@@ -707,7 +710,7 @@ class ServiceNowDataSource(BaseDataSource):
                         (
                             table_data_with_access_control,
                             None,
-                        )  # pyright: ignore
+                        )
                     )
                 await self.fetchers.put(
                     partial(
@@ -722,7 +725,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
-        await self.queue.put(EndSignal.RECORD)  # pyright: ignore
+        await self.queue.put(EndSignal.RECORD)
 
     async def _fetch_access_controls(self, table_name):
         access_control, user_roles, roles = [], [], {}
@@ -743,6 +746,7 @@ class ServiceNowDataSource(BaseDataSource):
             ):
                 roles[role.get("sys_id")] = role.get("name")
 
+            self._logger.info(f"Fetching roles of {table_name} with read operation.")
             acl_params = {
                 "sys_security_acl.operation": "read",
                 "sys_security_acl.name": table_name,
@@ -756,6 +760,9 @@ class ServiceNowDataSource(BaseDataSource):
 
             for role in user_roles:
                 if roles.get(role).lower() == "public":
+                    self._logger.info(
+                        f"Found public role in {table_name}, Fetching all users."
+                    )
                     async for user in self._fetch_all_users():
                         access_control.append(
                             _prefix_user_id(user_id=user.get("sys_id"))
@@ -791,7 +798,8 @@ class ServiceNowDataSource(BaseDataSource):
                     yield user
         except Exception as exception:
             self._logger.warning(
-                f"Skipping table data for {service_name}. Exception: {exception}."
+                f"Skipping table data for {service_name}. Exception: {exception}.",
+                exc_info=True,
             )
 
     async def _table_data_producer(self, service_name, params, table_access_control):
@@ -807,7 +815,7 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
 
-        await self.queue.put(EndSignal.SERVICE)  # pyright: ignore
+        await self.queue.put(EndSignal.SERVICE)
 
     async def _consumer(self):
         """Consume the queue for the documents.

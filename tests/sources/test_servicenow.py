@@ -801,6 +801,45 @@ async def test_get_docs_with_advanced_rules(filtering):
 
 @pytest.mark.asyncio
 async def test_get_access_control():
+    expected_response = {
+        "_id": "id_1",
+        "identity": {
+            "user_id": "user_id:id_1",
+            "display_name": "username:demo.user",
+            "email": "email:admin@email.com",
+        },
+        "created_at": "2023-10-10T05:21:45",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "user_id:id_1",
+                        "username:demo.user",
+                        "email:admin@email.com",
+                    ]
+                }
+            },
+            "source": {
+                "bool": {
+                    "filter": {
+                        "bool": {
+                            "should": [
+                                {
+                                    "terms": {
+                                        "_allow_access_control.enum": [
+                                            "user_id:id_1",
+                                            "username:demo.user",
+                                            "email:admin@email.com",
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+        },
+    }
     async with create_service_now_source() as source:
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
         source._dls_enabled = Mock(return_value=True)
@@ -821,7 +860,7 @@ async def test_get_access_control():
             ),
         ):
             async for user in source.get_access_control():
-                assert user["_id"] == "id_1"
+                assert user == expected_response
 
 
 @pytest.mark.asyncio
