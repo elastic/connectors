@@ -601,6 +601,18 @@ async def test_validate_config_with_invalid_token_then_raise():
 
 
 @pytest.mark.asyncio
+async def test_validate_config_with_extra_scopes_token():
+    async with create_github_source() as source:
+        source.github_client.post = AsyncMock(
+            return_value=(
+                {"user": "username"},
+                {"X-OAuth-Scopes": "user, repo, admin:org"},
+            )
+        )
+        assert await source.validate_config() is None
+
+
+@pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_validate_config_with_inaccessible_repositories_then_raise():
     async with create_github_source() as source:
