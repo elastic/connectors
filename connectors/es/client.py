@@ -174,6 +174,7 @@ class ESManagementClient(ESClient):
 
     This client, on the contrary, is used to manage a number of indices outside of connector protocol operations.
     """
+
     def __init__(self, config):
         logger.debug(f"ESManagementClient connecting to {config['host']}")
         # initialize ESIndex instance

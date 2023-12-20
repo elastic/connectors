@@ -208,6 +208,7 @@ class ConnectorIndex(ESIndex):
         async for connector in self.get_all_docs():
             yield connector
 
+
 def filter_ingestion_stats(ingestion_stats):
     if ingestion_stats is None:
         return {}
