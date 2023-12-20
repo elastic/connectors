@@ -187,10 +187,7 @@ class ESManagementClient(ESClient):
         for index in indices:
             logger.debug(f"Checking index {index}")
             if not await self.client.indices.exists(index=index):
-                # 400 is if index already exists
-                # It could technically have been created by someone else
-                # while this code has been running
-                await self.client.indices.create(index=index, ignore=400)
+                await self.client.indices.create(index=index)
                 logger.debug(f"Created index {index}")
 
     async def delete_indices(self, indices):
