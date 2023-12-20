@@ -6,7 +6,7 @@
 
 import aiohttp
 
-from connectors.es import ESClient
+from connectors.es.client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 from connectors.utils import CancellableSleeps
@@ -18,7 +18,7 @@ class PreflightCheck:
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
         self.extraction_config = config.get("extraction_service", None)
-        self.es_client = ESClient(self.elastic_config)
+        self.es_client = ESManagementClient(self.elastic_config)
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
         )

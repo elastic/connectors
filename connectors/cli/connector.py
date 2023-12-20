@@ -1,7 +1,7 @@
 import asyncio
 from collections import OrderedDict
 
-from connectors.es.client import ESClient
+from connectors.es.client import ESManagementClient
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
@@ -22,7 +22,7 @@ class Connector:
         self.config = config
 
         # initialize ES client
-        self.es_client = ESClient(self.config)
+        self.es_client = ESManagementClient(self.config)
 
         self.connector_index = ConnectorIndex(self.config)
 

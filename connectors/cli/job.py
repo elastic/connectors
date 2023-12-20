@@ -2,7 +2,7 @@ import asyncio
 
 from elasticsearch import ApiError
 
-from connectors.es.client import ESClient
+from connectors.es.client import ESManagementClient
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
@@ -18,7 +18,7 @@ from connectors.protocol import (
 class Job:
     def __init__(self, config):
         self.config = config
-        self.es_client = ESClient(self.config)
+        self.es_client = ESManagementClient(self.config)
         self.sync_job_index = SyncJobIndex(self.config)
         self.connector_index = ConnectorIndex(self.config)
 

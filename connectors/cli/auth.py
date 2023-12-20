@@ -4,7 +4,7 @@ import os
 import yaml
 from elasticsearch import ApiError
 
-from connectors.es import ESClient
+from connectors.es.client import ESManagementClient
 
 CONFIG_FILE_PATH = ".cli/config.yml"
 
@@ -12,7 +12,7 @@ CONFIG_FILE_PATH = ".cli/config.yml"
 class Auth:
     def __init__(self, host, username, password):
         self.elastic_config = {"host": host, "username": username, "password": password}
-        self.es_client = ESClient(self.elastic_config)
+        self.es_client = ESManagementClient(self.elastic_config)
 
     def authenticate(self):
         if asyncio.run(self.__ping_es_client()):
