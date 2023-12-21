@@ -2244,3 +2244,27 @@ async def test_native_connector_missing_features():
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
+
+
+@pytest.mark.asyncio
+async def test_get_connector_by_index():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    index_name = "search-mongo"
+    doc = {"_id": "1", "_source": {"index_name": index_name}}
+
+    es_client = ConnectorIndex(config)
+    es_client.client = Mock()
+
+    es_client.client.indices.refresh = AsyncMock()
+    es_client.client.search = AsyncMock(
+        return_value={"hits": {"total": {"value": 1}, "hits": [doc]}}
+    )
+
+    connector = await es_client.get_connector_by_index(index_name)
+    es_client.client.search.assert_awaited_once()
+    assert connector.id == doc["_id"]
+    assert connector.index_name == index_name

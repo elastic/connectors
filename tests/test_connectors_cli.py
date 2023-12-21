@@ -25,14 +25,14 @@ def mock_cli_config():
 
 @pytest.fixture(autouse=True)
 def mock_connector_es_client():
-    with patch("connectors.cli.connector.ESClient") as mock:
+    with patch("connectors.cli.connector.ESManagementClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
 
 @pytest.fixture(autouse=True)
 def mock_job_es_client():
-    with patch("connectors.cli.job.ESClient") as mock:
+    with patch("connectors.cli.job.ESManagementClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
@@ -454,7 +454,8 @@ def test_index_list_one_index():
     indices = {"indices": {"test_index": {"primaries": {"docs": {"count": 10}}}}}
 
     with patch(
-        "connectors.es.client.ESClient.list_indices", AsyncMock(return_value=indices)
+        "connectors.es.client.ESManagementClient.list_indices",
+        AsyncMock(return_value=indices),
     ):
         result = runner.invoke(cli, ["index", "list"])
 
@@ -467,7 +468,8 @@ def test_index_clean():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESClient.clean_index", AsyncMock(return_value=True)
+        "connectors.es.client.ESManagementClient.clean_index",
+        AsyncMock(return_value=True),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "clean", index_name])
 
@@ -481,7 +483,7 @@ def test_index_clean_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESClient.clean_index",
+        "connectors.es.client.ESManagementClient.clean_index",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -495,7 +497,8 @@ def test_index_delete():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESClient.delete_indices", AsyncMock(return_value=None)
+        "connectors.es.client.ESManagementClient.delete_indices",
+        AsyncMock(return_value=None),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "delete", index_name])
 
@@ -509,7 +512,7 @@ def test_delete_index_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESClient.delete_indices",
+        "connectors.es.client.ESManagementClient.delete_indices",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "delete", index_name])

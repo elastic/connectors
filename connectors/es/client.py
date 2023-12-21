@@ -160,6 +160,26 @@ class ESClient:
         await self.close()
         return False
 
+
+class ESManagementClient(ESClient):
+    """
+    Elasticsearch client with methods to manage connector-related indices.
+
+    Additionally to regular methods of ESClient, this client provides methods to work with arbitrary indices,
+    for example allowing to list indices, delete indices, wipe data from indices and such.
+
+    ESClient should be used to provide rich clients that operate on "domains", such as:
+        - specific connector
+        - specific job
+
+    This client, on the contrary, is used to manage a number of indices outside of connector protocol operations.
+    """
+
+    def __init__(self, config):
+        logger.debug(f"ESManagementClient connecting to {config['host']}")
+        # initialize ESIndex instance
+        super().__init__(config)
+
     async def ensure_exists(self, indices=None):
         if indices is None:
             indices = []
@@ -167,10 +187,7 @@ class ESClient:
         for index in indices:
             logger.debug(f"Checking index {index}")
             if not await self.client.indices.exists(index=index):
-                await self.client.index(
-                    index=index, document={}, id=".connectors-create-doc"
-                )
-                await self.client.delete(index=index, id=".connectors-create-doc")
+                await self.client.indices.create(index=index)
                 logger.debug(f"Created index {index}")
 
     async def delete_indices(self, indices):
@@ -186,14 +203,6 @@ class ESClient:
 
     async def index_exists(self, index_name):
         return await self.client.indices.exists(index=index_name)
-
-    async def get_connector_doc(self, index_name):
-        response = await self.client.search(
-            index=".elastic-connectors",
-            body={"query": {"match": {"index_name": index_name}}},
-        )
-        hits = response["hits"]["hits"]
-        return hits[0] if len(hits) > 0 else None
 
 
 def with_concurrency_control(retries=3):
