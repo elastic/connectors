@@ -16,19 +16,21 @@ These scripts can be useful if you want to try out Connectors and ingesting thei
 
 ## Prerequisites
 * Linux or MacOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
+* Python 3.10 or higher
 * Docker with Docker Compose Installed
 * It is recommended to run Docker with at least 4GB of available RAM.
 
 ## Running the Stack
 
-If you do not wish to use the default Elasticsearch username and password, you must set the username and password (or the API key)
-in the default [config.yml](./config.yml) file before running the `run-stack.sh` script. You can also
-use a different password for the `elastic` user by specifying the environment variable
-`ELASTIC_PASSWORD` before running the script. E.g.:
+The scripts used a default password for the `elastic` user when running the scripts.
+If you wish to use a different password for the `elastic` user, you can specify the environment variable `ELASTIC_PASSWORD` before running the script. E.g.:
 
 ```bash
 $ ELASTIC_PASSWORD="my_new_password" ./scripts/stack/run-stack.sh
 ```
+
+Alternatively, if you do not wish to a different set of credentials, or an API key for authentication, you can run the `./copy-config.sh` script to create a
+copy of the default [config.yml](../../config.yml) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
 
 ## Prompted Configuration
 

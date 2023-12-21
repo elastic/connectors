@@ -10,7 +10,6 @@ fi
 
 pushd "$CURDIR"
 
-# Make sure ES_VERSION and ENT_VERSION are set
 source $CURDIR/read-env.sh $CURDIR/.env
 compose_file=$CURDIR/docker/docker-compose.yml
 echo "Using compose file at: $compose_file"
