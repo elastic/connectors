@@ -71,7 +71,7 @@ async def test_connectors_index_missing(mocker, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=True)
     mock_create_index(mock_responses, CONCRETE_CONNECTORS_INDEX)
     preflight = PreflightCheck(config)
-    spy = mocker.spy(preflight.es_client.client.indices, "create")
+    spy = mocker.spy(preflight.es_management_client.client.indices, "create")
     result = await preflight.run()
     assert result is True
     spy.assert_called_with(index=CONCRETE_CONNECTORS_INDEX)
@@ -84,7 +84,7 @@ async def test_jobs_index_missing(mocker, mock_responses):
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
     mock_create_index(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config)
-    spy = mocker.spy(preflight.es_client.client.indices, "create")
+    spy = mocker.spy(preflight.es_management_client.client.indices, "create")
     await preflight.run()
     spy.assert_called_with(index=CONCRETE_JOBS_INDEX)
 
@@ -97,7 +97,7 @@ async def test_both_indices_missing(mocker, mock_responses):
     mock_create_index(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_create_index(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config)
-    spy = mocker.spy(preflight.es_client.client.indices, "create")
+    spy = mocker.spy(preflight.es_management_client.client.indices, "create")
     await preflight.run()
     assert spy.call_count == 2
 

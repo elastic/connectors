@@ -18,7 +18,7 @@ from connectors.protocol import (
 class Job:
     def __init__(self, config):
         self.config = config
-        self.es_client = ESManagementClient(self.config)
+        self.es_management_client = ESManagementClient(self.config)
         self.sync_job_index = SyncJobIndex(self.config)
         self.connector_index = ConnectorIndex(self.config)
 
@@ -36,14 +36,14 @@ class Job:
 
     async def __async_job(self, job_id):
         try:
-            await self.es_client.ensure_exists(
+            await self.es_management_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             job = await self.sync_job_index.fetch_by_id(job_id)
             return job
         finally:
             await self.sync_job_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     async def __async_start(self, connector_id, job_type):
         try:
@@ -58,11 +58,11 @@ class Job:
         finally:
             await self.sync_job_index.close()
             await self.connector_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     async def __async_list_jobs(self, connector_id, index_name, job_id):
         try:
-            await self.es_client.ensure_exists(
+            await self.es_management_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             jobs = self.sync_job_index.get_all_docs(
@@ -75,7 +75,7 @@ class Job:
         # TODO catch exceptions
         finally:
             await self.sync_job_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     async def __async_cancel_jobs(self, connector_id, index_name, job_id):
         try:
@@ -89,7 +89,7 @@ class Job:
             return False
         finally:
             await self.sync_job_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     def __job_list_query(self, connector_id, index_name, job_id):
         if job_id:

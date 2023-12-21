@@ -18,7 +18,7 @@ class PreflightCheck:
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
         self.extraction_config = config.get("extraction_service", None)
-        self.es_client = ESManagementClient(self.elastic_config)
+        self.es_management_client = ESManagementClient(self.elastic_config)
         self.preflight_max_attempts = int(
             self.service_config.get("preflight_max_attempts", 10)
         )
@@ -29,8 +29,8 @@ class PreflightCheck:
     def stop(self):
         self.running = False
         self._sleeps.cancel()
-        if self.es_client is not None:
-            self.es_client.stop_waiting()
+        if self.es_management_client is not None:
+            self.es_management_client.stop_waiting()
 
     def shutdown(self, sig):
         logger.info(f"Caught {sig.name}. Graceful shutdown.")
@@ -40,7 +40,7 @@ class PreflightCheck:
         try:
             logger.info("Running preflight checks")
             self.running = True
-            if not (await self.es_client.wait()):
+            if not (await self.es_management_client.wait()):
                 logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
                 return False
 
@@ -51,8 +51,8 @@ class PreflightCheck:
             return valid_configuration and available_system_indices
         finally:
             self.stop()
-            if self.es_client is not None:
-                await self.es_client.close()
+            if self.es_management_client is not None:
+                await self.es_management_client.close()
 
     async def _check_local_extraction_setup(self):
         if self.extraction_config is None:
@@ -96,7 +96,7 @@ class PreflightCheck:
                 # The templates are installed here: https://github.com/elastic/elasticsearch/blob/main/x-pack/plugin/ent-search/src/main/java/org/elasticsearch/xpack/application/connector/ConnectorTemplateRegistry.java
                 # and located here: https://github.com/elastic/elasticsearch/tree/main/x-pack/plugin/core/template-resources/src/main/resources/entsearch/connector
 
-                await self.es_client.ensure_exists(
+                await self.es_management_client.ensure_exists(
                     indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
                 )
                 return True
