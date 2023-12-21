@@ -46,6 +46,11 @@ def mock_index(mock_responses, index, doc_id, repeat=False):
     mock_responses.put(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
 
 
+def mock_create_index(mock_responses, index, repeat=False):
+    status = 200
+    mock_responses.put(f"{host}/{index}", status=status, repeat=repeat)
+
+
 def mock_delete(mock_responses, index, doc_id, repeat=False):
     status = 200
     mock_responses.delete(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
@@ -61,52 +66,40 @@ async def test_es_unavailable(mock_responses):
 
 @pytest.mark.asyncio
 async def test_connectors_index_missing(mocker, mock_responses):
-    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=True)
-    mock_index(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
-    mock_delete(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
+    mock_create_index(mock_responses, CONCRETE_CONNECTORS_INDEX)
     preflight = PreflightCheck(config)
-    spy = mocker.spy(preflight.es_client.client, "index")
-    delete_spy = mocker.spy(preflight.es_client.client, "delete")
-    await preflight.run()
-    spy.assert_called_with(index=CONCRETE_CONNECTORS_INDEX, document={}, id=doc_id)
-    delete_spy.assert_called_with(index=CONCRETE_CONNECTORS_INDEX, id=doc_id)
+    spy = mocker.spy(preflight.es_management_client.client.indices, "create")
+    result = await preflight.run()
+    assert result is True
+    spy.assert_called_with(index=CONCRETE_CONNECTORS_INDEX)
 
 
 @pytest.mark.asyncio
 async def test_jobs_index_missing(mocker, mock_responses):
-    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=True)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
-    mock_index(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
-    mock_delete(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
+    mock_create_index(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config)
-    spy = mocker.spy(preflight.es_client.client, "index")
-    delete_spy = mocker.spy(preflight.es_client.client, "delete")
+    spy = mocker.spy(preflight.es_management_client.client.indices, "create")
     await preflight.run()
-    spy.assert_called_with(index=CONCRETE_JOBS_INDEX, document={}, id=doc_id)
-    delete_spy.assert_called_with(index=CONCRETE_JOBS_INDEX, id=doc_id)
+    spy.assert_called_with(index=CONCRETE_JOBS_INDEX)
 
 
 @pytest.mark.asyncio
 async def test_both_indices_missing(mocker, mock_responses):
-    doc_id = ".connectors-create-doc"
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
-    mock_index(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
-    mock_index(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
-    mock_delete(mock_responses, CONCRETE_CONNECTORS_INDEX, doc_id)
-    mock_delete(mock_responses, CONCRETE_JOBS_INDEX, doc_id)
+    mock_create_index(mock_responses, CONCRETE_CONNECTORS_INDEX)
+    mock_create_index(mock_responses, CONCRETE_JOBS_INDEX)
     preflight = PreflightCheck(config)
-    spy = mocker.spy(preflight.es_client.client, "index")
-    delete_spy = mocker.spy(preflight.es_client.client, "delete")
+    spy = mocker.spy(preflight.es_management_client.client.indices, "create")
     await preflight.run()
     assert spy.call_count == 2
-    assert delete_spy.call_count == 2
 
 
 @pytest.mark.asyncio
