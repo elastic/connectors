@@ -23,7 +23,6 @@ from connectors.sources.generic_database import (
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    has_duplicates,
     iso_utc,
     retryable,
     ssl_context,
