@@ -1,6 +1,0 @@
-certifi==2023.11.17
-click==8.1.7
-elastic-transport==8.10.0
-elasticsearch==8.11.0
-PyYAML==6.0.1
-urllib3==2.1.0

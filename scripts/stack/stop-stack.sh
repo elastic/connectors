@@ -9,7 +9,7 @@ if ! which docker-compose > /dev/null; then
     exit 2
 fi
 
-source $CURDIR/read-env.sh $CURDIR/.env
+source $CURDIR/set-env.sh
 compose_file=$CURDIR/docker/docker-compose.yml
 
 . $CURDIR/parse-params.sh

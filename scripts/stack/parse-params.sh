@@ -7,6 +7,7 @@ parse_params() {
   connectors_only=false
   bypass_config=false
   reset_config=-false
+  use_snapshot=true
 
   #Boilerplate parameter parsing
   PARAMS=""
@@ -34,6 +35,10 @@ parse_params() {
         ;;
       -r|--reset-configuration)
         reset_config=true
+        shift 1
+        ;;
+      -s|--no-snapshot)
+        use_snapshot=false
         shift 1
         ;;
       --) # end argument parsing

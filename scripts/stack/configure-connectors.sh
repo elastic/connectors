@@ -5,7 +5,8 @@ set -o pipefail
 if [[ ${CURDIR:-} == "" ]]; then
     export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 fi
-source $CURDIR/read-env.sh $CURDIR/.env
+
+source $CURDIR/set-env.sh
 
 PYTHON_EXECUTABLE=""
 

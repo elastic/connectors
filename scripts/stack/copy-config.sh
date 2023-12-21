@@ -5,7 +5,7 @@ CONFIG_PATH=${1:-}
 if [[ ${CURDIR:-} == "" ]]; then
     export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 fi
-source $CURDIR/read-env.sh $CURDIR/.env
+source $CURDIR/set-env.sh
 
 config_dir="$PROJECT_ROOT/scripts/stack/connectors-config"
 script_config="$config_dir/config.yml"

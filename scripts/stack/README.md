@@ -96,6 +96,19 @@ Command line options:
 * `-n | --no-connectors`: do not run the connectors service or the connectors configuration
 * `-x | --no-configuration`: do not ask to run the connectors configuration, but still run the service
 * `-c | --connectors-only`: only start the connectors service. Useful if Elasticsearch and Kibana are already running
+* `-s | --no-snapshot`: by default, the scripts will use `SNAPSHOT` versions of the Docker images. Specify this to not use a SNAPSHOT.
+
+You can also specify the base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
+
+```bash
+$ CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+```
+
+By default, the Elasticsearch and Kibana versions will use the same stack version as the `CONNECTORS_VERSION`, however, you can additionally specify these before running:
+
+```bash
+$ ELASTICSERACH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+```
 
 ### stop-stack.sh
 

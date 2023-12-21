@@ -10,13 +10,14 @@ fi
 
 pushd "$CURDIR"
 
-source $CURDIR/read-env.sh $CURDIR/.env
 compose_file=$CURDIR/docker/docker-compose.yml
 echo "Using compose file at: $compose_file"
 
 . $CURDIR/parse-params.sh
 parse_params $@
 eval set -- "$parsed_params"
+
+source $CURDIR/set-env.sh $CURDIR/.env
 
 # for now, always update the images, make this an arg later
 if [ "${update_images:-}" = true ]

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [[ "${CURDIR:-}" == "" ]]; then
+  export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+fi
+
 function realpath {
   echo "$(cd "$(dirname "$1")"; pwd)"/"$(basename "$1")";
 }
@@ -10,22 +14,34 @@ if [[ "${CURDIR:-}" != "" && "${PROJECT_ROOT:-}" == "" ]]; then
   echo "set PROJECT_ROOT to $PROJECT_ROOT"
 fi
 
-# Fallback to .env file # if not already set
+if [[ "${CONNECTORS_VERSION:-}" == "" ]]; then
+  SET_CONNECTORS_VERSION=`head -1 $PROJECT_ROOT/connectors/VERSION`
+else
+  SET_CONNECTORS_VERSION="$CONNECTORS_VERSION"
+fi
+
+SET_STACK_VERSION=`echo "$SET_CONNECTORS_VERSION" | sed 's/\.[0-9]$//'`
+
+if [ "$use_snapshot" == true ]; then
+  SET_CONNECTORS_VERSION="$SET_CONNECTORS_VERSION-SNAPSHOT"
+  SET_STACK_VERSION="$SET_STACK_VERSION-SNAPSHOT"
+fi
+
 if [ -z "$ELASTICSEARCH_VERSION" ]
 then
-  export $(grep -E 'ELASTICSEARCH_VERSION' $1 | xargs)
+  export ELASTICSEARCH_VERSION="$SET_STACK_VERSION"
 fi
 echo "ELASTICSEARCH_VERSION=$ELASTICSEARCH_VERSION"
 
 if [ -z "$KIBANA_VERSION" ]
 then
-  export $(grep -E 'KIBANA_VERSION' $1 | xargs)
+  export KIBANA_VERSION="$SET_STACK_VERSION"
 fi
 echo "KIBANA_VERSION=$KIBANA_VERSION"
 
 if [ -z "$CONNECTORS_VERSION" ]
 then
-  export $(grep -E 'CONNECTORS_VERSION' $1 | xargs)
+  export CONNECTORS_VERSION="$SET_CONNECTORS_VERSION"
 fi
 echo "CONNECTORS_VERSION=$CONNECTORS_VERSION"
 
