@@ -561,12 +561,6 @@ class MySqlDataSource(BaseDataSource):
             )
             return
 
-        if has_duplicates(primary_key_columns):
-            self._logger.warning(
-                f"Skipping custom query for tables {format_list(tables)} as there are multiple primary key columns with the same name. Consider using 'AS' to uniquely identify primary key columns from different tables."
-            )
-            return
-
         last_update_times = list(
             filter(
                 lambda update_time: update_time is not None,
