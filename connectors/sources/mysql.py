@@ -23,7 +23,6 @@ from connectors.sources.generic_database import (
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
-    has_duplicates,
     iso_utc,
     retryable,
     ssl_context,
@@ -568,12 +567,6 @@ class MySqlDataSource(BaseDataSource):
         if not primary_key_columns:
             self._logger.warning(
                 f"Skipping tables {format_list(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
-            )
-            return
-
-        if has_duplicates(primary_key_columns):
-            self._logger.warning(
-                f"Skipping custom query for tables {format_list(tables)} as there are multiple primary key columns with the same name. Consider using 'AS' to uniquely identify primary key columns from different tables."
             )
             return
 
