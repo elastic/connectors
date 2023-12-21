@@ -203,22 +203,35 @@ class AzureBlobStorageDataSource(BaseDataSource):
             async for content in data.chunks():
                 yield content
 
-    async def get_container(self):
+    async def get_container(self, container_list):
         """Get containers from Azure Blob Storage via azure base client
+        Args:
+            container_list (list): List of containers
 
         Yields:
             dictionary: Container document with name & meta data
         """
+        container_set = set(container_list)
         async with BlobServiceClient.from_connection_string(
             conn_str=self.connection_string, retry_total=self.retry_count
         ) as azure_base_client:
-            async for container in azure_base_client.list_containers(
-                include_metadata=True
-            ):
-                yield {
-                    "name": container["name"],
-                    "metadata": container["metadata"],
-                }
+            try:
+                async for container in azure_base_client.list_containers(
+                    include_metadata=True
+                ):
+                    if "*" in container_set or container["name"] in container_set:
+                        yield {
+                            "name": container["name"],
+                            "metadata": container["metadata"],
+                        }
+                    if "*" not in container_set and container["name"] in container_set:
+                        container_set.remove(container["name"])
+                        if not container_set:
+                            yield
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while fetching containers. Error: {exception}"
+                )
 
     async def get_blob(self, container):
         """Get blobs for a specific container from Azure Blob Storage via container client
@@ -244,43 +257,13 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
                 )
 
-    async def get_container_properties(self, container):
-        """Get containers properties from Azure Blob Storage via azure base client
-
-        Args:
-            container (string): Name of container
-
-        Yields:
-            dictionary: Container document with name & meta data
-        """
-        async with BlobServiceClient.from_connection_string(
-            conn_str=self.connection_string, retry_total=self.retry_count
-        ) as azure_base_client:
-            try:
-                container_client = azure_base_client.get_container_client(container)
-                container_properties = await container_client.get_container_properties()
-                return {"name": container, "metadata": container_properties.metadata}
-
-            except Exception as exception:
-                self._logger.warning(
-                    f"Something went wrong while fetching container properties for specified container {container}. Error: {exception}"
-                )
-
     async def get_docs(self, filtering=None):
         """Get documents from Azure Blob Storage
 
         Yields:
             dictionary: Documents from Azure Blob Storage
         """
-        if self.containers == ["*"]:
-            async for container_data in self.get_container():
+        async for container_data in self.get_container(container_list=self.containers):
+            if container_data:
                 async for blob in self.get_blob(container=container_data):
                     yield blob, partial(self.get_content, blob)
-        else:
-            for container in self.containers:
-                container_properties = await self.get_container_properties(
-                    container=container
-                )
-                if container_properties:
-                    async for blob in self.get_blob(container=container_properties):
-                        yield blob, partial(self.get_content, blob)
