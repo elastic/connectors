@@ -32,6 +32,21 @@ $ ELASTIC_PASSWORD="my_new_password" ./scripts/stack/run-stack.sh
 Alternatively, if you do not wish to a different set of credentials, or an API key for authentication, you can run the `./copy-config.sh` script to create a
 copy of the default [config.yml](../../config.yml) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
 
+By default, these Connector scripts will use a `SNAPSHOT` version of the Docker image.
+The version is defined in the [VERSION file](../../connectors/VERSION).
+If you do not wish to use a `SNAPSHOT` version, add the `--no-snapshot` flag when you run the script.
+You can also specify an alternative base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
+
+```bash
+$ CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+```
+
+When running the script, the Elasticsearch and Kibana versions will use the same stack version as the `CONNECTORS_VERSION`, however, you can additionally specify these before running:
+
+```bash
+$ ELASTICSERACH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+```
+
 ## Prompted Configuration
 
 If you run the `run-stack.sh` command without any flags, by default the script will
@@ -54,6 +69,9 @@ To do this, in Kibana:
   * Optionally, change the name or add a description
   * Ensure your connector settings are the way you want, if not edit them to their correct values
   * Finally, set your schedule and sync
+
+Note - some of the connectors require a valid Elasticsearch license above `basic`.
+To see which connectors require a higher license tier, see the [Connectors reference](https://www.elastic.co/guide/en/enterprise-search/current/connectors-references.html).
 
 ## Manual Configuration
 
@@ -98,17 +116,6 @@ Command line options:
 * `-c | --connectors-only`: only start the connectors service. Useful if Elasticsearch and Kibana are already running
 * `-s | --no-snapshot`: by default, the scripts will use `SNAPSHOT` versions of the Docker images. Specify this to not use a SNAPSHOT.
 
-You can also specify the base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
-
-```bash
-$ CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
-```
-
-By default, the Elasticsearch and Kibana versions will use the same stack version as the `CONNECTORS_VERSION`, however, you can additionally specify these before running:
-
-```bash
-$ ELASTICSERACH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
-```
 
 ### stop-stack.sh
 
