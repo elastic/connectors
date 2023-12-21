@@ -652,13 +652,62 @@ def test_job_list_one_job():
 def test_job_start():
     runner = CliRunner()
     connector_id = "test_connector_id"
+    job_id = "test_job_id"
 
     with patch(
         "connectors.protocol.connectors.SyncJobIndex.create",
-        AsyncMock(return_value=True),
+        AsyncMock(return_value=job_id),
     ) as patched_create:
         result = runner.invoke(cli, ["job", "start", "-i", connector_id, "-t", "full"])
 
         patched_create.assert_called_once()
-        assert "The job has been started" in result.output
+        assert f"The job {job_id} has been started" in result.output
+        assert result.exit_code == 0
+
+
+def test_job_view():
+    runner = CliRunner()
+    job_id = "test_job_id"
+    connector_id = "test_connector_id"
+    index_name = "test_index_name"
+    status = "canceled"
+    deleted_document_count = 123
+    indexed_document_count = 123123
+    indexed_document_volume = 100500
+
+    job_index = MagicMock()
+
+    doc = {
+        "_source": {
+            "connector": {
+                "id": connector_id,
+                "index_name": index_name,
+                "service_type": "mongodb",
+                "last_sync_status": "error",
+                "status": "connected",
+            },
+            "status": status,
+            "deleted_document_count": deleted_document_count,
+            "indexed_document_count": indexed_document_count,
+            "indexed_document_volume": indexed_document_volume,
+            "job_type": "full",
+        },
+        "_id": job_id,
+    }
+
+    job = SyncJobObject(job_index, doc)
+
+    with patch(
+        "connectors.protocol.connectors.SyncJobIndex.fetch_by_id",
+        AsyncMock(return_value=job),
+    ):
+        result = runner.invoke(cli, ["job", "view", job_id])
+
+        assert job_id in result.output
+        assert connector_id in result.output
+        assert index_name in result.output
+        assert status in result.output
+        assert str(deleted_document_count) in result.output
+        assert str(indexed_document_count) in result.output
+        assert str(indexed_document_volume) in result.output
         assert result.exit_code == 0
