@@ -49,6 +49,8 @@ from connectors.utils import (
 )
 
 ACCESS_ALLOWED_TYPE = 0
+ACCESS_DENIED_TYPE = 1
+ACCESS_MASK_ALLOWED_WRITE_PERMISSION = 1048854
 ACCESS_MASK_DENIED_WRITE_PERMISSION = 278
 GET_USERS_COMMAND = "Get-LocalUser | Select Name, SID"
 GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
@@ -68,8 +70,8 @@ def _prefix_user(user):
     return prefix_identity("user", user)
 
 
-def _prefix_sid(sid):
-    return prefix_identity("sid", sid)
+def _prefix_rid(rid):
+    return prefix_identity("rid", rid)
 
 
 class InvalidRulesError(Exception):
@@ -510,40 +512,35 @@ class NASDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _decorate_with_access_control(self, document, file_path, file_type):
+    async def _decorate_with_access_control(
+        self, document, file_path, file_type, groups_info
+    ):
         if self._dls_enabled():
-            entity_permissions = await self.get_entity_permission(
-                file_path=file_path, file_type=file_type
+            allow_permissions, deny_permissions = await self.get_entity_permission(
+                file_path=file_path, file_type=file_type, groups_info=groups_info
             )
+            entity_permissions = list(set(allow_permissions) - set(deny_permissions))
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + entity_permissions)
             )
         return document
 
-    async def _user_access_control_doc(
-        self, user, sid, groups_info, groups_members=None
-    ):
+    async def _user_access_control_doc(self, user, sid, groups_info=None):
+        rid = str(sid).split("-")[-1]
         prefixed_username = _prefix_user(user)
-        sid_user = _prefix_sid(sid)
-        sid_groups = []
+        rid_user = _prefix_rid(rid)
+        rid_groups = []
 
-        if groups_members:
-            for group_name, group_sid in groups_info.items():
-                members = groups_members.get(group_name)
+        for group_sid in groups_info or []:
+            rid_groups.append(_prefix_rid(group_sid.split("-")[-1]))
 
-                if sid in members.values():
-                    sid_groups.append(_prefix_sid(group_sid))
-        else:
-            for group_sid in groups_info or []:
-                sid_groups.append(_prefix_sid(group_sid))
-
-        access_control = [sid_user, prefixed_username, *sid_groups]
+        access_control = [rid_user, prefixed_username, *rid_groups]
 
         return {
-            "_id": sid,
+            "_id": rid,
             "identity": {
                 "username": prefixed_username,
-                "user_id": sid_user,
+                "user_id": rid_user,
             },
             "created_at": iso_utc(),
         } | es_access_control_query(access_control)
@@ -566,6 +563,21 @@ class NASDataSource(BaseDataSource):
                     f"Error while reading user mapping file at the location: {self.identity_mappings}. Error: {e}"
                 )
             return user_info
+
+    async def fetch_groups_info(self):
+        self._logger.info(
+            f"Fetching all groups and members for drive at path '{self.drive_path}'"
+        )
+        groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
+
+        groups_members = {}
+        for group_name, group_sid in groups_info.items():
+            rid = group_sid.split("-")[-1]
+            groups_members[rid] = await asyncio.to_thread(
+                self.security_info.fetch_members, group_name
+            )
+
+        return groups_members
 
     async def get_access_control(self):
         if not self._dls_enabled():
@@ -591,17 +603,6 @@ class NASDataSource(BaseDataSource):
         else:
             try:
                 self._logger.info(
-                    f"Fetching all groups and members for drive at path '{self.drive_path}'"
-                )
-                groups_info = await asyncio.to_thread(self.security_info.fetch_groups)
-
-                groups_members = {}
-                for group_name, _ in groups_info.items():
-                    groups_members[group_name] = await asyncio.to_thread(
-                        self.security_info.fetch_members, group_name
-                    )
-
-                self._logger.info(
                     f"Fetching all users for drive at path '{self.drive_path}'"
                 )
                 users_info = await asyncio.to_thread(self.security_info.fetch_users)
@@ -610,18 +611,17 @@ class NASDataSource(BaseDataSource):
                     yield await self._user_access_control_doc(
                         user=user,
                         sid=sid,
-                        groups_info=groups_info,
-                        groups_members=groups_members,
                     )
             except ConnectionError as exception:
                 msg = "Something went wrong"
                 raise ConnectionError(msg) from exception
 
-    async def get_entity_permission(self, file_path, file_type):
+    async def get_entity_permission(self, file_path, file_type, groups_info):
         if not self._dls_enabled():
             return []
 
-        permissions = []
+        allow_permissions = []
+        deny_permissions = []
         if file_type == "file":
             list_permissions = await asyncio.to_thread(
                 self.list_file_permission,
@@ -639,13 +639,29 @@ class NASDataSource(BaseDataSource):
                 access=DirectoryAccessMask.READ_CONTROL,
             )
         for permission in list_permissions or []:
+            mask = permission["mask"].value
+            ace_type = permission["ace_type"].value
+            rid = str(permission["sid"]).split("-")[-1]
+            if groups_info.get(rid):
+                permissions = [
+                    _prefix_rid(member_id.split("-")[-1])
+                    for member_id in groups_info[rid].values()
+                ]
+            else:
+                permissions = [_prefix_rid(rid)]
             if (
-                permission["ace_type"].value == ACCESS_ALLOWED_TYPE
-                or permission["mask"].value == ACCESS_MASK_DENIED_WRITE_PERMISSION
+                ace_type == ACCESS_ALLOWED_TYPE
+                or mask == ACCESS_MASK_DENIED_WRITE_PERMISSION
             ):
-                permissions.append(_prefix_sid(permission["sid"]))
+                allow_permissions.extend(permissions)
 
-        return permissions
+            if (
+                ace_type == ACCESS_DENIED_TYPE
+                and mask != ACCESS_MASK_DENIED_WRITE_PERMISSION
+            ):
+                deny_permissions.extend(permissions)
+
+        return allow_permissions, deny_permissions
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch files and folders in async manner.
@@ -669,14 +685,15 @@ class NASDataSource(BaseDataSource):
 
         else:
             matched_paths = (path for path, _, _ in self.get_directory_details)
+            groups_info = await self.fetch_groups_info()
 
             for path in matched_paths:
                 async for file in self.get_files(path=path):
                     if file["type"] == "folder":
                         yield await self._decorate_with_access_control(
-                            file, file.get("path"), file.get("type")
+                            file, file.get("path"), file.get("type"), groups_info
                         ), None
                     else:
                         yield await self._decorate_with_access_control(
-                            file, file.get("path"), file.get("type")
+                            file, file.get("path"), file.get("type"), groups_info
                         ), partial(self.get_content, file)

@@ -16,6 +16,7 @@ import pytest
 import smbclient
 from smbprotocol.exceptions import LogonFailure, SMBOSError
 
+from connectors.access_control import ACCESS_CONTROL
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -33,21 +34,6 @@ ADVANCED_SNIPPET = "advanced_snippet"
 
 WINDOWS = "windows"
 LINUX = "linux"
-
-
-def mock_permission(sid):
-    mock_response = {}
-
-    mock_response["ace_type"] = mock.Mock()
-    mock_response["ace_type"].value.return_value = 0
-
-    mock_response["mask"] = mock.Mock()
-    mock_response["mask"].value.return_value = 234
-
-    mock_response["sid"] = mock.Mock()
-    mock_response["sid"].return_value = sid
-
-    return mock_response
 
 
 def mock_file(name):
@@ -116,6 +102,24 @@ def side_effect_function(MAX_CHUNK_SIZE):
         return None
     READ_COUNT += 1
     return b"Mock...."
+
+
+def mock_permission(sid, ace):
+    mock_response = {}
+
+    class MockSID:
+        def __str__(self):
+            return sid
+
+    mock_response["ace_type"] = mock.Mock()
+    mock_response["ace_type"].value = ace
+
+    mock_response["mask"] = mock.Mock()
+    mock_response["mask"].value = 234
+
+    mock_response["sid"] = MockSID()
+
+    return mock_response
 
 
 @pytest.mark.asyncio
@@ -380,8 +384,9 @@ async def test_get_content_when_file_type_not_supported():
 
 @pytest.mark.asyncio
 @mock.patch.object(NASDataSource, "get_files", return_value=mock.MagicMock())
+@mock.patch.object(NASDataSource, "fetch_groups_info", return_value=mock.AsyncMock())
 @mock.patch("smbclient.walk")
-async def test_get_doc(mock_get_files, mock_walk):
+async def test_get_doc(mock_get_files, mock_fetch_groups, mock_walk):
     """Test get_doc method of NASDataSource Class
 
     Args:
@@ -717,15 +722,32 @@ async def test_get_access_control_linux_empty_csv_file_path():
 
 
 @pytest.mark.asyncio
+async def test_fetch_groups_info():
+    mock_groups = {"Admins": "S-1-5-32-546"}
+    mock_group_members = {
+        "Administrator": "S-1-5-21-227823342-1368486282-703244805-500"
+    }
+    excepted_result = {
+        "546": {"Administrator": "S-1-5-21-227823342-1368486282-703244805-500"}
+    }
+    async with create_source(NASDataSource) as source:
+        with mock.patch.object(SecurityInfo, "fetch_groups", return_value=mock_groups):
+            with mock.patch.object(
+                SecurityInfo, "fetch_members", return_value=mock_group_members
+            ):
+                groups_info = await source.fetch_groups_info()
+        assert groups_info == excepted_result
+
+
+@pytest.mark.asyncio
 async def test_get_access_control_dls_enabled():
     expected_user_access_control = [
         [
-            "sid:S-1-5-21-227823342-1368486282-703244805-500",
-            "sid:S-1-5-32-546",
+            "rid:500",
             "user:Administrator",
         ],
         [
-            "sid:S-1-5-21-227823342-1368486282-703244805-501",
+            "rid:501",
             "user:Guest",
         ],
     ]
@@ -733,30 +755,21 @@ async def test_get_access_control_dls_enabled():
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.drive_type = WINDOWS
-        mock_groups = {"Admins": "S-1-5-32-546"}
-        mock_group_members = {
-            "Administrator": "S-1-5-21-227823342-1368486282-703244805-500"
-        }
+
         mock_users = {
             "Administrator": "S-1-5-21-227823342-1368486282-703244805-500",
             "Guest": "S-1-5-21-227823342-1368486282-703244805-501",
         }
 
-        with mock.patch.object(SecurityInfo, "fetch_groups", return_value=mock_groups):
-            with mock.patch.object(
-                SecurityInfo, "fetch_members", return_value=mock_group_members
-            ):
-                with mock.patch.object(
-                    SecurityInfo, "fetch_users", return_value=mock_users
-                ):
-                    user_access_control = []
-                    async for user_doc in source.get_access_control():
-                        user_doc["query"]["template"]["params"]["access_control"].sort()
-                        user_access_control.append(
-                            user_doc["query"]["template"]["params"]["access_control"]
-                        )
+        with mock.patch.object(SecurityInfo, "fetch_users", return_value=mock_users):
+            user_access_control = []
+            async for user_doc in source.get_access_control():
+                user_doc["query"]["template"]["params"]["access_control"].sort()
+                user_access_control.append(
+                    user_doc["query"]["template"]["params"]["access_control"]
+                )
 
-                assert expected_user_access_control == user_access_control
+        assert expected_user_access_control == user_access_control
 
 
 @mock.patch(
@@ -795,8 +808,11 @@ async def test_get_access_control_dls_enabled():
         ),
     ],
 )
+@mock.patch.object(NASDataSource, "fetch_groups_info", return_value=mock.AsyncMock())
 @pytest.mark.asyncio
-async def test_get_docs_without_dls_enabled(mock_get_files, mock_walk):
+async def test_get_docs_without_dls_enabled(
+    mock_get_files, mock_walk, mock_fetch_groups
+):
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -854,8 +870,8 @@ async def test_get_docs_without_dls_enabled(mock_get_files, mock_walk):
     NASDataSource,
     "list_file_permission",
     side_effect=[
-        [mock_permission("S-2-21-211-2112"), mock_permission("S-1-11-111-1111")],
-        [mock_permission("S-3-31-131-1131"), mock_permission("S-1-11-111-1111")],
+        [mock_permission("S-2-21-211-2112", 0), mock_permission("S-1-11-111-1111", 0)],
+        [mock_permission("S-3-31-131-1131", 0), mock_permission("S-1-11-111-1111", 0)],
     ],
 )
 @mock.patch.object(
@@ -969,3 +985,26 @@ async def test_list_file_permissions_with_inaccessible_file():
             )
 
             assert result is None
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        mock_permission(sid="S-2-21-211-411", ace=0),
+        mock_permission(sid="S-1-11-10", ace=1),
+    ],
+)
+async def test_deny_permission_has_precedence_over_allow(mock_list_file_permission):
+    mock_groups_info = {"10": {"admin": "S-2-21-211-411"}}
+    expected_result = []
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info=mock_groups_info,
+        )
+        assert document_permissions[ACCESS_CONTROL] == expected_result
