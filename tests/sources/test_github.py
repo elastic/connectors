@@ -587,11 +587,15 @@ async def test_ping_with_unsuccessful_connection():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "scopes",
+    ["", "repo", "manage_runner:org, delete:packages, admin:public_key"],
+)
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_validate_config_with_invalid_token_then_raise():
+async def test_validate_config_with_invalid_token_then_raise(scopes):
     async with create_github_source() as source:
         source.github_client.post = AsyncMock(
-            return_value=({"user": "username"}, {"X-OAuth-Scopes": ""})
+            return_value=({"user": "username"}, {"X-OAuth-Scopes": scopes})
         )
         with pytest.raises(
             ConfigurableFieldValueError,
