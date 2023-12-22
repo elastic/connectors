@@ -512,11 +512,10 @@ class NASDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _decorate_with_access_control(self, document, file_path, file_type):
+    async def _decorate_with_access_control(
+        self, document, file_path, file_type, groups_info
+    ):
         if self._dls_enabled():
-            groups_info = {}
-            if self.drive_type == WINDOWS:
-                groups_info = await self.fetch_groups_info()
             allow_permissions, deny_permissions = await self.get_entity_permission(
                 file_path=file_path, file_type=file_type, groups_info=groups_info
             )
@@ -686,14 +685,17 @@ class NASDataSource(BaseDataSource):
 
         else:
             matched_paths = (path for path, _, _ in self.get_directory_details)
+            groups_info = {}
+            if self.drive_type == WINDOWS:
+                groups_info = await self.fetch_groups_info()
 
             for path in matched_paths:
                 async for file in self.get_files(path=path):
                     if file["type"] == "folder":
                         yield await self._decorate_with_access_control(
-                            file, file.get("path"), file.get("type")
+                            file, file.get("path"), file.get("type"), groups_info
                         ), None
                     else:
                         yield await self._decorate_with_access_control(
-                            file, file.get("path"), file.get("type")
+                            file, file.get("path"), file.get("type"), groups_info
                         ), partial(self.get_content, file)
