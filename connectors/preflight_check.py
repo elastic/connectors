@@ -97,7 +97,8 @@ class PreflightCheck:
                 # and located here: https://github.com/elastic/elasticsearch/tree/main/x-pack/plugin/core/template-resources/src/main/resources/entsearch/connector
 
                 await self.es_management_client.ensure_exists(
-                    indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+                    indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
+                    expand_wildcards="all",
                 )
                 return True
             except Exception as e:

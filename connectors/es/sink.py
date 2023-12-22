@@ -24,13 +24,8 @@ import logging
 import time
 from collections import defaultdict
 
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
-)
-from elasticsearch.helpers import async_scan
-
-from connectors.es import ESClient, Mappings
-from connectors.es.settings import Settings
+from connectors.es.client import ESManagementClient
+from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
@@ -56,7 +51,6 @@ __all__ = ["SyncOrchestrator"]
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
-TIMESTAMP_FIELD = "_timestamp"
 CANCELATION_TIMEOUT = 5
 
 
@@ -73,6 +67,10 @@ class ForceCanceledError(Exception):
     pass
 
 
+class ContentIndexDoesNotExistError(Exception):
+    pass
+
+
 class Sink:
     """Send bulk operations in batches by consuming a queue.
 
@@ -81,7 +79,7 @@ class Sink:
 
     Arguments:
 
-    - `client` -- an instance of `connectors.es.ESClient`
+    - `client` -- an instance of `connectors.es.ESManagementClient`
     - `queue` -- an instance of `asyncio.Queue` to pull docs from
     - `chunk_size` -- a maximum number of operations to send per request
     - `pipeline` -- ingest pipeline settings to pass to the bulk API
@@ -134,7 +132,7 @@ class Sink:
     async def _batch_bulk(self, operations, stats):
         @retryable(retries=self.max_retires)
         async def _bulk_api_call():
-            return await self.client.bulk(
+            return await self.client.client.bulk(
                 operations=operations, pipeline=self.pipeline["name"]
             )
 
@@ -260,7 +258,7 @@ class Extractor:
     This class runs a coroutine that puts docs in `queue`, given a document generator.
 
     Arguments:
-    - client: an instance of `connectors.es.ESClient`
+    - client: an instance of `connectors.es.ESManagementClient`
     - queue: an `asyncio.Queue` to put docs in
     - index: the target Elasticsearch index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
@@ -302,32 +300,6 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
-
-    async def _get_existing_ids(self):
-        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
-
-
-        WARNING
-
-        This function will load all ids in memory -- on very large indices,
-        depending on the id length, it can be quite large.
-
-        300,000 ids will be around 50MiB
-        """
-        self._logger.debug(f"Scanning existing index {self.index}")
-        try:
-            await self.client.indices.get(index=self.index)
-        except ElasticNotFoundError:
-            return
-
-        async for doc in async_scan(
-            client=self.client,
-            index=self.index,
-            _source=["id", TIMESTAMP_FIELD],
-        ):
-            doc_id = doc["_source"].get("id", doc["_id"])
-            ts = doc["_source"].get(TIMESTAMP_FIELD)
-            yield doc_id, ts
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
@@ -399,7 +371,12 @@ class Extractor:
 
         start = time.time()
         self._logger.info("Collecting local document ids")
-        existing_ids = {k: v async for (k, v) in self._get_existing_ids()}
+        existing_ids = {
+            k: v
+            async for (k, v) in self.client.yield_existing_documents_metadata(
+                self.index
+            )
+        }
         self._logger.debug(
             f"Found {len(existing_ids)} docs in {self.index} (duration "
             f"{int(time.time() - start)} seconds) "
@@ -534,7 +511,10 @@ class Extractor:
 
         existing_ids = {
             doc_id: last_update_timestamp
-            async for (doc_id, last_update_timestamp) in self._get_existing_ids()
+            async for (
+                doc_id,
+                last_update_timestamp,
+            ) in self.client.yield_existing_documents_metadata(self.index)
         }
 
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -615,7 +595,7 @@ class AsyncBulkRunningError(Exception):
     pass
 
 
-class SyncOrchestrator(ESClient):
+class SyncOrchestrator:
     """This class is the sync orchestrator.
 
     It does the following in `async_bulk`
@@ -629,65 +609,39 @@ class SyncOrchestrator(ESClient):
     def __init__(self, elastic_config, logger_=None):
         self._logger = logger_ or logger
         self._logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
-        super().__init__(elastic_config)
+        self.es_management_client = ESManagementClient(elastic_config)
         self.loop = asyncio.get_event_loop()
         self._extractor = None
         self._extractor_task = None
         self._sink = None
         self._sink_task = None
 
+    async def close(self):
+        await self.es_management_client.close()
+
+    async def has_active_license_enabled(self, license_):
+        # TODO: think how to make it not a proxy method to the client
+        return await self.es_management_client.has_active_license_enabled(license_)
+
     async def prepare_content_index(self, index, language_code=None):
         """Creates the index, given a mapping if it does not exists."""
         self._logger.debug(f"Checking index {index}")
 
-        expand_wildcards = "open"
-        exists = await self.client.indices.exists(
-            index=index, expand_wildcards=expand_wildcards
-        )
+        exists = await self.es_management_client.index_exists(index)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
         if exists:
             # Update the index mappings if needed
             self._logger.debug(f"{index} exists")
-            await self._ensure_content_index_mappings(index, mappings, expand_wildcards)
+            await self.es_management_client.ensure_content_index_mappings(
+                index, mappings
+            )
         else:
             # Create a new index
             self._logger.info(f"Creating content index: {index}")
-            await self._create_content_index(
-                index=index, language_code=language_code, mappings=mappings
-            )
+            await self.es_management_client.create_content_index(index, language_code)
             self._logger.info(f"Content index successfully created:  {index}")
-
-    async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
-        response = await self.client.indices.get_mapping(
-            index=index, expand_wildcards=expand_wildcards
-        )
-
-        existing_mappings = response[index].get("mappings", {})
-        if len(existing_mappings) == 0 and mappings:
-            self._logger.debug(
-                "Index %s has no mappings or it's empty. Adding mappings...", index
-            )
-            await self.client.indices.put_mapping(
-                index=index,
-                dynamic=mappings.get("dynamic", False),
-                dynamic_templates=mappings.get("dynamic_templates", []),
-                properties=mappings.get("properties", {}),
-                expand_wildcards=expand_wildcards,
-            )
-            self._logger.debug("Successfully added mappings for index %s", index)
-        else:
-            self._logger.debug(
-                "Index %s already has mappings, skipping mappings creation", index
-            )
-
-    async def _create_content_index(self, index, mappings, language_code=None):
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        return await self.client.indices.create(
-            index=index, mappings=mappings, settings=settings
-        )
 
     def done(self):
         if self._extractor_task is not None and not self._extractor_task.done():
@@ -797,7 +751,7 @@ class SyncOrchestrator(ESClient):
 
         # start the fetcher
         self._extractor = Extractor(
-            self.client,
+            self.es_management_client,
             stream,
             index,
             filter_=filter_,
@@ -813,7 +767,7 @@ class SyncOrchestrator(ESClient):
 
         # start the bulker
         self._sink = Sink(
-            self.client,
+            self.es_management_client,
             stream,
             chunk_size,
             pipeline,

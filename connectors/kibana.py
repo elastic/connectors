@@ -10,11 +10,9 @@ import os
 import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
-import elasticsearch
-
 from connectors.config import load_config
-from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
-from connectors.es.sink import SyncOrchestrator
+from connectors.es.client import ESManagementClient
+from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.logger import set_extra_logger
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
@@ -50,44 +48,14 @@ set_extra_logger(logger, log_level=logging.DEBUG, prefix="KBN-FAKE")
 
 async def prepare(service_type, index_name, config, connector_definition=None):
     klass = get_source_klass(config["sources"][service_type])
-    es = SyncOrchestrator(config["elasticsearch"])
+    es = ESManagementClient(config["elasticsearch"])
 
-    # add a dummy pipeline
-    try:
-        pipeline = await es.client.ingest.get_pipeline(
-            id="ent-search-generic-ingestion"
-        )
-    except elasticsearch.NotFoundError:
-        await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion",
-            version=DEFAULT_PIPELINE["version"],
-            description=DEFAULT_PIPELINE["description"],
-            processors=DEFAULT_PIPELINE["processors"],
-        )
-
-    try:
-        pipeline = await es.client.ingest.get_pipeline(
-            id="ent-search-generic-ingestion"
-        )
-    except elasticsearch.NotFoundError:
-        pipeline = {
-            "description": "My optional pipeline description",
-            "processors": [
-                {
-                    "set": {
-                        "description": "My optional processor description",
-                        "field": "my-keyword-field",
-                        "value": "foo",
-                    }
-                }
-            ],
-        }
-
-        await es.client.ingest.put_pipeline(
-            id="ent-search-generic-ingestion",
-            description=pipeline["description"],
-            processors=pipeline["processors"],
-        )
+    await es.ensure_ingest_pipeline_exists(
+        "ent-search-generic-ingestion",
+        DEFAULT_PIPELINE["version"],
+        DEFAULT_PIPELINE["description"],
+        DEFAULT_PIPELINE["processors"],
+    )
 
     try:
         # https:#github.com/elastic/enterprise-search-team/discussions/2153#discussioncomment-2999765
@@ -183,28 +151,20 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         }
 
         logger.info(f"Prepare {CONNECTORS_INDEX} document")
-        await es.client.index(
-            index=CONNECTORS_INDEX,
-            id=config["connectors"][0]["connector_id"],
-            document=doc,
+        await es.upsert(
+            index_name=CONNECTORS_INDEX,
+            _id=config["connectors"][0]["connector_id"],
+            doc=doc,
         )
 
         logger.info(f"Prepare {index_name}")
-        mappings = Mappings.default_text_fields_mappings(
-            is_connectors_index=True,
-        )
-        settings = Settings(
-            language_code=DEFAULT_LANGUAGE, analysis_icu=False
-        ).to_hash()
-        await upsert_index(es, index_name, mappings=mappings, settings=settings)
+        await upsert_index(es, index_name)
         logger.info("Done")
     finally:
         await es.close()
 
 
-async def upsert_index(
-    es, index, docs=None, doc_ids=None, mappings=None, settings=None
-):
+async def upsert_index(es, index):
     """Override the index with new mappings and settings.
 
     If the index with such name exists, it's deleted and then created again
@@ -222,28 +182,15 @@ async def upsert_index(
     else:
         expand_wildcards = "open"
 
-    exists = await es.client.indices.exists(
-        index=index, expand_wildcards=expand_wildcards
-    )
+    exists = await es.index_exists(index, expand_wildcards)
 
     if exists:
         logger.debug(f"{index} exists, deleting...")
         logger.debug("Deleting it first")
-        await es.client.indices.delete(index=index, expand_wildcards=expand_wildcards)
+        await es.delete_indices([index], expand_wildcards)
 
     logger.debug(f"Creating index {index}")
-    await es.client.indices.create(index=index, mappings=mappings, settings=settings)
-
-    if docs is None:
-        return
-    # TODO: bulk
-
-    if doc_ids is None:
-        for doc_id, doc in enumerate(docs, start=1):
-            await es.client.index(index=index, id=doc_id, document=doc)
-    else:
-        for doc, doc_id in zip(docs, doc_ids, strict=True):
-            await es.client.index(index=index, id=doc_id, document=doc)
+    await es.create_content_index(index, DEFAULT_LANGUAGE)
 
 
 def _parser():

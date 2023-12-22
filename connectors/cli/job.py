@@ -37,7 +37,8 @@ class Job:
     async def __async_job(self, job_id):
         try:
             await self.es_management_client.ensure_exists(
-                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
+                expand_wildcards="all",
             )
             job = await self.sync_job_index.fetch_by_id(job_id)
             return job
@@ -63,7 +64,8 @@ class Job:
     async def __async_list_jobs(self, connector_id, index_name, job_id):
         try:
             await self.es_management_client.ensure_exists(
-                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
+                expand_wildcards="all",
             )
             jobs = self.sync_job_index.get_all_docs(
                 query=self.__job_list_query(connector_id, index_name, job_id),

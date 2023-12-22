@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.es.sink import SyncOrchestrator
+from connectors.es.client import ESManagementClient
 from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)
@@ -27,7 +27,7 @@ def mock_index_creation(index, mock_responses, hidden=True):
         headers=headers,
     )
     mock_responses.delete(
-        url,
+        f"{url}&ignore_unavailable=true",
         headers=headers,
     )
     mock_responses.put(
@@ -86,7 +86,7 @@ async def test_upsert_index(mock_responses):
         headers=headers,
     )
 
-    es = SyncOrchestrator(config)
+    es = ESManagementClient(config)
 
     await upsert_index(es, "search-new-index")
 
@@ -95,7 +95,7 @@ async def test_upsert_index(mock_responses):
         headers=headers,
     )
     mock_responses.delete(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index?expand_wildcards=open&ignore_unavailable=true",
         headers=headers,
     )
     mock_responses.put(
@@ -114,4 +114,4 @@ async def test_upsert_index(mock_responses):
         headers=headers,
     )
 
-    await upsert_index(es, "search-new-index", docs=[{"_id": "2"}, {"_id": "3"}])
+    await upsert_index(es, "search-new-index")
