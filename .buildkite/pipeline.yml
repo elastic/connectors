@@ -25,6 +25,7 @@ steps:
           - path: 
             - "connectors/sources/mysql.py"
             - "tests/sources/fixtures/mysql/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 MySQL"
@@ -36,6 +37,7 @@ steps:
           - path: 
             - "connectors/sources/network_drive.py"
             - "tests/sources/fixtures/network_drive/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Network Drive"
@@ -47,6 +49,7 @@ steps:
           - path: 
             - "connectors/sources/s3.py"
             - "tests/sources/fixtures/s3/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Amazon S3"
@@ -58,6 +61,7 @@ steps:
           - path: 
             - "connectors/sources/google_cloud_storage.py"
             - "tests/sources/fixtures/google_cloud_storage/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Google Cloud Storage"
@@ -69,6 +73,7 @@ steps:
           - path: 
             - "connectors/sources/azure_blob_storage.py"
             - "tests/sources/fixtures/azure_blob_storage/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Azure Blob Storage"
@@ -80,6 +85,7 @@ steps:
           - path: 
             - "connectors/sources/postgresql.py"
             - "tests/sources/fixtures/postgresql/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Postgresql"
@@ -91,6 +97,7 @@ steps:
           - path: 
             - "connectors/sources/directory.py"
             - "tests/sources/fixtures/dir/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 System Directory"
@@ -102,6 +109,7 @@ steps:
           - path: 
             - "connectors/sources/oracle.py"
             - "tests/sources/fixtures/oracle/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Oracle Database"
@@ -113,6 +121,7 @@ steps:
           - path: 
             - "connectors/sources/sharepoint_server.py"
             - "tests/sources/fixtures/sharepoint_server/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Sharepoint Server"
@@ -124,6 +133,7 @@ steps:
           - path: 
             - "connectors/sources/sharepoint_online.py"
             - "tests/sources/fixtures/sharepoint_online/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Sharepoint Online"
@@ -135,6 +145,7 @@ steps:
           - path: 
             - "connectors/sources/mssql.py"
             - "tests/sources/fixtures/mssql/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Microsoft SQL"
@@ -147,6 +158,7 @@ steps:
             - "connectors/sources/jira.py"
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/jira/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Jira"
@@ -159,6 +171,7 @@ steps:
             - "connectors/sources/confluence.py"
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/confluence/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Confluence"
@@ -170,6 +183,7 @@ steps:
           - path: 
             - "connectors/sources/servicenow.py"
             - "tests/sources/fixtures/servicenow/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 ServiceNow"
@@ -181,6 +195,7 @@ steps:
           - path: 
             - "connectors/sources/mongo.py"
             - "tests/sources/fixtures/mongodb/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 MongoDB"
@@ -192,6 +207,7 @@ steps:
           - path: 
             - "connectors/sources/github.py"
             - "tests/sources/fixtures/github/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 GitHub"
@@ -203,6 +219,7 @@ steps:
           - path: 
             - "connectors/sources/google_drive.py"
             - "tests/sources/fixtures/google_drive/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Google Drive"
@@ -214,6 +231,7 @@ steps:
           - path: 
             - "connectors/sources/dropbox.py"
             - "tests/sources/fixtures/dropbox/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Dropbox"
@@ -225,6 +243,7 @@ steps:
           - path: 
             - "connectors/sources/onedrive.py"
             - "tests/sources/fixtures/onedrive/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 OneDrive"
@@ -236,6 +255,7 @@ steps:
           - path:
             - "connectors/sources/salesforce.py"
             - "tests/sources/fixtures/salesforce/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Salesforce"
@@ -247,6 +267,7 @@ steps:
           - path: 
             - "connectors/sources/zoom.py"
             - "tests/sources/fixtures/zoom/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Zoom"
@@ -258,6 +279,7 @@ steps:
           - path: 
             - "connectors/sources/box.py"
             - "tests/sources/fixtures/box/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Box"
@@ -269,6 +291,7 @@ steps:
           - path: 
             - "connectors/sources/microsoft_teams.py"
             - "tests/sources/fixtures/microsoft_teams/**"
+            - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
             config:
               label: "🔨 Microsoft Teams"

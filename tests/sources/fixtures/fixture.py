@@ -202,6 +202,8 @@ async def main(args=None):
     spec.loader.exec_module(module)
     if hasattr(module, args.action):
         func = getattr(module, args.action)
+        if args.action in ("setup", "load", "teardown", "remove"):
+            return await func()
         return func()
     else:
         if action == "get_num_docs":

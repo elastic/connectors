@@ -53,7 +53,7 @@ def get_num_docs():
     )
 
 
-def verify():
+async def verify():
     "Method to verify if prerequisites are satisfied for e2e or not"
     storage_emulator_host = os.getenv(key="STORAGE_EMULATOR_HOST", default=None)
     if storage_emulator_host != "http://localhost:4443":
@@ -90,7 +90,7 @@ def generate_files(bucket_name, number_of_files):
     )
 
 
-def load():
+async def load():
     create_connection()
     print("Started loading files on the fake Google Cloud Storage server....")
     if FIRST_BUCKET_FILE_COUNT:
@@ -102,7 +102,7 @@ def load():
     )
 
 
-def remove():
+async def remove():
     """Method for removing random blobs from the fake Google Cloud Storage server"""
     create_connection()
     print("Started removing random blobs from the fake Google Cloud Storage server....")
@@ -117,5 +117,5 @@ def remove():
     )
 
 
-def setup():
-    verify()
+async def setup():
+    await verify()

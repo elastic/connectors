@@ -20,7 +20,7 @@ client = MongoClient("mongodb://admin:justtesting@127.0.0.1:27021")
 OB_STORE = "/tmp/objectstore"
 
 
-def setup():
+async def setup():
     print(f"preparing {OB_STORE}")
     # creating the file storage for es
     if os.path.exists(OB_STORE):
@@ -32,7 +32,7 @@ def setup():
     print(f"{OB_STORE} ready")
 
 
-def load():
+async def load():
     def _random_record():
         return {
             "id": bson.ObjectId(),
@@ -55,7 +55,7 @@ def load():
     collection.insert_many(data)
 
 
-def remove():
+async def remove():
     db = client.sample_database
     collection = db.sample_collection
 
@@ -64,7 +64,3 @@ def remove():
 
     query = {"_id": {"$in": doc_ids}}
     collection.delete_many(query)
-
-
-def teardown():
-    pass
