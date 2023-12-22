@@ -57,6 +57,7 @@ def cli(ctx, config):
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(ctx, config)
 
+
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option("--host", prompt="Elastic host")
 @click.option("--username", prompt="Username")
