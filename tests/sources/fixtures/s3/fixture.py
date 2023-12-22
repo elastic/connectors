@@ -40,12 +40,12 @@ def get_num_docs():
     print(FOLDER_COUNT + FILE_COUNT - OBJECT_TO_DELETE_COUNT)
 
 
-def setup():
+async def setup():
     os.environ["AWS_ENDPOINT_URL"] = AWS_ENDPOINT_URL
     os.environ["AWS_PORT"] = str(AWS_PORT)
 
 
-def load():
+async def load():
     """Method for generating 10k document for aws s3 emulator"""
     s3_client = boto3.client(
         "s3",
@@ -82,7 +82,7 @@ def load():
         )
 
 
-def remove():
+async def remove():
     """Method for removing 15 random document from aws s3 emulator"""
     s3_client = boto3.client(
         "s3",

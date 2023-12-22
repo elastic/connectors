@@ -18,11 +18,7 @@ fake = Faker()
 client = MongoClient("mongodb://admin:justtesting@127.0.0.1:27021")
 
 
-def setup():
-    pass
-
-
-def load():
+async def load():
     def _random_record():
         return {
             "id": bson.ObjectId(),
@@ -45,7 +41,7 @@ def load():
     collection.insert_many(data)
 
 
-def remove():
+async def remove():
     db = client.sample_database
     collection = db.sample_collection
 
@@ -54,7 +50,3 @@ def remove():
 
     query = {"_id": {"$in": doc_ids}}
     collection.delete_many(query)
-
-
-def teardown():
-    pass
