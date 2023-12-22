@@ -51,7 +51,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserting batch #{batch} of {batch_size} documents.")
 
 
-def load():
+async def load():
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
@@ -67,7 +67,7 @@ def load():
     database.commit()
 
 
-def remove():
+async def remove():
     """Removes 10 random items per table"""
     database = connect(host="127.0.0.1", port=3306, user="root", password="changeme")
     cursor = database.cursor()
