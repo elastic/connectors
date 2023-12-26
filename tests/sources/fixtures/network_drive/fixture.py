@@ -69,12 +69,12 @@ def generate_files():
         raise
 
 
-def load():
+async def load():
     generate_folder()
     generate_files()
 
 
-def remove():
+async def remove():
     """Method for deleting 10 random files from Network Drive server"""
     try:
         smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)

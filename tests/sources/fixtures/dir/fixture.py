@@ -31,7 +31,7 @@ def get_num_docs():
             print("300")
 
 
-def load():
+async def load():
     if os.path.exists(SYSTEM_DIR):
         teardown()
     print(f"Working in {SYSTEM_DIR}")
@@ -51,7 +51,7 @@ def load():
     os.unlink(repo_zip)
 
 
-def remove():
+async def remove():
     # removing 10 files
     files = []
     for root, __, filenames in os.walk(SYSTEM_DIR):
@@ -64,5 +64,5 @@ def remove():
         os.unlink(files[i])
 
 
-def teardown():
+async def teardown():
     shutil.rmtree(SYSTEM_DIR)
