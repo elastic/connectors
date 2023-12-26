@@ -228,6 +228,8 @@ class AzureBlobStorageDataSource(BaseDataSource):
                         container_set.remove(container["name"])
                         if not container_set:
                             yield
+                if container_set:
+                    self._logger.warning(f"{container_set} is invalid. Skipping.")
             except Exception as exception:
                 self._logger.warning(
                     f"Something went wrong while fetching containers. Error: {exception}"
