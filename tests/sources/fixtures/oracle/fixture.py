@@ -63,7 +63,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
-def load():
+async def load():
     """Generate tables and loads table data in the oracle server."""
     """N tables of RECORD_COUNT rows each"""
     connection = oracledb.connect(
@@ -86,7 +86,7 @@ def load():
     connection.commit()
 
 
-def remove():
+async def remove():
     """Removes 10 random items per table"""
     connection = oracledb.connect(
         user=USER, password=PASSWORD, dsn=DSN, encoding=ENCODING
