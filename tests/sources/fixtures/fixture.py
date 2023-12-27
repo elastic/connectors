@@ -20,7 +20,7 @@ from argparse import ArgumentParser
 from elastic_transport import ConnectionTimeout
 from elasticsearch import ApiError
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.logger import set_extra_logger
 from connectors.utils import (
     RetryStrategy,

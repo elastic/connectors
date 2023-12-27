@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)

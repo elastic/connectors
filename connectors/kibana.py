@@ -11,7 +11,7 @@ import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from connectors.config import load_config
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.logger import set_extra_logger
 from connectors.source import get_source_klass

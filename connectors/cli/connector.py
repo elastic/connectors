@@ -1,7 +1,7 @@
 import asyncio
 from collections import OrderedDict
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
@@ -87,9 +87,6 @@ class Connector:
         finally:
             await self.es_management_client.close()
 
-    async def __create_search_index(self, index_name, language):
-        await self.es_management_client.create_content_index(index_name, language)
-
     async def __create_connector(
         self, index_name, service_type, configuration, is_native, language, from_index
     ):
@@ -101,7 +98,9 @@ class Connector:
             timestamp = iso_utc()
 
             if not from_index:
-                await self.__create_search_index(index_name, language)
+                await self.es_management_client.create_content_index(
+                    index_name, language
+                )
 
             api_key = await self.__create_api_key(index_name)
 

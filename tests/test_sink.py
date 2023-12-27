@@ -14,7 +14,7 @@ import pytest
 from elasticsearch import BadRequestError
 
 from connectors.es import Mappings
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
@@ -625,7 +625,9 @@ async def setup_extractor(
         ),
     ],
 )
-@mock.patch("connectors.es.client.ESManagementClient.yield_existing_documents_metadata")
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
 @pytest.mark.asyncio
 async def test_get_docs(
     yield_existing_documents_metadata,
@@ -919,7 +921,9 @@ async def test_get_docs_incrementally(
         ),
     ],
 )
-@mock.patch("connectors.es.client.ESManagementClient.yield_existing_documents_metadata")
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
 @pytest.mark.asyncio
 async def test_get_access_control_docs(
     yield_existing_documents_metadata,

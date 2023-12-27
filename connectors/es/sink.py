@@ -24,7 +24,7 @@ import logging
 import time
 from collections import defaultdict
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
