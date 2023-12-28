@@ -64,18 +64,23 @@ class ESManagementClient(ESClient):
         )
 
         existing_mappings = response[index].get("mappings", {})
-        if len(existing_mappings) == 0 and mappings:
-            logger.debug(
-                "Index %s has no mappings or it's empty. Adding mappings...", index
-            )
-            await self.client.indices.put_mapping(
-                index=index,
-                dynamic=mappings.get("dynamic", False),
-                dynamic_templates=mappings.get("dynamic_templates", []),
-                properties=mappings.get("properties", {}),
-                expand_wildcards=expand_wildcards,
-            )
-            logger.debug("Successfully added mappings for index %s", index)
+        if len(existing_mappings) == 0:
+            if mappings:
+                logger.debug(
+                    "Index %s has no mappings or it's empty. Adding mappings...", index
+                )
+                await self.client.indices.put_mapping(
+                    index=index,
+                    dynamic=mappings.get("dynamic", False),
+                    dynamic_templates=mappings.get("dynamic_templates", []),
+                    properties=mappings.get("properties", {}),
+                    expand_wildcards=expand_wildcards,
+                )
+                logger.debug("Successfully added mappings for index %s", index)
+            else:
+                logger.debug(
+                    "Index %s has no mappings but no mappings are provided, skipping mappings creation"
+                )
         else:
             logger.debug(
                 "Index %s already has mappings, skipping mappings creation", index
@@ -90,8 +95,8 @@ class ESManagementClient(ESClient):
             await self.client.ingest.put_pipeline(
                 id=pipeline_id,
                 version=version,
-                description=version,
-                processors=version,
+                description=description,
+                processors=processors,
             )
 
     async def delete_indices(self, indices, expand_wildcards="open"):
@@ -130,7 +135,7 @@ class ESManagementClient(ESClient):
         300,000 ids will be around 50MiB
         """
         logger.debug(f"Scanning existing index {index}")
-        if not self.index_exists(index):
+        if not await self.index_exists(index):
             return
 
         async for doc in async_scan(

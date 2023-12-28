@@ -158,6 +158,11 @@ def set_responses(mock_responses, ts=None):
     if ts is None:
         ts = datetime.datetime.now().isoformat()
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.head(
+        "http://nowhere.com:9200/search-some-index?expand_wildcards=open",
+        headers=headers,
+    )
+
     mock_responses.get(
         "http://nowhere.com:9200/search-some-index",
         payload={"_id": "1"},
