@@ -17,6 +17,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from time import strftime
 
 import aiofiles
 import aiohttp
@@ -70,6 +71,8 @@ TIKA_SUPPORTED_FILETYPES = [
     ".vsdm",
 ]
 
+ISO_ZULU_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
 
 def iso_utc(when=None):
     if when is None:
@@ -77,9 +80,19 @@ def iso_utc(when=None):
     return when.isoformat()
 
 
-def next_run(quartz_definition):
+def iso_zulu():
+    """Returns the current time in ISO Zulu format"""
+    return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
+
+
+def epoch_timestamp_zulu():
+    """Returns the timestamp of the start of the epoch, in ISO Zulu format"""
+    return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
+
+
+def next_run(quartz_definition, now):
     """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, datetime.utcnow())
+    cron_obj = QuartzCron(quartz_definition, now)
     return cron_obj.next_trigger()
 
 

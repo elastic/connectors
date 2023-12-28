@@ -6,12 +6,14 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
+Please refer to the following Docker image registry to access and pull available versions of our service: [Elastic Connectors Docker Registry](https://www.docker.elastic.co/r/enterprise-search/elastic-connectors).
+
 Follow these steps:
 
 1. [Create network](#1-create-a-docker-network)
 2. [Create directory](#2-create-a-directory-to-be-mounted-into-the-docker-image)
 3. [Download config file](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
-4. [Update config file](#4-update-the-configuration-file-for-your-on-prem-connectorhttpswwwelasticcoguideenenterprise-searchcurrentbuild-connectorhtmlbuild-connector-usage)
+4. [Update config file](#4-update-the-configuration-file-for-your-self-managed-connectorhttpswwwelasticcoguideenenterprise-searchcurrentbuild-connectorhtmlbuild-connector-usage)
 5. [Run the docker image](#5-run-the-docker-image)
 
 ## 1. Create a Docker network.
@@ -36,7 +38,7 @@ You can download the file manually, or simply run the command below. Make sure t
 curl https://raw.githubusercontent.com/elastic/connectors-python/main/config.yml --output ~/connectors-python-config/config.yml
 ```
 
-## 4. Update the configuration file for your [on-prem connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
+## 4. Update the configuration file for your [self-managed connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
 
 If you're running the Connector Service against a dockerised version of Elasticsearch and Kibana, your config file will look like this:
 

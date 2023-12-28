@@ -52,6 +52,7 @@ OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
 TIMESTAMP_FIELD = "_timestamp"
+CANCELATION_TIMEOUT = 5
 
 
 def get_mb_size(ob):
@@ -60,6 +61,10 @@ def get_mb_size(ob):
 
 
 class UnsupportedJobType(Exception):
+    pass
+
+
+class ForceCanceledError(Exception):
     pass
 
 
@@ -103,6 +108,7 @@ class Sink:
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
         self._logger = logger_ or logger
+        self._canceled = False
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -168,12 +174,25 @@ class Sink:
             f"Sink stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
         )
 
+    def force_cancel(self):
+        self._canceled = True
+
+    async def fetch_doc(self):
+        if self._canceled:
+            raise ForceCanceledError
+
+        return await self.queue.get()
+
     async def run(self):
         try:
             await self._run()
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Sink...")
             raise
+        except ForceCanceledError:
+            self._logger.error(
+                f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+            )
 
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -193,7 +212,7 @@ class Sink:
         overhead_size = None
 
         while True:
-            doc_size, doc = await self.queue.get()
+            doc_size, doc = await self.fetch_doc()
             if doc in ("END_DOCS", "FETCH_ERROR"):
                 break
             operation = doc["_op_type"]
@@ -284,6 +303,7 @@ class Extractor:
         self.display_every = display_every
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
+        self._canceled = False
 
     async def _get_existing_ids(self):
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
@@ -322,7 +342,7 @@ class Extractor:
 
         doc.pop("_original_filename", None)
 
-        await self.queue.put(
+        await self.put_doc(
             {
                 "_op_type": operation,
                 "_index": self.index,
@@ -330,6 +350,15 @@ class Extractor:
                 "doc": doc,
             }
         )
+
+    def force_cancel(self):
+        self._canceled = True
+
+    async def put_doc(self, doc):
+        if self._canceled:
+            raise ForceCanceledError
+
+        await self.queue.put(doc)
 
     async def run(self, generator, job_type):
         try:
@@ -345,6 +374,14 @@ class Extractor:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Extractor...")
             raise
+        except ForceCanceledError:
+            self._logger.error(
+                f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+            )
+        except Exception as e:
+            self._logger.critical("Document extractor failed", exc_info=True)
+            await self.put_doc("FETCH_ERROR")
+            self.fetch_error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
     async def _decorate_with_metrics_span(self, generator):
@@ -390,22 +427,8 @@ class Extractor:
                     continue
 
                 if doc_id in existing_ids:
-                    # pop out of existing_ids
-                    ts = existing_ids.pop(doc_id)
-
-                    # If the doc has a timestamp, we can use it to see if it has
-                    # been modified. This reduces the bulk size a *lot*
-                    #
-                    # Some backends do not know how to do this, so it's optional.
-                    # For these, we update the docs in any case.
-                    if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
-                        # cancel the download
-                        if (
-                            self.content_extraction_enabled
-                            and lazy_download is not None
-                        ):
-                            await lazy_download(doit=False)
-                        continue
+                    # pop out of existing_ids, so they do not get deleted
+                    existing_ids.pop(doc_id)
 
                     self.total_docs_updated += 1
                 else:
@@ -423,7 +446,7 @@ class Extractor:
 
                 else:
                     # we can push into the queue right away
-                    await self.queue.put(
+                    await self.put_doc(
                         {
                             "_op_type": operation,
                             "_index": self.index,
@@ -433,17 +456,12 @@ class Extractor:
                     )
 
                 await asyncio.sleep(0)
-        except Exception as e:
-            self._logger.critical("Document fetcher failed", exc_info=True)
-            await self.queue.put("FETCH_ERROR")
-            self.fetch_error = e
-            return
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.queue.put("END_DOCS")
+        await self.put_doc("END_DOCS")
 
     async def get_docs_incrementally(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
@@ -501,19 +519,14 @@ class Extractor:
                     }
                     if operation in (OP_INDEX, OP_UPSERT):
                         item["doc"] = doc
-                    await self.queue.put(item)
+                    await self.put_doc(item)
 
                 await asyncio.sleep(0)
-        except Exception as e:
-            self._logger.critical("The document fetcher failed", exc_info=True)
-            await self.queue.put("FETCH_ERROR")
-            self.fetch_error = e
-            return
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        await self.queue.put("END_DOCS")
+        await self.put_doc("END_DOCS")
 
     async def get_access_control_docs(self, generator):
         """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
@@ -536,60 +549,53 @@ class Extractor:
             )
 
         count = 0
-        try:
-            async for doc in generator:
-                doc, _, _ = doc
-                count += 1
-                if count % self.display_every == 0:
-                    self._log_progress()
+        async for doc in generator:
+            doc, _, _ = doc
+            count += 1
+            if count % self.display_every == 0:
+                self._log_progress()
 
-                doc_id = doc["id"] = doc.pop("_id")
-                doc_exists = doc_id in existing_ids
+            doc_id = doc["id"] = doc.pop("_id")
+            doc_exists = doc_id in existing_ids
 
-                if doc_exists:
-                    last_update_timestamp = existing_ids.pop(doc_id)
-                    doc_not_updated = (
-                        TIMESTAMP_FIELD in doc
-                        and last_update_timestamp == doc[TIMESTAMP_FIELD]
-                    )
-
-                    if doc_not_updated:
-                        continue
-
-                    self.total_docs_updated += 1
-
-                    operation = OP_UPSERT
-                else:
-                    self.total_docs_created += 1
-
-                    if TIMESTAMP_FIELD not in doc:
-                        doc[TIMESTAMP_FIELD] = iso_utc()
-
-                    operation = OP_INDEX
-
-                await self.queue.put(
-                    {
-                        "_op_type": operation,
-                        "_index": self.index,
-                        "_id": doc_id,
-                        "doc": doc,
-                    }
+            if doc_exists:
+                last_update_timestamp = existing_ids.pop(doc_id)
+                doc_not_updated = (
+                    TIMESTAMP_FIELD in doc
+                    and last_update_timestamp == doc[TIMESTAMP_FIELD]
                 )
 
-                await asyncio.sleep(0)
-        except Exception as e:
-            self._logger.critical("The document fetcher failed", exc_info=True)
-            await self.queue.put("FETCH_ERROR")
-            self.fetch_error = e
-            return
+                if doc_not_updated:
+                    continue
+
+                self.total_docs_updated += 1
+
+                operation = OP_UPSERT
+            else:
+                self.total_docs_created += 1
+
+                if TIMESTAMP_FIELD not in doc:
+                    doc[TIMESTAMP_FIELD] = iso_utc()
+
+                operation = OP_INDEX
+
+            await self.put_doc(
+                {
+                    "_op_type": operation,
+                    "_index": self.index,
+                    "_id": doc_id,
+                    "doc": doc,
+                }
+            )
+            await asyncio.sleep(0)
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.queue.put("END_DOCS")
+        await self.put_doc("END_DOCS")
 
     async def enqueue_docs_to_delete(self, existing_ids):
         self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
         for doc_id in existing_ids.keys():
-            await self.queue.put(
+            await self.put_doc(
                 {
                     "_op_type": OP_DELETE,
                     "_index": self.index,
@@ -684,19 +690,33 @@ class SyncOrchestrator(ESClient):
             return False
         return True
 
+    def _sink_task_running(self):
+        return self._sink_task is not None and not self._sink_task.done()
+
+    def _extractor_task_running(self):
+        return self._extractor_task is not None and not self._extractor_task.done()
+
     async def cancel(self):
-        if self._extractor_task is not None and not self._extractor_task.done():
-            self._extractor_task.cancel()
-            try:
-                await self._extractor_task
-            except asyncio.CancelledError:
-                self._logger.info("Extractor is stopped.")
-        if self._sink_task is not None and not self._sink_task.done():
+        if self._sink_task_running():
             self._sink_task.cancel()
-            try:
-                await self._sink_task
-            except asyncio.CancelledError:
-                self._logger.info("Sink is stopped.")
+        if self._extractor_task_running():
+            self._extractor_task.cancel()
+
+        cancelation_timeout = CANCELATION_TIMEOUT
+        while cancelation_timeout > 0:
+            await asyncio.sleep(1)
+            cancelation_timeout -= 1
+            if not self._sink_task_running() and not self._extractor_task_running():
+                self._logger.info(
+                    "Both Extractor and Sink tasks are successfully stopped."
+                )
+                return
+
+        self._logger.error(
+            f"Sync job did not stop within {CANCELATION_TIMEOUT} seconds of canceling. Force-canceling."
+        )
+        self._sink.force_cancel()
+        self._extractor.force_cancel()
 
     def ingestion_stats(self):
         stats = {}

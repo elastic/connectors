@@ -671,7 +671,7 @@ async def test_connector_next_sync(
     next_run.return_value = mock_next_run
     connector = Connector(elastic_index=index, doc_source=connector_doc)
 
-    assert connector.next_sync(job_type) == expected_next_sync
+    assert connector.next_sync(job_type, datetime.utcnow()) == expected_next_sync
 
 
 @pytest.mark.asyncio
@@ -901,7 +901,7 @@ class Banana(BaseDataSource):
 
 
 @pytest.mark.asyncio
-async def test_connector_prepare_different_id():
+async def test_connector_prepare_different_id_invalid_source():
     doc_id = "1"
     seq_no = 1
     primary_term = 2
@@ -924,13 +924,19 @@ async def test_connector_prepare_different_id():
     index.update.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_connector_prepare_with_prepared_connector():
-    doc_id = "1"
+async def test_connector_prepare_with_prepared_connector(main_doc_id, this_doc_id):
     seq_no = 1
     primary_term = 2
     connector_doc = {
-        "_id": doc_id,
+        "_id": this_doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
         "_source": {
@@ -971,7 +977,7 @@ async def test_connector_prepare_with_prepared_connector():
         },
     }
     config = {
-        "connector_id": doc_id,
+        "connector_id": main_doc_id,
         "service_type": "banana",
     }
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
@@ -983,13 +989,128 @@ async def test_connector_prepare_with_prepared_connector():
     index.update.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_connector_prepare_with_connector_missing_field_properties_creates_them():
-    doc_id = "1"
+async def test_connector_prepare_with_connector_empty_config_creates_default(
+    main_doc_id, this_doc_id
+):
     seq_no = 1
     primary_term = 2
     connector_doc = {
-        "_id": doc_id,
+        "_id": this_doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {},
+            "features": Banana.features(),
+        },
+    }
+    config = {
+        "connector_id": main_doc_id,
+        "service_type": "banana",
+    }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    expected = Banana.get_simple_configuration()
+
+    # only updates fields with missing properties
+    await connector.prepare(config, sources)
+    index.update.assert_called_once_with(
+        doc_id=this_doc_id,
+        doc={"configuration": expected, "status": "needs_configuration"},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_fields_creates_them(
+    main_doc_id, this_doc_id
+):
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": this_doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "service_type": "banana",
+            "configuration": {
+                "two": {
+                    "default_value": None,
+                    "depends_on": [],
+                    "display": "text",
+                    "label": "",
+                    "options": [],
+                    "order": 1,
+                    "required": True,
+                    "sensitive": False,
+                    "tooltip": None,
+                    "type": "str",
+                    "ui_restrictions": [],
+                    "validations": [],
+                    "value": "foobar",
+                },
+            },
+            "features": Banana.features(),
+        },
+    }
+    config = {
+        "connector_id": main_doc_id,
+        "service_type": "banana",
+    }
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(return_value=connector_doc)
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    expected = Banana.get_simple_configuration()
+    del expected["two"]
+
+    # only updates fields with missing properties
+    await connector.prepare(config, sources)
+    index.update.assert_called_once_with(
+        doc_id=this_doc_id,
+        doc={"configuration": expected},
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.parametrize(
+    "main_doc_id, this_doc_id",
+    [
+        ("1", "1"),
+        ("1", "2"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_connector_prepare_with_connector_missing_field_properties_creates_them(
+    main_doc_id, this_doc_id
+):
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": this_doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
         "_source": {
@@ -1016,7 +1137,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
         },
     }
     config = {
-        "connector_id": doc_id,
+        "connector_id": main_doc_id,
         "service_type": "banana",
     }
     sources = {"banana": "tests.protocol.test_connectors:Banana"}
@@ -1034,7 +1155,7 @@ async def test_connector_prepare_with_connector_missing_field_properties_creates
 
     await connector.prepare(config, sources)
     index.update.assert_called_once_with(
-        doc_id=doc_id,
+        doc_id=this_doc_id,
         doc={"configuration": expected},
         if_seq_no=seq_no,
         if_primary_term=primary_term,
@@ -1157,7 +1278,7 @@ async def test_connector_prepare():
         "_id": doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
-        "_source": {},
+        "_source": {"configuration": {}},
     }
     config = {
         "connector_id": doc_id,
@@ -1191,7 +1312,7 @@ async def test_connector_prepare_with_race_condition():
         "_id": doc_id,
         "_seq_no": seq_no,
         "_primary_term": primary_term,
-        "_source": {},
+        "_source": {"configuration": {}},
     }
     config = {
         "connector_id": doc_id,
@@ -1974,3 +2095,77 @@ def test_pipeline_properties(key, value, default_value):
 )
 def test_get_advanced_rules(filtering, expected_advanced_rules):
     assert Filter(filtering).get_advanced_rules() == expected_advanced_rules
+
+
+def test_updated_configuration_fields():
+    current = {
+        "tenant_id": {"label": "Tenant ID", "order": 1, "type": "str", "value": "foo"},
+        "tenant_name": {
+            "label": "Tenant name",
+            "order": 2,
+            "type": "str",
+            "value": "bar",
+        },
+        "client_id": {"label": "Client ID", "order": 3, "type": "str", "value": "baz"},
+        "secret_value": {
+            "label": "Secret value",
+            "order": 4,
+            "sensitive": True,
+            "type": "str",
+            "value": "qux",
+        },
+        "some_toggle": {"label": "toggle", "order": 5, "type": "bool", "value": False},
+    }
+    simple_default = {
+        "tenant_id": {
+            "label": "Tenant Identifier",
+            "order": 1,
+            "type": "str",
+        },
+        "tenant_name": {
+            "label": "Tenant name",
+            "order": 2,
+            "type": "str",
+        },
+        "new_config": {
+            "label": "Config label",
+            "order": 3,
+            "type": "bool",
+            "value": True,
+        },
+        "client_id": {
+            "label": "Client ID",
+            "order": 4,
+            "type": "str",
+        },
+        "secret_value": {
+            "label": "Secret value",
+            "order": 5,
+            "sensitive": True,
+            "type": "str",
+        },
+        "some_toggle": {"label": "toggle", "order": 6, "type": "bool", "value": True},
+    }
+    missing_configs = ["new_config"]
+    connector = Connector(elastic_index=Mock(), doc_source={"_id": "test"})
+    result = connector.updated_configuration_fields(
+        missing_configs, current, simple_default
+    )
+
+    # all keys included where there are changes (excludes 'tenant_name')
+    assert result.keys() == set(
+        ["new_config", "tenant_id", "client_id", "secret_value", "some_toggle"]
+    )
+
+    # order is adjusted
+    assert result["client_id"]["order"] == 4
+    assert result["secret_value"]["order"] == 5
+
+    # so is label
+    assert result["tenant_id"]["label"] == "Tenant Identifier"
+
+    # value is not changed for existing configs
+    assert "value" not in result["some_toggle"].keys()
+
+    # value is set for new configs
+    assert result["new_config"]["value"] is True
