@@ -284,7 +284,8 @@ class MongoDataSource(BaseDataSource):
             msg = f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
             raise ConfigurableFieldValueError(msg)
 
-        database = client[configured_database_name]
+        if client is not None:
+            database = client[configured_database_name]
 
         existing_collection_names = await database.list_collection_names()
         self._logger.debug(
