@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from bson import DBRef, ObjectId
 from bson.decimal128 import Decimal128
-from pymongo.errors import ServerSelectionTimeoutError
+from pymongo.errors import InvalidURI, ServerSelectionTimeoutError
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -23,11 +23,16 @@ from tests.sources.support import create_source
 
 @asynccontextmanager
 async def create_mongo_source(
-    database="db", collection="col", ssl_enabled=False, ssl_ca="", tls_insecure=False
+    host="mongodb://127.0.0.1:27021",
+    database="db",
+    collection="col",
+    ssl_enabled=False,
+    ssl_ca="",
+    tls_insecure=False,
 ):
     async with create_source(
         MongoDataSource,
-        host="mongodb://127.0.0.1:27021",
+        host=host,
         user="foo",
         password="bar",
         direct_connection=True,
@@ -178,6 +183,7 @@ async def test_ping_when_called_then_does_not_raise(*args):
     command_mock = AsyncMock()
     admin_mock.command = command_mock
     async with create_mongo_source() as source:
+        await source._get_client()
         source.client.admin = admin_mock
         await source.ping()
 
@@ -185,6 +191,7 @@ async def test_ping_when_called_then_does_not_raise(*args):
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
     async with create_mongo_source() as source:
+        await source._get_client()
         collection_mock = Mock()
         collection_mock.find = AsyncIterator(items=[{"_id": 1}])
         source.collection = collection_mock
@@ -221,6 +228,7 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
     async with create_mongo_source() as source:
+        await source._get_client()
         collection_mock = Mock()
         collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
         source.collection = collection_mock
@@ -395,3 +403,12 @@ async def test_ssl_with_successful_connection(
             return_value=future_with_result(["col"]),
         ):
             await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_get_client_when_pass_conflicting_values():
+    async with create_mongo_source(
+        host="mongodb://127.0.0.1:27021/?ssl=true", ssl_enabled=False
+    ) as source:
+        with pytest.raises(InvalidURI):
+            await source._get_client()

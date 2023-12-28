@@ -12,6 +12,7 @@ import fastjsonschema
 from bson import DBRef, Decimal128, ObjectId
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import InvalidURI
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -96,9 +97,12 @@ class MongoDataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
 
-        client_params = {}
+        self.client_params = {}
+        self.db = None
+        self.collection = None
+        self.client = None
+        self.host = self.configuration["host"]
 
-        host = self.configuration["host"]
         user = self.configuration["user"]
         password = self.configuration["password"]
         ssl_ca = self.configuration["ssl_ca"]
@@ -106,28 +110,23 @@ class MongoDataSource(BaseDataSource):
         self.certfile = ""
 
         if self.configuration["direct_connection"]:
-            client_params["directConnection"] = True
+            self.client_params["directConnection"] = True
 
         if len(user) > 0 or len(password) > 0:
-            client_params["username"] = user
-            client_params["password"] = password
+            self.client_params["username"] = user
+            self.client_params["password"] = password
 
         if self.configuration["ssl_enabled"]:
-            client_params["tls"] = True
+            self.client_params["tls"] = True
             if ssl_ca:
                 pem_certificates = get_pem_format(key=ssl_ca)
                 with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
                     cert.write(pem_certificates)
                     self.certfile = cert.name
-                client_params["tlsCAFile"] = self.certfile
-            client_params["tlsInsecure"] = tls_insecure
+                self.client_params["tlsCAFile"] = self.certfile
+            self.client_params["tlsInsecure"] = tls_insecure
         else:
-            client_params["tls"] = False
-
-        self.client = AsyncIOMotorClient(host, **client_params)
-
-        self.db = self.client[self.configuration["database"]]
-        self.collection = self.db[self.configuration["collection"]]
+            self.client_params["tls"] = False
 
     @classmethod
     def get_default_configuration(cls):
@@ -191,10 +190,24 @@ class MongoDataSource(BaseDataSource):
             },
         }
 
+    async def _get_client(self):
+        try:
+            self.client = AsyncIOMotorClient(self.host, **self.client_params)
+            self.db = self.client[self.configuration["database"]]
+            self.collection = self.db[self.configuration["collection"]]
+        except InvalidURI as exception:
+            msg = f"Found Invalid URL, please check configuration. Error: {exception}"
+            raise InvalidURI(msg) from exception
+        except Exception as exception:
+            msg = f"Somthing went wrong while creating a client. Error: {exception}"
+            raise Exception(msg) from exception
+
     def advanced_rules_validators(self):
         return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
+        if self.client is None:
+            await self._get_client()
         await self.client.admin.command("ping")
 
     async def close(self):
@@ -231,6 +244,8 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
+        if self.client is None or self.collection is None:
+            await self._get_client()
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
@@ -253,6 +268,8 @@ class MongoDataSource(BaseDataSource):
                 yield self.serialize(doc), None
 
     async def validate_config(self):
+        if self.client is None:
+            await self._get_client()
         await super().validate_config()
 
         client = self.client
