@@ -14,6 +14,11 @@ import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -41,12 +46,15 @@ API_VERSION = "v59.0"
 TOKEN_ENDPOINT = "/services/oauth2/token"  # noqa S105
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 SOSL_SEARCH_ENDPOINT = f"/services/data/{API_VERSION}/search"
-CUSTOM_OBJECT_ENDPOINT = f"/services/data/{API_VERSION}/tooling/query"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
 # https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
 CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
 OFFSET = 200
+
+OBJECT_READ_PERMISSION_USERS = "SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId IN (SELECT ParentId FROM ObjectPermissions WHERE PermissionsRead = true AND SObjectType = '{sobject}')"
+USERNAME_FROM_IDS = "SELECT Name, Email FROM User WHERE Id IN {user_list}"
+FILE_ACCESS = "SELECT ContentDocumentId, LinkedEntityId, LinkedEntity.Name FROM ContentDocumentLink WHERE ContentDocumentId = '{document_id}'"
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -115,7 +123,21 @@ RELEVANT_SOBJECT_FIELDS = [
     "VersionDataUrl",
     "VersionNumber",
     "Website",
+    "UserType",
 ]
+
+
+def _prefix_user(user):
+    if user:
+        return prefix_identity("user", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
+
+
+def _prefix_email(email):
+    return prefix_identity("email", email)
 
 
 class RateLimitedException(Exception):
@@ -249,35 +271,51 @@ class SalesforceClient:
                 for record in records:
                     yield record
 
-    async def get_custom_objects(self):
-        custom_object_query = (
-            SalesforceSoqlBuilder("CustomObject")
-            .with_id()
-            .with_default_metafields()
-            .with_fields(["DeveloperName"])
-            .build()
-        )
-
+    async def _custom_objects(self):
+        response = await self._get_json(f"{self.base_url}{DESCRIBE_ENDPOINT}")
         custom_objects = []
-        async for records in self._yield_non_bulk_query_pages(
-            soql_query=custom_object_query, endpoint=CUSTOM_OBJECT_ENDPOINT
-        ):
-            custom_objects.extend(records)
 
-        for _object in custom_objects:
-            if (
-                _object["DeveloperName"] == "Knowledge_kav"
-            ):  # kav stands for Knowledge Article Version
-                object_name = "Knowledge__kav"
-            elif _object["DeveloperName"] == "Knowledge":
-                object_name = f"{_object['DeveloperName']}__kav"
-            else:
-                object_name = f"{_object['DeveloperName']}__c"
+        for sobject in response.get("sobjects", []):
+            if sobject.get("custom"):
+                custom_objects.append(sobject.get("name"))
+        return custom_objects
 
-            query = await self._custom_object_query(custom_object=object_name)
+    async def get_custom_objects(self):
+        for custom_object in await self._custom_objects():
+            query = await self._custom_object_query(custom_object=custom_object)
             async for records in self._yield_non_bulk_query_pages(query):
                 for record in records:
                     yield record
+
+    async def get_salesforce_users(self):
+        if not await self._is_queryable("User"):
+            self._logger.warning(
+                "Object User is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._user_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_users_with_read_access(self, sobject):
+        query = OBJECT_READ_PERMISSION_USERS.format(sobject=sobject)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_username_by_id(self, user_list):
+        query = USERNAME_FROM_IDS.format(user_list=user_list)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_file_access(self, document_id):
+        query = FILE_ACCESS.format(document_id=document_id)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
 
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
@@ -661,6 +699,20 @@ class SalesforceClient:
             SalesforceSoqlBuilder(custom_object)
             .with_fields(queryable_fields)
             .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _user_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "User",
+            ["Name", "Email", "UserType"],
+        )
+
+        return (
+            SalesforceSoqlBuilder("User")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
             .build()
         )
 
@@ -1233,6 +1285,7 @@ class SalesforceDataSource(BaseDataSource):
     name = "Salesforce"
     service_type = "salesforce"
     advanced_rules_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -1247,6 +1300,7 @@ class SalesforceDataSource(BaseDataSource):
             configuration=configuration, base_url=base_url
         )
         self.doc_mapper = SalesforceDocMapper(base_url)
+        self.permissions = {}
 
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
@@ -1283,7 +1337,79 @@ class SalesforceDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 5,
+                "tooltip": "Document level security ensures identities and permissions set in Salesforce are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if self._features is None:
+            return False
+
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+        return document
+
+    async def _user_access_control_doc(self, user):
+        email = user.get("Email")
+        username = user.get("Name")
+
+        prefixed_email = _prefix_email(email)
+        prefixed_username = _prefix_user(username)
+        prefixed_user_id = _prefix_user_id(user.get("Id"))
+
+        access_control = [prefixed_email, prefixed_username, prefixed_user_id]
+        return {
+            "_id": user.get("Id"),
+            "identity": {
+                "email": prefixed_email,
+                "username": prefixed_username,
+                "user_id": prefixed_user_id,
+            },
+            "created_at": user.get("CreatedDate", iso_utc()),
+            "_timestamp": user.get("LastModifiedDate", iso_utc()),
+        } | es_access_control_query(access_control)
+
+    async def get_access_control(self):
+        """Get access control documents for active Atlassian users.
+
+        This method fetches access control documents for active Atlassian users when document level security (DLS)
+        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        If DLS is enabled, the method fetches all users from the Salesforce API, filters out active Atlassian users,
+        and fetches additional information for each active user using the _fetch_user method. After gathering the user information,
+        it generates an access control document for each user using the user_access_control_doc method and yields the results.
+
+        Yields:
+            dict: An access control document for each active Atlassian user.
+        """
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        self._logger.info("Fetching Salesforce users")
+        async for user in self.salesforce_client.get_salesforce_users():
+            if user.get("UserType") in ["CloudIntegrationUser", "AutomatedProcess"]:
+                continue
+            user_doc = await self._user_access_control_doc(user=user)
+            yield user_doc
 
     async def validate_config(self):
         await super().validate_config()
@@ -1304,7 +1430,40 @@ class SalesforceDataSource(BaseDataSource):
 
     async def _get_advanced_sync_rules_result(self, rule):
         async for doc in self.salesforce_client.get_sync_rules_results(rule=rule):
+            if sobject := doc.get("attributes", {}).get("type"):
+                await self._fetch_users_with_read_access(sobject=sobject)
             yield doc
+
+    async def _fetch_users_with_read_access(self, sobject):
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        self._logger.debug(
+            f"Fetching users who has Read access for Salesforce object: {sobject}"
+        )
+
+        if sobject in self.permissions:
+            return
+
+        user_list = []
+        access_control = []
+        async for assignee in self.salesforce_client.get_users_with_read_access(
+            sobject=sobject
+        ):
+            user_list.append(assignee.get("AssigneeId"))
+            access_control.append(_prefix_user_id(assignee.get("AssigneeId")))
+
+        if user_list == []:
+            return
+
+        async for user in self.salesforce_client.get_username_by_id(
+            user_list=tuple(user_list)
+        ):
+            access_control.append(_prefix_user(user.get("Name")))
+            access_control.append(_prefix_email(user.get("Email")))
+
+        self.permissions[sobject] = access_control
 
     async def get_docs(self, filtering=None):
         # We collect all content documents and de-duplicate them before downloading and yielding
@@ -1316,40 +1475,90 @@ class SalesforceDataSource(BaseDataSource):
             for rule in advanced_rules:
                 async for doc in self._get_advanced_sync_rules_result(rule=rule):
                     content_docs.extend(self._parse_content_documents(doc))
-                    yield self.doc_mapper.map_salesforce_objects(doc), None
+                    access_control = self.permissions.get(
+                        doc.get("attributes", {}).get("type"), []
+                    )
+                    yield self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(doc, access_control)
+                    ), None
 
         else:
+            for sobject in [
+                "Account",
+                "Opportunity",
+                "Contact",
+                "Lead",
+                "Campaign",
+                "Case",
+            ]:
+                await self._fetch_users_with_read_access(sobject=sobject)
+
+            for custom_object in await self.salesforce_client._custom_objects():
+                await self._fetch_users_with_read_access(sobject=custom_object)
+
             async for account in self.salesforce_client.get_accounts():
                 content_docs.extend(self._parse_content_documents(account))
-                yield self.doc_mapper.map_salesforce_objects(account), None
+                access_control = self.permissions.get("Account", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(account, access_control)
+                ), None
 
             async for opportunity in self.salesforce_client.get_opportunities():
                 content_docs.extend(self._parse_content_documents(opportunity))
-                yield self.doc_mapper.map_salesforce_objects(opportunity), None
+                access_control = self.permissions.get("Opportunity", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(opportunity, access_control)
+                ), None
 
             async for contact in self.salesforce_client.get_contacts():
                 content_docs.extend(self._parse_content_documents(contact))
-                yield self.doc_mapper.map_salesforce_objects(contact), None
+                access_control = self.permissions.get("Contact", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(contact, access_control)
+                ), None
 
             async for lead in self.salesforce_client.get_leads():
                 content_docs.extend(self._parse_content_documents(lead))
-                yield self.doc_mapper.map_salesforce_objects(lead), None
+                access_control = self.permissions.get("Lead", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(lead, access_control)
+                ), None
 
             async for campaign in self.salesforce_client.get_campaigns():
                 content_docs.extend(self._parse_content_documents(campaign))
-                yield self.doc_mapper.map_salesforce_objects(campaign), None
+                access_control = self.permissions.get("Campaign", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(campaign, access_control)
+                ), None
 
             async for case in self.salesforce_client.get_cases():
                 content_docs.extend(self._parse_content_documents(case))
-                yield self.doc_mapper.map_salesforce_objects(case), None
+                access_control = self.permissions.get("Case", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(case, access_control)
+                ), None
 
             async for custom_object in self.salesforce_client.get_custom_objects():
                 content_docs.extend(self._parse_content_documents(custom_object))
-                yield self.doc_mapper.map_salesforce_objects(custom_object), None
+                access_control = self.permissions.get(
+                    custom_object.get("attributes", {}).get("type"), []
+                )
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(custom_object, access_control)
+                ), None
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
         for content_doc in content_docs:
+            access_control = []
+            async for permission in self.salesforce_client.get_file_access(
+                document_id=content_doc["Id"]
+            ):
+                access_control.append(_prefix_user_id(permission.get("LinkedEntityId")))
+                access_control.append(
+                    _prefix_user(permission.get("LinkedEntity", {}).get("Name"))
+                )
+
             content_version_id = (
                 content_doc.get("LatestPublishedVersion", {}) or {}
             ).get("Id")
@@ -1362,7 +1571,7 @@ class SalesforceDataSource(BaseDataSource):
             doc = self.doc_mapper.map_content_document(content_doc)
             doc = await self.get_content(doc, content_version_id)
 
-            yield doc, None
+            yield self._decorate_with_access_control(doc, access_control), None
 
     async def get_content(self, doc, content_version_id):
         file_size = doc["content_size"]

@@ -8,7 +8,7 @@ import re
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from unittest import TestCase, mock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aioresponses import CallbackResult
@@ -27,6 +27,9 @@ from connectors.sources.salesforce import (
     SalesforceServerError,
     SalesforceSoqlBuilder,
     TokenFetchException,
+    _prefix_email,
+    _prefix_user,
+    _prefix_user_id,
 )
 from tests.sources.support import create_source
 
@@ -39,6 +42,7 @@ TEST_QUERY_MATCH_URL = re.compile(
 )
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
+TEST_DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -611,6 +615,35 @@ EXPECTED_CONTENT_RESPONSE = {
     "_attachment": "Y2h1bmsx",
 }
 
+USER_RESPONSE_PAYLOAD = {
+    "totalSize": 1,
+    "done": True,
+    "records": [
+        {
+            "attributes": {
+                "type": "ContentDocumentLink",
+                "url": f"/services/data/{API_VERSION}/sobjects/ContentDocumentLink/content_document_link_id",
+            },
+            "Id": "user_id",
+            "Name": "Dummy User",
+            "CreatedDate": "2023-12-25T01:01:01Z",
+            "LastModifiedDate": "2023-12-25T01:01:01Z",
+        }
+    ],
+}
+
+PERMISSION_SET_RESPONSE_PAYLOAD = {
+    "totalSize": 1,
+    "done": True,
+    "records": [{"AssigneeId": "user_id"}],
+}
+
+CONTENT_DOCUMENT_RESPONSE_PAYLOAD = {
+    "totalSize": 1,
+    "done": True,
+    "records": [{"LinkedEntityId": "user_id", "LinkedEntity": {"Name": "Dummy User"}}],
+}
+
 
 @asynccontextmanager
 async def create_salesforce_source(
@@ -669,6 +702,10 @@ def salesforce_query_callback(url, **kwargs):
             payload = deepcopy(CUSTOM_OBJECT_RESPONSE_PAYLOAD)
         case "Connector__c":
             payload = deepcopy(CONNECTOR_RESPONSE_PAYLOAD)
+        case "ObjectPermissions":
+            payload = deepcopy(PERMISSION_SET_RESPONSE_PAYLOAD)
+        case "ContentDocumentLink":
+            payload = deepcopy(CONTENT_DOCUMENT_RESPONSE_PAYLOAD)
         case _:
             payload = {"records": []}
 
@@ -1483,6 +1520,9 @@ async def test_get_all_with_content_docs_when_success(
         mock_responses.get(
             TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
         )
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject"]
+        )
 
         content_document_records = []
         async for record, _ in source.get_docs():
@@ -1536,6 +1576,9 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
             )
             mock_responses.get(
                 TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+            )
+            source.salesforce_client._custom_objects = AsyncMock(
+                return_value=["CustomObject"]
             )
 
             content_document_records = []
@@ -1690,10 +1733,15 @@ async def test_get_docs_for_sosl_query(mock_responses, filtering):
         mock_responses.get(
             TEST_QUERY_MATCH_URL, status=200, payload=SOSL_RESPONSE_PAYLOAD
         )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, status=200, payload=CONTENT_DOCUMENT_RESPONSE_PAYLOAD
+        )
 
         resultant_docs = []
         async for record, _ in source.get_docs(filtering):
             resultant_docs.append(record)
+
+        assert len(resultant_docs) == 2
 
 
 @pytest.mark.asyncio
@@ -1936,3 +1984,105 @@ async def test_combine_duplicate_content_docs_with_duplicates():
 
         combined_docs = source._combine_duplicate_content_docs(content_docs)
         TestCase().assertCountEqual(combined_docs, expected_docs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "user, result",
+    [("Alex Wilber", "user:Alex Wilber"), ("", None)],
+)
+async def test_prefix_user(user, result):
+    prefixed_user = _prefix_user(user=user)
+    assert prefixed_user == result
+
+
+@pytest.mark.asyncio
+async def test_prefix_user_id():
+    prefixed_user_id = _prefix_user_id(user_id="ae34fad12")
+    assert prefixed_user_id == "user_id:ae34fad12"
+
+
+@pytest.mark.asyncio
+async def test_prefix_email():
+    prefixed_email = _prefix_email(email="alex.wilber@gmail.com")
+    assert prefixed_email == "email:alex.wilber@gmail.com"
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_disabled():
+    async with create_salesforce_source() as source:
+        source._dls_enabled = MagicMock(return_value=False)
+
+        access_control_list = []
+        async for access_control in source.get_access_control():
+            access_control_list.append(access_control)
+
+        assert len(access_control_list) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_dls_enabled(mock_responses):
+    expected_user_doc = {
+        "_id": "user_id",
+        "identity": {
+            "email": None,
+            "username": "user:Dummy User",
+            "user_id": "user_id:user_id",
+        },
+        "created_at": "2023-12-25T01:01:01Z",
+        "_timestamp": "2023-12-25T01:01:01Z",
+        "query": {
+            "template": {
+                "params": {"access_control": ["user:Dummy User", "user_id:user_id"]}
+            },
+            "source": {
+                "bool": {
+                    "filter": {
+                        "bool": {
+                            "should": [
+                                {
+                                    "terms": {
+                                        "_allow_access_control.enum": [
+                                            "user:Dummy User",
+                                            "user_id:user_id",
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+        },
+    }
+
+    async with create_salesforce_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL,
+            status=200,
+            payload=USER_RESPONSE_PAYLOAD,
+        )
+
+        async for user_doc in source.get_access_control():
+            assert user_doc == expected_user_doc
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_dls_enabled(mock_responses):
+    async with create_salesforce_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject"]
+        )
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+
+        async for record, _ in source.get_docs():
+            assert len(record["_allow_access_control"]) > 0
