@@ -67,6 +67,13 @@ class ESIndex(ESClient):
     async def index(self, doc):
         return await self.client.index(index=self.index_name, document=doc)
 
+    async def clean_index(self):
+        return await self.client.delete_by_query(
+            index=self.index_name,
+            body={"query": {"match_all": {}}},
+            ignore_unavailable=True,
+        )
+
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
         return await self.client.update(
             index=self.index_name,

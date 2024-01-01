@@ -68,7 +68,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
-def load():
+async def load():
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
 
     database_sa = pytds.connect(
@@ -95,7 +95,7 @@ def load():
     database.commit()
 
 
-def remove():
+async def remove():
     """Removes 10 random items per table"""
 
     database = pytds.connect(server=HOST, port=PORT, user=USER, password=PASSWORD)

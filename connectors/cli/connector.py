@@ -1,7 +1,7 @@
 import asyncio
 from collections import OrderedDict
 
-from connectors.es.client import ESClient
+from connectors.es.client import ESManagementClient
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings, Settings
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
@@ -22,14 +22,14 @@ class Connector:
         self.config = config
 
         # initialize ES client
-        self.es_client = ESClient(self.config)
+        self.es_management_client = ESManagementClient(self.config)
 
         self.connector_index = ConnectorIndex(self.config)
 
     async def list_connectors(self):
         # TODO move this on top
         try:
-            await self.es_client.ensure_exists(
+            await self.es_management_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
 
@@ -40,7 +40,7 @@ class Connector:
         # TODO catch exceptions
         finally:
             await self.connector_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     def service_type_configuration(self, source_class):
         source_klass = get_source_klass(source_class)
@@ -84,7 +84,7 @@ class Connector:
         except Exception as e:
             raise e
         finally:
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     async def __create_search_index(self, index_name, language):
         mappings = Mappings.default_text_fields_mappings(
@@ -96,7 +96,7 @@ class Connector:
         settings["auto_expand_replicas"] = "0-3"
         settings["number_of_shards"] = 2
 
-        await self.es_client.client.indices.create(
+        await self.es_management_client.client.indices.create(
             index=index_name, mappings=mappings, settings=settings
         )
 
@@ -104,7 +104,7 @@ class Connector:
         self, index_name, service_type, configuration, is_native, language, from_index
     ):
         try:
-            await self.es_client.ensure_exists(
+            await self.es_management_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             timestamp = iso_utc()
@@ -224,10 +224,10 @@ class Connector:
             },
         }
         try:
-            return await self.es_client.client.security.create_api_key(
+            return await self.es_management_client.client.security.create_api_key(
                 name=f"{name}-connector",
                 role_descriptors=role_descriptors,
                 metadata=metadata,
             )
         finally:
-            await self.es_client.close()
+            await self.es_management_client.close()

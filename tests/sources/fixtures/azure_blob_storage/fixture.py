@@ -34,7 +34,7 @@ def get_num_docs():
     print((CONTAINER_COUNT - CONTAINERS_TO_DELETE) * BLOB_COUNT)
 
 
-def load():
+async def load():
     """Method for generating document for azurite emulator"""
     try:
         blob_service_client = BlobServiceClient.from_connection_string(
@@ -57,7 +57,7 @@ def load():
         print(f"Exception: {exception}")
 
 
-def remove():
+async def remove():
     """Method for removing 2k document for azurite emulator"""
     try:
         blob_service_client = BlobServiceClient.from_connection_string(
