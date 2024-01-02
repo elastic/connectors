@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
+import urllib.parse
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from tempfile import NamedTemporaryFile
@@ -12,7 +14,6 @@ import fastjsonschema
 from bson import DBRef, Decimal128, ObjectId
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import InvalidURI
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -97,36 +98,14 @@ class MongoDataSource(BaseDataSource):
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
 
-        self.client_params = {}
-        self.db = None
-        self.collection = None
         self.client = None
         self.host = self.configuration["host"]
-
-        user = self.configuration["user"]
-        password = self.configuration["password"]
-        ssl_ca = self.configuration["ssl_ca"]
-        tls_insecure = self.configuration["tls_insecure"]
-        self.certfile = ""
-
-        if self.configuration["direct_connection"]:
-            self.client_params["directConnection"] = True
-
-        if len(user) > 0 or len(password) > 0:
-            self.client_params["username"] = user
-            self.client_params["password"] = password
-
-        if self.configuration["ssl_enabled"]:
-            self.client_params["tls"] = True
-            if ssl_ca:
-                pem_certificates = get_pem_format(key=ssl_ca)
-                with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
-                    cert.write(pem_certificates)
-                    self.certfile = cert.name
-                self.client_params["tlsCAFile"] = self.certfile
-            self.client_params["tlsInsecure"] = tls_insecure
-        else:
-            self.client_params["tls"] = False
+        self.ssl_enabled = self.configuration["ssl_enabled"]
+        self.ssl_ca = self.configuration["ssl_ca"]
+        self.user = self.configuration["user"]
+        self.password = self.configuration["password"]
+        self.tls_insecure = self.configuration["tls_insecure"]
+        self.collection = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -190,30 +169,52 @@ class MongoDataSource(BaseDataSource):
             },
         }
 
-    async def _get_client(self):
+    @contextmanager
+    def get_client(self):
+        certfile = ""
         try:
-            self.client = AsyncIOMotorClient(self.host, **self.client_params)
-            self.db = self.client[self.configuration["database"]]
-            self.collection = self.db[self.configuration["collection"]]
-        except InvalidURI as exception:
-            msg = f"Found Invalid URL, please check configuration. Error: {exception}"
-            raise InvalidURI(msg) from exception
-        except Exception as exception:
-            msg = f"Somthing went wrong while creating a client. Error: {exception}"
-            raise Exception(msg) from exception
+            client_params = {}
+            if self.configuration["direct_connection"]:
+                client_params["directConnection"] = True
+
+            if len(self.user) > 0 or len(self.password) > 0:
+                client_params["username"] = self.user
+                client_params["password"] = self.password
+
+            if self.configuration["ssl_enabled"]:
+                client_params["tls"] = True
+                if self.ssl_ca:
+                    pem_certificates = get_pem_format(key=self.ssl_ca)
+                    with NamedTemporaryFile(
+                        mode="w", suffix=".pem", delete=False
+                    ) as cert:
+                        cert.write(pem_certificates)
+                        certfile = cert.name
+                    client_params["tlsCAFile"] = certfile
+                client_params["tlsInsecure"] = self.tls_insecure
+            else:
+                client_params["tls"] = False
+
+            client = AsyncIOMotorClient(self.host, **client_params)
+
+            db = client[self.configuration["database"]]
+            self.collection = db[self.configuration["collection"]]
+
+            yield client
+        finally:
+            self.remove_temp_file(certfile)
 
     def advanced_rules_validators(self):
         return [MongoAdvancedRulesValidator()]
 
     async def ping(self):
-        if self.client is None:
-            await self._get_client()
-        await self.client.admin.command("ping")
+        with self.get_client() as client:
+            await client.admin.command("ping")
 
-    async def close(self):
-        if os.path.exists(self.certfile):
+    def remove_temp_file(self, temp_file):
+        if os.path.exists(temp_file):
             try:
-                os.remove(self.certfile)
+                os.remove(temp_file)
             except Exception as exception:
                 self._logger.warning(
                     f"Something went wrong while removing temporary certificate file. Exception: {exception}",
@@ -244,54 +245,68 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        if self.client is None or self.collection is None:
-            await self._get_client()
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
             if "find" in advanced_rules:
                 find_kwargs = advanced_rules.get("find", {})
 
-                async for doc in self.collection.find(**find_kwargs):
-                    yield self.serialize(doc), None
+                with self.get_client():
+                    async for doc in self.collection.find(**find_kwargs):
+                        yield self.serialize(doc), None
 
             elif "aggregate" in advanced_rules:
                 aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
                 pipeline = aggregate_kwargs.pop("pipeline", [])
 
-                async for doc in self.collection.aggregate(
-                    pipeline=pipeline, **aggregate_kwargs
-                ):
-                    yield self.serialize(doc), None
+                with self.get_client():
+                    async for doc in self.collection.aggregate(
+                        pipeline=pipeline, **aggregate_kwargs
+                    ):
+                        yield self.serialize(doc), None
         else:
-            async for doc in self.collection.find():
-                yield self.serialize(doc), None
+            with self.get_client():
+                async for doc in self.collection.find():
+                    yield self.serialize(doc), None
 
     async def validate_config(self):
-        if self.client is None:
-            await self._get_client()
         await super().validate_config()
+        parsed_url = urllib.parse.urlparse(self.host)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
 
-        client = self.client
-        configured_database_name = self.configuration["database"]
-        configured_collection_name = self.configuration["collection"]
+        if "ssl" in query_params:
+            ssl_value = query_params.get("ssl", ["None"])[0]
 
-        existing_database_names = await client.list_database_names()
+            if ssl_value == "true":
+                ssl_value = True
+            elif ssl_value == "false":
+                ssl_value = False
+            else:
+                ssl_value = None
 
-        self._logger.debug(f"Existing databases: {existing_database_names}")
+            if ssl_value != self.ssl_enabled:
+                msg = "The value of SSL/TLS must be the same in the hostname and configuration field."
+                raise ConfigurableFieldValueError(msg)
 
-        if configured_database_name not in existing_database_names:
-            msg = f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
-            raise ConfigurableFieldValueError(msg)
+        with self.get_client() as client:
+            configured_database_name = self.configuration["database"]
+            configured_collection_name = self.configuration["collection"]
 
-        if client is not None:
+            existing_database_names = await client.list_database_names()
+
+            self._logger.debug(f"Existing databases: {existing_database_names}")
+
+            if configured_database_name not in existing_database_names:
+                msg = f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
+                raise ConfigurableFieldValueError(msg)
+
             database = client[configured_database_name]
 
-        existing_collection_names = await database.list_collection_names()
-        self._logger.debug(
-            f"Existing collections in {configured_database_name}: {existing_collection_names}"
-        )
+            existing_collection_names = await database.list_collection_names()
+            self._logger.debug(
+                f"Existing collections in {configured_database_name}: {existing_collection_names}"
+            )
 
-        if configured_collection_name not in existing_collection_names:
-            msg = f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
-            raise ConfigurableFieldValueError(msg)
+            if configured_collection_name not in existing_collection_names:
+                msg = f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
+                raise ConfigurableFieldValueError(msg)

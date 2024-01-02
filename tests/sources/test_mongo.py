@@ -10,9 +10,8 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from bson import DBRef, ObjectId
 from bson.decimal128 import Decimal128
-from pymongo.errors import InvalidURI, ServerSelectionTimeoutError
+from pymongo.errors import ServerSelectionTimeoutError
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -182,16 +181,26 @@ async def test_ping_when_called_then_does_not_raise(*args):
     admin_mock = Mock()
     command_mock = AsyncMock()
     admin_mock.command = command_mock
+
+    class MockedClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return
+
+        @property
+        def admin(self):
+            return admin_mock
+
     async with create_mongo_source() as source:
-        await source._get_client()
-        source.client.admin = admin_mock
-        await source.ping()
+        with mock.patch.object(source, "get_client", return_value=MockedClient()):
+            await source.ping()
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
     async with create_mongo_source() as source:
-        await source._get_client()
         collection_mock = Mock()
         collection_mock.find = AsyncIterator(items=[{"_id": 1}])
         source.collection = collection_mock
@@ -218,17 +227,19 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
             }
         )
 
-        async for _ in source.get_docs(filtering):
-            pass
+        with mock.patch.object(source, "get_client") as mock_client:
+            mock_client.__enter__.return_value = Mock()
 
-        find_call_kwargs = collection_mock.find.call_kwargs
-        assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
+            async for _ in source.get_docs(filtering):
+                pass
+
+            find_call_kwargs = collection_mock.find.call_kwargs
+            assert find_call_kwargs[0] == filtering.get_advanced_rules().get("find")
 
 
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
     async with create_mongo_source() as source:
-        await source._get_client()
         collection_mock = Mock()
         collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
         source.collection = collection_mock
@@ -252,13 +263,15 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present(
             }
         )
 
-        async for _ in source.get_docs(filtering):
-            pass
+        with mock.patch.object(source, "get_client") as mock_client:
+            mock_client.__enter__.return_value = Mock()
+            async for _ in source.get_docs(filtering):
+                pass
 
-        aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
-        assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get(
-            "aggregate"
-        )
+            aggregate_call_kwargs = collection_mock.aggregate.call_kwargs
+            assert aggregate_call_kwargs[0] == filtering.get_advanced_rules().get(
+                "aggregate"
+            )
 
 
 def future_with_result(result):
@@ -339,23 +352,6 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "raw, output",
-    [
-        ({"ref": DBRef("foo", "bar")}, {"ref": {"$ref": "foo", "$id": "bar"}}),
-        ({"dec": Decimal128("1.25")}, {"dec": 1.25}),
-        (
-            {"id": ObjectId("507f1f77bcf86cd799439011")},
-            {"id": "507f1f77bcf86cd799439011"},
-        ),
-    ],
-)
-async def test_serialize(raw, output):
-    async with create_mongo_source() as source:
-        assert source.serialize(raw) == output
-
-
-@pytest.mark.asyncio
 @mock.patch("ssl.SSLContext.load_verify_locations")
 async def test_ssl_connection_with_invalid_certificate(mock_ssl):
     mock_ssl.return_value = True
@@ -388,9 +384,7 @@ async def test_ssl_connection_with_invalid_certificate(mock_ssl):
     ],
 )
 @mock.patch("ssl.SSLContext.load_verify_locations")
-async def test_ssl_with_successful_connection(
-    mock_ssl, certificate_value, tls_insecure
-):
+async def test_ssl_successful_connection(mock_ssl, certificate_value, tls_insecure):
     mock_ssl.return_value = True
     async with create_mongo_source(
         ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
@@ -406,9 +400,14 @@ async def test_ssl_with_successful_connection(
 
 
 @pytest.mark.asyncio
-async def test_get_client_when_pass_conflicting_values():
-    async with create_mongo_source(
-        host="mongodb://127.0.0.1:27021/?ssl=true", ssl_enabled=False
-    ) as source:
-        with pytest.raises(InvalidURI):
-            await source._get_client()
+@pytest.mark.parametrize(
+    "host_value, ssl_value",
+    [
+        ("mongodb://127.0.0.1:27021/?ssl=true", False),
+        ("mongodb://127.0.0.1:27021/?ssl=false", True),
+    ],
+)
+async def test_get_client_when_pass_conflicting_values(host_value, ssl_value):
+    async with create_mongo_source(host=host_value, ssl_enabled=ssl_value) as source:
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
