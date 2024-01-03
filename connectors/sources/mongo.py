@@ -12,6 +12,7 @@ import fastjsonschema
 from bson import DBRef, Decimal128, ObjectId
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import OperationFailure
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -256,24 +257,44 @@ class MongoDataSource(BaseDataSource):
         await super().validate_config()
 
         client = self.client
+
         configured_database_name = self.configuration["database"]
         configured_collection_name = self.configuration["collection"]
 
-        existing_database_names = await client.list_database_names()
+        # First check if collection is accessible
+        collection_valid = True
 
-        self._logger.debug(f"Existing databases: {existing_database_names}")
+        try:
+            await client[configured_database_name].validate_collection(configured_collection_name)
+        except OperationFailure:  # If the collection doesn't exist
+            collection_valid = False
 
-        if configured_database_name not in existing_database_names:
-            msg = f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
-            raise ConfigurableFieldValueError(msg)
+        if collection_valid:
+            return
 
-        database = client[configured_database_name]
+        # If it's not accessible, try to make a good user-friendly error message
+        try:
+            existing_database_names = await client.list_database_names()
 
-        existing_collection_names = await database.list_collection_names()
-        self._logger.debug(
-            f"Existing collections in {configured_database_name}: {existing_collection_names}"
-        )
+            self._logger.debug(f"Existing databases: {existing_database_names}")
 
-        if configured_collection_name not in existing_collection_names:
-            msg = f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
-            raise ConfigurableFieldValueError(msg)
+            if configured_database_name not in existing_database_names:
+                msg = f"Database '{configured_database_name}' does not exist. Existing databases: {', '.join(existing_database_names)}"
+                raise ConfigurableFieldValueError(msg)
+
+            database = client[configured_database_name]
+
+            existing_collection_names = await database.list_collection_names()
+            self._logger.debug(
+                f"Existing collections in {configured_database_name}: {existing_collection_names}"
+            )
+
+            if configured_collection_name not in existing_collection_names:
+                msg = f"Collection '{configured_collection_name}' does not exist within database '{configured_database_name}'. Existing collections: {', '.join(existing_collection_names)}"
+                raise ConfigurableFieldValueError(msg)
+        except OperationFailure:
+                user = self.configuration["user"]
+            # This happens if the user has no access to operations to list collection/database names
+                msg = f"Database '{configured_database_name}' or collection '{configured_collection_name}' is not accessible by user '{user}'. Verify that these database and collection exist, and specified user has access to it"
+                raise ConfigurableFieldValueError(msg)
+

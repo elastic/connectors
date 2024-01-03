@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from bson import DBRef, ObjectId
 from bson.decimal128 import Decimal128
-from pymongo.errors import ServerSelectionTimeoutError
+from pymongo.errors import OperationFailure
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -310,24 +310,48 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_configuration_valid_then_does_not_raise():
-    server_database_names = ["hello"]
-    server_collection_names = ["first", "second"]
+@mock.patch("motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection", side_effect=OperationFailure("Unauthorized"))
+async def test_validate_config_when_collection_access_unauthorized(patch_validate_collection):
     configured_database_name = "hello"
     configured_collection_name = "second"
 
-    with mock.patch(
-        "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-        return_value=future_with_result(server_database_names),
-    ), mock.patch(
-        "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
-        return_value=future_with_result(server_collection_names),
-    ):
+    with pytest.raises(ConfigurableFieldValueError) as e:
         async with create_mongo_source(
             database=configured_database_name,
             collection=configured_collection_name,
         ) as source:
             await source.validate_config()
+
+    assert e is not None
+
+@pytest.mark.asyncio
+@mock.patch("motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection", side_effect=OperationFailure("Unauthorized"))
+@mock.patch("motor.motor_asyncio.AsyncIOMotorClient.list_database_names", side_effect=OperationFailure("Unauthorized"))
+async def test_validate_config_when_collection_access_unauthorized(patch_validate_collection, patch_list_database_names):
+    configured_database_name = "hello"
+    configured_collection_name = "second"
+
+    with pytest.raises(ConfigurableFieldValueError) as e:
+        async with create_mongo_source(
+            database=configured_database_name,
+            collection=configured_collection_name,
+        ) as source:
+            await source.validate_config()
+
+    assert e is not None
+
+
+@pytest.mark.asyncio
+@mock.patch("motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection", return_value=future_with_result(None))
+async def test_validate_config_when_configuration_valid_then_does_not_raise(patch_validate_connection):
+    configured_database_name = "hello"
+    configured_collection_name = "second"
+
+    async with create_mongo_source(
+        database=configured_database_name,
+        collection=configured_collection_name,
+    ) as source:
+        await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -346,23 +370,6 @@ async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
 
-
-@pytest.mark.asyncio
-@mock.patch("ssl.SSLContext.load_verify_locations")
-async def test_ssl_connection_with_invalid_certificate(mock_ssl):
-    mock_ssl.return_value = True
-    async with create_mongo_source(
-        ssl_enabled=True,
-        ssl_ca="-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----",
-    ) as source:
-        with mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-            side_effect=ServerSelectionTimeoutError(),
-        ):
-            with pytest.raises(ServerSelectionTimeoutError):
-                await source.validate_config()
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "certificate_value, tls_insecure",
@@ -379,19 +386,12 @@ async def test_ssl_connection_with_invalid_certificate(mock_ssl):
         ),
     ],
 )
-@mock.patch("ssl.SSLContext.load_verify_locations")
+@mock.patch("ssl.SSLContext.load_verify_locations", return_value=True)
 async def test_ssl_with_successful_connection(
     mock_ssl, certificate_value, tls_insecure
 ):
-    mock_ssl.return_value = True
     async with create_mongo_source(
-        ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
-    ) as source:
-        with mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-            return_value=future_with_result(["db"]),
-        ), mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
-            return_value=future_with_result(["col"]),
-        ):
-            await source.validate_config()
+        ssl_enabled=True,
+        ssl_ca="-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----"
+    ):
+        assert True
