@@ -177,17 +177,12 @@ async def upsert_index(es, index):
     this logic.
     """
 
-    if index.startswith("."):
-        expand_wildcards = "hidden"
-    else:
-        expand_wildcards = "open"
-
-    exists = await es.index_exists(index, expand_wildcards)
+    exists = await es.index_exists(index)
 
     if exists:
         logger.debug(f"{index} exists, deleting...")
         logger.debug("Deleting it first")
-        await es.delete_indices([index], expand_wildcards)
+        await es.delete_indices([index])
 
     logger.debug(f"Creating index {index}")
     await es.create_content_index(index, DEFAULT_LANGUAGE)

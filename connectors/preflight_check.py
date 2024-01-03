@@ -98,7 +98,6 @@ class PreflightCheck:
 
                 await self.es_management_client.ensure_exists(
                     indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
-                    expand_wildcards="all",
                 )
                 return True
             except Exception as e:

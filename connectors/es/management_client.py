@@ -33,17 +33,13 @@ class ESManagementClient(ESClient):
         # initialize ESIndex instance
         super().__init__(config)
 
-    async def ensure_exists(self, indices=None, expand_wildcards="open"):
+    async def ensure_exists(self, indices=None):
         if indices is None:
             indices = []
 
         for index in indices:
-            logger.debug(
-                f"Checking index {index} with expand_wildcards={expand_wildcards}"
-            )
-            if not await self.client.indices.exists(
-                index=index, expand_wildcards=expand_wildcards
-            ):
+            logger.debug(f"Checking index {index}")
+            if not await self.client.indices.exists(index=index):
                 await self.client.indices.create(index=index)
                 logger.debug(f"Created index {index}")
 
@@ -58,10 +54,7 @@ class ESManagementClient(ESClient):
     async def ensure_content_index_mappings(self, index, mappings):
         # open = Match open, non-hidden indices. Also matches any non-hidden data stream.
         # Content indices are always non-hidden.
-        expand_wildcards = "open"
-        response = await self.client.indices.get_mapping(
-            index=index, expand_wildcards=expand_wildcards
-        )
+        response = await self.client.indices.get_mapping(index=index)
 
         existing_mappings = response[index].get("mappings", {})
         if len(existing_mappings) == 0:
@@ -74,7 +67,6 @@ class ESManagementClient(ESClient):
                     dynamic=mappings.get("dynamic", False),
                     dynamic_templates=mappings.get("dynamic_templates", []),
                     properties=mappings.get("properties", {}),
-                    expand_wildcards=expand_wildcards,
                 )
                 logger.debug("Successfully added mappings for index %s", index)
             else:
@@ -99,10 +91,8 @@ class ESManagementClient(ESClient):
                 processors=processors,
             )
 
-    async def delete_indices(self, indices, expand_wildcards="open"):
-        await self.client.indices.delete(
-            index=indices, expand_wildcards=expand_wildcards, ignore_unavailable=True
-        )
+    async def delete_indices(self, indices):
+        await self.client.indices.delete(index=indices, ignore_unavailable=True)
 
     async def clean_index(self, index_name):
         return await self.client.delete_by_query(
@@ -112,10 +102,8 @@ class ESManagementClient(ESClient):
     async def list_indices(self):
         return await self.client.indices.stats(index="search-*")
 
-    async def index_exists(self, index_name, expand_wildcards="open"):
-        return await self.client.indices.exists(
-            index=index_name, expand_wildcards=expand_wildcards
-        )
+    async def index_exists(self, index_name):
+        return await self.client.indices.exists(index=index_name)
 
     async def upsert(self, _id, index_name, doc):
         await self.client.index(

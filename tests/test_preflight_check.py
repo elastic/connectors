@@ -38,9 +38,7 @@ def mock_es_info(mock_responses, healthy=True, repeat=False):
 
 def mock_index_exists(mock_responses, index, exist=True, repeat=False):
     status = 200 if exist else 404
-    mock_responses.head(
-        f"{host}/{index}?expand_wildcards=all", status=status, repeat=repeat
-    )
+    mock_responses.head(f"{host}/{index}", status=status, repeat=repeat)
 
 
 def mock_index(mock_responses, index, doc_id, repeat=False):

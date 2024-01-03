@@ -60,7 +60,7 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
     mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}?expand_wildcards=open",
+        f"http://nowhere.com:9200/{index_name}",
         headers=headers,
         status=404,
     )
@@ -90,7 +90,7 @@ async def test_prepare_content_index_create_index(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
     mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}?expand_wildcards=open",
+        f"http://nowhere.com:9200/{index_name}",
         headers=headers,
         status=404,
     )
@@ -126,16 +126,16 @@ async def test_prepare_content_index(mock_responses):
     mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index",
         headers=headers,
     )
     mock_responses.get(
-        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index/_mapping",
         headers=headers,
         payload={"search-new-index": {"mappings": {}}},
     )
     mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index/_mapping",
         headers=headers,
         payload=mappings,
         body='{"acknowledged": True}',
@@ -159,7 +159,7 @@ def set_responses(mock_responses, ts=None):
         ts = datetime.datetime.now().isoformat()
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(
-        "http://nowhere.com:9200/search-some-index?expand_wildcards=open",
+        "http://nowhere.com:9200/search-some-index",
         headers=headers,
     )
 

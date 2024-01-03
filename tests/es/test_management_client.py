@@ -44,9 +44,7 @@ class TestESManagementClient:
 
         await es_management_client.ensure_exists([index_name])
 
-        es_management_client.client.indices.exists.assert_called_with(
-            index=index_name, expand_wildcards="open"
-        )
+        es_management_client.client.indices.exists.assert_called_with(index=index_name)
         es_management_client.client.indices.create.assert_called_with(index=index_name)
 
     @pytest.mark.asyncio
@@ -96,7 +94,6 @@ class TestESManagementClient:
             dynamic=mappings["dynamic"],
             dynamic_templates=mappings["dynamic_templates"],
             properties=mappings["properties"],
-            expand_wildcards=ANY,
         )
 
     @pytest.mark.asyncio
@@ -162,7 +159,7 @@ class TestESManagementClient:
 
         await es_management_client.delete_indices(indices=indices)
         es_management_client.client.indices.delete.assert_awaited_with(
-            index=indices, expand_wildcards="open", ignore_unavailable=True
+            index=indices, ignore_unavailable=True
         )
 
     @pytest.mark.asyncio
@@ -171,9 +168,7 @@ class TestESManagementClient:
         es_management_client.client.indices.exists = AsyncMock()
 
         await es_management_client.index_exists(index_name=index_name)
-        es_management_client.client.indices.exists.assert_awaited_with(
-            index=index_name, expand_wildcards="open"
-        )
+        es_management_client.client.indices.exists.assert_awaited_with(index=index_name)
 
     @pytest.mark.asyncio
     async def test_clean_index(self, es_management_client):
