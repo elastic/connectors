@@ -30,8 +30,7 @@ class Connector:
         # TODO move this on top
         try:
             await self.es_management_client.ensure_exists(
-                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
-                expand_wildcards="all",
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
 
             return [
@@ -92,8 +91,7 @@ class Connector:
     ):
         try:
             await self.es_management_client.ensure_exists(
-                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
-                expand_wildcards="all",
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             timestamp = iso_utc()
 
