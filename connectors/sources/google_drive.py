@@ -174,6 +174,11 @@ class GoogleDriveClient(GoogleServiceAccountClient):
     async def list_files_from_my_drive(self, fetch_permissions=False):
         """Get files from Google Drive. Files can have any type.
 
+        We optimize by filtering for files a user can edit using "trashed=false and 'me' in writers",
+        as users with read-only access can't fetch permission lists. During sync, we iterate over all
+        organizational users, skipping read-only files. Eventually, we impersonate a user with write access
+        to each file, enabling complete file and permissions retrieval.
+
         Args:
             include_permissions (bool): flag to select permissions in the request query
 
@@ -191,7 +196,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             resource="files",
             method="list",
             corpora="user",
-            q="trashed=false",
+            q="trashed=false and 'me' in writers",
             orderBy="modifiedTime desc",
             fields=f"files({files_fields}),incompleteSearch,nextPageToken",
             includeItemsFromAllDrives=False,
