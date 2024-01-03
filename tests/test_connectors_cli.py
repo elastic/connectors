@@ -454,7 +454,7 @@ def test_index_list_one_index():
     indices = {"indices": {"test_index": {"primaries": {"docs": {"count": 10}}}}}
 
     with patch(
-        "connectors.es.client.ESManagementClient.list_indices",
+        "connectors.es.management_client.ESManagementClient.list_indices",
         AsyncMock(return_value=indices),
     ):
         result = runner.invoke(cli, ["index", "list"])
@@ -468,7 +468,7 @@ def test_index_clean():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESManagementClient.clean_index",
+        "connectors.es.management_client.ESManagementClient.clean_index",
         AsyncMock(return_value=True),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -483,7 +483,7 @@ def test_index_clean_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESManagementClient.clean_index",
+        "connectors.es.management_client.ESManagementClient.clean_index",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -497,7 +497,7 @@ def test_index_delete():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESManagementClient.delete_indices",
+        "connectors.es.management_client.ESManagementClient.delete_indices",
         AsyncMock(return_value=None),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "delete", index_name])
@@ -512,7 +512,7 @@ def test_delete_index_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.client.ESManagementClient.delete_indices",
+        "connectors.es.management_client.ESManagementClient.delete_indices",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "delete", index_name])
