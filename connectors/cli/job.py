@@ -2,7 +2,7 @@ import asyncio
 
 from elasticsearch import ApiError
 
-from connectors.es.client import ESClient
+from connectors.es.client import ESManagementClient
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
@@ -18,7 +18,7 @@ from connectors.protocol import (
 class Job:
     def __init__(self, config):
         self.config = config
-        self.es_client = ESClient(self.config)
+        self.es_management_client = ESManagementClient(self.config)
         self.sync_job_index = SyncJobIndex(self.config)
         self.connector_index = ConnectorIndex(self.config)
 
@@ -31,24 +31,38 @@ class Job:
     def start(self, connector_id, job_type):
         return asyncio.run(self.__async_start(connector_id, job_type))
 
+    def job(self, job_id):
+        return asyncio.run(self.__async_job(job_id))
+
+    async def __async_job(self, job_id):
+        try:
+            await self.es_management_client.ensure_exists(
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+            )
+            job = await self.sync_job_index.fetch_by_id(job_id)
+            return job
+        finally:
+            await self.sync_job_index.close()
+            await self.es_management_client.close()
+
     async def __async_start(self, connector_id, job_type):
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
-            await self.sync_job_index.create(
+            job_id = await self.sync_job_index.create(
                 connector=connector,
                 trigger_method=JobTriggerMethod.ON_DEMAND,
                 job_type=JobType(job_type),
             )
 
-            return True
+            return job_id
         finally:
             await self.sync_job_index.close()
             await self.connector_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     async def __async_list_jobs(self, connector_id, index_name, job_id):
         try:
-            await self.es_client.ensure_exists(
+            await self.es_management_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             jobs = self.sync_job_index.get_all_docs(
@@ -61,7 +75,7 @@ class Job:
         # TODO catch exceptions
         finally:
             await self.sync_job_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     async def __async_cancel_jobs(self, connector_id, index_name, job_id):
         try:
@@ -75,7 +89,7 @@ class Job:
             return False
         finally:
             await self.sync_job_index.close()
-            await self.es_client.close()
+            await self.es_management_client.close()
 
     def __job_list_query(self, connector_id, index_name, job_id):
         if job_id:

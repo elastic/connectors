@@ -132,6 +132,10 @@ class DataSourceError(Exception):
     pass
 
 
+class InvalidConnectorSetupError(Exception):
+    pass
+
+
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
@@ -184,6 +188,21 @@ class ConnectorIndex(ESIndex):
             self,
             doc_source,
         )
+
+    async def get_connector_by_index(self, index_name):
+        connectors = [
+            connector
+            async for connector in self.get_all_docs(
+                {"match": {"index_name": index_name}}
+            )
+        ]
+        if len(connectors) > 1:
+            msg = f"Multiple connectors exist for index {index_name}"
+            raise InvalidConnectorSetupError(msg)
+        elif len(connectors) == 0:
+            return None
+        else:
+            return connectors[0]
 
     async def all_connectors(self):
         async for connector in self.get_all_docs():
@@ -995,7 +1014,9 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
-        await self.index(job_def)
+        api_response = await self.index(job_def)
+
+        return api_response["_id"]
 
     async def pending_jobs(self, connector_ids, job_types):
         if not job_types:

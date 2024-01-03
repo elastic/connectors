@@ -112,9 +112,9 @@ def list_connectors(obj):
         table_rows = []
         for connector in connectors:
             formatted_connector = [
-                click.style(connector.id, blink=True, fg="green"),
-                click.style(connector.index_name, blink=True, fg="white"),
-                click.style(connector.service_type, blink=True, fg="white"),
+                click.style(connector.id, fg="green"),
+                click.style(connector.index_name, fg="white"),
+                click.style(connector.service_type, fg="white"),
                 click.style(connector.status.value, fg="white"),
                 click.style(connector.last_sync_status.value, fg="white"),
             ]
@@ -150,17 +150,17 @@ def validate_language(ctx, param, value):
 @click.command(help="Creates a new connector and a search index")
 @click.option(
     "--index-name",
-    prompt=f"{click.style('?', blink=True, fg='green')} Index name",
+    prompt=f"{click.style('?', fg='green')} Index name",
     help="Name of the index. If the connector will be native, `search-` will be prepended to the index name.",
 )
 @click.option(
     "--service-type",
-    prompt=f"{click.style('?', blink=True, fg='green')} Service type",
+    prompt=f"{click.style('?', fg='green')} Service type",
     type=click.Choice(list(_default_config()["sources"].keys()), case_sensitive=False),
 )
 @click.option(
     "--index-language",
-    prompt=f"{click.style('?', blink=True, fg='green')} Index language (leave empty for universal) {language_keys}",
+    prompt=f"{click.style('?', fg='green')} Index language (leave empty for universal) {language_keys}",
     default="",
     callback=validate_language,
 )
@@ -232,7 +232,7 @@ def create(
                 raise click.Abort()
 
         return click.prompt(
-            f"{click.style('?', blink=True, fg='green')} {item['label']}",
+            f"{click.style('?', fg='green')} {item['label']}",
             default=item.get("value", None),
             hide_input=True if item.get("sensitive") is True else False,
         )
@@ -358,7 +358,7 @@ def list_indices(obj):
     table_rows = []
     for index in indices:
         formatted_index = [
-            click.style(index, blink=True, fg="white"),
+            click.style(index, fg="white"),
             click.style(indices[index]["primaries"]["docs"]["count"]),
         ]
         table_rows.append(formatted_index)
@@ -437,11 +437,25 @@ def job(obj):
     type=click.Choice(["full", "incremental", "access_control"], case_sensitive=False),
     required=True,
 )
-def start(obj, i, t):
+@click.option(
+    "-o",
+    "--format",
+    "output_format",
+    default="text",
+    help="Output format",
+    type=click.Choice(["json", "text"]),
+)
+def start(obj, i, t, output_format):
     job_cli = Job(config=obj["config"]["elasticsearch"])
-    click.echo("Starting a job...")
-    if job_cli.start(connector_id=i, job_type=t):
-        click.echo(click.style("The job has been started.", fg="green"))
+    job_id = job_cli.start(connector_id=i, job_type=t)
+
+    if job:
+        if output_format == "json":
+            click.echo(json.dumps({"id": job_id}, indent=4))
+        else:
+            click.echo(
+                "The job " + click.style(job_id, fg="green") + " has been started."
+            )
     else:
         click.echo("")
         click.echo(
@@ -470,14 +484,14 @@ def list_jobs(obj, connector_id):
     table_rows = []
     for job in jobs:
         formatted_job = [
-            click.style(job.id, blink=True, fg="green"),
-            click.style(job.connector_id, blink=True, fg="white"),
-            click.style(job.index_name, blink=True, fg="white"),
-            click.style(job.status.value, blink=True, fg="white"),
-            click.style(job.job_type.value, blink=True, fg="white"),
-            click.style(job.indexed_document_count, blink=True, fg="white"),
-            click.style(job.indexed_document_volume, blink=True, fg="white"),
-            click.style(job.deleted_document_count, blink=True, fg="white"),
+            click.style(job.id, fg="green"),
+            click.style(job.connector_id, fg="white"),
+            click.style(job.index_name, fg="white"),
+            click.style(job.status.value, fg="white"),
+            click.style(job.job_type.value, fg="white"),
+            click.style(job.indexed_document_count, fg="white"),
+            click.style(job.indexed_document_volume, fg="white"),
+            click.style(job.deleted_document_count, fg="white"),
         ]
         table_rows.append(formatted_job)
 
@@ -524,6 +538,49 @@ def cancel(obj, job_id):
 
 
 job.add_command(cancel)
+
+
+@click.command(help="Show information about a job", name="view")
+@click.pass_obj
+@click.argument("job_id")
+@click.option(
+    "-o",
+    "--format",
+    "output_format",
+    default="text",
+    help="Output format",
+    type=click.Choice(["json", "text"]),
+)
+def view_job(obj, job_id, output_format):
+    job_cli = Job(config=obj["config"]["elasticsearch"])
+    job = job_cli.job(job_id=job_id)
+    result = {
+        "job_id": job.id,
+        "connector_id": job.connector_id,
+        "index_name": job.index_name,
+        "job_status": job.status.value,
+        "job_type": job.job_type.value,
+        "documents_index,ed": job.indexed_document_count,
+        "volume_documents_indexed": job.indexed_document_volume,
+        "documents_deleted": job.deleted_document_count,
+    }
+    if job:
+        if output_format == "json":
+            click.echo(json.dumps(result, indent=4))
+        else:
+            click.echo(tabulate(result.items()))
+    else:
+        click.echo("")
+        click.echo(
+            click.style(
+                "Something went wrong. Please try again later or check your credentials",
+                fg="red",
+            ),
+            err=True,
+        )
+
+
+job.add_command(view_job)
 
 cli.add_command(job)
 
