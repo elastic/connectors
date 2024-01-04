@@ -11,7 +11,9 @@ from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
-from elasticsearch import ConnectionError as ElasticConnectionError
+from elasticsearch import (
+    ConnectionError as ElasticConnectionError,
+)
 
 from connectors import __version__
 from connectors.logger import logger, set_extra_logger
@@ -159,50 +161,6 @@ class ESClient:
 
         await self.close()
         return False
-
-
-class ESManagementClient(ESClient):
-    """
-    Elasticsearch client with methods to manage connector-related indices.
-
-    Additionally to regular methods of ESClient, this client provides methods to work with arbitrary indices,
-    for example allowing to list indices, delete indices, wipe data from indices and such.
-
-    ESClient should be used to provide rich clients that operate on "domains", such as:
-        - specific connector
-        - specific job
-
-    This client, on the contrary, is used to manage a number of indices outside of connector protocol operations.
-    """
-
-    def __init__(self, config):
-        logger.debug(f"ESManagementClient connecting to {config['host']}")
-        # initialize ESIndex instance
-        super().__init__(config)
-
-    async def ensure_exists(self, indices=None):
-        if indices is None:
-            indices = []
-
-        for index in indices:
-            logger.debug(f"Checking index {index}")
-            if not await self.client.indices.exists(index=index):
-                await self.client.indices.create(index=index)
-                logger.debug(f"Created index {index}")
-
-    async def delete_indices(self, indices):
-        await self.client.indices.delete(index=indices, ignore_unavailable=True)
-
-    async def clean_index(self, index_name):
-        return await self.client.delete_by_query(
-            index=index_name, body={"query": {"match_all": {}}}, ignore_unavailable=True
-        )
-
-    async def list_indices(self):
-        return await self.client.indices.stats(index="search-*")
-
-    async def index_exists(self, index_name):
-        return await self.client.indices.exists(index=index_name)
 
 
 def with_concurrency_control(retries=3):
