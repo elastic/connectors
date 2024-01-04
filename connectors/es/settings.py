@@ -8,6 +8,8 @@ from os import path
 
 import yaml
 
+TIMESTAMP_FIELD = "_timestamp"
+
 ENUM_IGNORE_ABOVE = 2048
 
 DATE_FIELD_MAPPING = {"type": "date"}
@@ -274,6 +276,14 @@ class Settings:
         }
 
         return definitions
+
+    @property
+    def auto_expand_replicas(self):
+        return "0-1"
+
+    @property
+    def number_of_shards(self):
+        return 2
 
     def __init__(self, *, language_code=None, analysis_icu=False):
         self._language_data = None
