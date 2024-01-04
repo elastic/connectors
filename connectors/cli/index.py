@@ -2,7 +2,7 @@ import asyncio
 
 from elasticsearch import ApiError
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.protocol import ConnectorIndex
 
 
