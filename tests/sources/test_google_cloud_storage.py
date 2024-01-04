@@ -192,7 +192,7 @@ async def test_fetch_buckets():
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 bucket_list = []
-                async for bucket in source.fetch_buckets():
+                async for bucket in source.fetch_buckets(["*"]):
                     bucket_list.append(bucket)
 
         assert bucket_list == expected_bucket_list

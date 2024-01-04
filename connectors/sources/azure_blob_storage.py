@@ -227,9 +227,11 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     if "*" not in container_set and container["name"] in container_set:
                         container_set.remove(container["name"])
                         if not container_set:
-                            yield
-                if container_set:
-                    self._logger.warning(f"{container_set} is invalid. Skipping.")
+                            return
+                if container_set and "*" not in container_set:
+                    self._logger.warning(
+                        f"Container(s) {','.join(container_set)} are configured but not found."
+                    )
             except Exception as exception:
                 self._logger.warning(
                     f"Something went wrong while fetching containers. Error: {exception}"

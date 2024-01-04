@@ -257,20 +257,26 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             )
             raise
 
-    async def fetch_buckets(self):
+    async def fetch_buckets(self, buckets):
         """Fetch the buckets from the Google Cloud Storage.
+        Args:
+            buckets (List): List of buckets.
 
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self._google_storage_client.api_call(
-            resource="buckets",
-            method="list",
-            full_response=True,
-            project=self._google_storage_client.user_project_id,
-            userProject=self._google_storage_client.user_project_id,
-        ):
-            yield bucket
+        if "*" in buckets:
+            async for bucket in self._google_storage_client.api_call(
+                resource="buckets",
+                method="list",
+                full_response=True,
+                project=self._google_storage_client.user_project_id,
+                userProject=self._google_storage_client.user_project_id,
+            ):
+                yield bucket
+        else:
+            for bucket in buckets:
+                yield {"items": [{"id": bucket, "name": bucket}]}
 
     async def fetch_blobs(self, buckets):
         """Fetches blobs stored in the bucket from Google Cloud Storage.
@@ -384,19 +390,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        if self.configuration["buckets"] == ["*"]:
-            async for buckets in self.fetch_buckets():
-                if not buckets.get("items"):
-                    continue
-                async for blobs in self.fetch_blobs(
-                    buckets=buckets,
-                ):
-                    for blob_document in self.get_blob_document(blobs=blobs):
-                        yield blob_document, partial(self.get_content, blob_document)
-        else:
-            for bucket in self.configuration["buckets"]:
-                async for blobs in self.fetch_blobs(
-                    buckets={"items": [{"id": bucket, "name": bucket}]},
-                ):
-                    for blob_document in self.get_blob_document(blobs=blobs):
-                        yield blob_document, partial(self.get_content, blob_document)
+        async for bucket in self.fetch_buckets(self.configuration["buckets"]):
+            async for blobs in self.fetch_blobs(
+                buckets=bucket,
+            ):
+                for blob_document in self.get_blob_document(blobs=blobs):
+                    yield blob_document, partial(self.get_content, blob_document)
