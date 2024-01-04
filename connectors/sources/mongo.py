@@ -265,7 +265,9 @@ class MongoDataSource(BaseDataSource):
         collection_valid = True
 
         try:
-            await client[configured_database_name].validate_collection(configured_collection_name)
+            await client[configured_database_name].validate_collection(
+                configured_collection_name
+            )
         except OperationFailure:  # If the collection doesn't exist
             collection_valid = False
 
@@ -292,9 +294,8 @@ class MongoDataSource(BaseDataSource):
             if configured_collection_name not in existing_collection_names:
                 msg = f"Collection '{configured_collection_name}' does not exist within database '{configured_database_name}'. Existing collections: {', '.join(existing_collection_names)}"
                 raise ConfigurableFieldValueError(msg)
-        except OperationFailure:
-                user = self.configuration["user"]
+        except OperationFailure as e:
+            user = self.configuration["user"]
             # This happens if the user has no access to operations to list collection/database names
-                msg = f"Database '{configured_database_name}' or collection '{configured_collection_name}' is not accessible by user '{user}'. Verify that these database and collection exist, and specified user has access to it"
-                raise ConfigurableFieldValueError(msg)
-
+            msg = f"Database '{configured_database_name}' or collection '{configured_collection_name}' is not accessible by user '{user}'. Verify that these database and collection exist, and specified user has access to it"
+            raise ConfigurableFieldValueError(msg) from e

@@ -310,24 +310,21 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
 
 
 @pytest.mark.asyncio
-@mock.patch("motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection", side_effect=OperationFailure("Unauthorized"))
-async def test_validate_config_when_collection_access_unauthorized(patch_validate_collection):
-    configured_database_name = "hello"
-    configured_collection_name = "second"
-
-    with pytest.raises(ConfigurableFieldValueError) as e:
-        async with create_mongo_source(
-            database=configured_database_name,
-            collection=configured_collection_name,
-        ) as source:
-            await source.validate_config()
-
-    assert e is not None
-
-@pytest.mark.asyncio
-@mock.patch("motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection", side_effect=OperationFailure("Unauthorized"))
-@mock.patch("motor.motor_asyncio.AsyncIOMotorClient.list_database_names", side_effect=OperationFailure("Unauthorized"))
-async def test_validate_config_when_collection_access_unauthorized(patch_validate_collection, patch_list_database_names):
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection",
+    side_effect=OperationFailure("Unauthorized"),
+)
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+    return_value=future_with_result(["hello"]),
+)
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+    return_value=future_with_result(["first"]),
+)
+async def test_validate_config_when_collection_access_unauthorized(
+    patch_validate_collection, patch_list_database_names, patch_list_collection_names
+):
     configured_database_name = "hello"
     configured_collection_name = "second"
 
@@ -342,8 +339,38 @@ async def test_validate_config_when_collection_access_unauthorized(patch_validat
 
 
 @pytest.mark.asyncio
-@mock.patch("motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection", return_value=future_with_result(None))
-async def test_validate_config_when_configuration_valid_then_does_not_raise(patch_validate_connection):
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection",
+    side_effect=OperationFailure("Unauthorized"),
+)
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+    side_effect=OperationFailure("Unauthorized"),
+)
+async def test_validate_config_when_collection_access_unauthorized_and_no_admin_access(
+    patch_validate_collection, patch_list_database_names
+):
+    configured_database_name = "hello"
+    configured_collection_name = "second"
+
+    with pytest.raises(ConfigurableFieldValueError) as e:
+        async with create_mongo_source(
+            database=configured_database_name,
+            collection=configured_collection_name,
+        ) as source:
+            await source.validate_config()
+
+    assert e is not None
+
+
+@pytest.mark.asyncio
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection",
+    return_value=future_with_result(None),
+)
+async def test_validate_config_when_configuration_valid_then_does_not_raise(
+    patch_validate_connection,
+):
     configured_database_name = "hello"
     configured_collection_name = "second"
 
@@ -370,6 +397,7 @@ async def test_serialize(raw, output):
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "certificate_value, tls_insecure",
@@ -392,6 +420,6 @@ async def test_ssl_with_successful_connection(
 ):
     async with create_mongo_source(
         ssl_enabled=True,
-        ssl_ca="-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----"
+        ssl_ca="-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----",
     ):
         assert True
