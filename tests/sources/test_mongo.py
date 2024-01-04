@@ -261,7 +261,13 @@ def future_with_result(result):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_database_name_invalid_then_raises_exception():
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection",
+    side_effect=OperationFailure("Unauthorized"),
+)
+async def test_validate_config_when_database_name_invalid_then_raises_exception(
+    patch_validate_collection,
+):
     server_database_names = ["hello", "world"]
     configured_database_name = "something"
 
@@ -283,7 +289,13 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_collection_name_invalid_then_raises_exception():
+@mock.patch(
+    "motor.motor_asyncio.AsyncIOMotorDatabase.validate_collection",
+    side_effect=OperationFailure("Unauthorized"),
+)
+async def test_validate_config_when_collection_name_invalid_then_raises_exception(
+    patch_validate_collection,
+):
     server_database_names = ["hello"]
     server_collection_names = ["first", "second"]
     configured_database_name = "hello"

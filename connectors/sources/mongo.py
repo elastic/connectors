@@ -265,10 +265,11 @@ class MongoDataSource(BaseDataSource):
         collection_valid = True
 
         try:
+            # This works on both standalone and Managed mongo in the same way
             await client[configured_database_name].validate_collection(
                 configured_collection_name
             )
-        except OperationFailure:  # If the collection doesn't exist
+        except OperationFailure:
             collection_valid = False
 
         if collection_valid:
@@ -276,6 +277,9 @@ class MongoDataSource(BaseDataSource):
 
         # If it's not accessible, try to make a good user-friendly error message
         try:
+            # We will try to access some databases/collections to give a friendly message
+            # That will suggest the name of existing collection - but only if the user
+            # that we use to log in into MongoDB has access to it
             existing_database_names = await client.list_database_names()
 
             self._logger.debug(f"Existing databases: {existing_database_names}")
@@ -295,7 +299,9 @@ class MongoDataSource(BaseDataSource):
                 msg = f"Collection '{configured_collection_name}' does not exist within database '{configured_database_name}'. Existing collections: {', '.join(existing_collection_names)}"
                 raise ConfigurableFieldValueError(msg)
         except OperationFailure as e:
-            user = self.configuration["user"]
             # This happens if the user has no access to operations to list collection/database names
+            # Managed MongoDB never gets here, but if we're running against a standalone mongo
+            # Then this code can trigger
+            user = self.configuration["user"]
             msg = f"Database '{configured_database_name}' or collection '{configured_collection_name}' is not accessible by user '{user}'. Verify that these database and collection exist, and specified user has access to it"
             raise ConfigurableFieldValueError(msg) from e
