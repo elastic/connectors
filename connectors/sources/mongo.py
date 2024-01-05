@@ -270,8 +270,9 @@ class MongoDataSource(BaseDataSource):
             )
             return
         except OperationFailure:
-            self._logger.warning(f"Unable to access '{configured_database_name}.{configured_collection_name}' as user '{user}'")
-
+            self._logger.warning(
+                f"Unable to access '{configured_database_name}.{configured_collection_name}' as user '{user}'"
+            )
 
         # If it's not accessible, try to make a good user-friendly error message
         try:
