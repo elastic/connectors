@@ -190,7 +190,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         if fetch_permissions:
             files_fields = DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
             # Google Drive API required write access to fetch file's permissions
-            list_query = f"trashed=false and 'me' in writers"
+            list_query = "trashed=false and 'me' in writers"
         else:
             files_fields = DRIVE_ITEMS_FIELDS
             list_query = "trashed=false"
