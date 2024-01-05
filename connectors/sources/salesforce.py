@@ -1389,22 +1389,22 @@ class SalesforceDataSource(BaseDataSource):
         } | es_access_control_query(access_control)
 
     async def get_access_control(self):
-        """Get access control documents for active Atlassian users.
+        """Get access control documents for Salesforce users.
 
-        This method fetches access control documents for active Atlassian users when document level security (DLS)
+        This method fetches access control documents for Salesforce users when document level security (DLS)
         is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
-        If DLS is enabled, the method fetches all users from the Salesforce API, filters out active Atlassian users,
-        and fetches additional information for each active user using the _fetch_user method. After gathering the user information,
+        If DLS is enabled, the method fetches all users from the Salesforce API, filters out Salesforce users,
+        and fetches additional information for each user using the _fetch_user method. After gathering the user information,
         it generates an access control document for each user using the user_access_control_doc method and yields the results.
 
         Yields:
-            dict: An access control document for each active Atlassian user.
+            dict: An access control document for each Salesforce user.
         """
         if not self._dls_enabled():
-            self._logger.warning("DLS is not enabled. Skipping")
+            self._logger.debug("DLS is not enabled. Skipping")
             return
 
-        self._logger.info("Fetching Salesforce users")
+        self._logger.debug("Fetching Salesforce users")
         async for user in self.salesforce_client.get_salesforce_users():
             if user.get("UserType") in ["CloudIntegrationUser", "AutomatedProcess"]:
                 continue
@@ -1436,34 +1436,38 @@ class SalesforceDataSource(BaseDataSource):
 
     async def _fetch_users_with_read_access(self, sobject):
         if not self._dls_enabled():
-            self._logger.warning("DLS is not enabled. Skipping")
+            self._logger.debug("DLS is not enabled. Skipping")
             return
 
         self._logger.debug(
-            f"Fetching users who has Read access for Salesforce object: {sobject}"
+            f"Fetching users who have Read access for Salesforce object: {sobject}"
         )
 
         if sobject in self.permissions:
             return
 
-        user_list = []
-        access_control = []
+        user_list = set()
+        access_control = set()
         async for assignee in self.salesforce_client.get_users_with_read_access(
             sobject=sobject
         ):
-            user_list.append(assignee.get("AssigneeId"))
-            access_control.append(_prefix_user_id(assignee.get("AssigneeId")))
+            user_list.add(assignee.get("AssigneeId"))
+            access_control.add(_prefix_user_id(assignee.get("AssigneeId")))
 
-        if user_list == []:
+        if user_list == set():
             return
 
-        async for user in self.salesforce_client.get_username_by_id(
-            user_list=tuple(user_list)
-        ):
-            access_control.append(_prefix_user(user.get("Name")))
-            access_control.append(_prefix_email(user.get("Email")))
+        user_sub_list = [
+            list(user_list)[i : i + 800] for i in range(0, len(user_list), 800)
+        ]
+        for _user_list in user_sub_list:
+            async for user in self.salesforce_client.get_username_by_id(
+                user_list=tuple(_user_list)
+            ):
+                access_control.add(_prefix_user(user.get("Name")))
+                access_control.add(_prefix_email(user.get("Email")))
 
-        self.permissions[sobject] = access_control
+        self.permissions[sobject] = list(access_control)
 
     async def get_docs(self, filtering=None):
         # We collect all content documents and de-duplicate them before downloading and yielding
