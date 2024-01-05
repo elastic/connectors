@@ -7,8 +7,8 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
-from connectors.es.client import ESManagementClient
 from connectors.es.index import DocumentNotFoundError
+from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService

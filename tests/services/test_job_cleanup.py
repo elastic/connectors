@@ -47,7 +47,7 @@ def mock_sync_job(sync_job_id="1", connector_id="1", index_name="index_name"):
 
 @pytest.mark.asyncio
 @patch("connectors.protocol.SyncJobIndex.delete_jobs")
-@patch("connectors.es.client.ESManagementClient.delete_indices")
+@patch("connectors.es.management_client.ESManagementClient.delete_indices")
 @patch("connectors.protocol.SyncJobIndex.idle_jobs")
 @patch("connectors.protocol.SyncJobIndex.orphaned_jobs")
 @patch("connectors.protocol.ConnectorIndex.fetch_by_id")
