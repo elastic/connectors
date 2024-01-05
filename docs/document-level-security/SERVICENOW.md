@@ -8,6 +8,18 @@ Document level security (DLS) enables you to restrict access to documents based 
 
 Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
 
+ServiceNow connector support ACL roles for document level security. For default services, connectors use the below roles to find users who have access to documents.
+
+| Service        | Roles                                                             |
+|----------------|-------------------------------------------------------------------|
+| User           | admin                                                             |
+| Incident       | admin, sn_incident_read, ml_report_user, ml_admin, itil           |
+| Requested Item | admin, sn_request_read, asset, atf_test_designer, atf_test_admin  |
+| Knowledge      | admin, knowledge, knowledge_manager, knowledge_admin              |
+| Change Request | admin, sn_change_read, itil                                       |
+
+For services other than default, connector iterate over access controls with read operations and find the respective roles of the services.
+
 **Note:** Refer to [DLS in Search Applications](https://www.elastic.co/guide/en/enterprise-search/master/dls-e2e-guide.html) to learn how to ingest data from ServiceNow with DLS enabled, when building a search application.
 
 #### Additional Configuration
