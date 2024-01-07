@@ -2,7 +2,7 @@
 
 ### Installation
 
-Atomated testing CLI depends on `gcloud` and `vault` CLIs so you need to install them. 
+Automated testing CLI depends on `gcloud` and `vault` CLIs so you need to install them. 
 
 #### Google cloud CLI
 Follow the [offical installation](https://cloud.google.com/sdk/docs/install) guide. Once installed, run `gcloud auth login` and authorize using SSO. 
@@ -52,11 +52,11 @@ To automatically delete the VM you need to use `--delete` option.
 `./bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --connectors-ref 8.12 --test-case {path to the test case file} --delete`
 
 #### Using different machine type
-All new VMs are based on a predefined image which is in turn based on `ubuntu-2204-lts` with python3 and docker installed. Cusome images are not supported. You can change a machine type by providing `--vm-type`. Visit [the official GCP documentation](https://cloud.google.com/compute/docs/general-purpose-machines) to get more information. 
+All new VMs are based on a predefined image which is in turn based on `ubuntu-2204-lts` with python3 and docker installed. Custome images are not supported. You can change a machine type by providing `--vm-type`. Visit [the official GCP documentation](https://cloud.google.com/compute/docs/general-purpose-machines) to get more information. 
 
 #### Adding a new test case
 
-A test case should be presented as a YAML file.
+A test case should be present as a YAML file.
 
 ```YAML
 ---
@@ -101,12 +101,12 @@ Example:
 }
 ```
 
-Make sure that all the required fields are presented in the secret. The CLI will get all the secrets and upload them to the VM.
+Make sure that all the required fields are present in the secret. The CLI will get all the secrets and upload them to the VM.
 
-Consider adding new secrets only for new connector sources. Rich out to the Search Productivity team if you need any help with Vault secrets. 
+Consider adding new secrets only for new connector sources. Reach out to the Search Productivity team if you need any help with Vault secrets. 
 
 ### Can I use gcloud?
 Yes, it's already installed on your machine and the cli does not limit your use. Visit [the official documentation page](https://cloud.google.com/sdk/docs) for more information.
 
 ### Hygiene of use
-Since the CLI creates virtual machines in GCP it's recommended to keep them running only when you need them. Let's some trees 🌳🌳🌳. 
+Since the CLI creates virtual machines in GCP it's recommended to keep them running only when you need them. Let's save some trees 🌳🌳🌳. 
