@@ -69,11 +69,11 @@ scenarios:
     tests:
       - name: Full sync job is performed without errors
         job_type: full
-        max_timeout: 60
+        timeout: 60
         match: { status: 'completed'}
       - name: Incremental sync job is performed without errors
         job_type: incremental
-        max_timeout: 20
+        timeout: 20
         match: { status: 'completed'}
 ```
 

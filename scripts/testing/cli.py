@@ -541,7 +541,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
             job_id = json.loads(result.stdout.decode("utf-8"))["id"]
 
             timeout = 0
-            timeout_step = test["max_timeout"] / 5
+            timeout_step = test["timeout"] / 5
             while True:
                 cmd = [
                     "gcloud",
@@ -563,7 +563,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
                     click.echo(click.style(f"Test {test['name']} passed", fg="green"))
                     break
 
-                if timeout >= test["max_timeout"]:
+                if timeout >= test["timeout"]:
                     click.echo(click.style(f"Test {test['name']} failed", fg="red"))
                     break
 
