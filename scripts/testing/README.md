@@ -18,9 +18,6 @@ Run `make clean install` to generate executable files in `./bin` folder
 
 ### Usage
 
-***Note:*** The working directory for `./bin/test-connectors` is `scripts/testing` so when you need to point to a file you should use it as a root directory. 
-e.g. `./bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --test-case scenarios/clients/spo_full_and_incremental_syncs.yml`
-
 Run `./bin/test-connectors --help` or `./bin/test-connectors {command name} --help` to get more information about the cli. 
 
 #### Running test with Elastic cloud deployment

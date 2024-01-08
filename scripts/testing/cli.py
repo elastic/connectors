@@ -15,14 +15,13 @@ import yaml
 
 __all__ = ["main"]
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-os.chdir(sys.path[0] + "/../scripts/testing")
-
-VM_STARTUP_SCRIPT_PATH = "startup-script=startup_scipt.sh"
+VM_STARTUP_SCRIPT_PATH = f"startup-script={BASE_DIR}/startup_scipt.sh"
 VM_INIT_ATTEMPTS = 30
-SLEEP_TIMEOUT = 5
-DOCKER_COMPOSE_FILE = "docker-compose.yml"
-PULL_CONNECTORS_SCRIPT = "pull-connectors.sh"
+SLEEP_TIMEOUT = 6
+DOCKER_COMPOSE_FILE = f"{BASE_DIR}/docker-compose.yml"
+PULL_CONNECTORS_SCRIPT = f"{BASE_DIR}/pull-connectors.sh"
 CLI_CONFIG_FILE = "cli-config.yml"
 CONNECTOR_SERVICE_CONFIG_FILE = "/var/app/config.yml"
 VAULT_SECRETS_PREFIX = "secret/ent-search-team/"
@@ -76,7 +75,7 @@ def cli(ctx):
 @click.option(
     "--es-password", help="Elasticsearch password", default=ES_DEFAULT_PASSWORD
 )
-@click.option("--test-case", help="Test case file")
+@click.option("--test-case", help="Test case file", type=click.Path(exists=True))
 @click.option("--delete", is_flag=True, help="Deletes the VM once the tests passed")
 @click.pass_context
 def create_test_environment(
@@ -275,7 +274,7 @@ def render_connector_configuration(file_path):
     with the values from Vault
     """
     configuration = {}
-    with open(file_path, "r") as f:
+    with open(os.path.join(BASE_DIR, file_path), "r") as f:
         configuration = json.loads(f.read())
         for key, item in configuration.items():
             if type(item) is str and item.startswith("vault:"):
@@ -308,7 +307,7 @@ def setup_stack(name, vm_zone, es_version, connectors_ref, es_host):
             "--zone",
             vm_zone,
             "--command",
-            f"sudo ./{PULL_CONNECTORS_SCRIPT} {connectors_ref}",
+            f"sudo ./{os.path.basename(PULL_CONNECTORS_SCRIPT)} {connectors_ref}",
         ]
         run_gcloud_cmd(cmd)
         steps.update(9)
@@ -341,7 +340,7 @@ def setup_stack(name, vm_zone, es_version, connectors_ref, es_host):
             "--zone",
             vm_zone,
             "--command",
-            f"sudo ES_VERSION={es_version} docker compose -f ~/docker-compose.yml up -d",
+            f"sudo ES_VERSION={es_version} docker compose -f ~/{os.path.basename(DOCKER_COMPOSE_FILE)} up -d",
         ]
         run_gcloud_cmd(cmd)
 
