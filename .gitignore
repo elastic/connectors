@@ -14,3 +14,4 @@ __pycache__
 .cli
 
 **/venv
+scripts/stack/connectors-config

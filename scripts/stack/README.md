@@ -1,8 +1,8 @@
 # Full Elastic Stack with Connectors
 
-We know that setting up the Connectors service may look a bit daunting, but to help with this, we pulled together a set of scripts to enable a user to get up and running with a full stack with connectors. Here, we provide an example configuration, Docker Compose configuration, and a bash script to startup and run a stack including Elasticsearch, Kibana, and Connectors.
-
-These scripts can be useful if you want to try out Connectors and ingesting their data into an Elasticsearch instance, or, as a starting place for adding Connectors to your production environment.
+We know that setting up the Connectors service may look a bit daunting, so to help with this, we pulled together a set of scripts to enable a user to get up and running quickly. Here, we provide an example Connectors configuration, a Docker Compose file, and a bash script to run a stack comprising of Elasticsearch, Kibana, and Connectors.
+Once running, you can start to ingest data into an Elasticsearch instance via Elastic Connectors.
+These scripts can also be used as a starting place for adding Connectors to your production environment.
 
 # Contents
 
@@ -15,21 +15,20 @@ These scripts can be useful if you want to try out Connectors and ingesting thei
   * [stop-stack.sh](#stop-stacksh)
 
 ## Prerequisites
-* Linux or MacOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
+* Linux or macOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
 * Python 3.10 or higher
 * Docker with Docker Compose Installed
 * It is recommended to run Docker with at least 4GB of available RAM.
 
 ## Running the Stack
 
-The scripts used a default password for the `elastic` user when running the scripts.
-If you wish to use a different password for the `elastic` user, you can specify the environment variable `ELASTIC_PASSWORD` before running the script. E.g.:
+The scripts use a default password for the `elastic` user, however, if you wish to use a different password, you can specify the environment variable `ELASTIC_PASSWORD` before running the script. E.g.:
 
 ```bash
-$ ELASTIC_PASSWORD="my_new_password" ./scripts/stack/run-stack.sh
+ELASTIC_PASSWORD="my_new_password" ./scripts/stack/run-stack.sh
 ```
 
-Alternatively, if you do not wish to a different set of credentials, or an API key for authentication, you can run the `./copy-config.sh` script to create a
+Alternatively, if you do not wish to use a different set of credentials, or an API key for authentication, you can run the `./copy-config.sh` script to create a
 copy of the default [config.yml](../../config.yml) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
 
 By default, these Connector scripts will use a `SNAPSHOT` version of the Docker image.
@@ -38,13 +37,18 @@ If you do not wish to use a `SNAPSHOT` version, add the `--no-snapshot` flag whe
 You can also specify an alternative base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
 
 ```bash
-$ CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
 ```
 
 When running the script, the Elasticsearch and Kibana versions will use the same stack version as the `CONNECTORS_VERSION`, however, you can additionally specify these before running:
 
 ```bash
-$ ELASTICSERACH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+ELASTICSERACH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+```
+
+Once the stack is running, you can monitor the logs from the Connectors instance by running:
+```bash
+docker-compose -f ./scripts/stack/docker/docker-compose.yml logs -f elastic-connectors
 ```
 
 ## Prompted Configuration
@@ -103,7 +107,7 @@ use those instead. To do this and still use the `run-stack.sh` script:
 This is the main script that sets up and runs an Elasticsearch, Kibana, and Connectors stack.
 
 ```bash
-$ ./scripts/stack/run-stack.sh
+./scripts/stack/run-stack.sh
 ```
 
 By default, the script will start an Elasticsearch and Kibana instance, then it will ask the user if they want
@@ -122,7 +126,7 @@ Command line options:
 This script is used to stop the stack, and optionally remove any data volumes and reset the configuration file.
 
 ```bash
-$ ./scripts/stack/stop-stack.sh
+./scripts/stack/stop-stack.sh
 ```
 
 Command line options:
