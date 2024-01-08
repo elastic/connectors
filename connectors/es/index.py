@@ -72,6 +72,7 @@ class ESIndex(ESClient):
             index=self.index_name,
             body={"query": {"match_all": {}}},
             ignore_unavailable=True,
+            conflicts="proceed",
         )
 
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
