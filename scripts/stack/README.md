@@ -43,7 +43,7 @@ CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
 When running the script, the Elasticsearch and Kibana versions will use the same stack version as the `CONNECTORS_VERSION`, however, you can additionally specify these before running:
 
 ```bash
-ELASTICSERACH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
+ELASTICSEARCH_VERSION=8.11.2 KIBANA_VERSION=8.11.2 CONNECTORS_VERSION=8.11.2.0 ./scripts/stack/run-stack.sh --no-snapshot
 ```
 
 Once the stack is running, you can monitor the logs from the Connectors instance by running:
