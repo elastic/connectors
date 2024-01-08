@@ -14,11 +14,13 @@ Connectors CLI in tech preview.
 3. Connectors CLI is available via `./bin/connectors`
 
 ## Configuration
-1. Run `./bin/connectors login` to authenticate the CLI wuith an Elasticsearch instance. 
+**Note:** Make sure your Elasticsearch instance is up and running. 
+
+1. Run `./bin/connectors login` to authenticate the CLI with an Elasticsearch instance. 
 2. Provide credentials
 3. The command will create or ask to rewrite an existing configuration file in `./cli/config.yml`
 
-When you run any commands you can specify your a configuration file using `-c` argument. 
+When you run any command you can specify a configuration file using `-c` argument. 
 Example: 
 
 ```bash
@@ -50,15 +52,15 @@ Commands:
 
 ### Commands list
 
- - [connectors connector create](#connector-create)
- - [connectors connector list](#connector-list)
- - [connectors job list](#job-list)
- - [connectors job cancel](#job-cancel)
- - [connectors job start](#job-start)
- - [connectors job view](#job-view)
+ - [connectors connector create](#connectors-connector-create)
+ - [connectors connector list](#connectors-connector-list)
+ - [connectors job list](#connectors-job-list)
+ - [connectors job cancel](#connectors-job-cancel)
+ - [connectors job start](#connectors-job-start)
+ - [connectors job view](#connectors-job-view)
  
  
-#### Connector create
+#### connectors connector create
 Creates a new connector and links it to an Elasticsearch index. When executing the command you will be asked to provide a connector configuration based on the service type you selected. For instance, you will be asked for host, username, and password if you select `mysql`. 
 
 To bypass interactive mode you can pass `--from-file` argument pointing to a key-value JSON file with connectors configuration.
@@ -66,14 +68,14 @@ To bypass interactive mode you can pass `--from-file` argument pointing to a key
 Examples:
 
 ```bash
-./bin/connectors connector create --index-name my-index --service-type sharepoint_online --index-language en --from-file sharepoint-config.json en --from-file sharepoint-config.json
+./bin/connectors connector create --index-name my-index --service-type sharepoint_online --index-language en --from-file sharepoint-config.json
 ```
 This will create a new Sharepoint Online connector with an Elasticsearch index `my-index` and configuration from `sharepoint-online-config.json`. 
 
 **Note**
-See the connectors' [source code](https://github.com/elastic/connectors/tree/main/connectors/sources) to get more information about their configuration fields.
+See the connectors' [source code](../connectors/sources) to get more information about their configuration fields.
 
-#### Connector list
+#### connectors connector list
 
 Lists all the existing connectors
 
@@ -85,7 +87,7 @@ Examples:
 
 It will display all existing connectors and the associated indices.
 
-#### Job list
+#### connectors job list
 Lists all jobs and their stats. 
 
 Examples
@@ -95,7 +97,7 @@ Examples
 
 It will display all sync jobs including information like job status, number of indexed documents and index data volume associated with `connector_id`. 
 
-#### Job cancel
+#### connectors job cancel
 Marks the job as `cancelling` to let Connector services know that the job has to be canceled. 
 
 Examples: 
@@ -104,7 +106,7 @@ Examples:
 ./bin/connectors job cancel -- <job_id>
 ```
 
-#### Job start
+#### connectors job start
 Schedules a new sync job and lets Connector service pick it up. 
 
 Examples: 
@@ -115,7 +117,7 @@ Examples:
 
 It will schedule a new sync job using job type and connector id. The outcome of the command contains a job id.
 
-#### Job view
+#### connectors job view
 Shows information about a sync job. 
 
 Examples: 
