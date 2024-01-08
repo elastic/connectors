@@ -336,7 +336,7 @@ cli.add_command(connector)
 
 
 # Index group
-@click.group(invoke_without_command=True, help="Search indices management")
+@click.group(invoke_without_command=False, help="Search indices management")
 @click.pass_obj
 def index(obj):
     pass
