@@ -65,7 +65,8 @@ by copying over the [example config.yml.example](./connectors-config/config.yml.
 to `config.yml` in the directory.
 
 If you configured a new connector, you will need to go into Kibana to start or schedule a sync.
-To do this, in Kibana:
+Running the scripts, you can log in at http://localhost:5601/ with the username `elastic` and your password (`changeme` is the default, unless you specified a different `ELASTIC_PASSWORD` earlier).
+Then, to complete this in Kibana:
 * From the main menu, choose "Content" under the "Search" heading
 * Click on your index name
 * Click on the "Configuration" tab

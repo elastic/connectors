@@ -71,6 +71,6 @@ else
   echo "... Connectors service is set to not start... skipping..."
 fi
 
-echo "Stack is running. You can log in at http://localhost:5601/"
+echo "Stack is running. You can log in at http://localhost:5601/ with the user 'elastic'"
 
 popd
