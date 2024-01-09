@@ -16,6 +16,11 @@ import aiohttp
 import dateutil.parser as parser
 import fastjsonschema
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
@@ -51,13 +56,32 @@ ENDPOINTS = {
     "DOWNLOAD": "/api/now/attachment/{sys_id}/file",
     "BATCH": "/api/now/v1/batch",
 }
-DEFAULT_SERVICE_NAMES = (
-    "sys_user",
-    "sc_req_item",
-    "incident",
-    "kb_knowledge",
-    "change_request",
-)
+DEFAULT_SERVICE_NAMES = {
+    "sys_user": ["admin"],
+    "sc_req_item": [
+        "admin",
+        "sn_request_read",
+        "asset",
+        "atf_test_designer",
+        "atf_test_admin",
+    ],
+    "incident": ["admin", "sn_incident_read", "ml_report_user", "ml_admin", "itil"],
+    "kb_knowledge": ["admin", "knowledge", "knowledge_manager", "knowledge_admin"],
+    "change_request": ["admin", "sn_change_read", "itil"],
+}
+ACLS_QUERY = "sys_security_acl.operation=read^sys_security_acl.name={table_name}"
+
+
+def _prefix_email(email):
+    return prefix_identity("email", email)
+
+
+def _prefix_username(user):
+    return prefix_identity("username", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
 
 
 class EndSignal(Enum):
@@ -386,6 +410,7 @@ class ServiceNowDataSource(BaseDataSource):
 
     name = "ServiceNow"
     service_type = "servicenow"
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the ServiceNow instance.
@@ -470,7 +495,79 @@ class ServiceNowDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 8,
+                "tooltip": "Document level security ensures identities and permissions set in ServiceNow are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if (
+            self._features is None
+            or not self._features.document_level_security_enabled()
+        ):
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    async def _user_access_control_doc(self, user):
+        user_id = user.get("_id", "")
+        user_name = user.get("user_name", "")
+        user_email = user.get("email", "")
+
+        _prefixed_user_id = _prefix_user_id(user_id=user_id)
+        _prefixed_user_name = _prefix_username(user=user_name)
+        _prefixed_email = _prefix_email(email=user_email)
+        return {
+            "_id": user_id,
+            "identity": {
+                "user_id": _prefixed_user_id,
+                "display_name": _prefixed_user_name,
+                "email": _prefixed_email,
+            },
+            "created_at": user.get("_timestamp"),
+        } | es_access_control_query(
+            access_control=[_prefixed_user_id, _prefixed_user_name, _prefixed_email]
+        )
+
+    async def _fetch_all_users(self):
+        self._logger.debug("Fetching all users.")
+        async for user in self._table_data_generator(
+            service_name="sys_user", params={}
+        ):
+            yield user
+
+    async def _fetch_users_by_roles(self, role):
+        self._logger.debug(f"Fetching users with role: {role}.")
+        role_user_params = {"sysparm_query": f"role={role}"}
+        async for user in self._table_data_generator(
+            service_name="sys_user_has_role", params=role_user_params
+        ):
+            yield user
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        async for user in self._fetch_all_users():
+            yield await self._user_access_control_doc(user=user)
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+        return document
 
     async def _remote_validation(self):
         """Validate configured services
@@ -530,7 +627,7 @@ class ServiceNowDataSource(BaseDataSource):
         )
         return data
 
-    async def _fetch_attachment_metadata(self, batched_apis):
+    async def _fetch_attachment_metadata(self, batched_apis, table_access_control):
         try:
             async for attachments_metadata in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -540,12 +637,16 @@ class ServiceNowDataSource(BaseDataSource):
                     serialized_attachment_metadata = self.serialize(
                         doc=formatted_attachment_metadata
                     )
+                    attachment_with_access_control = self._decorate_with_access_control(
+                        document=serialized_attachment_metadata,
+                        access_control=table_access_control,
+                    )
                     await self.queue.put(
-                        (  # pyright: ignore
-                            serialized_attachment_metadata,
+                        (
+                            attachment_with_access_control,
                             partial(
                                 self.get_content,
-                                serialized_attachment_metadata,
+                                attachment_with_access_control,
                             ),
                         )
                     )
@@ -554,9 +655,9 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
-        await self.queue.put(EndSignal.ATTACHMENT)  # pyright: ignore
+        await self.queue.put(EndSignal.ATTACHMENT)
 
-    async def _attachment_metadata_producer(self, record_ids):
+    async def _attachment_metadata_producer(self, record_ids, table_access_control):
         attachment_apis = self.servicenow_client.get_attachment_apis(
             url=ENDPOINTS["ATTACHMENT"], ids=record_ids
         )
@@ -568,13 +669,30 @@ class ServiceNowDataSource(BaseDataSource):
                 )
             ]
             await self.fetchers.put(
-                partial(self._fetch_attachment_metadata, batched_apis)
+                partial(
+                    self._fetch_attachment_metadata, batched_apis, table_access_control
+                )
             )
             self.task_count += 1
 
-        await self.queue.put(EndSignal.RECORD)  # pyright: ignore
+        await self.queue.put(EndSignal.RECORD)
 
-    async def _fetch_table_data(self, batched_apis):
+    async def _yield_table_data(self, batched_apis):
+        try:
+            async for table_data in self.servicenow_client.get_data(
+                batched_apis=batched_apis
+            ):
+                for record in table_data:
+                    formatted_table_data = self._format_doc(data=record)
+                    serialized_table_data = self.serialize(doc=formatted_table_data)
+                    yield serialized_table_data
+        except Exception as exception:
+            self._logger.warning(
+                f"Skipping batch data for {batched_apis}. Exception: {exception}.",
+                exc_info=True,
+            )
+
+    async def _fetch_table_data(self, batched_apis, table_access_control):
         try:
             async for table_data in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -584,13 +702,21 @@ class ServiceNowDataSource(BaseDataSource):
                     formatted_table_data = self._format_doc(data=record)
                     serialized_table_data = self.serialize(doc=formatted_table_data)
                     record_ids.append(serialized_table_data["_id"])
+                    table_data_with_access_control = self._decorate_with_access_control(
+                        document=serialized_table_data,
+                        access_control=table_access_control,
+                    )
                     await self.queue.put(
-                        (serialized_table_data, None)  # pyright: ignore
+                        (
+                            table_data_with_access_control,
+                            None,
+                        )
                     )
                 await self.fetchers.put(
                     partial(
                         self._attachment_metadata_producer,
                         record_ids,
+                        table_access_control,
                     )
                 )
                 self.task_count += 1
@@ -599,32 +725,97 @@ class ServiceNowDataSource(BaseDataSource):
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
 
-        await self.queue.put(EndSignal.RECORD)  # pyright: ignore
+        await self.queue.put(EndSignal.RECORD)
 
-    async def _table_data_producer(self, service_name):
+    async def _fetch_access_controls(self, table_name):
+        access_control, user_roles, roles = [], [], {}
+        if table_name in DEFAULT_SERVICE_NAMES.keys():
+            async for role in self._table_data_generator(
+                service_name="sys_user_role", params={}
+            ):
+                roles[role.get("name")] = role.get("sys_id")
+
+            for role in DEFAULT_SERVICE_NAMES.get(table_name, []):
+                async for user in self._fetch_users_by_roles(roles[role]):
+                    access_control.append(
+                        _prefix_user_id(user_id=user.get("user", {}).get("value"))
+                    )
+        else:
+            async for role in self._table_data_generator(
+                service_name="sys_user_role", params={}
+            ):
+                roles[role.get("sys_id")] = role.get("name")
+
+            self._logger.info(f"Fetching roles of {table_name} with read operation.")
+            acl_params = {
+                "sys_security_acl.operation": "read",
+                "sys_security_acl.name": table_name,
+                "sys_security_acl.script": "",
+                "sys_security_acl.condition": "",
+            }
+            async for acl in self._table_data_generator(
+                service_name="sys_security_acl_role", params=acl_params
+            ):
+                user_roles.append(acl.get("sys_user_role", {}).get("value"))
+
+            for role in user_roles:
+                if roles.get(role).lower() == "public":
+                    self._logger.info(
+                        f"Found public role in {table_name}, Fetching all users."
+                    )
+                    async for user in self._fetch_all_users():
+                        access_control.append(
+                            _prefix_user_id(user_id=user.get("sys_id"))
+                        )
+
+                async for user in self._fetch_users_by_roles(role):
+                    access_control.append(
+                        _prefix_user_id(user_id=user.get("user", {}).get("value"))
+                    )
+        return list(set(access_control))
+
+    async def _get_batched_apis(self, service_name, params):
+        table_length = await self.servicenow_client.get_table_length(
+            table_name=service_name
+        )
+        record_apis = self.servicenow_client.get_record_apis(
+            url=ENDPOINTS["TABLE"].format(table=service_name),
+            params=params,
+            total_count=table_length,
+        )
+
+        for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
+            batched_apis = record_apis[
+                batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+            ]
+            yield batched_apis
+
+    async def _table_data_generator(self, service_name, params):
         self._logger.debug(f"Fetching {service_name} data")
         try:
-            table_length = await self.servicenow_client.get_table_length(
-                table_name=service_name
-            )
-            record_apis = self.servicenow_client.get_record_apis(
-                url=ENDPOINTS["TABLE"].format(table=service_name),
-                params={},
-                total_count=table_length,
+            async for batched_apis in self._get_batched_apis(service_name, params):
+                async for user in self._yield_table_data(batched_apis=batched_apis):
+                    yield user
+        except Exception as exception:
+            self._logger.warning(
+                f"Skipping table data for {service_name}. Exception: {exception}.",
+                exc_info=True,
             )
 
-            for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
-                batched_apis = record_apis[
-                    batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
-                ]
-                await self.fetchers.put(partial(self._fetch_table_data, batched_apis))
+    async def _table_data_producer(self, service_name, params, table_access_control):
+        self._logger.debug(f"Fetching {service_name} data")
+        try:
+            async for batched_apis in self._get_batched_apis(service_name, params):
+                await self.fetchers.put(
+                    partial(self._fetch_table_data, batched_apis, table_access_control)
+                )
                 self.task_count += 1
         except Exception as exception:
             self._logger.warning(
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
 
-        await self.queue.put(EndSignal.SERVICE)  # pyright: ignore
+        await self.queue.put(EndSignal.SERVICE)
 
     async def _consumer(self):
         """Consume the queue for the documents.
@@ -673,7 +864,9 @@ class ServiceNowDataSource(BaseDataSource):
                     rules=batched_advanced_rules, mapping=servicenow_mapping
                 )
 
-                await self.fetchers.put(partial(self._fetch_table_data, filter_apis))
+                await self.fetchers.put(
+                    partial(self._fetch_table_data, filter_apis, [])
+                )
                 self.task_count += 1
 
         else:
@@ -688,10 +881,20 @@ class ServiceNowDataSource(BaseDataSource):
                     configured_service=self.servicenow_client.services.copy()
                 )
             for service_name in (
-                self.servicenow_mapping.values() or DEFAULT_SERVICE_NAMES
+                self.servicenow_mapping.values() or DEFAULT_SERVICE_NAMES.keys()
             ):
+                table_access_control = []
+                if self._dls_enabled():
+                    table_access_control = await self._fetch_access_controls(
+                        table_name=service_name
+                    )
                 await self.fetchers.put(
-                    partial(self._table_data_producer, service_name)
+                    partial(
+                        self._table_data_producer,
+                        service_name,
+                        {},
+                        table_access_control,
+                    )
                 )
                 self.task_count += 1
 

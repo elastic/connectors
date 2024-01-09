@@ -172,11 +172,17 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """
 
         return {
+            "buckets": {
+                "display": "textarea",
+                "label": "Google Cloud Storage buckets",
+                "order": 1,
+                "type": "list",
+            },
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "Google Cloud service account JSON",
                 "sensitive": True,
-                "order": 1,
+                "order": 2,
                 "type": "str",
             },
             "use_text_extraction_service": {
@@ -251,20 +257,26 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             )
             raise
 
-    async def fetch_buckets(self):
+    async def fetch_buckets(self, buckets):
         """Fetch the buckets from the Google Cloud Storage.
+        Args:
+            buckets (List): List of buckets.
 
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self._google_storage_client.api_call(
-            resource="buckets",
-            method="list",
-            full_response=True,
-            project=self._google_storage_client.user_project_id,
-            userProject=self._google_storage_client.user_project_id,
-        ):
-            yield bucket
+        if "*" in buckets:
+            async for bucket in self._google_storage_client.api_call(
+                resource="buckets",
+                method="list",
+                full_response=True,
+                project=self._google_storage_client.user_project_id,
+                userProject=self._google_storage_client.user_project_id,
+            ):
+                yield bucket
+        else:
+            for bucket in buckets:
+                yield {"items": [{"id": bucket, "name": bucket}]}
 
     async def fetch_blobs(self, buckets):
         """Fetches blobs stored in the bucket from Google Cloud Storage.
@@ -378,11 +390,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        async for buckets in self.fetch_buckets():
-            if not buckets.get("items"):
-                continue
+        async for bucket in self.fetch_buckets(self.configuration["buckets"]):
             async for blobs in self.fetch_blobs(
-                buckets=buckets,
+                buckets=bucket,
             ):
                 for blob_document in self.get_blob_document(blobs=blobs):
                     yield blob_document, partial(self.get_content, blob_document)

@@ -11,7 +11,9 @@ from enum import Enum
 
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
-from elasticsearch import ConnectionError as ElasticConnectionError
+from elasticsearch import (
+    ConnectionError as ElasticConnectionError,
+)
 
 from connectors import __version__
 from connectors.logger import logger, set_extra_logger
@@ -159,41 +161,6 @@ class ESClient:
 
         await self.close()
         return False
-
-    async def ensure_exists(self, indices=None):
-        if indices is None:
-            indices = []
-
-        for index in indices:
-            logger.debug(f"Checking index {index}")
-            if not await self.client.indices.exists(index=index):
-                await self.client.index(
-                    index=index, document={}, id=".connectors-create-doc"
-                )
-                await self.client.delete(index=index, id=".connectors-create-doc")
-                logger.debug(f"Created index {index}")
-
-    async def delete_indices(self, indices):
-        await self.client.indices.delete(index=indices, ignore_unavailable=True)
-
-    async def clean_index(self, index_name):
-        return await self.client.delete_by_query(
-            index=index_name, body={"query": {"match_all": {}}}, ignore_unavailable=True
-        )
-
-    async def list_indices(self):
-        return await self.client.indices.stats(index="search-*")
-
-    async def index_exists(self, index_name):
-        return await self.client.indices.exists(index=index_name)
-
-    async def get_connector_doc(self, index_name):
-        response = await self.client.search(
-            index=".elastic-connectors",
-            body={"query": {"match": {"index_name": index_name}}},
-        )
-        hits = response["hits"]["hits"]
-        return hits[0] if len(hits) > 0 else None
 
 
 def with_concurrency_control(retries=3):

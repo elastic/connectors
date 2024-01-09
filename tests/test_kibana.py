@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.es.sink import SyncOrchestrator
+from connectors.es.management_client import ESManagementClient
 from connectors.kibana import main, upsert_index
 
 HERE = os.path.dirname(__file__)
@@ -17,17 +17,13 @@ FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
 
 def mock_index_creation(index, mock_responses, hidden=True):
     url = f"http://nowhere.com:9200/{index}"
-    if hidden:
-        url += "?expand_wildcards=hidden"
-    else:
-        url += "?expand_wildcards=open"
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(
         url,
         headers=headers,
     )
     mock_responses.delete(
-        url,
+        f"{url}?ignore_unavailable=true",
         headers=headers,
     )
     mock_responses.put(
@@ -76,7 +72,7 @@ async def test_upsert_index(mock_responses):
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index",
         headers=headers,
         status=404,
     )
@@ -86,16 +82,16 @@ async def test_upsert_index(mock_responses):
         headers=headers,
     )
 
-    es = SyncOrchestrator(config)
+    es = ESManagementClient(config)
 
     await upsert_index(es, "search-new-index")
 
     mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index",
         headers=headers,
     )
     mock_responses.delete(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
+        "http://nowhere.com:9200/search-new-index?ignore_unavailable=true",
         headers=headers,
     )
     mock_responses.put(
@@ -114,4 +110,4 @@ async def test_upsert_index(mock_responses):
         headers=headers,
     )
 
-    await upsert_index(es, "search-new-index", docs=[{"_id": "2"}, {"_id": "3"}])
+    await upsert_index(es, "search-new-index")
