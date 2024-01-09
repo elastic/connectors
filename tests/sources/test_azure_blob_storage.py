@@ -139,12 +139,17 @@ async def test_get_container():
         with patch.object(
             BlobServiceClient, "list_containers", return_value=mock_repsonse
         ):
-            expected_output = {"name": "container1", "metadata": {"key1": "value1"}}
+            expected_output = [
+                {"name": "container1", "metadata": {"key1": "value1"}},
+                None,
+            ]
 
             # Execute
-            async for actual_document in source.get_container():
+            async for actual_document in source.get_container(
+                container_list=["container1"]
+            ):
                 # Assert
-                assert actual_document == expected_output
+                assert actual_document in expected_output
 
 
 @pytest.mark.asyncio
@@ -209,11 +214,24 @@ async def test_get_blob_negative():
 
 
 @pytest.mark.asyncio
+async def test_get_containr_negative():
+    """Test get_container negative method of AzureBlobStorageDataSource Class"""
+
+    async with create_abs_source() as source:
+        source.connection_string = source._configure_connection_string()
+        async for actual_document in source.get_container(
+            container_list=["container1"]
+        ):
+            assert actual_document is None
+
+
+@pytest.mark.asyncio
 async def test_get_doc():
     """Test get_doc method of AzureBlobStorageDataSource Class"""
 
     # Setup
     async with create_abs_source() as source:
+        source.containers = ["*"]
         source.get_container = Mock(
             return_value=AsyncIterator(
                 [
@@ -245,6 +263,83 @@ async def test_get_doc():
                         "tier": "private",
                         "size": 1000,
                         "container": "container1",
+                    }
+                ]
+            )
+        )
+        expected_response = [
+            {
+                "type": "blob",
+                "_id": "container1/blob1",
+                "timestamp": "2022-04-21T12:12:30",
+                "created at": "2022-04-21T12:12:30",
+                "content type": "plain/text",
+                "container metadata": "{'key1': 'value1'}",
+                "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+                "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+                "title": "blob1",
+                "tier": "private",
+                "size": 1000,
+                "container": "container1",
+            }
+        ]
+        actual_response = []
+
+        # Execute
+        async for document, _ in source.get_docs():
+            actual_response.append(document)
+
+        # Assert
+        assert actual_response == expected_response
+
+
+async def create_fake_coroutine(item):
+    """create a method for returning fake coroutine value for
+    Args:
+        item: Value for converting into coroutine
+    """
+    return item
+
+
+@pytest.mark.asyncio
+async def test_get_doc_for_specific_container():
+    """Test get_doc for specific container method of AzureBlobStorageDataSource Class"""
+
+    # Setup
+    async with create_abs_source() as source:
+        source.containers = ["container1"]
+        source.get_blob = Mock(
+            return_value=AsyncIterator(
+                [
+                    {
+                        "type": "blob",
+                        "_id": "container1/blob1",
+                        "timestamp": "2022-04-21T12:12:30",
+                        "created at": "2022-04-21T12:12:30",
+                        "content type": "plain/text",
+                        "container metadata": "{'key1': 'value1'}",
+                        "metadata": "{'key1': 'value1', 'key2': 'value2'}",
+                        "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+                        "title": "blob1",
+                        "tier": "private",
+                        "size": 1000,
+                        "container": "container1",
+                    }
+                ]
+            )
+        )
+
+        source.get_container = Mock(
+            return_value=AsyncIterator(
+                [
+                    {
+                        "type": "container",
+                        "_id": "container1",
+                        "timestamp": "2022-04-21T12:12:30",
+                        "metadata": "key1=value1",
+                        "leasedata": "{'status': 'Locked', 'state': 'Leased', 'duration': 'Infinite'}",
+                        "title": "container1",
+                        "access": "private",
                     }
                 ]
             )

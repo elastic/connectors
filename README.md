@@ -63,5 +63,6 @@ The framework serves two distinct, but related use cases:
 - [Elastic-internal guide](docs/INTERNAL.md)
 - [Connector Protocol](docs/CONNECTOR_PROTOCOL.md)
 - [Configuration](docs/CONFIG.md)
+- [Command line interface](docs/CLI.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
 - [Upgrading](docs/UPGRADING.md)

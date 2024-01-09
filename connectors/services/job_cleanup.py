@@ -7,8 +7,8 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
-from connectors.es.client import ESManagementClient
 from connectors.es.index import DocumentNotFoundError
+from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
@@ -71,11 +71,6 @@ class JobCleanUpService(BaseService):
                 logger.debug("No orphaned jobs found, skipping cleaning")
                 return
 
-            # delete content indices in case they are re-created by sync job
-            if len(content_indices) > 0:
-                await self.es_management_client.delete_indices(
-                    indices=list(content_indices)
-                )
             result = await self.sync_job_index.delete_jobs(job_ids=job_ids)
             if len(result["failures"]) > 0:
                 logger.error(f"Error found when deleting jobs: {result['failures']}")
