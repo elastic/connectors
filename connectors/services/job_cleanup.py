@@ -21,8 +21,10 @@ class JobCleanUpService(BaseService):
 
     def __init__(self, config):
         super().__init__(config)
-        self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
-        self.native_service_types = self.config.get("native_service_types", []) or []
+        self.idling = int(self.service_config.get(
+            "job_cleanup_interval", 60 * 5))
+        self.native_service_types = self.config.get(
+            "native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())
 
     async def _run(self):
@@ -71,14 +73,10 @@ class JobCleanUpService(BaseService):
                 logger.debug("No orphaned jobs found, skipping cleaning")
                 return
 
-            # delete content indices in case they are re-created by sync job
-            if len(content_indices) > 0:
-                await self.es_management_client.delete_indices(
-                    indices=list(content_indices)
-                )
             result = await self.sync_job_index.delete_jobs(job_ids=job_ids)
             if len(result["failures"]) > 0:
-                logger.error(f"Error found when deleting jobs: {result['failures']}")
+                logger.error(
+                    f"Error found when deleting jobs: {result['failures']}")
             logger.info(
                 f"Successfully deleted {result['deleted']} out of {result['total']} orphaned jobs"
             )
@@ -123,7 +121,8 @@ class JobCleanUpService(BaseService):
                         job = None
                     await connector.sync_done(job=job)
                 except Exception as e:
-                    logger.error(f"Failed to mark idle job #{job_id} as error: {e}")
+                    logger.error(
+                        f"Failed to mark idle job #{job_id} as error: {e}")
                 finally:
                     total_count += 1
 
