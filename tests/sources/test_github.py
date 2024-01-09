@@ -587,17 +587,47 @@ async def test_ping_with_unsuccessful_connection():
 
 
 @pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_validate_config_with_invalid_token_then_raise():
     async with create_github_source() as source:
+        with patch.object(
+            source.github_client,
+            "post",
+            side_effect=UnauthorizedException(),
+        ):
+            with pytest.raises(UnauthorizedException):
+                await source.validate_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "scopes",
+    ["", "repo", "manage_runner:org, delete:packages, admin:public_key"],
+)
+async def test_validate_config_with_insufficient_scope(scopes):
+    async with create_github_source() as source:
         source.github_client.post = AsyncMock(
-            return_value=({"user": "username"}, {"X-OAuth-Scopes": ""})
+            return_value=({"user": "username"}, {"X-OAuth-Scopes": scopes})
         )
         with pytest.raises(
             ConfigurableFieldValueError,
             match="Configured token does not have required rights to fetch the content",
         ):
             await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_with_extra_scopes_token(patch_logger):
+    async with create_github_source() as source:
+        source.github_client.post = AsyncMock(
+            return_value=(
+                {"user": "username"},
+                {"X-OAuth-Scopes": "user, repo, admin:org"},
+            )
+        )
+        await source.validate_config()
+        patch_logger.assert_present(
+            "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."
+        )
 
 
 @pytest.mark.asyncio
