@@ -47,7 +47,6 @@ def mock_sync_job(sync_job_id="1", connector_id="1", index_name="index_name"):
 
 @pytest.mark.asyncio
 @patch("connectors.protocol.SyncJobIndex.delete_jobs")
-@patch("connectors.protocol.SyncJobIndex.delete_indices")
 @patch("connectors.protocol.SyncJobIndex.idle_jobs")
 @patch("connectors.protocol.SyncJobIndex.orphaned_jobs")
 @patch("connectors.protocol.ConnectorIndex.fetch_by_id")
@@ -59,7 +58,6 @@ async def test_cleanup_jobs(
     connector_fetch_by_id,
     orphaned_jobs,
     idle_jobs,
-    delete_indices,
     delete_jobs,
 ):
     existing_index_name = "foo"
@@ -77,7 +75,6 @@ async def test_cleanup_jobs(
 
     await create_and_run_service(JobCleanUpService, config=CONFIG, stop_after=0.1)
 
-    delete_indices.assert_called_with(indices=[to_be_deleted_index_name])
     delete_jobs.assert_called_with(job_ids=[sync_job.id, another_sync_job.id])
     sync_job.fail.assert_called_with(IDLE_JOB_ERROR)
     connector.sync_done.assert_called_with(job=sync_job)
