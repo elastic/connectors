@@ -236,7 +236,7 @@ class GitHubAPI:
         if "viewer{login}" in query:
             mock_data = make_response({"data": {"viewer": {"login": "demo_repo"}}})
             mock_data.status_code = 200
-            mock_data.headers["X-OAuth-Scopes"] = ["repo"]
+            mock_data.headers["X-OAuth-Scopes"] = "repo, user, read:org"
         elif "repositories" in query:
             start_index, end_index, subset_nodes = self.get_index_metadata(
                 variables, repos_data

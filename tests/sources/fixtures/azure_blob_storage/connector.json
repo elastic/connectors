@@ -34,11 +34,18 @@
                         "type": "str",
                         "value": "http://127.0.0.1:10000/devstoreaccount1"
                 },
+                "containers": {
+                        "display": "textarea",
+                        "label": "Azure Blob Storage containers",
+                        "order": 4,
+                        "type": "list",
+                        "value": "*"
+                },
                 "retry_count": {
                         "default_value": 3,
                         "display": "numeric",
                         "label": "Retries per request",
-                        "order": 4,
+                        "order": 5,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -48,7 +55,7 @@
                         "default_value": 100,
                         "display": "numeric",
                         "label": "Maximum concurrent downloads",
-                        "order": 5,
+                        "order": 6,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -63,7 +70,7 @@
                         "display": "toggle",
                         "label": "Use text extraction service",
                         "options": [],
-                        "order": 6,
+                        "order": 7,
                         "required": true,
                         "sensitive": false,
                         "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
