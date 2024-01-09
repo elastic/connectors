@@ -38,6 +38,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.connection_string = None
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
+        self.containers = self.configuration["containers"]
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage
@@ -73,11 +74,17 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
+            "containers": {
+                "display": "textarea",
+                "label": "Azure Blob Storage containers",
+                "order": 4,
+                "type": "list",
+            },
             "retry_count": {
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 4,
+                "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -86,7 +93,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 5,
+                "order": 6,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -97,7 +104,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 6,
+                "order": 7,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -196,22 +203,39 @@ class AzureBlobStorageDataSource(BaseDataSource):
             async for content in data.chunks():
                 yield content
 
-    async def get_container(self):
+    async def get_container(self, container_list):
         """Get containers from Azure Blob Storage via azure base client
+        Args:
+            container_list (list): List of containers
 
         Yields:
             dictionary: Container document with name & meta data
         """
+        container_set = set(container_list)
         async with BlobServiceClient.from_connection_string(
             conn_str=self.connection_string, retry_total=self.retry_count
         ) as azure_base_client:
-            async for container in azure_base_client.list_containers(
-                include_metadata=True
-            ):
-                yield {
-                    "name": container["name"],
-                    "metadata": container["metadata"],
-                }
+            try:
+                async for container in azure_base_client.list_containers(
+                    include_metadata=True
+                ):
+                    if "*" in container_set or container["name"] in container_set:
+                        yield {
+                            "name": container["name"],
+                            "metadata": container["metadata"],
+                        }
+                    if "*" not in container_set and container["name"] in container_set:
+                        container_set.remove(container["name"])
+                        if not container_set:
+                            return
+                if container_set and "*" not in container_set:
+                    self._logger.warning(
+                        f"Container(s) {','.join(container_set)} are configured but not found."
+                    )
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while fetching containers. Error: {exception}"
+                )
 
     async def get_blob(self, container):
         """Get blobs for a specific container from Azure Blob Storage via container client
@@ -243,6 +267,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Azure Blob Storage
         """
-        async for container in self.get_container():
-            async for blob in self.get_blob(container=container):
-                yield blob, partial(self.get_content, blob)
+        async for container_data in self.get_container(container_list=self.containers):
+            if container_data:
+                async for blob in self.get_blob(container=container_data):
+                    yield blob, partial(self.get_content, blob)
