@@ -8,6 +8,7 @@ parse_params() {
   bypass_config=false
   reset_config=-false
   use_snapshot=true
+  watch_logs=false
 
   #Boilerplate parameter parsing
   PARAMS=""
@@ -39,6 +40,10 @@ parse_params() {
         ;;
       -s|--no-snapshot)
         use_snapshot=false
+        shift 1
+        ;;
+      -w|--watch-logs)
+        watch_logs=true
         shift 1
         ;;
       --) # end argument parsing

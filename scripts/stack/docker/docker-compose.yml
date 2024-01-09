@@ -23,7 +23,7 @@ services:
     ports:
       - 9200:9200
     volumes:
-      - es-data:/usr/share/elasticsearch/data
+      - conn-es-data:/usr/share/elasticsearch/data
 
   kibana:
     image: docker.elastic.co/kibana/kibana:${KIBANA_VERSION}
@@ -51,4 +51,4 @@ services:
     network_mode: "host"
 
 volumes:
-  es-data:
+  conn-es-data:
