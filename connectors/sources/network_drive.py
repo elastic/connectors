@@ -532,7 +532,8 @@ class NASDataSource(BaseDataSource):
         rid_groups = []
 
         for group_sid in groups_info or []:
-            rid_groups.append(_prefix_rid(group_sid.split("-")[-1]))
+            rid = group_sid.split("-")[-1]
+            rid_groups.append(_prefix_rid(rid))
 
         access_control = [rid_user, prefixed_username, *rid_groups]
 
@@ -617,6 +618,13 @@ class NASDataSource(BaseDataSource):
                 raise ConnectionError(msg) from exception
 
     async def get_entity_permission(self, file_path, file_type, groups_info):
+        """Processes permissions for a network drive, focusing on key terms:
+
+        - SID (Security Identifier): The unique identifier for a user or group, it undergoes revision.
+        - RID (Relative Identifier): The last part of a SID, uniquely identifying a user or group within a domain.
+        - ACE (Access Control Entry): An entry in `an Access Control List (ACL), defining permissions for a specific user or group. 0 is allowed ACE, 1 is denied ACE.
+        - Mask: A bit field representing allowed or denied permissions within an ACE. Example: Deny write, Allow read, etc.
+        """
         if not self._dls_enabled():
             return []
 
@@ -639,15 +647,23 @@ class NASDataSource(BaseDataSource):
                 access=DirectoryAccessMask.READ_CONTROL,
             )
         for permission in list_permissions or []:
+            # Access mask indicates specific permission within an ACE, such as read in deny ACE.
             mask = permission["mask"].value
+
+            # Determine the type of ACE (access control entry), i.e, allow or deny
             ace_type = permission["ace_type"].value
+
+            # Extract RID from SID. RID uniquely identifying a user or group within a domain.
             rid = str(permission["sid"]).split("-")[-1]
+
             if groups_info.get(rid):
+                # If the RID corresponds to a group, get the RIDs of all members of that group
                 permissions = [
                     _prefix_rid(member_id.split("-")[-1])
                     for member_id in groups_info[rid].values()
                 ]
             else:
+                # Else the RID corresponds to a user, hence we use it directly.
                 permissions = [_prefix_rid(rid)]
             if (
                 ace_type == ACCESS_ALLOWED_TYPE
