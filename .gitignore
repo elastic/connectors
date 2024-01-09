@@ -12,3 +12,6 @@ __pycache__
 .idea
 *.iml
 .cli
+
+**/venv
+scripts/stack/connectors-config
