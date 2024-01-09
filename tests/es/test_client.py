@@ -12,7 +12,6 @@ from elasticsearch import ConflictError, ConnectionError
 
 from connectors.es.client import (
     ESClient,
-    ESManagementClient,
     License,
     with_concurrency_control,
 )
@@ -233,37 +232,3 @@ class TestESClient:
             # Execute
             assert not await es_client.ping()
             await es_client.close()
-
-
-class TestESManagementClient:
-    @pytest.mark.asyncio
-    async def test_index_exists(self):
-        config = {
-            "username": "elastic",
-            "password": "changeme",
-            "host": "http://nowhere.com:9200",
-        }
-        index_name = "search-mongo"
-        es_management_client = ESManagementClient(config)
-        es_management_client.client = Mock()
-        es_management_client.client.indices.exists = AsyncMock()
-
-        await es_management_client.index_exists(index_name=index_name)
-        es_management_client.client.indices.exists.assert_awaited_with(index=index_name)
-
-    @pytest.mark.asyncio
-    async def test_delete_indices(self):
-        config = {
-            "username": "elastic",
-            "password": "changeme",
-            "host": "http://nowhere.com:9200",
-        }
-        indices = ["search-mongo"]
-        es_management_client = ESManagementClient(config)
-        es_management_client.client = Mock()
-        es_management_client.client.indices.delete = AsyncMock()
-
-        await es_management_client.delete_indices(indices=indices)
-        es_management_client.client.indices.delete.assert_awaited_with(
-            index=indices, ignore_unavailable=True
-        )
