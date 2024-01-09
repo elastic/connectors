@@ -1198,15 +1198,15 @@ class GitHubDataSource(BaseDataSource):
         )
 
         scopes = headers.get("X-OAuth-Scopes", "")
-        scopes = [scope.strip() for scope in scopes.split(",")]
-        required_scopes = ["repo", "user", "read:org"]
+        scopes = {scope.strip() for scope in scopes.split(",")}
+        required_scopes = {"repo", "user", "read:org"}
 
         for scope in ["write:org", "admin:org"]:
             if scope in scopes:
-                scopes.append("read:org")
+                scopes.add("read:org")
 
-        if set(required_scopes).issubset(scopes):
-            extra_scopes = set(scopes) - set(required_scopes)
+        if required_scopes.issubset(scopes):
+            extra_scopes = scopes - required_scopes
             if extra_scopes:
                 self._logger.warning(
                     "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."

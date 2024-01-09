@@ -616,7 +616,7 @@ async def test_validate_config_with_insufficient_scope(scopes):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_extra_scopes_token():
+async def test_validate_config_with_extra_scopes_token(patch_logger):
     async with create_github_source() as source:
         source.github_client.post = AsyncMock(
             return_value=(
@@ -624,7 +624,10 @@ async def test_validate_config_with_extra_scopes_token():
                 {"X-OAuth-Scopes": "user, repo, admin:org"},
             )
         )
-        assert await source.validate_config() is None
+        await source.validate_config()
+        patch_logger.assert_present(
+            "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."
+        )
 
 
 @pytest.mark.asyncio
