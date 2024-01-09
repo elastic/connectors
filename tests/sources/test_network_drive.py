@@ -992,8 +992,8 @@ async def test_list_file_permissions_with_inaccessible_file():
     NASDataSource,
     "list_file_permission",
     return_value=[
-        mock_permission(sid="S-2-21-211-411", ace=0), # User with allow permission
-        mock_permission(sid="S-1-11-10", ace=1), # Group with Deny permission
+        mock_permission(sid="S-2-21-211-411", ace=0),  # User with allow permission
+        mock_permission(sid="S-1-11-10", ace=1),  # Group with Deny permission
     ],
 )
 async def test_deny_permission_has_precedence_over_allow(mock_list_file_permission):
