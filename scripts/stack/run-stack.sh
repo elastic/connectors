@@ -51,7 +51,7 @@ if [[ "${bypass_config:-}" == false ]]; then
   done
   if [ $run_configurator == "yes" ]; then
     source ./copy-config.sh
-    source ./configure-connectors.sh $SECURE_STATE_DIR
+    source ./configure-connectors.sh
   fi
 fi
 
