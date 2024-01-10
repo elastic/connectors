@@ -22,6 +22,18 @@ pushd $PROJECT_ROOT
     if [[ "${CONFIG_FILE:-}" == "" ]]; then
         CONFIG_FILE="${PROJECT_ROOT}/scripts/stack/connectors-config/config.yml"
     fi
+    CLI_CONFIG="${PROJECT_ROOT}/scripts/stack/connectors-config/cli_config.yml"
+
+    # ensure our Connectors CLI config exists and has the correct information
+    if [ ! -f "$CLI_CONFIG" ]; then
+        cliConfigText='
+elasticsearch:
+    host: http://localhost:9200
+    password: '"${ELASTIC_PASSWORD}"'
+    username: elastic
+'
+        echo "${cliConfigText}" > "$CLI_CONFIG"
+    fi
 
     CONNECTORS_EXE="${PROJECT_ROOT}/bin/connectors"
     if [ ! -f "$CONNECTORS_EXE" ]; then
@@ -39,7 +51,7 @@ pushd $PROJECT_ROOT
     while [ $keep_configuring == true ]; do
         echo
         echo "Currently configured connectors:"
-        $CONNECTORS_EXE --config "$CONFIG_FILE" connector list
+        $CONNECTORS_EXE --config "$CLI_CONFIG" connector list
         echo
         while true; do
             read -p "Do you want to set up a new connector? (y/N) " yn
@@ -51,7 +63,7 @@ pushd $PROJECT_ROOT
         done
 
         if [ $keep_configuring == true ]; then
-            $CONNECTORS_EXE --config "${CONFIG_FILE}" connector create --connector-service-config "$CONFIG_FILE" --update-config
+            $CONNECTORS_EXE --config "${CLI_CONFIG}" connector create --connector-service-config "$CONFIG_FILE" --update-config
         fi
     done
 popd

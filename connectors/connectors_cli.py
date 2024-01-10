@@ -24,7 +24,6 @@ from connectors.cli.connector import Connector
 from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
-from connectors.config import load_config as configuration_loader
 from connectors.es.settings import Settings
 
 __all__ = ["main"]
@@ -32,7 +31,7 @@ __all__ = ["main"]
 
 def load_config(ctx, config):
     if config:
-        return configuration_loader(config.name)
+        return yaml.safe_load(config)
     elif os.path.isfile(CONFIG_FILE_PATH):
         with open(CONFIG_FILE_PATH, "r") as f:
             return yaml.safe_load(f.read())
