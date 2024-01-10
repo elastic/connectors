@@ -1,4 +1,0 @@
-connectors:
-  -
-    connector_id: 'redis'
-    service_type: 'redis'

@@ -10,10 +10,6 @@ from enum import Enum
 import fastjsonschema
 import redis.asyncio as redis
 
-from connectors.filtering.validation import (
-    AdvancedRulesValidator,
-    SyncRuleValidationResult,
-)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import hash_id, iso_utc
@@ -145,75 +141,11 @@ class RedisClient:
             return ""
 
 
-class RedisAdvancedRulesValidator(AdvancedRulesValidator):
-    RULES_OBJECT_SCHEMA_DEFINITION = {
-        "type": "object",
-        "properties": {
-            "database": {"type": "integer", "minLength": 1, "minimum": 0},
-            "key_pattern": {"type": "string", "minLength": 1},
-            "_type": {
-                "type": "string",
-                "minLength": 1,
-            },
-        },
-        "required": ["database"],
-        "anyOf": [
-            {"required": ["key_pattern"]},
-            {"required": ["_type"]},
-        ],
-        "additionalProperties": False,
-    }
-
-    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
-
-    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
-
-    def __init__(self, source):
-        self.source = source
-
-    async def validate(self, advanced_rules):
-        if len(advanced_rules) == 0:
-            return SyncRuleValidationResult.valid_result(
-                SyncRuleValidationResult.ADVANCED_RULES
-            )
-        return await self._remote_validation(advanced_rules)
-
-    async def _remote_validation(self, advanced_rules):
-        try:
-            RedisAdvancedRulesValidator.SCHEMA(advanced_rules)
-        except fastjsonschema.JsonSchemaValueException as e:
-            return SyncRuleValidationResult(
-                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=e.message,
-            )
-        invalid_db = []
-        database_to_filter = [rule["database"] for rule in advanced_rules]
-        async with self.source.redis_client.client() as redis_client:
-            for db in database_to_filter:
-                check_db = await self.source.redis_client.validate_database(
-                    db=db, redis_client=redis_client
-                )
-                if not check_db:
-                    invalid_db.append(db)
-        if invalid_db:
-            msg = f"Database {','.join(map(str, invalid_db))} are not available."
-            return SyncRuleValidationResult(
-                SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=msg,
-            )
-        return SyncRuleValidationResult.valid_result(
-            SyncRuleValidationResult.ADVANCED_RULES
-        )
-
-
 class RedisDataSource(BaseDataSource):
     """Redis"""
 
     name = "Redis"
     service_type = "redis"
-    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -248,9 +180,6 @@ class RedisDataSource(BaseDataSource):
 
     def _set_internal_logger(self):
         self.redis_client.set_logger(self._logger)
-
-    def advanced_rules_validators(self):
-        return [RedisAdvancedRulesValidator(self)]
 
     async def _remote_validation(self):
         """Validate configured databases
@@ -347,19 +276,9 @@ class RedisDataSource(BaseDataSource):
             dictionary: Document from Redis.
         """
         async with self.redis_client.client() as redis_client:
-            if filtering and filtering.has_advanced_rules():
-                for rule in filtering.get_advanced_rules():
-                    async for document in self.get_db_records(
-                        db=rule.get("database"),
-                        redis_client=redis_client,
-                        pattern=rule.get("key_pattern"),
-                        _type=rule.get("_type"),
-                    ):
-                        yield document, None
-            else:
-                db_list = await self.redis_client.get_databases()
-                for db in db_list:
-                    async for document in self.get_db_records(
-                        db=db, redis_client=redis_client
-                    ):
-                        yield document, None
+            db_list = await self.redis_client.get_databases()
+            for db in db_list:
+                async for document in self.get_db_records(
+                    db=db, redis_client=redis_client
+                ):
+                    yield document, None
