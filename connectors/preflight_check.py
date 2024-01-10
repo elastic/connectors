@@ -6,7 +6,7 @@
 
 import aiohttp
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 from connectors.utils import CancellableSleeps
@@ -97,7 +97,7 @@ class PreflightCheck:
                 # and located here: https://github.com/elastic/elasticsearch/tree/main/x-pack/plugin/core/template-resources/src/main/resources/entsearch/connector
 
                 await self.es_management_client.ensure_exists(
-                    indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+                    indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
                 )
                 return True
             except Exception as e:

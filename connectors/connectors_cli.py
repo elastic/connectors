@@ -24,6 +24,7 @@ from connectors.cli.connector import Connector
 from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
+from connectors.config import load_config as configuration_loader
 from connectors.es.settings import Settings
 
 __all__ = ["main"]
@@ -31,7 +32,7 @@ __all__ = ["main"]
 
 def load_config(ctx, config):
     if config:
-        return yaml.safe_load(config)
+        return configuration_loader(config.name)
     elif os.path.isfile(CONFIG_FILE_PATH):
         with open(CONFIG_FILE_PATH, "r") as f:
             return yaml.safe_load(f.read())
@@ -336,7 +337,7 @@ cli.add_command(connector)
 
 
 # Index group
-@click.group(invoke_without_command=True, help="Search indices management")
+@click.group(invoke_without_command=False, help="Search indices management")
 @click.pass_obj
 def index(obj):
     pass
