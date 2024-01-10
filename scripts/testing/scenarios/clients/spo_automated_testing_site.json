@@ -10,6 +10,6 @@
   "enumerate_all_sites": false,
   "fetch_unique_list_item_permissions": true,
   "fetch_unique_list_permissions": true,
-  "site_collections": "Sean'sTeamSite",
+  "site_collections": "Automatedtesting",
   "use_document_level_security": false
 }
