@@ -1008,3 +1008,29 @@ async def test_deny_permission_has_precedence_over_allow(mock_list_file_permissi
             groups_info=mock_groups_info,
         )
         assert document_permissions[ACCESS_CONTROL] == expected_result
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    NASDataSource,
+    "list_file_permission",
+    return_value=[
+        mock_permission(sid="S-2-21-211-411", ace=0),  # User 1 with allow permission
+        mock_permission(sid="S-3-23-222-221", ace=1),  # User 2 with deny permission
+        mock_permission(sid="S-1-11-11", ace=0),  # Group with allow permission
+    ],
+)
+async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_access(
+    mock_list_file_permission,
+):
+    mock_groups_info = {"11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}}
+    expected_result = ["rid:411"]  # Only User-1 should have access
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        document_permissions = await source._decorate_with_access_control(
+            document={"id": "123", "title": "sample.py"},
+            file_path="dummy_url/file1",
+            file_type="file",
+            groups_info=mock_groups_info,
+        )
+        assert document_permissions[ACCESS_CONTROL] == expected_result
