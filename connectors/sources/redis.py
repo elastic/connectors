@@ -7,7 +7,6 @@ import json
 from contextlib import asynccontextmanager
 from enum import Enum
 
-import fastjsonschema
 import redis.asyncio as redis
 
 from connectors.logger import logger
