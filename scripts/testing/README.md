@@ -5,7 +5,8 @@
 Automated testing CLI depends on `gcloud` and `vault` CLIs so you need to install them. 
 
 #### Google cloud CLI
-Follow the [offical installation](https://cloud.google.com/sdk/docs/install) guide. Once installed, run `gcloud auth login` and authorize using SSO. 
+1. Follow the [offical installation](https://cloud.google.com/sdk/docs/install) guide. Once installed, run `gcloud auth login` and authorize using SSO. 
+2. Set the correct Google cloud project by running this command `gcloud config set project connectors-sources`.
 
 #### Vault
 Download and install the Hashicorp Vault client version 1.14.1 or newer or via brew with `brew install vault`
