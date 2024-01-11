@@ -14,6 +14,7 @@ import fastjsonschema
 from bson import DBRef, Decimal128, ObjectId
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import OperationFailure
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -269,6 +270,18 @@ class MongoDataSource(BaseDataSource):
                 async for doc in self.collection.find():
                     yield self.serialize(doc), None
 
+    def check_conflicting_values(self, value):
+        if value == "true":
+            value = True
+        elif value == "false":
+            value = False
+        else:
+            value = None
+
+        if value != self.ssl_enabled:
+            msg = "The value of SSL/TLS must be the same in the hostname and configuration field."
+            raise ConfigurableFieldValueError(msg)
+
     async def validate_config(self):
         await super().validate_config()
         parsed_url = urllib.parse.urlparse(self.host)
@@ -276,37 +289,55 @@ class MongoDataSource(BaseDataSource):
 
         if "ssl" in query_params:
             ssl_value = query_params.get("ssl", ["None"])[0]
+            self.check_conflicting_values(ssl_value)
 
-            if ssl_value == "true":
-                ssl_value = True
-            elif ssl_value == "false":
-                ssl_value = False
-            else:
-                ssl_value = None
+        if "tls" in query_params:
+            ssl_value = query_params.get("tls", ["None"])[0]
+            self.check_conflicting_values(ssl_value)
 
-            if ssl_value != self.ssl_enabled:
-                msg = "The value of SSL/TLS must be the same in the hostname and configuration field."
-                raise ConfigurableFieldValueError(msg)
+        user = self.configuration["user"]
+        configured_database_name = self.configuration["database"]
+        configured_collection_name = self.configuration["collection"]
 
         with self.get_client() as client:
-            configured_database_name = self.configuration["database"]
-            configured_collection_name = self.configuration["collection"]
+            # First check if collection is accessible
+            try:
+                # This works on both standalone and Managed mongo in the same way
+                await client[configured_database_name].validate_collection(
+                    configured_collection_name
+                )
+                return
+            except OperationFailure:
+                self._logger.warning(
+                    f"Unable to access '{configured_database_name}.{configured_collection_name}' as user '{user}'"
+                )
 
-            existing_database_names = await client.list_database_names()
+            # If it's not accessible, try to make a good user-friendly error message
+            try:
+                # We will try to access some databases/collections to give a friendly message
+                # That will suggest the name of existing collection - but only if the user
+                # that we use to log in into MongoDB has access to it
+                existing_database_names = await client.list_database_names()
 
-            self._logger.debug(f"Existing databases: {existing_database_names}")
+                self._logger.debug(f"Existing databases: {existing_database_names}")
 
-            if configured_database_name not in existing_database_names:
-                msg = f"Database ({configured_database_name}) does not exist. Existing databases: {', '.join(existing_database_names)}"
-                raise ConfigurableFieldValueError(msg)
+                if configured_database_name not in existing_database_names:
+                    msg = f"Database '{configured_database_name}' does not exist. Existing databases: {', '.join(existing_database_names)}"
+                    raise ConfigurableFieldValueError(msg)
 
-            database = client[configured_database_name]
+                database = client[configured_database_name]
 
-            existing_collection_names = await database.list_collection_names()
-            self._logger.debug(
-                f"Existing collections in {configured_database_name}: {existing_collection_names}"
-            )
+                existing_collection_names = await database.list_collection_names()
+                self._logger.debug(
+                    f"Existing collections in {configured_database_name}: {existing_collection_names}"
+                )
 
-            if configured_collection_name not in existing_collection_names:
-                msg = f"Collection ({configured_collection_name}) does not exist within database {configured_database_name}. Existing collections: {', '.join(existing_collection_names)}"
-                raise ConfigurableFieldValueError(msg)
+                if configured_collection_name not in existing_collection_names:
+                    msg = f"Collection '{configured_collection_name}' does not exist within database '{configured_database_name}'. Existing collections: {', '.join(existing_collection_names)}"
+                    raise ConfigurableFieldValueError(msg)
+            except OperationFailure as e:
+                # This happens if the user has no access to operations to list collection/database names
+                # Managed MongoDB never gets here, but if we're running against a standalone mongo
+                # Then this code can trigger
+                msg = f"Database '{configured_database_name}' or collection '{configured_collection_name}' is not accessible by user '{user}'. Verify that these database and collection exist, and specified user has access to it"
+                raise ConfigurableFieldValueError(msg) from e
