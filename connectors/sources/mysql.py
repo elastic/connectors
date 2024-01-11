@@ -327,6 +327,8 @@ class MySqlDataSource(BaseDataSource):
     name = "MySQL"
     service_type = "mysql"
     advanced_rules_enabled = True
+    incremental_sync_enabled = True
+    incremental_sync_timestamp_optimization_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)

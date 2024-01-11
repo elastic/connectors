@@ -15,6 +15,7 @@ from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.utils import truncate_id
+from functools import cache
 
 UTF_8 = "utf-8"
 
@@ -193,6 +194,21 @@ class SyncJobRunner:
             options=bulk_options,
         )
 
+    @cache
+    def _timestamp_optimization_enabled(self, job_type, data_provider):
+        """
+        Check if timestamp optimization is enabled for the current data source.
+        Timestamp optimization can be enabled only for incremental jobs.
+        """
+        if job_type != JobType.INCREMENTAL:
+            return False
+
+        if not hasattr(data_provider, "incremental_sync_timestamp_optimization_enabled"):
+            return False
+
+        return data_provider.incremental_sync_timestamp_optimization_enabled == True
+
+
     async def _execute_content_sync_job(self, job_type, bulk_options):
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
         if sync_rules_enabled:
@@ -218,6 +234,9 @@ class SyncJobRunner:
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
+            timestamp_optimization=self._timestamp_optimization_enabled(
+                job_type, self.data_provider
+            )
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
@@ -342,23 +361,51 @@ class SyncJobRunner:
             yield doc, lazy_download, operation
 
     async def generator(self):
-        match self.sync_job.job_type:
-            case JobType.FULL:
+        timestamp_optimization = self._timestamp_optimization_enabled(
+            self.sync_job.job_type, self.data_provider
+        )
+
+        match [self.sync_job.job_type, timestamp_optimization]:
+            case [JobType.FULL, _]:
                 async for doc, lazy_download in self.data_provider.get_docs(
                     filtering=self.sync_job.filtering
                 ):
                     yield doc, lazy_download, OP_INDEX
-            case JobType.INCREMENTAL:
+            case [JobType.INCREMENTAL, optimization] if optimization == False:
                 async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
                     yield doc, lazy_download, operation
-            case JobType.ACCESS_CONTROL:
+            case [JobType.INCREMENTAL, optimization] if optimization == True:
+                async for doc, lazy_download in self.data_provider.get_docs(
+                    filtering=self.sync_job.filtering
+                ):
+                    yield doc, lazy_download, OP_INDEX
+            case [JobType.ACCESS_CONTROL, _]:
                 async for doc in self.data_provider.get_access_control():
                     yield doc, None, None
             case _:
                 raise UnsupportedJobType
+
+    # async def generator(self):
+    #     match self.sync_job.job_type:
+    #         case JobType.FULL:
+    #             async for doc, lazy_download in self.data_provider.get_docs(
+    #                 filtering=self.sync_job.filtering
+    #             ):
+    #                 yield doc, lazy_download, OP_INDEX
+    #         case JobType.INCREMENTAL:
+    #             async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
+    #                 sync_cursor=self.connector.sync_cursor,
+    #                 filtering=self.sync_job.filtering,
+    #             ):
+    #                 yield doc, lazy_download, operation
+    #         case JobType.ACCESS_CONTROL:
+    #             async for doc in self.data_provider.get_access_control():
+    #                 yield doc, None, None
+    #         case _:
+    #             raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
         while True:
