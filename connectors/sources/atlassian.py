@@ -127,7 +127,9 @@ class AtlassianAccessControl:
                     "_id": <account_id>,
                     "identity": {
                         "account_id": <prefixed_account_id>,
-                        "display_name": <_prefixed_account_name>
+                        "display_name": <_prefixed_account_name>,
+                        "locale": <prefix_account_locale>,
+                        "emailAddress": prefix_account_email,
                     },
                     "created_at": <iso_utc_timestamp>,
                     ACCESS_CONTROL: [<prefixed_account_id>, <prefixed_group_ids>, <prefixed_role_keys>]
