@@ -72,6 +72,7 @@ class ESIndex(ESClient):
             index=self.index_name,
             body={"query": {"match_all": {}}},
             ignore_unavailable=True,
+            conflicts="proceed",
         )
 
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
@@ -122,9 +123,11 @@ class ESIndex(ESClient):
                     seq_no_primary_term=True,
                 )
             except ApiError as e:
-                logger.critical(f"The server returned {e.status_code}")
-                logger.critical(e.body, exc_info=True)
-                return
+                logger.error(
+                    f"Elasticsearch returned {e.status_code} for 'GET {self.index_name}/_search' with body:"
+                )
+                logger.error(e.body, exc_info=True)
+                raise
 
             hits = resp["hits"]["hits"]
             total = resp["hits"]["total"]["value"]

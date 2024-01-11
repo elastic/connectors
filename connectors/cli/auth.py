@@ -4,7 +4,7 @@ import os
 import yaml
 from elasticsearch import ApiError
 
-from connectors.es.client import ESManagementClient
+from connectors.es.management_client import ESManagementClient
 
 CONFIG_FILE_PATH = ".cli/config.yml"
 

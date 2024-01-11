@@ -1196,9 +1196,25 @@ class GitHubDataSource(BaseDataSource):
         _, headers = await self.github_client.post(  # pyright: ignore
             query_data=query_data, need_headers=True
         )
-        if "repo" not in headers.get("X-OAuth-Scopes"):  # pyright: ignore
-            msg = "Configured token does not have required rights to fetch the content"
+
+        scopes = headers.get("X-OAuth-Scopes", "")
+        scopes = {scope.strip() for scope in scopes.split(",")}
+        required_scopes = {"repo", "user", "read:org"}
+
+        for scope in ["write:org", "admin:org"]:
+            if scope in scopes:
+                scopes.add("read:org")
+
+        if required_scopes.issubset(scopes):
+            extra_scopes = scopes - required_scopes
+            if extra_scopes:
+                self._logger.warning(
+                    "The provided token has higher privileges than required. It is advisable to run the connector with least privielged token. Required scopes are 'repo', 'user', and 'read:org'."
+                )
+        else:
+            msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
             raise ConfigurableFieldValueError(msg)
+
         if self.github_client.repos != [WILDCARD]:
             invalid_repos = await self.get_invalid_repos()
             if invalid_repos:
