@@ -7,12 +7,15 @@ agents:
 steps:
   - label: ":face_with_peeking_eye: Lint"
     command: "make lint"
+    timeout_in_minutes: 45
 
   - label: ":pytest: Test"
     command: "make test"
+    timeout_in_minutes: 45
 
   - label: ":shipit: Smoke test"
     command: "make ftest NAME=dir DATA_SIZE=small"
+    timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
 
@@ -22,7 +25,7 @@ steps:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
-          - path: 
+          - path:
             - "connectors/sources/mysql.py"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
@@ -34,7 +37,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/network_drive.py"
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
@@ -46,7 +49,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/s3.py"
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
@@ -58,7 +61,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/google_cloud_storage.py"
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
@@ -70,7 +73,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/azure_blob_storage.py"
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
@@ -82,7 +85,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/postgresql.py"
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
@@ -94,7 +97,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/directory.py"
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
@@ -106,7 +109,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/oracle.py"
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
@@ -118,7 +121,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/sharepoint_server.py"
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
@@ -130,7 +133,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/sharepoint_online.py"
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
@@ -142,7 +145,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/mssql.py"
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
@@ -154,7 +157,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/jira.py"
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/jira/**"
@@ -167,7 +170,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/confluence.py"
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/confluence/**"
@@ -180,7 +183,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/servicenow.py"
             - "tests/sources/fixtures/servicenow/**"
             - "tests/sources/fixtures/fixture.py"
@@ -192,7 +195,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/mongo.py"
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
@@ -204,7 +207,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/github.py"
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
@@ -216,7 +219,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/google_drive.py"
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
@@ -228,7 +231,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/dropbox.py"
             - "tests/sources/fixtures/dropbox/**"
             - "tests/sources/fixtures/fixture.py"
@@ -240,7 +243,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/onedrive.py"
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
@@ -264,7 +267,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/zoom.py"
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
@@ -276,7 +279,7 @@ steps:
               artifact_paths:
                 - "perf8-report-*/**/*"
 
-          - path: 
+          - path:
             - "connectors/sources/box.py"
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
@@ -287,8 +290,8 @@ steps:
                 - ".buildkite/run_nigthly.sh box small"
               artifact_paths:
                 - "perf8-report-*/**/*"
-          
-          - path: 
+
+          - path:
             - "connectors/sources/microsoft_teams.py"
             - "tests/sources/fixtures/microsoft_teams/**"
             - "tests/sources/fixtures/fixture.py"
