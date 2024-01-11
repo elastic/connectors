@@ -388,25 +388,6 @@ class SyncJobRunner:
             case _:
                 raise UnsupportedJobType
 
-    # async def generator(self):
-    #     match self.sync_job.job_type:
-    #         case JobType.FULL:
-    #             async for doc, lazy_download in self.data_provider.get_docs(
-    #                 filtering=self.sync_job.filtering
-    #             ):
-    #                 yield doc, lazy_download, OP_INDEX
-    #         case JobType.INCREMENTAL:
-    #             async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
-    #                 sync_cursor=self.connector.sync_cursor,
-    #                 filtering=self.sync_job.filtering,
-    #             ):
-    #                 yield doc, lazy_download, operation
-    #         case JobType.ACCESS_CONTROL:
-    #             async for doc in self.data_provider.get_access_control():
-    #                 yield doc, None, None
-    #         case _:
-    #             raise UnsupportedJobType
-
     async def update_ingestion_stats(self, interval):
         while True:
             await asyncio.sleep(interval)
