@@ -11,7 +11,7 @@ steps:
 
   - label: ":pytest: Test"
     command: "make test"
-    timeout_in_minutes: 45
+    timeout_in_minutes: 5
 
   - label: ":shipit: Smoke test"
     command: "make ftest NAME=dir DATA_SIZE=small"
