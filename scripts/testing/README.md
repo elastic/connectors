@@ -108,3 +108,4 @@ Yes, it's already installed on your machine and the cli does not limit your use.
 
 ### Hygiene of use
 Since the CLI creates virtual machines in GCP it's recommended to keep them running only when you need them. Let's save some trees 🌳🌳🌳. 
+In case of pipeline errors check if your VM is still running `gcloud compute instances list` and then delete it manually `gcloud compute instances delete <your-vm-name>`
