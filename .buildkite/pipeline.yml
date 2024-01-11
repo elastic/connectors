@@ -7,7 +7,7 @@ agents:
 steps:
   - label: ":face_with_peeking_eye: Lint"
     command: "make lint"
-    timeout_in_minutes: 45
+    timeout_in_minutes: 5
 
   - label: ":pytest: Test"
     command: "make test"
