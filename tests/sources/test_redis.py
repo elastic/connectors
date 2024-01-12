@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock
 
@@ -11,6 +12,7 @@ from freezegun import freeze_time
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.redis import (
+    RedisClient,
     RedisDataSource,
 )
 from tests.sources.support import create_source
@@ -42,7 +44,7 @@ class RedisObject:
         return {"databases": "1"}
 
     async def scan_iter(self, match="*", count=10, _type=None):
-        return "0"
+        yield "0"
 
     async def type(self, *args):  # NOQA
         return "string"
@@ -52,6 +54,25 @@ class RedisObject:
 
     async def get(self, *args):
         return "this is value"
+
+    async def __aenter__(self):
+        """Make a dummy connection and return it"""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Make sure the dummy connection gets closed"""
+        pass
+
+
+class RedisForCloud:
+    """Class for mock Redis object"""
+
+    def __init__(self, *args, **kw):
+        """Setup document of Mock object"""
+        self.db = self
+
+    async def execute_command(self, SELECT="JSON.GET", key="json_key"):
+        return json.dumps({"1": "1", "2": "2"})
 
     async def __aenter__(self):
         """Make a dummy connection and return it"""
@@ -130,3 +151,15 @@ async def test_get_databases_negative():
         source.redis_client.database = ["*"]
         async for database in source.redis_client.get_databases():
             assert database == []
+
+
+@pytest.mark.asyncio
+async def test_get_key_value():
+    async with create_redis_source() as source:
+        source.redis_client.database = ["*"]
+        mock_redis = RedisForCloud
+        source.redis_client.client = mock_redis
+        value = await source.redis_client.get_key_value(
+            redis_client=mock_redis, key="json_key", key_type="ReJSON-RL"
+        )
+        assert value == {"1": "1", "2": "2"}
