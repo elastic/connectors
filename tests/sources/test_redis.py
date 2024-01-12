@@ -12,7 +12,6 @@ from freezegun import freeze_time
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.redis import (
-    RedisClient,
     RedisDataSource,
 )
 from tests.sources.support import create_source
