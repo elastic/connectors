@@ -17,41 +17,14 @@ from tests.sources.support import create_source
 
 DOCUMENT = [
     {
-        "_id": "2d1f1f94982ad0bb733101efb6837577",
-        "key": "1",
+        "_id": "aa00c4c0f44c5cb7cad68df40e8f8877",
+        "key": "0",
         "value": "this is value",
         "size_in_bytes": 10,
         "database": 0,
         "key_type": "string",
         "_timestamp": "2023-01-24T04:07:19+00:00",
-    },
-    {
-        "_id": "1f13de8b0b9213fe943efea16823f3e7",
-        "key": "2",
-        "value": "this is value",
-        "size_in_bytes": 10,
-        "database": 0,
-        "key_type": "string",
-        "_timestamp": "2023-01-24T04:07:19+00:00",
-    },
-    {
-        "_id": "0fcabfa8af576ebe76de84b71f9b15ff",
-        "key": "1",
-        "value": "this is value",
-        "size_in_bytes": 10,
-        "database": "1",
-        "key_type": "string",
-        "_timestamp": "2023-01-24T04:07:19+00:00",
-    },
-    {
-        "_id": "975ca8804565c1a569450d61090b2743",
-        "key": "2",
-        "value": "this is value",
-        "size_in_bytes": 10,
-        "database": "1",
-        "key_type": "string",
-        "_timestamp": "2023-01-24T04:07:19+00:00",
-    },
+    }
 ]
 
 
@@ -68,8 +41,8 @@ class RedisObject:
     async def config_get(self, pattern="databases"):
         return {"databases": "1"}
 
-    async def scan(self, match="*", count=10, _type=None):
-        return (0, ["1", "2"])
+    async def scan_iter(self, match="*", count=10, _type=None):
+        return "0"
 
     async def type(self, *args):  # NOQA
         return "string"
@@ -155,5 +128,5 @@ async def test_get_docs():
 async def test_get_databases_negative():
     async with create_redis_source() as source:
         source.redis_client.database = ["*"]
-        databases = await source.redis_client.get_databases()
-        assert databases == []
+        async for database in source.redis_client.get_databases():
+            assert database == []

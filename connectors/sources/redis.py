@@ -43,12 +43,16 @@ class RedisClient:
 
     @asynccontextmanager
     async def client(self):
-        pool = redis.ConnectionPool.from_url(
-            f"redis://{self.username}:{self.password}@{self.host}:{self.port}",
-            decode_responses=True,
-            max_connections=MAX_POOL_SIZE,
-        )
-        yield redis.Redis(connection_pool=pool)
+        try:
+            pool = redis.ConnectionPool.from_url(
+                f"redis://{self.username}:{self.password}@{self.host}:{self.port}",
+                decode_responses=True,
+                max_connections=MAX_POOL_SIZE,
+            )
+            client = redis.Redis(connection_pool=pool)
+            yield client
+        finally:
+            await client.aclose()  # pyright: ignore
 
     async def validate_database(self, db, redis_client):
         try:
@@ -64,20 +68,21 @@ class RedisClient:
             list: List of databases
         """
         if self.database != ["*"]:
-            return set(self.database)
-        databases = []
-        try:
-            async with self.client() as redis_client:
-                database = await redis_client.config_get("databases")
-                databases = list(range(int(database.get("databases", 1))))
-        except Exception as exception:
-            self._logger.warning(
-                f"Something went wrong while fetching database list. Error: {exception}",
-                exc_info=True,
-            )
-        return databases
+            for database in set(self.database):
+                yield database
+        else:
+            try:
+                async with self.client() as redis_client:
+                    databases = await redis_client.config_get("databases")
+                    for database in list(range(int(databases.get("databases", 1)))):
+                        yield database
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while fetching database list. Error: {exception}",
+                    exc_info=True,
+                )
 
-    async def _get_paginated_keys(self, redis_client, pattern, _type=None):
+    async def get_paginated_key(self, redis_client, pattern, _type=None):
         """Make a paginated call for fetching database keys.
 
         Args:
@@ -86,18 +91,12 @@ class RedisClient:
             _type: Datatype for filter data
 
         Yields:
-            list: list of keys in a database
+            string: key in database
         """
-        cursor, keys = await redis_client.scan(
+        async for key in redis_client.scan_iter(
             match=pattern, count=PAGE_SIZE, _type=_type
-        )
-        yield keys
-
-        while cursor != 0:
-            cursor, keys = await redis_client.scan(
-                cursor=cursor, match=pattern, count=PAGE_SIZE
-            )
-            yield keys
+        ):
+            yield key
 
     async def get_key_value(self, redis_client, key, key_type):
         """Fetch value of key for database.
@@ -256,14 +255,13 @@ class RedisDataSource(BaseDataSource):
 
     async def get_db_records(self, db, redis_client, pattern="*", _type=None):
         await redis_client.execute_command("SELECT", db)
-        async for keys in self.redis_client._get_paginated_keys(
+        async for key in self.redis_client.get_paginated_key(
             redis_client=redis_client, pattern=pattern, _type=_type
         ):
-            for key in keys:
-                document = await self.get_key_metadata(
-                    redis_client=redis_client, key=key, db=db
-                )
-                yield document
+            document = await self.get_key_metadata(
+                redis_client=redis_client, key=key, db=db
+            )
+            yield document
 
     async def get_docs(self, filtering=None):
         """Get documents from Redis
@@ -275,8 +273,7 @@ class RedisDataSource(BaseDataSource):
             dictionary: Document from Redis.
         """
         async with self.redis_client.client() as redis_client:
-            db_list = await self.redis_client.get_databases()
-            for db in db_list:
+            async for db in self.redis_client.get_databases():
                 async for document in self.get_db_records(
                     db=db, redis_client=redis_client
                 ):
