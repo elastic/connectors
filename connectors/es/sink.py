@@ -132,8 +132,12 @@ class Sink:
     async def _batch_bulk(self, operations, stats):
         @retryable(retries=self.max_retires)
         async def _bulk_api_call():
-            return await self.client.client.bulk(
-                operations=operations, pipeline=self.pipeline["name"]
+            return await self.client._retrier.retry(
+                functools.partial(
+                    self.client.client.bulk,
+                    operations=operations,
+                    pipeline=self.pipeline["name"],
+                )
             )
 
         # TODO: treat result to retry errors like in async_streaming_bulk
