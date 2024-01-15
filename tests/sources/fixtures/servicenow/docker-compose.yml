@@ -58,7 +58,7 @@ services:
       - kibana.host=http://host.docker.internal:5601
       - kibana.external_url=http://localhost:5601
       - secret_management.encryption_keys=["4a2cd3f81d39bf28738c10db0ca782095ffac07279561809eecc722e0c20eb09"]
-      - JAVA_OPTS=-Xms2g -Xmx2g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - email.account.enabled=true
       - email.account.smtp.auth=plain
       - email.account.smtp.starttls.enable=false
