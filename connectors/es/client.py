@@ -191,10 +191,9 @@ class Retrier:
     async def retry(self, func):
         retry = 0
         while self._keep_retrying and retry < self._max_retries:
+            print(f"RETRY ATTEMPT {retry}")
             try:
                 result = await func()
-                print("RESULT IS:")
-                print(result)
                 return result
             except ConnectionTimeout:
                 print("TIMEOUT")
