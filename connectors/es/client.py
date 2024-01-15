@@ -179,18 +179,18 @@ class Retrier:
         self._sleeps.cancel()
         self._keep_retrying = False
 
-    async def sleep(self):
-            # TODO: 15 is arbitrary
-            # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
-            time_to_sleep = time_to_sleep_between_retries(
-                RetryStrategy.LINEAR_BACKOFF, 15, retry
-            )
-            print("SLEEPING FOR {time_to_sleep}")
-            await self._sleeps.sleep(time_to_sleep)
+    async def sleep(self, retry):
+        # TODO: 15 is arbitrary
+        # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
+        time_to_sleep = time_to_sleep_between_retries(
+            RetryStrategy.LINEAR_BACKOFF, 15, retry
+        )
+        print("SLEEPING FOR {time_to_sleep}")
+        await self._sleeps.sleep(time_to_sleep)
 
     async def retry(self, func):
-        retry = 1
-        while self._keep_retrying and retry <= self._max_retries:
+        retry = 0
+        while self._keep_retrying and retry < self._max_retries:
             try:
                 result = await func()
                 print("RESULT IS:")
@@ -200,16 +200,16 @@ class Retrier:
                 print("TIMEOUT")
                 if retry >= self._max_retries:
                     raise
+                await self.sleep(retry)
                 retry += 1
-                await self.sleep()
             except ApiError as e:
                 print("API ERROR")
                 if e.status_code != 429:
                     raise
                 if retry >= self._max_retries:
                     raise
+                await self.sleep(retry)
                 retry += 1
-                await self.sleep()
 
 
 def with_concurrency_control(retries=3):
