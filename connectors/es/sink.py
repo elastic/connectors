@@ -339,7 +339,7 @@ class Extractor:
                     await self.get_docs(generator)
                 case JobType.INCREMENTAL:
                     if self.timestamp_optimization:
-                        await self.get_docs_with_timestamp_optimization(generator)
+                        await self.get_docs(generator, timestamp_optimization=True)
                     else:
                         await self.get_docs_incrementally(generator)
                 case JobType.ACCESS_CONTROL:
@@ -366,30 +366,16 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator):
+    async def get_docs(self, generator, timestamp_optimization=False):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
-
-        A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
+
+        Args:
+           generator (generator): BaseDataSource child get_docs or get_docs_incrementally
+           timestamp_optimization (bool): if True, will skip documents that have not changed since last sync
         """
         generator = self._decorate_with_metrics_span(generator)
-
-        start = time.time()
-        self._logger.info("Collecting local document ids")
-        existing_ids = {
-            k: v
-            async for (k, v) in self.client.yield_existing_documents_metadata(
-                self.index
-            )
-        }
-        self._logger.debug(
-            f"Found {len(existing_ids)} docs in {self.index} (duration "
-            f"{int(time.time() - start)} seconds) "
-        )
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(
-                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
-            )
+        existing_ids = await self._load_existing_docs()
 
         self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
@@ -408,100 +394,17 @@ class Extractor:
 
                 if doc_id in existing_ids:
                     # pop out of existing_ids, so they do not get deleted
-                    existing_ids.pop(doc_id)
-
-                    self.total_docs_updated += 1
-                else:
-                    self.total_docs_created += 1
-                    if TIMESTAMP_FIELD not in doc:
-                        doc[TIMESTAMP_FIELD] = iso_utc()
-
-                # if we need to call lazy_download we push it in lazy_downloads
-                if self.content_extraction_enabled and lazy_download is not None:
-                    await lazy_downloads.put(
-                        functools.partial(
-                            self._deferred_index, lazy_download, doc_id, doc, operation
-                        )
-                    )
-
-                else:
-                    # we can push into the queue right away
-                    await self.put_doc(
-                        {
-                            "_op_type": operation,
-                            "_index": self.index,
-                            "_id": doc_id,
-                            "doc": doc,
-                        }
-                    )
-
-                await asyncio.sleep(0)
-        finally:
-            # wait for all downloads to be finished
-            await lazy_downloads.join()
-
-        await self.enqueue_docs_to_delete(existing_ids)
-        await self.put_doc("END_DOCS")
-
-    async def get_docs_with_timestamp_optimization(self, generator):
-        self._logger.debug("Get docs with timestamp is triggered")
-        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
-
-        A document might be discarded if its timestamp has not changed.
-        Extraction happens in a separate task, when a document contains files.
-        """
-        generator = self._decorate_with_metrics_span(generator)
-
-        self.sync_runs = True
-
-        start = time.time()
-        self._logger.info("Collecting local document ids")
-        existing_ids = {
-            k: v
-            async for (k, v) in self.client.yield_existing_documents_metadata(
-                self.index
-            )
-        }
-        self._logger.debug(
-            f"Found {len(existing_ids)} docs in {self.index} (duration "
-            f"{int(time.time() - start)} seconds) "
-        )
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(
-                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
-            )
-
-        self._logger.info("Iterating on remote documents")
-        lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
-        try:
-            async for count, doc in aenumerate(generator):
-                doc, lazy_download, operation = doc
-                if count % self.display_every == 0:
-                    self._log_progress()
-
-                doc_id = doc["id"] = doc.pop("_id")
-
-                if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
-                    doc
-                ):
-                    continue
-
-                if doc_id in existing_ids:
-                    # pop out of existing_ids
                     ts = existing_ids.pop(doc_id)
 
-                    # If the doc has a timestamp, we can use it to see if it has
-                    # been modified. This reduces the bulk size a *lot*
-                    #
-                    # Some backends do not know how to do this, so it's optional.
-                    # For these, we update the docs in any case.
-                    if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
-                        # cancel the download
+                    if timestamp_optimization and TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
+                    # cancel the download
                         if (
                             self.content_extraction_enabled
                             and lazy_download is not None
                         ):
                             await lazy_download(doit=False)
+
+                        self._logger.debug(f"Skipping document with id '{doc_id}' because field '{TIMESTAMP_FIELD}' has not changed since last sync")
                         continue
 
                     self.total_docs_updated += 1
@@ -536,6 +439,29 @@ class Extractor:
 
         await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc("END_DOCS")
+
+    async def _load_existing_docs(self):
+        start = time.time()
+        self._logger.info("Collecting local document ids")
+
+        existing_ids = {
+            k: v
+            async for (k, v) in self.client.yield_existing_documents_metadata(
+                self.index
+            )
+        }
+
+        self._logger.debug(
+            f"Found {len(existing_ids)} docs in {self.index} (duration "
+            f"{int(time.time() - start)} seconds) "
+        )
+
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(
+                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
+            )
+
+        return existing_ids
 
     async def get_docs_incrementally(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.

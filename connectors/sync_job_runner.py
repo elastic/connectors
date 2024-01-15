@@ -15,7 +15,7 @@ from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.utils import truncate_id
-from functools import cache
+from connectors.source import BaseDataSource
 
 UTF_8 = "utf-8"
 
@@ -194,20 +194,24 @@ class SyncJobRunner:
             options=bulk_options,
         )
 
-    @cache
     def _timestamp_optimization_enabled(self, job_type, data_provider):
         """
         Check if timestamp optimization is enabled for the current data source.
         Timestamp optimization can be enabled only for incremental jobs.
         """
+
+        # The job type is not incremental, so we can't use timestamp optimization
         if job_type != JobType.INCREMENTAL:
             return False
 
-        if not hasattr(data_provider, "incremental_sync_timestamp_optimization_enabled"):
+        # Data provider has to have the method get_docs_incrementally (inherent from BaseDataSource or implemented in a subclass)
+        if not hasattr(
+            data_provider, "get_docs_incrementally"
+        ):
             return False
 
-        return data_provider.incremental_sync_timestamp_optimization_enabled == True
-
+        # make sure that the data provider is not overriding the default implementation of get_docs_incrementally
+        return data_provider.get_docs_incrementally.__func__ is BaseDataSource.get_docs_incrementally
 
     async def _execute_content_sync_job(self, job_type, bulk_options):
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
@@ -236,7 +240,7 @@ class SyncJobRunner:
             options=bulk_options,
             timestamp_optimization=self._timestamp_optimization_enabled(
                 job_type, self.data_provider
-            )
+            ),
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
@@ -371,13 +375,13 @@ class SyncJobRunner:
                     filtering=self.sync_job.filtering
                 ):
                     yield doc, lazy_download, OP_INDEX
-            case [JobType.INCREMENTAL, optimization] if optimization == False:
+            case [JobType.INCREMENTAL, optimization] if optimization is False:
                 async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
                     yield doc, lazy_download, operation
-            case [JobType.INCREMENTAL, optimization] if optimization == True:
+            case [JobType.INCREMENTAL, optimization] if optimization is True:
                 async for doc, lazy_download in self.data_provider.get_docs(
                     filtering=self.sync_job.filtering
                 ):
