@@ -1022,8 +1022,22 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query, sort=sort):
             yield job
 
-    async def orphaned_jobs(self, connector_ids):
-        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+    async def orphaned_idle_jobs(self, connector_ids):
+        query = {
+            "bool": {
+                "must_not": {"terms": {"connector.id": connector_ids}},
+                "filter": [
+                    {
+                        "terms": {
+                            "status": [
+                                JobStatus.IN_PROGRESS.value,
+                                JobStatus.CANCELING.value,
+                            ]
+                        }
+                    }
+                ],
+            }
+        }
         async for job in self.get_all_docs(query=query):
             yield job
 
@@ -1047,7 +1061,3 @@ class SyncJobIndex(ESIndex):
 
         async for job in self.get_all_docs(query=query):
             yield job
-
-    async def delete_jobs(self, job_ids):
-        query = {"terms": {"_id": job_ids}}
-        return await self.client.delete_by_query(index=self.index_name, query=query)
