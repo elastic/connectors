@@ -130,7 +130,6 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        @retryable(retries=self.max_retires)
         async def _bulk_api_call():
             return await self.client._retrier.retry(
                 functools.partial(
