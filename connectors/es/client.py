@@ -9,6 +9,7 @@ import os
 import time
 from enum import Enum
 
+from elastic_transport import ConnectionTimeout
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
 from elasticsearch import (
@@ -17,7 +18,11 @@ from elasticsearch import (
 
 from connectors import __version__
 from connectors.logger import logger, set_extra_logger
-from connectors.utils import CancellableSleeps
+from connectors.utils import (
+    CancellableSleeps,
+    RetryStrategy,
+    time_to_sleep_between_retries,
+)
 
 
 class License(Enum):
@@ -41,6 +46,7 @@ class ESClient:
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
+        self._retrier = Retrier(5)  # TODO: read from config
         options = {
             "hosts": [self.host],
             "request_timeout": config.get("request_timeout", 120),
@@ -100,7 +106,7 @@ class ESClient:
             Tuple: (boolean if `license_` is enabled and not expired, actual license Elasticsearch is using)
         """
 
-        license_response = await self.client.license.get()
+        license_response = await self._retrier.retry(self.client.license.get)
         license_info = license_response.get("license", {})
         is_expired = license_info.get("status", "").lower() == "expired"
 
@@ -127,21 +133,6 @@ class ESClient:
     async def close(self):
         await self.client.close()
 
-    async def ping(self):
-        try:
-            await self.client.info()
-        except ApiError as e:
-            logger.error(f"The server returned a {e.status_code} code")
-            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
-                logger.error(e.info["error"]["reason"])
-            return False
-        except ElasticConnectionError as e:
-            logger.error("Could not connect to the server")
-            if e.message is not None:
-                logger.error(e.message)
-            return False
-        return True
-
     async def wait(self):
         backoff = self.initial_backoff_duration
         start = time.time()
@@ -161,6 +152,64 @@ class ESClient:
 
         await self.close()
         return False
+
+    async def ping(self):
+        try:
+            await self.client.info()
+        except ApiError as e:
+            logger.error(f"The server returned a {e.status_code} code")
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
+                logger.error(e.info["error"]["reason"])
+            return False
+        except ElasticConnectionError as e:
+            logger.error("Could not connect to the server")
+            if e.message is not None:
+                logger.error(e.message)
+            return False
+        return True
+
+
+class Retrier:
+    def __init__(self, max_retries):
+        self._sleeps = CancellableSleeps()
+        self._keep_retrying = True
+        self._max_retries = max_retries
+
+    async def close(self):
+        self._sleeps.cancel()
+        self._keep_retrying = False
+
+    async def sleep(self):
+            # TODO: 15 is arbitrary
+            # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
+            time_to_sleep = time_to_sleep_between_retries(
+                RetryStrategy.LINEAR_BACKOFF, 15, retry
+            )
+            print("SLEEPING FOR {time_to_sleep}")
+            await self._sleeps.sleep(time_to_sleep)
+
+    async def retry(self, func):
+        retry = 1
+        while self._keep_retrying and retry <= self._max_retries:
+            try:
+                result = await func()
+                print("RESULT IS:")
+                print(result)
+                return result
+            except ConnectionTimeout:
+                print("TIMEOUT")
+                if retry >= self._max_retries:
+                    raise
+                retry += 1
+                await self.sleep()
+            except ApiError as e:
+                print("API ERROR")
+                if e.status_code != 429:
+                    raise
+                if retry >= self._max_retries:
+                    raise
+                retry += 1
+                await self.sleep()
 
 
 def with_concurrency_control(retries=3):
