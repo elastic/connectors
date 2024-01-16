@@ -8,10 +8,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
-from aiogoogle import Aiogoogle
+from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
@@ -82,6 +82,7 @@ async def test_ping_for_successful_connection(catch_stdout):
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_ping_for_failed_connection(catch_stdout):
     """Tests the ping functionality when connection can not be established to Google Cloud Storage."""
 
@@ -241,6 +242,32 @@ async def test_fetch_blobs():
                     buckets=expected_bucket_response
                 ):
                     assert blob_result == dummy_blob_response
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_blobs_negative():
+    """Tests the method responsible to yield blobs(negative) from Google Cloud Storage bucket."""
+
+    bucket_response = {
+        "kind": "storage#objects",
+        "items": [
+            {
+                "kind": "storage#object",
+                "id": "bucket_1",
+                "updated": "2011-10-12T00:01:00Z",
+                "name": "bucket_1",
+            }
+        ],
+    }
+    async with create_gcs_source() as source:
+        with mock.patch.object(
+            Aiogoogle,
+            "discover",
+            side_effect=HTTPError("Something Went Wrong", res=mock.MagicMock()),
+        ):
+            async for blob_result in source.fetch_blobs(buckets=bucket_response):
+                assert blob_result is None
 
 
 @pytest.mark.asyncio
@@ -585,16 +612,18 @@ async def test_get_content_when_file_size_is_large(catch_stdout):
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_api_call_for_attribute_error(catch_stdout):
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     async with create_gcs_source() as source:
-        with pytest.raises(AttributeError):
-            async for resp in source._google_storage_client.api_call(
-                resource="buckets_dummy",
-                method="list",
-                full_response=True,
-                project=source._google_storage_client.user_project_id,
-                userProject=source._google_storage_client.user_project_id,
-            ):
-                assert resp is not None
+        with mock.patch.object(Aiogoogle, "discover", side_effect=AttributeError):
+            with pytest.raises(AttributeError):
+                async for resp in source._google_storage_client.api_call(
+                    resource="buckets_dummy",
+                    method="list",
+                    full_response=True,
+                    project=source._google_storage_client.user_project_id,
+                    userProject=source._google_storage_client.user_project_id,
+                ):
+                    assert resp is not None

@@ -197,6 +197,18 @@ async def test_get_blob():
 
 
 @pytest.mark.asyncio
+async def test_get_blob_negative():
+    """Test get_blob negative method of AzureBlobStorageDataSource Class"""
+
+    async with create_abs_source() as source:
+        source.connection_string = source._configure_connection_string()
+        async for actual_document in source.get_blob(
+            {"name": "container1", "metadata": {"key1": "value1"}}
+        ):
+            assert actual_document is None
+
+
+@pytest.mark.asyncio
 async def test_get_doc():
     """Test get_doc method of AzureBlobStorageDataSource Class"""
 
