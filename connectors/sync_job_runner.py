@@ -97,6 +97,10 @@ class SyncJobRunner:
             msg = f"Sync job {self.sync_job.id} is already running."
             raise SyncJobRunningError(msg)
 
+        if self.sync_job.job_type == JobType.INCREMENTAL and not self.connector.features.incremental_sync_enabled():
+            msg = f"Connector {self.connector.id} does not support incremental sync."
+            raise SyncJobRunningError(msg)
+
         self.running = True
 
         await self.sync_starts()
@@ -199,7 +203,6 @@ class SyncJobRunner:
         Check if timestamp optimization is enabled for the current data source.
         Timestamp optimization can be enabled only for incremental jobs.
         """
-
         # The job type is not incremental, so we can't use timestamp optimization
         if job_type != JobType.INCREMENTAL:
             return False

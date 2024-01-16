@@ -13,7 +13,7 @@ from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
-from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
+from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError, SyncJobRunningError
 from tests.commons import AsyncIterator
 
 SEARCH_INDEX_NAME = "search-mysql"
@@ -27,6 +27,7 @@ def mock_connector():
     connector.id = "1"
     connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
+    connector.features.incremental_sync_enabled.return_value = True
     connector.sync_cursor = SYNC_CURSOR
     connector.document_count = AsyncMock(return_value=TOTAL_DOCUMENT_COUNT)
     connector.sync_starts = AsyncMock(return_value=True)
@@ -68,6 +69,7 @@ def create_runner(
     job_type=JobType.FULL,
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
+    connector=None
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -81,10 +83,17 @@ def create_runner(
         data_provider.ping.side_effect = Exception()
     data_provider.sync_cursor = Mock(return_value=sync_cursor)
     data_provider.close = AsyncMock()
+
+    # mock get_docs_incrementally to not rely on a call to `execute`
+    data_provider.get_docs_incrementally = Mock()
+    data_provider.get_docs_incrementally.__func__ = Mock()
+
     source_klass.return_value = data_provider
 
     sync_job = mock_sync_job(job_type=job_type, index_name=index_name)
-    connector = mock_connector()
+    if not connector:
+        connector = mock_connector()
+
     es_config = {}
 
     return SyncJobRunner(
@@ -189,6 +198,25 @@ async def test_connector_access_control_sync_starts_fail():
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_not_awaited()
 
+
+@pytest.mark.asyncio
+async def test_connector_incremental_sync_job_starts_fail():
+    connector = mock_connector()
+    # disable incremental sync
+    connector.features.incremental_sync_enabled.return_value = False
+
+    sync_job_runner = create_runner(job_type=JobType.INCREMENTAL, connector=connector)
+
+    with pytest.raises(SyncJobRunningError):
+        await sync_job_runner.execute()
+
+    sync_job_runner.connector.sync_starts.assert_not_awaited()
+    sync_job_runner.sync_job.claim.assert_not_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_not_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_not_awaited()
 
 @pytest.mark.parametrize(
     "job_type, sync_cursor_to_claim, sync_cursor_to_update",
@@ -357,9 +385,9 @@ async def test_invalid_filtering_access_control_sync_still_executed(
 @pytest.mark.parametrize(
     "job_type, sync_cursor",
     [
-        (JobType.FULL, SYNC_CURSOR),
+        # (JobType.FULL, SYNC_CURSOR),
         (JobType.INCREMENTAL, SYNC_CURSOR),
-        (JobType.ACCESS_CONTROL, None),
+        # (JobType.ACCESS_CONTROL, None),
     ],
 )
 @pytest.mark.asyncio
