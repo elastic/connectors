@@ -172,6 +172,10 @@ class ESClient:
         return True
 
 
+class RetryInterruptedError(Exception):
+    pass
+
+
 class Retrier:
     def __init__(
         self,
@@ -205,15 +209,18 @@ class Retrier:
         while self._keep_retrying and retry < self._max_retries:
             try:
                 result = await func()
+
                 return result
             except ConnectionTimeout:
                 self._logger.debug(f"Attempt {retry}: connection timeout")
+
                 if retry >= self._max_retries:
                     raise
             except ApiError as e:
                 self._logger.debug(
                     f"Attempt {retry}: api error with status {e.status_code}"
                 )
+
                 if e.status_code != 429:
                     raise
                 if retry >= self._max_retries:
@@ -221,6 +228,9 @@ class Retrier:
 
             retry += 1
             await self.sleep(retry)
+
+        msg = "Retry operation was interrupted"
+        raise RetryInterruptedError(msg)
 
 
 def with_concurrency_control(retries=3):
