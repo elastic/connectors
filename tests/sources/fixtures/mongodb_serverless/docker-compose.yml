@@ -16,7 +16,7 @@ services:
       - stateless.object_store.type=fs
       - stateless.object_store.bucket=stateless
       - path.repo=/objectstore
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m -Des.serverless=true
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g -Des.serverless=true
       - ELASTIC_PASSWORD=changeme
       - bootstrap.memory_lock=true
     ulimits:
