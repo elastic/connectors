@@ -11,7 +11,7 @@ from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
-from elasticsearch import BadRequestError
+from elasticsearch import ApiError, BadRequestError
 
 from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
@@ -1080,7 +1080,13 @@ async def test_batch_bulk_with_retry():
 
     with mock.patch.object(asyncio, "sleep"):
         # first call raises exception, and the second call succeeds
-        client.client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
+        error_meta = Mock()
+        error_meta.status = 429
+        first_call_error = ApiError(429, meta=error_meta, body="error")
+        second_call_result = {"items": []}
+        client.client.bulk = AsyncMock(
+            side_effect=[first_call_error, second_call_result]
+        )
         await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
 
         assert client.client.bulk.await_count == 2

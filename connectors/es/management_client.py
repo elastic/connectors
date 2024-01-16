@@ -36,7 +36,6 @@ class ESManagementClient(ESClient):
         super().__init__(config)
 
     async def ensure_exists(self, indices=None):
-        print("ENSURE EXISTS")
         if indices is None:
             indices = []
 
@@ -136,12 +135,21 @@ class ESManagementClient(ESClient):
         )
 
     async def upsert(self, _id, index_name, doc):
-        await self._retrier.retry(
+        return await self._retrier.retry(
             partial(
                 self.client.index,
                 id=_id,
                 index=index_name,
                 document=doc,
+            )
+        )
+
+    async def bulk_insert(self, operations, pipeline):
+        return await self._retrier.retry(
+            partial(
+                self.client.bulk,
+                operations=operations,
+                pipeline=pipeline,
             )
         )
 

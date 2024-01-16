@@ -46,7 +46,10 @@ class ESClient:
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
-        self._retrier = Retrier(5)  # TODO: read from config
+        self._retrier = Retrier(
+            config.get("max_retries", 5), config.get("retry_timeout", 10)
+        )
+
         options = {
             "hosts": [self.host],
             "request_timeout": config.get("request_timeout", 120),
@@ -170,10 +173,19 @@ class ESClient:
 
 
 class Retrier:
-    def __init__(self, max_retries):
+    def __init__(
+        self,
+        logger,
+        max_retries,
+        retry_timeout,
+        retry_strategy=RetryStrategy.LINEAR_BACKOFF,
+    ):
+        self._logger = logger
         self._sleeps = CancellableSleeps()
         self._keep_retrying = True
         self._max_retries = max_retries
+        self._retry_timeout = retry_timeout
+        self._retry_strategy = retry_strategy
 
     async def close(self):
         self._sleeps.cancel()
@@ -183,26 +195,27 @@ class Retrier:
         # TODO: 15 is arbitrary
         # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
         time_to_sleep = time_to_sleep_between_retries(
-            RetryStrategy.LINEAR_BACKOFF, 15, retry
+            self._retry_strategy, self._retry_timeout, retry
         )
-        print("SLEEPING FOR {time_to_sleep}")
+        self._logger.debug(f"Attempt {retry}: sleeping for {time_to_sleep}")
         await self._sleeps.sleep(time_to_sleep)
 
     async def retry(self, func):
         retry = 0
         while self._keep_retrying and retry < self._max_retries:
-            print(f"RETRY ATTEMPT {retry}")
             try:
                 result = await func()
                 return result
             except ConnectionTimeout:
-                print("TIMEOUT")
+                self._logger.debug(f"Attempt {retry}: connection timeout")
                 if retry >= self._max_retries:
                     raise
                 await self.sleep(retry)
                 retry += 1
             except ApiError as e:
-                print("API ERROR")
+                self._logger.debug(
+                    f"Attempt {retry}: api error with status {e.status_code}"
+                )
                 if e.status_code != 429:
                     raise
                 if retry >= self._max_retries:

@@ -43,7 +43,6 @@ from connectors.utils import (
     aenumerate,
     get_size,
     iso_utc,
-    retryable,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -130,15 +129,6 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        async def _bulk_api_call():
-            return await self.client._retrier.retry(
-                functools.partial(
-                    self.client.client.bulk,
-                    operations=operations,
-                    pipeline=self.pipeline["name"],
-                )
-            )
-
         # TODO: treat result to retry errors like in async_streaming_bulk
         task_num = len(self.bulk_tasks)
 
@@ -146,7 +136,9 @@ class Sink:
             self._logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
-        res = await _bulk_api_call()
+
+        # TODO: retry 429s for individual items here
+        res = await self.client.bulk_insert(operations, self.pipeline["name"])
         if res.get("errors"):
             for item in res["items"]:
                 for op, data in item.items():
