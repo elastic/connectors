@@ -47,7 +47,7 @@ class ESClient:
         )
         self._sleeps = CancellableSleeps()
         self._retrier = Retrier(
-            config.get("max_retries", 5), config.get("retry_timeout", 10)
+            logger, config.get("max_retries", 5), config.get("retry_timeout", 10)
         )
 
         options = {
@@ -210,8 +210,6 @@ class Retrier:
                 self._logger.debug(f"Attempt {retry}: connection timeout")
                 if retry >= self._max_retries:
                     raise
-                await self.sleep(retry)
-                retry += 1
             except ApiError as e:
                 self._logger.debug(
                     f"Attempt {retry}: api error with status {e.status_code}"
@@ -220,8 +218,9 @@ class Retrier:
                     raise
                 if retry >= self._max_retries:
                     raise
-                await self.sleep(retry)
-                retry += 1
+
+            retry += 1
+            await self.sleep(retry)
 
 
 def with_concurrency_control(retries=3):

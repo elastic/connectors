@@ -102,11 +102,14 @@ class ESManagementClient(ESClient):
                 partial(self.client.ingest.get_pipeline, id=pipeline_id)
             )
         except ElasticNotFoundError:
-            await self.client.ingest.put_pipeline(
-                id=pipeline_id,
-                version=version,
-                description=description,
-                processors=processors,
+            await self._retrier.retry(
+                partial(
+                    self.client.ingest.put_pipeline,
+                    id=pipeline_id,
+                    version=version,
+                    description=description,
+                    processors=processors,
+                )
             )
 
     async def delete_indices(self, indices):
