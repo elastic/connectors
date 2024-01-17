@@ -51,11 +51,15 @@ class RedisClient:
             await self.redis_client.aclose()  # pyright: ignore
 
     async def validate_database(self, db):
+        if not self.redis_client:
+            await self.client()
         try:
             await self.redis_client.execute_command("SELECT", db)
-            return await self.redis_client.ping()
+            await self.redis_client.ping()
+            return True
         except Exception as exception:
             self._logger.warning(f"Database {db} not found. Error: {exception}")
+            return False
 
     async def get_databases(self):
         """Returns number of databases from config_get response
@@ -77,18 +81,21 @@ class RedisClient:
                     exc_info=True,
                 )
 
-    async def get_paginated_key(self, pattern, _type=None):
+    async def get_paginated_key(self, db, pattern, _type=None):
         """Make a paginated call for fetching database keys.
 
         Args:
+            db: Index of database
             pattern: keyname or pattern
             _type: Datatype for filter data
 
         Yields:
             string: key in database
         """
-        client = await self.redis_client  # pyright: ignore
-        async for key in client.scan_iter(match=pattern, count=PAGE_SIZE, _type=_type):
+        await self.redis_client.execute_command("SELECT", db)
+        async for key in self.redis_client.scan_iter(
+            match=pattern, count=PAGE_SIZE, _type=_type
+        ):
             yield key
 
     async def get_key_value(self, key, key_type):
@@ -129,6 +136,12 @@ class RedisClient:
                 exc_info=True,
             )
             return ""
+
+    async def get_key_metadata(self, key):
+        key_type = await self.redis_client.type(key)
+        key_value = await self.get_key_value(key=key, key_type=key_type)
+        key_size = await self.redis_client.memory_usage(key)
+        return key_type, key_value, key_size
 
     async def ping(self):
         await self.client()
@@ -234,23 +247,18 @@ class RedisDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Redis.")
             raise
 
-    async def get_key_metadata(self, key, db):
-        key_type = await self.client.redis_client.type(key)
-        key_value = await self.client.get_key_value(key=key, key_type=key_type)
-        key_size = await self.client.redis_client.memory_usage(key)
-        return await self.format_document(
-            key=key,
-            value=key_value,
-            key_type=key_type,
-            size=key_size,
-            db=db,
-        )
-
     async def get_db_records(self, db, pattern="*", _type=None):
-        await self.client.redis_client.execute_command("SELECT", db)
-        async for key in self.client.get_paginated_key(pattern=pattern, _type=_type):
-            document = await self.get_key_metadata(key=key, db=db)
-            yield document
+        async for key in self.client.get_paginated_key(
+            db=db, pattern=pattern, _type=_type
+        ):
+            key_type, key_value, key_size = await self.client.get_key_metadata(key=key)
+            yield await self.format_document(
+                key=key,
+                value=key_value,
+                key_type=key_type,
+                size=key_size,
+                db=db,
+            )
 
     async def get_docs(self, filtering=None):
         """Get documents from Redis
@@ -261,9 +269,6 @@ class RedisDataSource(BaseDataSource):
         Yields:
             dictionary: Document from Redis.
         """
-        if not self.client.redis_client:
-            await self.client.client()
-
         async for db in self.client.get_databases():
             async for document in self.get_db_records(db=db):
                 yield document, None

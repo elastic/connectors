@@ -191,8 +191,10 @@ async def test_get_key_value(key, key_type, expected_response):
 async def test_get_key_metadata():
     async with create_redis_source() as source:
         source.client.redis_client = RedisClientMock()
-        document = await source.get_key_metadata(key="0", db=0)
-        assert document == DOCUMENT[0]
+        key_type, value, size = await source.client.get_key_metadata(key="0")
+        assert key_type == "string"
+        assert value == "this is value"
+        assert size == 10
 
 
 @pytest.mark.asyncio
