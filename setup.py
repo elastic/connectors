@@ -9,10 +9,15 @@ import sys
 from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
 
+from connectors.logger import logger
+
 try:
     ARCH = os.uname().machine
-except Exception:
+except Exception as e:
     ARCH = "x86_64"
+    logger.info(
+        f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
+    )
 
 if sys.version_info.major != 3:
     raise ValueError("Requires Python 3")
