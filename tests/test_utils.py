@@ -1069,7 +1069,7 @@ def test_ensure_python_3_10_or_higher_does_not_raise_for_3_10():
     try:
         ensure_python_3_10_or_higher()
     except ValueError:
-        pytest.fail("ValueError raised for Python 3.11")
+        pytest.fail("ValueError raised for Python 3.10")
 
 
 @patch("sys.version_info", new=(3, 11))
