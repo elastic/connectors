@@ -390,8 +390,7 @@ class SyncJobRunner:
                     yield doc, lazy_download, operation
             case [JobType.INCREMENTAL, optimization] if optimization is True:
                 async for doc, lazy_download in self.data_provider.get_docs(
-                    filtering=self.sync_job.filtering,
-                    timestamp_optimization=True,
+                    filtering=self.sync_job.filtering
                 ):
                     yield doc, lazy_download, OP_INDEX
             case [JobType.ACCESS_CONTROL, _]:

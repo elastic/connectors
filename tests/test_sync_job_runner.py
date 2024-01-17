@@ -855,7 +855,7 @@ async def test_incremental_sync_with_timestamp_optimization_generator():
         pass
 
     sync_job_runner.data_provider.get_docs.assert_called_once_with(
-        filtering=data_provider.sync_job.filtering, timestamp_optimization=True
+        filtering=data_provider.sync_job.filtering
     )
 
 
