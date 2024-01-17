@@ -41,10 +41,10 @@ class ESManagementClient(ESClient):
 
         for index in indices:
             logger.debug(f"Checking index {index}")
-            if not await self._retrier.retry(
+            if not await self._retrier.execute_with_retry(
                 partial(self.client.indices.exists, index=index)
             ):
-                await self._retrier.retry(
+                await self._retrier.execute_with_retry(
                     partial(self.client.indices.create, index=index)
                 )
                 logger.debug(f"Created index {index}")
@@ -53,7 +53,7 @@ class ESManagementClient(ESClient):
         settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
-        return await self._retrier.retry(
+        return await self._retrier.execute_with_retry(
             partial(
                 self.client.indices.create,
                 index=search_index_name,
@@ -65,7 +65,7 @@ class ESManagementClient(ESClient):
     async def ensure_content_index_mappings(self, index, mappings):
         # open = Match open, non-hidden indices. Also matches any non-hidden data stream.
         # Content indices are always non-hidden.
-        response = await self._retrier.retry(
+        response = await self._retrier.execute_with_retry(
             partial(self.client.indices.get_mapping, index=index)
         )
 
@@ -75,7 +75,7 @@ class ESManagementClient(ESClient):
                 logger.debug(
                     "Index %s has no mappings or it's empty. Adding mappings...", index
                 )
-                await self._retrier.retry(
+                await self._retrier.execute_with_retry(
                     partial(
                         self.client.indices.put_mapping,
                         index=index,
@@ -98,11 +98,11 @@ class ESManagementClient(ESClient):
         self, pipeline_id, version, description, processors
     ):
         try:
-            await self._retrier.retry(
+            await self._retrier.execute_with_retry(
                 partial(self.client.ingest.get_pipeline, id=pipeline_id)
             )
         except ElasticNotFoundError:
-            await self._retrier.retry(
+            await self._retrier.execute_with_retry(
                 partial(
                     self.client.ingest.put_pipeline,
                     id=pipeline_id,
@@ -113,12 +113,12 @@ class ESManagementClient(ESClient):
             )
 
     async def delete_indices(self, indices):
-        await self._retrier.retry(
+        await self._retrier.execute_with_retry(
             partial(self.client.indices.delete, index=indices, ignore_unavailable=True)
         )
 
     async def clean_index(self, index_name):
-        return await self._retrier.retry(
+        return await self._retrier.execute_with_retry(
             partial(
                 self.client.delete_by_query,
                 index=index_name,
@@ -128,17 +128,17 @@ class ESManagementClient(ESClient):
         )
 
     async def list_indices(self):
-        return await self._retrier.retry(
+        return await self._retrier.execute_with_retry(
             partial(self.client.indices.stats, index="search-*")
         )
 
     async def index_exists(self, index_name):
-        return await self._retrier.retry(
+        return await self._retrier.execute_with_retry(
             partial(self.client.indices.exists, index=index_name)
         )
 
     async def upsert(self, _id, index_name, doc):
-        return await self._retrier.retry(
+        return await self._retrier.execute_with_retry(
             partial(
                 self.client.index,
                 id=_id,
@@ -148,7 +148,7 @@ class ESManagementClient(ESClient):
         )
 
     async def bulk_insert(self, operations, pipeline):
-        return await self._retrier.retry(
+        return await self._retrier.execute_with_retry(
             partial(
                 self.client.bulk,
                 operations=operations,

@@ -46,7 +46,7 @@ class ESClient:
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
-        self._retrier = Retrier(
+        self._retrier = TransientElasticsearchRetrier(
             logger, config.get("max_retries", 5), config.get("retry_timeout", 10)
         )
 
@@ -109,7 +109,9 @@ class ESClient:
             Tuple: (boolean if `license_` is enabled and not expired, actual license Elasticsearch is using)
         """
 
-        license_response = await self._retrier.retry(self.client.license.get)
+        license_response = await self._retrier.execute_with_retry(
+            self.client.license.get
+        )
         license_info = license_response.get("license", {})
         is_expired = license_info.get("status", "").lower() == "expired"
 
@@ -134,6 +136,7 @@ class ESClient:
         )
 
     async def close(self):
+        await self._retrier.close()
         await self.client.close()
 
     async def wait(self):
@@ -176,15 +179,15 @@ class RetryInterruptedError(Exception):
     pass
 
 
-class Retrier:
+class TransientElasticsearchRetrier:
     def __init__(
         self,
-        logger,
+        logger_,
         max_retries,
         retry_timeout,
         retry_strategy=RetryStrategy.LINEAR_BACKOFF,
     ):
-        self._logger = logger
+        self._logger = logger_
         self._sleeps = CancellableSleeps()
         self._keep_retrying = True
         self._max_retries = max_retries
@@ -195,7 +198,7 @@ class Retrier:
         self._sleeps.cancel()
         self._keep_retrying = False
 
-    async def sleep(self, retry):
+    async def _sleep(self, retry):
         # TODO: 15 is arbitrary
         # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
         time_to_sleep = time_to_sleep_between_retries(
@@ -204,9 +207,10 @@ class Retrier:
         self._logger.debug(f"Attempt {retry}: sleeping for {time_to_sleep}")
         await self._sleeps.sleep(time_to_sleep)
 
-    async def retry(self, func):
+    async def execute_with_retry(self, func):
         retry = 0
         while self._keep_retrying and retry < self._max_retries:
+            retry += 1
             try:
                 result = await func()
 
@@ -226,8 +230,7 @@ class Retrier:
                 if retry >= self._max_retries:
                     raise
 
-            retry += 1
-            await self.sleep(retry)
+            await self._sleep(retry)
 
         msg = "Retry operation was interrupted"
         raise RetryInterruptedError(msg)
