@@ -5,7 +5,8 @@
 #
 import json
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, Mock
+from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 from freezegun import freeze_time
@@ -14,6 +15,7 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.redis import (
     RedisDataSource,
 )
+from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 DOCUMENT = [
@@ -29,31 +31,7 @@ DOCUMENT = [
 ]
 
 
-class RedisObject:
-    """Class for mock Redis object"""
-
-    def __init__(self, *args, **kw):
-        """Setup document of Mock object"""
-        self.db = self
-
-    async def execute_command(self, SELECT="SELECT", db=0):
-        return
-
-    async def config_get(self, pattern="databases"):
-        return {"databases": "1"}
-
-    async def scan_iter(self, match="*", count=10, _type=None):
-        yield "0"
-
-    async def type(self, *args):  # NOQA
-        return "string"
-
-    async def memory_usage(self, *args):
-        return 10
-
-    async def get(self, *args):
-        return "this is value"
-
+class RedisClientMock:
     async def __aenter__(self):
         """Make a dummy connection and return it"""
         return self
@@ -61,25 +39,46 @@ class RedisObject:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Make sure the dummy connection gets closed"""
         pass
-
-
-class RedisForCloud:
-    """Class for mock Redis object"""
-
-    def __init__(self, *args, **kw):
-        """Setup document of Mock object"""
-        self.db = self
 
     async def execute_command(self, SELECT="JSON.GET", key="json_key"):
         return json.dumps({"1": "1", "2": "2"})
 
-    async def __aenter__(self):
-        """Make a dummy connection and return it"""
-        return self
+    async def zrange(self, key, start, skip, withscores=True):
+        return {1, 2, 3}
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Make sure the dummy connection gets closed"""
-        pass
+    async def smembers(self, key):
+        return {1, 2, 3}
+
+    async def get(self, key):
+        return "this is value"
+
+    async def hgetall(self, key):
+        return "hash"
+
+    async def xread(self, key):
+        return "stream"
+
+    async def lrange(self, key, start, skip):
+        return [1, 2, 3]
+
+    async def config_get(self, databases):
+        return {"databases": "1"}
+
+    async def ping(self):
+        return False
+
+    async def aclose(self):
+        return True
+
+    async def type(self, key):  # NOQA
+        return "string"
+
+    async def memory_usage(self, key):
+        return 10
+
+    async def validate_database(self, db=0):
+        await self.execute_command()
+        await self.ping()
 
 
 @asynccontextmanager
@@ -97,14 +96,8 @@ async def create_redis_source():
 
 @pytest.mark.asyncio
 async def test_ping_positive():
-    @asynccontextmanager
-    async def non_pingable_client():
-        redis_mock = Mock()
-        redis_mock.ping = AsyncMock(return_value=True)
-        yield redis_mock
-
     async with create_redis_source() as source:
-        source.redis_client.client = non_pingable_client
+        source.client.ping = AsyncMock()
         await source.ping()
 
 
@@ -118,7 +111,7 @@ async def test_ping_negative():
 @pytest.mark.asyncio
 async def test_validate_config_when_database_type():
     async with create_redis_source() as source:
-        source.redis_client.database = ["1", "db123", "123"]
+        source.client.database = ["1", "db123", "123"]
         source.ping = AsyncMock(return_value=True)
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -127,7 +120,7 @@ async def test_validate_config_when_database_type():
 @pytest.mark.asyncio
 async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
-        source.redis_client.database = ["123"]
+        source.client.database = ["123"]
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
@@ -136,29 +129,77 @@ async def test_validate_config_when_database_is_invalid():
 @freeze_time("2023-01-24T04:07:19+00:00")
 async def test_get_docs():
     async with create_redis_source() as source:
-        source.redis_client.database = ["*"]
-        mock_redis = RedisObject
+        source.client.database = [1]
 
-        source.redis_client.client = mock_redis
-        async for (doc, _) in source.get_docs():
-            assert doc in DOCUMENT
+        with mock.patch(
+            "redis.from_url",
+            return_value=AsyncMock(),
+        ):
+            source.get_db_records = AsyncIterator(items=DOCUMENT)
+            async for (doc, _) in source.get_docs():
+                assert doc in DOCUMENT
+
+
+@pytest.mark.asyncio
+async def test_get_databases_for_multiple_db():
+    async with create_redis_source() as source:
+        source.client.database = [1, 2]
+        async for database in source.client.get_databases():
+            assert database in [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_get_databases_with_astric():
+    async with create_redis_source() as source:
+        source.client.database = ["*"]
+        source.client.redis_client = RedisClientMock()
+        async for database in source.client.get_databases():
+            assert database == 0
 
 
 @pytest.mark.asyncio
 async def test_get_databases_negative():
     async with create_redis_source() as source:
-        source.redis_client.database = ["*"]
-        async for database in source.redis_client.get_databases():
+        source.client.database = ["*"]
+        async for database in source.client.get_databases():
             assert database == []
 
 
 @pytest.mark.asyncio
-async def test_get_key_value():
+@pytest.mark.parametrize(
+    "key, key_type, expected_response",
+    [
+        ("json_key", "ReJSON-RL", {"1": "1", "2": "2"}),
+        ("string_key", "string", "this is value"),
+        ("list_key", "list", [1, 2, 3]),
+        ("set_key", "set", {1, 2, 3}),
+        ("sorted_set_key", "zset", {1, 2, 3}),
+        ("hash_key", "hash", "hash"),
+        ("stream_key", "stream", "stream"),
+    ],
+)
+async def test_get_key_value(key, key_type, expected_response):
     async with create_redis_source() as source:
-        source.redis_client.database = ["*"]
-        mock_redis = RedisForCloud
-        source.redis_client.client = mock_redis
-        value = await source.redis_client.get_key_value(
-            redis_client=mock_redis, key="json_key", key_type="ReJSON-RL"
-        )
-        assert value == {"1": "1", "2": "2"}
+        source.client.database = ["*"]
+        source.client.redis_client = RedisClientMock()
+        value = await source.client.get_key_value(key=key, key_type=key_type)
+        assert value == expected_response
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19+00:00")
+async def test_get_key_metadata():
+    async with create_redis_source() as source:
+        source.client.redis_client = RedisClientMock()
+        document = await source.get_key_metadata(key="0", db=0)
+        assert document == DOCUMENT[0]
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19+00:00")
+async def test_get_db_records():
+    async with create_redis_source() as source:
+        source.client.redis_client = RedisClientMock()
+        source.client.get_paginated_key = AsyncIterator(["0"])
+        async for record in source.get_db_records(db=0):
+            assert record == DOCUMENT[0]
