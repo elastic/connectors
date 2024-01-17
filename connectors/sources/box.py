@@ -211,6 +211,7 @@ class BoxClient:
 class BoxDataSource(BaseDataSource):
     name = "Box"
     service_type = "box"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
