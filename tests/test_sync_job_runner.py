@@ -391,9 +391,9 @@ async def test_invalid_filtering_access_control_sync_still_executed(
 @pytest.mark.parametrize(
     "job_type, sync_cursor",
     [
-        # (JobType.FULL, SYNC_CURSOR),
+        (JobType.FULL, SYNC_CURSOR),
         (JobType.INCREMENTAL, SYNC_CURSOR),
-        # (JobType.ACCESS_CONTROL, None),
+        (JobType.ACCESS_CONTROL, None),
     ],
 )
 @pytest.mark.asyncio
@@ -838,7 +838,10 @@ def test_timestamp_optimization_enabled_disabled_by_full_sync():
     )
 
 
-@patch("connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled", Mock(return_value=True))
+@patch(
+    "connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled",
+    Mock(return_value=True),
+)
 @pytest.mark.asyncio
 async def test_incremental_sync_with_timestamp_optimization_generator():
     sync_job_runner = create_runner(job_type=JobType.INCREMENTAL)
@@ -848,15 +851,20 @@ async def test_incremental_sync_with_timestamp_optimization_generator():
     data_provider.get_docs.return_value = AsyncIterator([])
     sync_job_runner.data_provider = data_provider
 
-    async for doc, _, _ in sync_job_runner.generator():
+    async for _doc, _, _ in sync_job_runner.generator():
         pass
 
-    sync_job_runner.data_provider.get_docs.assert_called_once_with(filtering=data_provider.sync_job.filtering, timestamp_optimization=True)
+    sync_job_runner.data_provider.get_docs.assert_called_once_with(
+        filtering=data_provider.sync_job.filtering, timestamp_optimization=True
+    )
 
 
-@patch("connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled", Mock(return_value=False))
+@patch(
+    "connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled",
+    Mock(return_value=False),
+)
 @pytest.mark.asyncio
-async def test_incremental_sync_with_timestamp_optimization_generator():
+async def test_incremental_sync_without_timestamp_optimization_generator():
     connector = mock_connector()
     connector.sync_cursor = {}
 
@@ -868,7 +876,9 @@ async def test_incremental_sync_with_timestamp_optimization_generator():
     data_provider.get_docs.return_value = AsyncIterator([])
     sync_job_runner.data_provider = data_provider
 
-    async for doc, _, _ in sync_job_runner.generator():
+    async for _doc, _, _ in sync_job_runner.generator():
         pass
 
-    sync_job_runner.data_provider.get_docs_incrementally.assert_called_once_with(filtering=data_provider.sync_job.filtering, sync_cursor=connector.sync_cursor)
+    sync_job_runner.data_provider.get_docs_incrementally.assert_called_once_with(
+        filtering=data_provider.sync_job.filtering, sync_cursor=connector.sync_cursor
+    )
