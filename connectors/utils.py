@@ -897,4 +897,5 @@ def shorten_str(string, shorten_by):
 
 def ensure_python_3_10_or_higher():
     if sys.version_info < (3, 10):
-        raise ValueError("Requires Python 3.10 or higher.")
+        msg = "Requires Python 3.10 or higher."
+        raise ValueError(msg)
