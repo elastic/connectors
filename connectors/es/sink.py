@@ -396,15 +396,21 @@ class Extractor:
                     # pop out of existing_ids, so they do not get deleted
                     ts = existing_ids.pop(doc_id)
 
-                    if timestamp_optimization and TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
-                    # cancel the download
+                    if (
+                        timestamp_optimization
+                        and TIMESTAMP_FIELD in doc
+                        and ts == doc[TIMESTAMP_FIELD]
+                    ):
+                        # cancel the download
                         if (
                             self.content_extraction_enabled
                             and lazy_download is not None
                         ):
                             await lazy_download(doit=False)
 
-                        self._logger.debug(f"Skipping document with id '{doc_id}' because field '{TIMESTAMP_FIELD}' has not changed since last sync")
+                        self._logger.debug(
+                            f"Skipping document with id '{doc_id}' because field '{TIMESTAMP_FIELD}' has not changed since last sync"
+                        )
                         continue
 
                     self.total_docs_updated += 1

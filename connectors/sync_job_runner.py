@@ -14,8 +14,8 @@ from connectors.es.license import requires_platinum_license
 from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
-from connectors.utils import truncate_id
 from connectors.source import BaseDataSource
+from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
 
@@ -97,7 +97,10 @@ class SyncJobRunner:
             msg = f"Sync job {self.sync_job.id} is already running."
             raise SyncJobRunningError(msg)
 
-        if self.sync_job.job_type == JobType.INCREMENTAL and not self.connector.features.incremental_sync_enabled():
+        if (
+            self.sync_job.job_type == JobType.INCREMENTAL
+            and not self.connector.features.incremental_sync_enabled()
+        ):
             msg = f"Connector {self.connector.id} does not support incremental sync."
             raise SyncJobRunningError(msg)
 
@@ -208,13 +211,14 @@ class SyncJobRunner:
             return False
 
         # Data provider has to have the method get_docs_incrementally (inherent from BaseDataSource or implemented in a subclass)
-        if not hasattr(
-            data_provider, "get_docs_incrementally"
-        ):
+        if not hasattr(data_provider, "get_docs_incrementally"):
             return False
 
         # make sure that the data provider is not overriding the default implementation of get_docs_incrementally
-        return data_provider.get_docs_incrementally.__func__ is BaseDataSource.get_docs_incrementally
+        return (
+            data_provider.get_docs_incrementally.__func__
+            is BaseDataSource.get_docs_incrementally
+        )
 
     async def _execute_content_sync_job(self, job_type, bulk_options):
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
@@ -386,7 +390,8 @@ class SyncJobRunner:
                     yield doc, lazy_download, operation
             case [JobType.INCREMENTAL, optimization] if optimization is True:
                 async for doc, lazy_download in self.data_provider.get_docs(
-                    filtering=self.sync_job.filtering
+                    filtering=self.sync_job.filtering,
+                    timestamp_optimization=True,
                 ):
                     yield doc, lazy_download, OP_INDEX
             case [JobType.ACCESS_CONTROL, _]:

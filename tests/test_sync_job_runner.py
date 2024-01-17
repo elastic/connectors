@@ -13,7 +13,12 @@ from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
-from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError, SyncJobRunningError
+from connectors.source import BaseDataSource
+from connectors.sync_job_runner import (
+    SyncJobRunner,
+    SyncJobRunningError,
+    SyncJobStartError,
+)
 from tests.commons import AsyncIterator
 
 SEARCH_INDEX_NAME = "search-mysql"
@@ -69,7 +74,7 @@ def create_runner(
     job_type=JobType.FULL,
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
-    connector=None
+    connector=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -217,6 +222,7 @@ async def test_connector_incremental_sync_job_starts_fail():
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_not_awaited()
+
 
 @pytest.mark.parametrize(
     "job_type, sync_cursor_to_claim, sync_cursor_to_update",
@@ -779,3 +785,90 @@ async def test_sync_job_runner_sets_features_for_data_provider():
     await sync_job_runner.execute()
 
     assert sync_job_runner.data_provider.set_features.called
+
+
+def test_timestamp_optimization_enabled():
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+    assert (
+        sync_job_runner._timestamp_optimization_enabled(
+            data_provider=MockDataSource(Mock()),
+            job_type=JobType.INCREMENTAL,
+        )
+        is True
+    )
+
+
+def test_timestamp_optimization_enabled_disabled():
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+        def get_docs_incrementally(self, sync_cursor, filtering=None):
+            pass
+
+    assert (
+        sync_job_runner._timestamp_optimization_enabled(
+            data_provider=MockDataSource(Mock()),
+            job_type=JobType.INCREMENTAL,
+        )
+        is False
+    )
+
+
+def test_timestamp_optimization_enabled_disabled_by_full_sync():
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+    assert (
+        sync_job_runner._timestamp_optimization_enabled(
+            data_provider=MockDataSource(Mock()),
+            job_type=JobType.FULL,
+        )
+        is False
+    )
+
+
+@patch("connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled", Mock(return_value=True))
+@pytest.mark.asyncio
+async def test_incremental_sync_with_timestamp_optimization_generator():
+    sync_job_runner = create_runner(job_type=JobType.INCREMENTAL)
+
+    data_provider = Mock()
+    data_provider.sync_job.filtering = {}
+    data_provider.get_docs.return_value = AsyncIterator([])
+    sync_job_runner.data_provider = data_provider
+
+    async for doc, _, _ in sync_job_runner.generator():
+        pass
+
+    sync_job_runner.data_provider.get_docs.assert_called_once_with(filtering=data_provider.sync_job.filtering, timestamp_optimization=True)
+
+
+@patch("connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled", Mock(return_value=False))
+@pytest.mark.asyncio
+async def test_incremental_sync_with_timestamp_optimization_generator():
+    connector = mock_connector()
+    connector.sync_cursor = {}
+
+    sync_job_runner = create_runner(job_type=JobType.INCREMENTAL, connector=connector)
+
+    data_provider = Mock()
+    data_provider.get_docs_incrementally = AsyncIterator([])
+    data_provider.sync_job.filtering = {}
+    data_provider.get_docs.return_value = AsyncIterator([])
+    sync_job_runner.data_provider = data_provider
+
+    async for doc, _, _ in sync_job_runner.generator():
+        pass
+
+    sync_job_runner.data_provider.get_docs_incrementally.assert_called_once_with(filtering=data_provider.sync_job.filtering, sync_cursor=connector.sync_cursor)
