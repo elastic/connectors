@@ -34,6 +34,7 @@ from connectors.utils import (
     convert_to_b64,
     decode_base64_value,
     deep_merge_dicts,
+    ensure_python_3_10_or_higher,
     evaluate_timedelta,
     filter_nested_dict_by_keys,
     get_base64_value,
@@ -1055,3 +1056,25 @@ async def test_time_to_sleep_between_retries_invalid_strategy():
         time_to_sleep_between_retries("lalala", 1, 1)
 
     assert e is not None
+
+
+@patch("sys.version_info", new=(3, 9))
+def test_ensure_python_3_10_or_higher_raises_for_3_9():
+    with pytest.raises(ValueError):
+        ensure_python_3_10_or_higher()
+
+
+@patch("sys.version_info", new=(3, 10))
+def test_ensure_python_3_10_or_higher_does_not_raise_for_3_10():
+    try:
+        ensure_python_3_10_or_higher()
+    except ValueError:
+        pytest.fail("ValueError raised for Python 3.11")
+
+
+@patch("sys.version_info", new=(3, 11))
+def test_ensure_python_3_10_or_higher_does_not_raise_for_3_11():
+    try:
+        ensure_python_3_10_or_higher()
+    except ValueError:
+        pytest.fail("ValueError raised for Python 3.11")

@@ -4,20 +4,18 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
-import sys
 
 from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
+
+from connectors.utils import ensure_python_3_10_or_higher
 
 try:
     ARCH = os.uname().machine
 except Exception:
     ARCH = "x86_64"
 
-if sys.version_info.major != 3:
-    raise ValueError("Requires Python 3")
-if sys.version_info.minor < 10:
-    raise ValueError("Requires Python 3.10 or superior.")
+ensure_python_3_10_or_higher()
 
 from connectors import __version__  # NOQA
 
