@@ -47,7 +47,7 @@ class ESClient:
         )
         self._sleeps = CancellableSleeps()
         self._retrier = TransientElasticsearchRetrier(
-            logger, config.get("max_retries"), config.get("retry_timeout")
+            logger, config.get("max_retries", 5), config.get("retry_timeout", 10)
         )
 
         options = {
