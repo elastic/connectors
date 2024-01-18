@@ -5,6 +5,7 @@
 #
 import json
 from enum import Enum
+from functools import cached_property
 
 import redis.asyncio as redis
 
@@ -35,27 +36,27 @@ class RedisClient:
         self.database = self.configuration["database"]
         self.username = self.configuration["username"]
         self.password = self.configuration["password"]
-        self.redis_client = None
+        self._redis_client = None
 
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def client(self):
-        self.redis_client = redis.from_url(
+    @cached_property
+    def _client(self):
+        self._redis_client = redis.from_url(
             f"redis://{self.username}:{self.password}@{self.host}:{self.port}",
             decode_responses=True,
         )
+        return self._redis_client
 
     async def close(self):
-        if self.redis_client:
-            await self.redis_client.aclose()  # pyright: ignore
+        if self._redis_client:
+            await self._client.aclose()  # pyright: ignore
 
     async def validate_database(self, db):
-        if not self.redis_client:
-            await self.client()
         try:
-            await self.redis_client.execute_command("SELECT", db)
-            await self.redis_client.ping()
+            await self._client.execute_command("SELECT", db)
+            await self._client.ping()
             return True
         except Exception as exception:
             self._logger.warning(f"Database {db} not found. Error: {exception}")
@@ -72,7 +73,7 @@ class RedisClient:
                 yield database
         else:
             try:
-                databases = await self.redis_client.config_get("databases")
+                databases = await self._client.config_get("databases")
                 for database in list(range(int(databases.get("databases", 1)))):
                     yield database
             except Exception as exception:
@@ -92,8 +93,8 @@ class RedisClient:
         Yields:
             string: key in database
         """
-        await self.redis_client.execute_command("SELECT", db)
-        async for key in self.redis_client.scan_iter(
+        await self._client.execute_command("SELECT", db)
+        async for key in self._client.scan_iter(
             match=pattern, count=PAGE_SIZE, _type=_type
         ):
             yield key
@@ -110,20 +111,20 @@ class RedisClient:
         """
         try:
             if key_type == KeyType.HASH.value:
-                return await self.redis_client.hgetall(key)
+                return await self._client.hgetall(key)
             elif key_type == KeyType.STREAM.value:
-                return await self.redis_client.xread({key: "0"})
+                return await self._client.xread({key: "0"})
             elif key_type == KeyType.LIST.value:
-                return await self.redis_client.lrange(key, 0, -1)
+                return await self._client.lrange(key, 0, -1)
             elif key_type == KeyType.SET.value:
-                return await self.redis_client.smembers(key)
+                return await self._client.smembers(key)
             elif key_type == KeyType.ZSET.value:
-                return await self.redis_client.zrange(key, 0, -1, withscores=True)
+                return await self._client.zrange(key, 0, -1, withscores=True)
             elif key_type == KeyType.JSON.value:
-                value = await self.redis_client.execute_command("JSON.GET", key)
+                value = await self._client.execute_command("JSON.GET", key)
                 return json.loads(value)
             else:
-                value = await self.redis_client.get(key)
+                value = await self._client.get(key)
                 if value is not None:
                     try:
                         value_json = json.loads(value)
@@ -138,14 +139,13 @@ class RedisClient:
             return ""
 
     async def get_key_metadata(self, key):
-        key_type = await self.redis_client.type(key)
+        key_type = await self._client.type(key)
         key_value = await self.get_key_value(key=key, key_type=key_type)
-        key_size = await self.redis_client.memory_usage(key)
+        key_size = await self._client.memory_usage(key)
         return key_type, key_value, key_size
 
     async def ping(self):
-        await self.client()
-        await self.redis_client.ping()
+        await self._client.ping()
 
 
 class RedisDataSource(BaseDataSource):

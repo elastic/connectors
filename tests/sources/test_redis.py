@@ -32,14 +32,6 @@ DOCUMENT = [
 
 
 class RedisClientMock:
-    async def __aenter__(self):
-        """Make a dummy connection and return it"""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Make sure the dummy connection gets closed"""
-        pass
-
     async def execute_command(self, SELECT="JSON.GET", key="json_key"):
         return json.dumps({"1": "1", "2": "2"})
 
@@ -152,7 +144,7 @@ async def test_get_databases_for_multiple_db():
 async def test_get_databases_with_astric():
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        source.client.redis_client = RedisClientMock()
+        source.client._client = RedisClientMock()
         async for database in source.client.get_databases():
             assert database == 0
 
@@ -181,7 +173,7 @@ async def test_get_databases_negative():
 async def test_get_key_value(key, key_type, expected_response):
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        source.client.redis_client = RedisClientMock()
+        source.client._client = RedisClientMock()
         value = await source.client.get_key_value(key=key, key_type=key_type)
         assert value == expected_response
 
@@ -190,7 +182,7 @@ async def test_get_key_value(key, key_type, expected_response):
 @freeze_time("2023-01-24T04:07:19+00:00")
 async def test_get_key_metadata():
     async with create_redis_source() as source:
-        source.client.redis_client = RedisClientMock()
+        source.client._client = RedisClientMock()
         key_type, value, size = await source.client.get_key_metadata(key="0")
         assert key_type == "string"
         assert value == "this is value"
@@ -201,7 +193,7 @@ async def test_get_key_metadata():
 @freeze_time("2023-01-24T04:07:19+00:00")
 async def test_get_db_records():
     async with create_redis_source() as source:
-        source.client.redis_client = RedisClientMock()
+        source.client._client = RedisClientMock()
         source.client.get_paginated_key = AsyncIterator(["0"])
         async for record in source.get_db_records(db=0):
             assert record == DOCUMENT[0]
