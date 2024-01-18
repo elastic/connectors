@@ -103,9 +103,15 @@ class ConfluenceClient:
                 self.configuration["api_token"],
             )
         elif self.configuration["data_source"] == CONFLUENCE_SERVER:
-            auth = self.configuration["server_username"], self.configuration["server_password"]
+            auth = (
+                self.configuration["server_username"],
+                self.configuration["server_password"],
+            )
         else:
-            auth = self.configuration["data_center_username"], self.configuration["data_center_password"]
+            auth = (
+                self.configuration["data_center_username"],
+                self.configuration["data_center_password"],
+            )
 
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -235,7 +241,10 @@ class ConfluenceDataSource(BaseDataSource):
                 "options": [
                     {"label": "Confluence Cloud", "value": CONFLUENCE_CLOUD},
                     {"label": "Confluence Server", "value": CONFLUENCE_SERVER},
-                    {"label": "Confluence Data Center", "value": CONFLUENCE_DATA_CENTER},
+                    {
+                        "label": "Confluence Data Center",
+                        "value": CONFLUENCE_DATA_CENTER,
+                    },
                 ],
                 "order": 1,
                 "type": "str",
@@ -255,13 +264,17 @@ class ConfluenceDataSource(BaseDataSource):
                 "type": "str",
             },
             "data_center_username": {
-                "depends_on": [{"field": "data_source", "value": CONFLUENCE_DATA_CENTER}],
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
+                ],
                 "label": "Confluence Data Center username",
                 "order": 4,
                 "type": "str",
             },
             "data_center_password": {
-                "depends_on": [{"field": "data_source", "value": CONFLUENCE_DATA_CENTER}],
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
+                ],
                 "label": "Confluence Data Center password",
                 "sensitive": True,
                 "order": 5,
