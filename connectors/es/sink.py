@@ -789,8 +789,19 @@ class SyncOrchestrator:
         retry_interval = options.get(
             "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
         )
+        mem_queue_refresh_timeout = options.get("mem_queue", {}).get(
+            "refresh_timeout", 600
+        )
+        mem_queue_refresh_interval = options.get("mem_queue", {}).get(
+            "refresh_interval", 1
+        )
 
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
+        stream = MemQueue(
+            maxsize=queue_size,
+            maxmemsize=queue_mem_size * 1024 * 1024,
+            refresh_timeout=mem_queue_refresh_timeout,
+            refresh_interval=mem_queue_refresh_interval,
+        )
 
         # start the fetcher
         self._extractor = Extractor(

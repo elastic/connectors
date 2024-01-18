@@ -1,4 +1,3 @@
-#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -67,6 +66,7 @@ def _default_config():
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
                 "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": 10,
+                "mem_queue": {"refresh_interval": 1, "refresh_timeout": 600},
             },
             "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
             "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
