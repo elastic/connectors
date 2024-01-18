@@ -8,9 +8,8 @@ import os
 from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
 
-from connectors.utils import ensure_python_3_10_or_higher
 from connectors.logger import logger
-
+from connectors.utils import ensure_python_3_10_or_higher
 
 try:
     ARCH = os.uname().machine
