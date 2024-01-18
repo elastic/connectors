@@ -46,8 +46,9 @@ class ESClient:
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
+        bulk_config = config.get("bulk", {})
         self._retrier = TransientElasticsearchRetrier(
-            logger, config.get("max_retries", 5), config.get("retry_timeout", 10)
+            logger, bulk_config.get("max_retries", 5), bulk_config.get("retry_timeout", 10)
         )
 
         options = {

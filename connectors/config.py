@@ -59,7 +59,8 @@ def _default_config():
                 "max_concurrency": 5,
                 "chunk_max_mem_size": 5,
                 "concurrent_downloads": 10,
-                "max_retries": 3,
+                "max_retries": 5,
+                "retry_timeout": 10
             },
             "retry_on_timeout": True,
             "request_timeout": 120,
