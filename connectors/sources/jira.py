@@ -73,6 +73,7 @@ URLS = {
 
 JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
+JIRA_DATA_CENTER = "jira_data_center"
 
 ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
@@ -128,10 +129,15 @@ class JiraClient:
                 self.configuration["account_email"],
                 self.configuration["api_token"],
             )
+        elif self.configuration["data_source"] == JIRA_SERVER:
+            login, password = (
+                self.configuration["server_username"],
+                self.configuration["server_password"],
+            )
         else:
             login, password = (
-                self.configuration["username"],
-                self.configuration["password"],
+                self.configuration["data_center_username"],
+                self.configuration["data_center_password"],
             )
 
         basic_auth = aiohttp.BasicAuth(login=login, password=password)
@@ -306,67 +312,81 @@ class JiraDataSource(BaseDataSource):
                 "options": [
                     {"label": "Jira Cloud", "value": JIRA_CLOUD},
                     {"label": "Jira Server", "value": JIRA_SERVER},
+                    {"label": "Jira Data Center", "value": JIRA_DATA_CENTER},
                 ],
                 "order": 1,
                 "type": "str",
                 "value": JIRA_CLOUD,
             },
-            "username": {
+            "server_username": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
                 "label": "Jira Server username",
                 "order": 2,
                 "type": "str",
             },
-            "password": {
+            "server_password": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
                 "label": "Jira Server password",
                 "sensitive": True,
                 "order": 3,
                 "type": "str",
             },
+            "data_center_username": {
+                "depends_on": [{"field": "data_source", "value": JIRA_DATA_CENTER}],
+                "label": "Jira Data Center username",
+                "order": 4,
+                "type": "str",
+            },
+            "data_center_password": {
+                "depends_on": [{"field": "data_source", "value": JIRA_DATA_CENTER}],
+                "label": "Jira Data Center password",
+                "sensitive": True,
+                "order": 5,
+                "type": "str",
+            },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
-                "order": 4,
+                "order": 6,
                 "type": "str",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud API token",
-                "order": 5,
+                "order": 7,
                 "sensitive": True,
                 "type": "str",
             },
             "jira_url": {
                 "label": "Jira host url",
-                "order": 6,
+                "order": 8,
                 "type": "str",
             },
             "projects": {
                 "display": "textarea",
                 "label": "Jira project keys",
-                "order": 7,
+                "order": 9,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 8,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 9,
+                "order": 11,
                 "type": "str",
             },
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries for failed requests",
-                "order": 10,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -375,7 +395,7 @@ class JiraDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 11,
+                "order": 13,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -387,7 +407,7 @@ class JiraDataSource(BaseDataSource):
                 "display": "toggle",
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Enable document level security",
-                "order": 12,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -395,7 +415,7 @@ class JiraDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 13,
+                "order": 15,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],

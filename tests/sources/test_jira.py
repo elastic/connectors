@@ -413,8 +413,10 @@ def side_effect_function(url, ssl):
         ("projects", "jira_cloud"),
         ("api_token", "jira_cloud"),
         ("account_email", "jira_cloud"),
-        ("username", "jira_server"),
-        ("password", "jira_server"),
+        ("server_username", "jira_server"),
+        ("server_password", "jira_server"),
+        ("data_center_username", "jira_data_center"),
+        ("data_center_password", "jira_data_center"),
     ],
 )
 @pytest.mark.asyncio

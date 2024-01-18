@@ -539,8 +539,10 @@ class MockSSL:
         ("confluence_url", "confluence_cloud"),
         ("account_email", "confluence_cloud"),
         ("api_token", "confluence_cloud"),
-        ("username", "confluence_server"),
-        ("password", "confluence_server"),
+        ("server_username", "confluence_server"),
+        ("server_password", "confluence_server"),
+        ("data_center_username", "confluence_data_center"),
+        ("data_center_password", "confluence_data_center"),
     ],
 )
 @pytest.mark.asyncio
