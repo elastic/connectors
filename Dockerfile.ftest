@@ -1,5 +1,4 @@
 FROM python:3.11.6-slim
-
 COPY . /connectors
 WORKDIR /connectors
 RUN apt update && \
