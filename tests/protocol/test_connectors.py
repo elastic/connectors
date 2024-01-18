@@ -2018,16 +2018,31 @@ async def test_pending_jobs(
 
 @pytest.mark.asyncio
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
-async def test_orphaned_jobs(get_all_docs, set_env):
+async def test_orphaned_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
-    expected_query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+    expected_query = {
+        "bool": {
+            "must_not": {"terms": {"connector.id": connector_ids}},
+            "filter": [
+                {
+                    "terms": {
+                        "status": [
+                            JobStatus.IN_PROGRESS.value,
+                            JobStatus.CANCELING.value,
+                        ]
+                    }
+                }
+            ],
+        }
+    }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [
-        job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)
+        job
+        async for job in sync_job_index.orphaned_idle_jobs(connector_ids=connector_ids)
     ]
 
     get_all_docs.assert_called_with(query=expected_query)
