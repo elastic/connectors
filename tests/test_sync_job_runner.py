@@ -17,7 +17,7 @@ from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
     SyncJobRunner,
     SyncJobRunningError,
-    SyncJobStartError,
+    SyncJobStartError
 )
 from tests.commons import AsyncIterator
 
@@ -882,3 +882,13 @@ async def test_incremental_sync_without_timestamp_optimization_generator():
     sync_job_runner.data_provider.get_docs_incrementally.assert_called_once_with(
         filtering=data_provider.sync_job.filtering, sync_cursor=connector.sync_cursor
     )
+
+
+async def test_unsupported_job_type():
+    connector = mock_connector()
+    connector.sync_cursor = {}
+
+    sync_job_runner = create_runner(job_type="unsupported_type", connector=connector)
+
+    with pytest.raises(SyncJobStartError):
+        await sync_job_runner.execute()
