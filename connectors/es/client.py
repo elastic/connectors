@@ -46,9 +46,8 @@ class ESClient:
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
-        bulk_config = config.get("bulk", {})
         self._retrier = TransientElasticsearchRetrier(
-            logger, bulk_config.get("max_retries"), bulk_config.get("retry_timeout")
+            logger, config.get("max_retries"), config.get("retry_timeout")
         )
 
         options = {
@@ -200,8 +199,6 @@ class TransientElasticsearchRetrier:
         self._keep_retrying = False
 
     async def _sleep(self, retry):
-        # TODO: 15 is arbitrary
-        # Default retry time is 15 * SUM(1, 5) = 225 seconds, should be enough as a start
         time_to_sleep = time_to_sleep_between_retries(
             self._retry_strategy, self._retry_timeout, retry
         )
