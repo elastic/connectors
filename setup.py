@@ -8,12 +8,16 @@ import os
 from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
 
+from connectors.logger import logger
 from connectors.utils import ensure_python_3_10_or_higher
 
 try:
     ARCH = os.uname().machine
-except Exception:
+except Exception as e:
     ARCH = "x86_64"
+    logger.info(
+        f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
+    )
 
 ensure_python_3_10_or_higher()
 
