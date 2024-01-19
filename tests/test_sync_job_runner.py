@@ -392,7 +392,9 @@ async def test_async_bulk_error(job_type, sync_cursor, sync_orchestrator_mock):
 
 
 @pytest.mark.asyncio
-async def test_access_control_sync_fails_with_insufficient_license(sync_orchestrator_mock):
+async def test_access_control_sync_fails_with_insufficient_license(
+    sync_orchestrator_mock,
+):
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
@@ -401,7 +403,10 @@ async def test_access_control_sync_fails_with_insufficient_license(sync_orchestr
     }
 
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    sync_orchestrator_mock.has_active_license_enabled.return_value = (False, License.BASIC)
+    sync_orchestrator_mock.has_active_license_enabled.return_value = (
+        False,
+        License.BASIC,
+    )
 
     sync_job_runner = create_runner(job_type=JobType.ACCESS_CONTROL)
     await sync_job_runner.execute()
@@ -705,7 +710,9 @@ async def test_sync_job_runner_canceled(job_type, sync_cursor, sync_orchestrator
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_not_running(job_type, sync_cursor, sync_orchestrator_mock):
+async def test_sync_job_runner_not_running(
+    job_type, sync_cursor, sync_orchestrator_mock
+):
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,

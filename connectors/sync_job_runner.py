@@ -132,7 +132,9 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.sync_orchestrator = SyncOrchestrator(self.es_config, self.sync_job.logger)
+            self.sync_orchestrator = SyncOrchestrator(
+                self.es_config, self.sync_job.logger
+            )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -174,7 +176,9 @@ class SyncJobRunner:
             (
                 is_platinum_license_enabled,
                 license_enabled,
-            ) = await self.sync_orchestrator.has_active_license_enabled(License.PLATINUM)
+            ) = await self.sync_orchestrator.has_active_license_enabled(
+                License.PLATINUM
+            )
 
             if not is_platinum_license_enabled:
                 raise InsufficientESLicenseError(
@@ -227,7 +231,9 @@ class SyncJobRunner:
                 self.sync_job.log_debug("Job reporting task is stopped.")
 
         result = (
-            {} if self.sync_orchestrator is None else self.sync_orchestrator.ingestion_stats()
+            {}
+            if self.sync_orchestrator is None
+            else self.sync_orchestrator.ingestion_stats()
         )
         ingestion_stats = {
             "indexed_document_count": result.get("indexed_document_count", 0),
