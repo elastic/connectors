@@ -85,7 +85,7 @@ class SyncJobRunner:
         self.sync_job = sync_job
         self.connector = connector
         self.es_config = es_config
-        self.elastic_server = None
+        self.sync_orchestrator = None
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
@@ -132,7 +132,7 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.elastic_server = SyncOrchestrator(self.es_config, self.sync_job.logger)
+            self.sync_orchestrator = SyncOrchestrator(self.es_config, self.sync_job.logger)
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -147,10 +147,10 @@ class SyncJobRunner:
                 self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
 
-            while not self.elastic_server.done():
+            while not self.sync_orchestrator.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
-            fetch_error = self.elastic_server.fetch_error()
+            fetch_error = self.sync_orchestrator.fetch_error()
             sync_status = (
                 JobStatus.COMPLETED if fetch_error is None else JobStatus.ERROR
             )
@@ -164,8 +164,8 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
-            if self.elastic_server is not None:
-                await self.elastic_server.close()
+            if self.sync_orchestrator is not None:
+                await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
 
@@ -174,14 +174,14 @@ class SyncJobRunner:
             (
                 is_platinum_license_enabled,
                 license_enabled,
-            ) = await self.elastic_server.has_active_license_enabled(License.PLATINUM)
+            ) = await self.sync_orchestrator.has_active_license_enabled(License.PLATINUM)
 
             if not is_platinum_license_enabled:
                 raise InsufficientESLicenseError(
                     required_license=License.PLATINUM, actual_license=license_enabled
                 )
 
-        await self.elastic_server.async_bulk(
+        await self.sync_orchestrator.async_bulk(
             self.sync_job.index_name,
             self.generator(),
             self.sync_job.pipeline,
@@ -196,7 +196,7 @@ class SyncJobRunner:
 
         logger.debug("Preparing the content index")
 
-        await self.elastic_server.prepare_content_index(
+        await self.sync_orchestrator.prepare_content_index(
             index=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
@@ -205,7 +205,7 @@ class SyncJobRunner:
             or self.sync_job.pipeline["extract_binary_content"]
         )
 
-        await self.elastic_server.async_bulk(
+        await self.sync_orchestrator.async_bulk(
             self.sync_job.index_name,
             self.prepare_docs(),
             self.sync_job.pipeline,
@@ -217,8 +217,8 @@ class SyncJobRunner:
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
-        if self.elastic_server is not None and not self.elastic_server.done():
-            await self.elastic_server.cancel()
+        if self.sync_orchestrator is not None and not self.sync_orchestrator.done():
+            await self.sync_orchestrator.cancel()
         if self.job_reporting_task is not None and not self.job_reporting_task.done():
             self.job_reporting_task.cancel()
             try:
@@ -227,7 +227,7 @@ class SyncJobRunner:
                 self.sync_job.log_debug("Job reporting task is stopped.")
 
         result = (
-            {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
+            {} if self.sync_orchestrator is None else self.sync_orchestrator.ingestion_stats()
         )
         ingestion_stats = {
             "indexed_document_count": result.get("indexed_document_count", 0),
@@ -361,7 +361,7 @@ class SyncJobRunner:
             if not await self.reload_sync_job():
                 break
 
-            result = self.elastic_server.ingestion_stats()
+            result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
                 "indexed_document_count": result.get("indexed_document_count", 0),
                 "indexed_document_volume": result.get("indexed_document_volume", 0),
