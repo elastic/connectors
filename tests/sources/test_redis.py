@@ -6,9 +6,10 @@
 import json
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+import redis
 from freezegun import freeze_time
 
 from connectors.source import ConfigurableFieldValueError
@@ -96,8 +97,13 @@ async def test_ping_positive():
 @pytest.mark.asyncio
 async def test_ping_negative():
     async with create_redis_source() as source:
-        with pytest.raises(Exception):
-            await source.ping()
+        mocked_client = Mock()
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            mocked_client.ping = AsyncMock(
+                side_effect=redis.exceptions.AuthenticationError
+            )
+            with pytest.raises(Exception):
+                await source.ping()
 
 
 @pytest.mark.asyncio
@@ -153,8 +159,13 @@ async def test_get_databases_with_astric():
 async def test_get_databases_negative():
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        async for database in source.client.get_databases():
-            assert database == []
+        mocked_client = Mock()
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            mocked_client.ping = AsyncMock(
+                side_effect=redis.exceptions.AuthenticationError
+            )
+            async for database in source.client.get_databases():
+                assert database == []
 
 
 @pytest.mark.asyncio
