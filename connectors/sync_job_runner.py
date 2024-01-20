@@ -201,7 +201,7 @@ class SyncJobRunner:
             options=bulk_options,
         )
 
-    def _timestamp_optimization_enabled(self, job_type, data_provider):
+    def _skip_unchanged_documents(self, job_type, data_provider):
         """
         Check if timestamp optimization is enabled for the current data source.
         Timestamp optimization can be enabled only for incremental jobs.
@@ -245,7 +245,7 @@ class SyncJobRunner:
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
-            timestamp_optimization=self._timestamp_optimization_enabled(
+            skip_unchanged_documents=self._skip_unchanged_documents(
                 job_type, self.data_provider
             ),
         )
@@ -372,11 +372,11 @@ class SyncJobRunner:
             yield doc, lazy_download, operation
 
     async def generator(self):
-        timestamp_optimization = self._timestamp_optimization_enabled(
+        skip_unchanged_documents = self._skip_unchanged_documents(
             self.sync_job.job_type, self.data_provider
         )
 
-        match [self.sync_job.job_type, timestamp_optimization]:
+        match [self.sync_job.job_type, skip_unchanged_documents]:
             case [JobType.FULL, _]:
                 async for doc, lazy_download in self.data_provider.get_docs(
                     filtering=self.sync_job.filtering

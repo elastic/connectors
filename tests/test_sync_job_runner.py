@@ -17,7 +17,7 @@ from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
     SyncJobRunner,
     SyncJobRunningError,
-    SyncJobStartError
+    SyncJobStartError,
 )
 from tests.commons import AsyncIterator
 
@@ -787,7 +787,7 @@ async def test_sync_job_runner_sets_features_for_data_provider():
     assert sync_job_runner.data_provider.set_features.called
 
 
-def test_timestamp_optimization_enabled():
+def test_skip_unchanged_documents_enabled():
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
@@ -795,7 +795,7 @@ def test_timestamp_optimization_enabled():
             pass
 
     assert (
-        sync_job_runner._timestamp_optimization_enabled(
+        sync_job_runner._skip_unchanged_documents(
             data_provider=MockDataSource(Mock()),
             job_type=JobType.INCREMENTAL,
         )
@@ -803,7 +803,7 @@ def test_timestamp_optimization_enabled():
     )
 
 
-def test_timestamp_optimization_enabled_disabled():
+def test_skip_unchanged_documents_enabled_disabled():
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
@@ -814,7 +814,7 @@ def test_timestamp_optimization_enabled_disabled():
             pass
 
     assert (
-        sync_job_runner._timestamp_optimization_enabled(
+        sync_job_runner._skip_unchanged_documents(
             data_provider=MockDataSource(Mock()),
             job_type=JobType.INCREMENTAL,
         )
@@ -822,7 +822,7 @@ def test_timestamp_optimization_enabled_disabled():
     )
 
 
-def test_timestamp_optimization_enabled_disabled_by_full_sync():
+def test_skip_unchanged_documents_enabled_disabled_by_full_sync():
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
@@ -830,7 +830,7 @@ def test_timestamp_optimization_enabled_disabled_by_full_sync():
             pass
 
     assert (
-        sync_job_runner._timestamp_optimization_enabled(
+        sync_job_runner._skip_unchanged_documents(
             data_provider=MockDataSource(Mock()),
             job_type=JobType.FULL,
         )
@@ -839,11 +839,11 @@ def test_timestamp_optimization_enabled_disabled_by_full_sync():
 
 
 @patch(
-    "connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled",
+    "connectors.sync_job_runner.SyncJobRunner._skip_unchanged_documents",
     Mock(return_value=True),
 )
 @pytest.mark.asyncio
-async def test_incremental_sync_with_timestamp_optimization_generator():
+async def test_incremental_sync_with_skip_unchanged_documents_generator():
     sync_job_runner = create_runner(job_type=JobType.INCREMENTAL)
 
     data_provider = Mock()
@@ -860,11 +860,11 @@ async def test_incremental_sync_with_timestamp_optimization_generator():
 
 
 @patch(
-    "connectors.sync_job_runner.SyncJobRunner._timestamp_optimization_enabled",
+    "connectors.sync_job_runner.SyncJobRunner._skip_unchanged_documents",
     Mock(return_value=False),
 )
 @pytest.mark.asyncio
-async def test_incremental_sync_without_timestamp_optimization_generator():
+async def test_incremental_sync_without_skip_unchanged_documents_generator():
     connector = mock_connector()
     connector.sync_cursor = {}
 

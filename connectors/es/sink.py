@@ -279,7 +279,7 @@ class Extractor:
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
-        timestamp_optimization=False,
+        skip_unchanged_documents=False,
     ):
         if filter_ is None:
             filter_ = Filter()
@@ -301,7 +301,7 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
-        self.timestamp_optimization = timestamp_optimization
+        self.skip_unchanged_documents = skip_unchanged_documents
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
@@ -338,8 +338,8 @@ class Extractor:
                 case JobType.FULL:
                     await self.get_docs(generator)
                 case JobType.INCREMENTAL:
-                    if self.timestamp_optimization:
-                        await self.get_docs(generator, timestamp_optimization=True)
+                    if self.skip_unchanged_documents:
+                        await self.get_docs(generator, skip_unchanged_documents=True)
                     else:
                         await self.get_docs_incrementally(generator)
                 case JobType.ACCESS_CONTROL:
@@ -366,13 +366,13 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator, timestamp_optimization=False):
+    async def get_docs(self, generator, skip_unchanged_documents=False):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
         Extraction happens in a separate task, when a document contains files.
 
         Args:
            generator (generator): BaseDataSource child get_docs or get_docs_incrementally
-           timestamp_optimization (bool): if True, will skip documents that have not changed since last sync
+           skip_unchanged_documents (bool): if True, will skip documents that have not changed since last sync
         """
         generator = self._decorate_with_metrics_span(generator)
         existing_ids = await self._load_existing_docs()
@@ -397,7 +397,7 @@ class Extractor:
                     ts = existing_ids.pop(doc_id)
 
                     if (
-                        timestamp_optimization
+                        skip_unchanged_documents
                         and TIMESTAMP_FIELD in doc
                         and ts == doc[TIMESTAMP_FIELD]
                     ):
@@ -747,7 +747,7 @@ class SyncOrchestrator:
         sync_rules_enabled=False,
         content_extraction_enabled=True,
         options=None,
-        timestamp_optimization=False,
+        skip_unchanged_documents=False,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -792,7 +792,7 @@ class SyncOrchestrator:
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
             logger_=self._logger,
-            timestamp_optimization=timestamp_optimization,
+            skip_unchanged_documents=skip_unchanged_documents,
         )
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
