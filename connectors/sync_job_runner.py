@@ -15,6 +15,7 @@ from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.utils import truncate_id
+from connectors.config import DataSourceFrameworkConfig
 
 UTF_8 = "utf-8"
 
@@ -58,7 +59,6 @@ class ConnectorJobNotRunningError(Exception):
             f"Connector job (ID: {job_id}) is not running but in status of {status}."
         )
 
-
 class SyncJobRunner:
     """The class to run a sync job.
 
@@ -79,12 +79,14 @@ class SyncJobRunner:
         sync_job,
         connector,
         es_config,
+        service_config,
     ):
         self.source_klass = source_klass
         self.data_provider = None
         self.sync_job = sync_job
         self.connector = connector
         self.es_config = es_config
+        self.service_config = service_config
         self.sync_orchestrator = None
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
@@ -112,6 +114,7 @@ class SyncJobRunner:
                 configuration=self.sync_job.configuration
             )
             self.data_provider.set_logger(self.sync_job.logger)
+            self.data_provider.set_framework_config(self._data_source_framework_config())
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
@@ -170,6 +173,11 @@ class SyncJobRunner:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
+
+    def _data_source_framework_config(self):
+        builder = DataSourceFrameworkConfig.Builder()\
+            .with_max_file_size(self.service_config.get("max_file_download_size"))
+        return builder.build()
 
     async def _execute_access_control_sync_job(self, job_type, bulk_options):
         if requires_platinum_license(self.sync_job, self.connector, self.source_klass):
