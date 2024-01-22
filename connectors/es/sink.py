@@ -790,7 +790,7 @@ class SyncOrchestrator:
             "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
         )
         mem_queue_refresh_timeout = options.get("mem_queue", {}).get(
-            "refresh_timeout", 600
+            "refresh_timeout", 60
         )
         mem_queue_refresh_interval = options.get("mem_queue", {}).get(
             "refresh_interval", 1
