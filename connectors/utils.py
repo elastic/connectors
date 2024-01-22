@@ -14,6 +14,7 @@ import re
 import shutil
 import ssl
 import subprocess
+import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -892,3 +893,9 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
+
+
+def ensure_python_3_10_or_higher():
+    if sys.version_info < (3, 10):
+        msg = "Requires Python 3.10 or higher."
+        raise ValueError(msg)
