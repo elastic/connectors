@@ -110,17 +110,22 @@ async def test_ping_negative():
 async def test_validate_config_when_database_type():
     async with create_redis_source() as source:
         source.client.database = ["1", "db123", "123"]
-        source.ping = AsyncMock(return_value=True)
-        with pytest.raises(ConfigurableFieldValueError):
-            await source.validate_config()
+        mocked_client = Mock()
+        mocked_client.validate_database = AsyncMock(return_value=True)
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
         source.client.database = ["123"]
-        with pytest.raises(ConfigurableFieldValueError):
-            await source.validate_config()
+        mocked_client = Mock()
+        mocked_client.validate_database = AsyncMock(return_value=True)
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
