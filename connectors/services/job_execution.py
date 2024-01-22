@@ -85,7 +85,7 @@ class JobExecutionService(BaseService):
             sync_job=sync_job,
             connector=connector,
             es_config=self._override_es_config(connector),
-            service_config=self.service_config
+            service_config=self.service_config,
         )
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
             sync_job.log_debug(

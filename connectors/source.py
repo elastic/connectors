@@ -718,8 +718,9 @@ class BaseDataSource:
         return True
 
     def is_file_size_within_limit(self, file_size, filename):
-        if file_size > self.framework_config.max_file_size and not self.configuration.get(
-            "use_text_extraction_service"
+        if (
+            file_size > self.framework_config.max_file_size
+            and not self.configuration.get("use_text_extraction_service")
         ):
             self._logger.warning(
                 f"File size {file_size} of file {filename} is larger than {self.framework_config.max_file_size} bytes. Discarding file content."

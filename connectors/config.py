@@ -10,7 +10,9 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
-DEFAULT_MAX_FILE_SIZE = 10485760 # 10MB
+DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
+
+
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
     yaml_config = EnvYAML(config_file, flatten=False).export()
@@ -179,6 +181,7 @@ def _merge_dicts(hsh1, hsh2):
         else:
             yield (k, hsh2[k])
 
+
 class DataSourceFrameworkConfig:
     """
     The configs that will be exposed to DataSource instances.
@@ -192,7 +195,6 @@ class DataSourceFrameworkConfig:
         """
         self.max_file_size = max_file_size
 
-
     class Builder:
         def __init__(self):
             self.max_file_size = DEFAULT_MAX_FILE_SIZE
@@ -203,4 +205,3 @@ class DataSourceFrameworkConfig:
 
         def build(self):
             return DataSourceFrameworkConfig(self.max_file_size)
-

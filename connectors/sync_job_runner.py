@@ -8,6 +8,7 @@ import time
 
 import elasticsearch
 
+from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
@@ -15,7 +16,6 @@ from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.utils import truncate_id
-from connectors.config import DataSourceFrameworkConfig
 
 UTF_8 = "utf-8"
 
@@ -58,6 +58,7 @@ class ConnectorJobNotRunningError(Exception):
         super().__init__(
             f"Connector job (ID: {job_id}) is not running but in status of {status}."
         )
+
 
 class SyncJobRunner:
     """The class to run a sync job.
@@ -114,7 +115,9 @@ class SyncJobRunner:
                 configuration=self.sync_job.configuration
             )
             self.data_provider.set_logger(self.sync_job.logger)
-            self.data_provider.set_framework_config(self._data_source_framework_config())
+            self.data_provider.set_framework_config(
+                self._data_source_framework_config()
+            )
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
@@ -175,8 +178,9 @@ class SyncJobRunner:
                 await self.data_provider.close()
 
     def _data_source_framework_config(self):
-        builder = DataSourceFrameworkConfig.Builder()\
-            .with_max_file_size(self.service_config.get("max_file_download_size"))
+        builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
+            self.service_config.get("max_file_download_size")
+        )
         return builder.build()
 
     async def _execute_access_control_sync_job(self, job_type, bulk_options):
