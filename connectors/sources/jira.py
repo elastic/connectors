@@ -131,8 +131,8 @@ class JiraClient:
             )
         elif self.configuration["data_source"] == JIRA_SERVER:
             login, password = (
-                self.configuration["server_username"],
-                self.configuration["server_password"],
+                self.configuration["username"],
+                self.configuration["password"],
             )
         else:
             login, password = (
@@ -318,13 +318,13 @@ class JiraDataSource(BaseDataSource):
                 "type": "str",
                 "value": JIRA_CLOUD,
             },
-            "server_username": {
+            "username": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
                 "label": "Jira Server username",
                 "order": 2,
                 "type": "str",
             },
-            "server_password": {
+            "password": {
                 "depends_on": [{"field": "data_source", "value": JIRA_SERVER}],
                 "label": "Jira Server password",
                 "sensitive": True,

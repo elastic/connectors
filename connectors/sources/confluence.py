@@ -104,8 +104,8 @@ class ConfluenceClient:
             )
         elif self.configuration["data_source"] == CONFLUENCE_SERVER:
             auth = (
-                self.configuration["server_username"],
-                self.configuration["server_password"],
+                self.configuration["username"],
+                self.configuration["password"],
             )
         else:
             auth = (
@@ -250,13 +250,13 @@ class ConfluenceDataSource(BaseDataSource):
                 "type": "str",
                 "value": CONFLUENCE_SERVER,
             },
-            "server_username": {
+            "username": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server username",
                 "order": 2,
                 "type": "str",
             },
-            "server_password": {
+            "password": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_SERVER}],
                 "label": "Confluence Server password",
                 "sensitive": True,

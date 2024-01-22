@@ -372,8 +372,8 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
             # Confluence Server with blank dependent fields
             {
                 "data_source": CONFLUENCE_SERVER,
-                "server_username": "",
-                "server_password": "",
+                "username": "",
+                "password": "",
                 "account_email": "foo@bar.me",
                 "api_token": "foo",
             }
@@ -420,8 +420,8 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
             # Confluence Server with blank non-dependent fields
             {
                 "data_source": CONFLUENCE_SERVER,
-                "server_username": "foo",
-                "server_password": "bar",
+                "username": "foo",
+                "password": "bar",
                 "account_email": "",
                 "api_token": "",
             }
@@ -440,8 +440,8 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
             # Confluence Cloud with blank non-dependent fields
             {
                 "data_source": CONFLUENCE_CLOUD,
-                "server_username": "",
-                "server_password": "",
+                "username": "",
+                "password": "",
                 "account_email": "foo@bar.me",
                 "api_token": "foobar",
             }
@@ -449,8 +449,8 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
         (
             # SSL certificate not enabled (empty ssl_ca okay)
             {
-                "server_username": "foo",
-                "server_password": "bar",
+                "username": "foo",
+                "password": "bar",
                 "ssl_enabled": False,
                 "ssl_ca": "",
             }
@@ -474,8 +474,8 @@ async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_ra
 ):
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_confluence_source() as source:
-            source.configuration.get_field("server_username").value = "foo"
-            source.configuration.get_field("server_password").value = "foo"
+            source.configuration.get_field("username").value = "foo"
+            source.configuration.get_field("password").value = "foo"
             source.configuration.get_field("ssl_enabled").value = True
             source.configuration.get_field(
                 "ssl_ca"
@@ -569,8 +569,8 @@ class MockSSL:
         ("confluence_url", "confluence_cloud"),
         ("account_email", "confluence_cloud"),
         ("api_token", "confluence_cloud"),
-        ("server_username", "confluence_server"),
-        ("server_password", "confluence_server"),
+        ("username", "confluence_server"),
+        ("password", "confluence_server"),
         ("data_center_username", "confluence_data_center"),
         ("data_center_password", "confluence_data_center"),
     ],
