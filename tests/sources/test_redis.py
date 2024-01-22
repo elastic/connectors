@@ -215,6 +215,7 @@ async def test_get_db_records():
         async for record in source.get_db_records(db=0):
             assert record == DOCUMENT[0]
 
+
 @pytest.mark.parametrize(
     "filtering",
     [
@@ -327,4 +328,6 @@ async def test_advanced_rules_validation_for_invalid_db():
             validation_result = await RedisAdvancedRulesValidator(source).validate(
                 [{"database": 0, "key_pattern": "*"}]
             )
-            assert validation_result.validation_message == "Database 0 are not available."
+            assert (
+                validation_result.validation_message == "Database 0 are not available."
+            )
