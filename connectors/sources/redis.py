@@ -253,7 +253,7 @@ class RedisDataSource(BaseDataSource):
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
-    
+
     def advanced_rules_validators(self):
         return [RedisAdvancedRulesValidator(self)]
 
