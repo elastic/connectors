@@ -159,7 +159,6 @@ def test_connector_create(patch_click_confirm):
     input_params = "\n".join(
         [
             "test_connector",
-            "mongodb",
             "en",
             "http://localhost/",
             "username",
@@ -174,7 +173,11 @@ def test_connector_create(patch_click_confirm):
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
-        result = runner.invoke(cli, ["connector", "create"], input=input_params)
+        result = runner.invoke(
+            cli,
+            ["connector", "create", "--service-type", "mongodb"],
+            input=input_params,
+        )
 
         patched_create.assert_called_once()
         assert result.exit_code == 0
@@ -205,7 +208,6 @@ def test_connector_create_with_native_flags(
     input_params = "\n".join(
         [
             input_index_name,
-            "mongodb",
             "en",
             "http://localhost/",
             "username",
@@ -220,7 +222,7 @@ def test_connector_create_with_native_flags(
         "connectors.protocol.connectors.ConnectorIndex.index",
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
-        args = ["connector", "create"]
+        args = ["connector", "create", "--service-type", "mongodb"]
         if native_flag:
             args.append(native_flag)
 
@@ -249,7 +251,6 @@ def test_connector_create_from_index(patch_click_confirm):
     input_params = "\n".join(
         [
             "test-connector",
-            "mongodb",
             "en",
             "http://localhost/",
             "username",
@@ -265,7 +266,9 @@ def test_connector_create_from_index(patch_click_confirm):
         AsyncMock(return_value={"_id": "new_connector_id"}),
     ) as patched_create:
         result = runner.invoke(
-            cli, ["connector", "create", "--from-index"], input=input_params
+            cli,
+            ["connector", "create", "--service-type", "mongodb", "--from-index"],
+            input=input_params,
         )
 
         patched_create.assert_called_once()
@@ -298,7 +301,6 @@ def test_connector_create_fails_when_index_or_connector_exists(
     input_params = "\n".join(
         [
             "test-connector",
-            "mongodb",
             "en",
             "http://localhost/",
             "username",
@@ -317,7 +319,7 @@ def test_connector_create_fails_when_index_or_connector_exists(
             "connectors.protocol.connectors.ConnectorIndex.index",
             AsyncMock(return_value={"_id": "new_connector_id"}),
         ) as patched_create:
-            args = ["connector", "create"]
+            args = ["connector", "create", "--service-type", "mongodb"]
             if from_index_flag:
                 args.append("--from-index")
 
@@ -344,7 +346,6 @@ def test_connector_create_from_file():
     input_params = "\n".join(
         [
             "test-connector",
-            "mongodb",
             "en",
         ]
     )
@@ -370,7 +371,14 @@ def test_connector_create_from_file():
                 )
             result = runner.invoke(
                 cli,
-                ["connector", "create", "--from-file", "mongodb.json"],
+                [
+                    "connector",
+                    "create",
+                    "--from-file",
+                    "mongodb.json",
+                    "--service-type",
+                    "mongodb",
+                ],
                 input=input_params,
             )
 
@@ -397,7 +405,6 @@ def test_connector_create_and_update_the_service_config():
     input_params = "\n".join(
         [
             "test_connector",
-            service_type,
             "en",
             "http://localhost/",
             "username",
@@ -417,7 +424,15 @@ def test_connector_create_and_update_the_service_config():
                 f.write(yaml.dump({}))
 
             result = runner.invoke(
-                cli, ["connector", "create", "--update-config"], input=input_params
+                cli,
+                [
+                    "connector",
+                    "create",
+                    "--service-type",
+                    service_type,
+                    "--update-config",
+                ],
+                input=input_params,
             )
             config = yaml.load(open("config.yml"), Loader=yaml.FullLoader)[
                 "connectors"

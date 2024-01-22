@@ -276,7 +276,7 @@ class SalesforceClient:
         custom_objects = []
 
         for sobject in response.get("sobjects", []):
-            if sobject.get("custom"):
+            if sobject.get("custom") and sobject.get("name")[-3:] == "__c":
                 custom_objects.append(sobject.get("name"))
         return custom_objects
 
