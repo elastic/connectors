@@ -291,7 +291,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "Confluence Cloud API token",
                 "sensitive": True,
                 "order": 7,
-                "type": "s7tr",
+                "type": "str",
             },
             "confluence_url": {
                 "label": "Confluence URL",
