@@ -6,18 +6,24 @@
 import json
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 import redis
 from freezegun import freeze_time
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.redis import (
+    RedisAdvancedRulesValidator,
+    RedisClient,
     RedisDataSource,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+
+ADVANCED_SNIPPET = "advanced_snippet"
 
 DOCUMENT = [
     {
@@ -213,3 +219,116 @@ async def test_get_db_records():
         source.client.get_paginated_key = AsyncIterator(["0"])
         async for record in source.get_db_records(db=0):
             assert record == DOCUMENT[0]
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"database": 0},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19+00:00")
+async def test_get_docs_with_sync_rules(filtering):
+    async with create_redis_source() as source:
+        source.client.database = ["*"]
+        with mock.patch(
+            "redis.from_url",
+            return_value=AsyncMock(),
+        ):
+            source.get_db_records = AsyncIterator(items=DOCUMENT)
+            async for (doc, _) in source.get_docs(filtering):
+                assert doc in DOCUMENT
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom pattern
+            [{"database": 0, "key_pattern": "*"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom patterns
+            [
+                {"database": 0, "key_pattern": "test*"},
+                {"database": 1, "_type": "string"},
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: database number
+            [{"database": -1}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            {"database": ["a/b/c", ""]},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    async with create_redis_source() as source:
+        source.client._client = AsyncMock()
+        with mock.patch.object(
+            RedisClient,
+            "validate_database",
+            return_value=AsyncMock(return_value=True),
+        ):
+            validation_result = await RedisAdvancedRulesValidator(source).validate(
+                advanced_rules
+            )
+            assert validation_result == expected_validation_result
+
+
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_for_invalid_db():
+    async with create_redis_source() as source:
+        mocked_client = Mock()
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            mocked_client.execute_command = AsyncMock(
+                side_effect=redis.exceptions.AuthenticationError
+            )
+            validation_result = await RedisAdvancedRulesValidator(source).validate(
+                [{"database": 0, "key_pattern": "*"}]
+            )
+            assert (
+                validation_result.validation_message == "Database 0 are not available."
+            )
