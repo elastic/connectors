@@ -26,6 +26,7 @@ cp "$CONFIG_PATH" "$script_config"
 echo "copied config from $CONFIG_PATH to $config_dir"
 
 if [[ "$is_example_config" == true ]]; then
+    export CONFIG_FILE="$script_config"
     sed_cmd="sed -i"
     if [[ "$MACHINE_OS" == "MacOS" || "$MACHINE_OS" == "FreeBSD" ]]; then
         sed_cmd="sed -i -e"

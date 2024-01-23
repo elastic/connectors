@@ -74,7 +74,7 @@
                     "order":7,
                     "type": "str",
                     "ui_restrictions": ["advanced"],
-                    "value":"windows"
+                    "value":"linux"
                 },
                 "identity_mappings": {
                     "label": "Path of CSV file containing users and groups SID (For Linux Network Drive)",

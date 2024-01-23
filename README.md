@@ -11,9 +11,9 @@ These connectors are available as:
 - [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) to be self-managed on your own infrastructure
 - [**Native connectors**](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) using our fully managed service on Elastic Cloud
 
-ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-You can get started quickly with Docker, using [these instructions](docs/DOCKER.md).
-We also have an end-to-end tutorial using the [PostgreSQL connector client](https://www.elastic.co/guide/en/enterprise-search/current/postgresql-connector-client-tutorial.html).
+ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) in the official Elastic documentation.
+
+To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
 
 ### Connector documentation
 
@@ -26,6 +26,15 @@ Here are the main pages:
 
 You'll also find the individual references for each connector there.
 For everything to do with _developing_ connectors, you'll find that here in this repo.
+
+#### API documentation
+
+Since 8.12.0, you can manage connectors and sync jobs programmatically using APIs.
+Refer to the [Connector API documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/connector-apis.html) in the Elasticsearch docs.
+
+#### Command-line interface
+
+Learn about our CLI tool in [`docs/CLI.md`](./docs/CLI.md).
 
 ## Connector service code
 
