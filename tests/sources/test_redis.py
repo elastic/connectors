@@ -117,7 +117,7 @@ async def test_validate_config_when_database_type():
     async with create_redis_source() as source:
         source.client.database = ["1", "db123", "123"]
         mocked_client = Mock()
-        mocked_client.client.validate_database = AsyncMock(return_value=True)
+        mocked_client.validate_database = AsyncMock(return_value=True)
         with mock.patch("redis.from_url", return_value=mocked_client):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
@@ -128,7 +128,7 @@ async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
         source.client.database = ["123"]
         mocked_client = Mock()
-        mocked_client.client.validate_database = AsyncMock(return_value=True)
+        mocked_client.validate_database = AsyncMock(return_value=True)
         with mock.patch("redis.from_url", return_value=mocked_client):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
@@ -240,13 +240,9 @@ async def test_get_db_records():
 async def test_get_docs_with_sync_rules(filtering):
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        with mock.patch(
-            "redis.from_url",
-            return_value=AsyncMock(),
-        ):
-            source.get_db_records = AsyncIterator(items=DOCUMENT)
-            async for (doc, _) in source.get_docs(filtering):
-                assert doc in DOCUMENT
+        source.get_db_records = AsyncIterator(items=DOCUMENT)
+        async for (doc, _) in source.get_docs(filtering):
+            assert doc in DOCUMENT
 
 
 @pytest.mark.parametrize(
@@ -306,26 +302,19 @@ async def test_get_docs_with_sync_rules(filtering):
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
     async with create_redis_source() as source:
-        source.client._client = AsyncMock()
-        with mock.patch.object(
-            RedisClient,
-            "validate_database",
-            return_value=AsyncMock(return_value=True),
-        ):
-            validation_result = await RedisAdvancedRulesValidator(source).validate(
-                advanced_rules
-            )
-            assert validation_result == expected_validation_result
+        source.client._client = RedisClientMock()
+        validation_result = await RedisAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
+        assert validation_result == expected_validation_result
 
 
 @pytest.mark.asyncio
 async def test_advanced_rules_validation_for_invalid_db():
     async with create_redis_source() as source:
         mocked_client = Mock()
+        mocked_client.validate_database = AsyncMock(return_value=True)
         with mock.patch("redis.from_url", return_value=mocked_client):
-            mocked_client.execute_command = AsyncMock(
-                side_effect=redis.exceptions.AuthenticationError
-            )
             validation_result = await RedisAdvancedRulesValidator(source).validate(
                 [{"database": 0, "key_pattern": "*"}]
             )
