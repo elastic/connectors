@@ -16,7 +16,6 @@ from connectors.protocol import Filter, JobStatus, JobType, Pipeline
 from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
     SyncJobRunner,
-    UnsupportedJobType,
     SyncJobStartError,
 )
 from tests.commons import AsyncIterator
