@@ -1101,7 +1101,7 @@ async def test_batch_bulk_with_retry():
     ],
 )
 @pytest.mark.asyncio
-async def test_elastic_server_done(
+async def test_sync_orchestrator_done(
     extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
     if extractor_task is not None:
