@@ -116,17 +116,22 @@ async def test_ping_negative():
 async def test_validate_config_when_database_type():
     async with create_redis_source() as source:
         source.client.database = ["1", "db123", "123"]
-        source.ping = AsyncMock(return_value=True)
-        with pytest.raises(ConfigurableFieldValueError):
-            await source.validate_config()
+        mocked_client = Mock()
+        mocked_client.client.validate_database = AsyncMock(return_value=True)
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
 async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
         source.client.database = ["123"]
-        with pytest.raises(ConfigurableFieldValueError):
-            await source.validate_config()
+        mocked_client = Mock()
+        mocked_client.client.validate_database = AsyncMock(return_value=True)
+        with mock.patch("redis.from_url", return_value=mocked_client):
+            with pytest.raises(ConfigurableFieldValueError):
+                await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -300,16 +305,12 @@ async def test_get_docs_with_sync_rules(filtering):
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
-    async def create_fake_coroutine(data):
-        """create a method for returning fake coroutine value"""
-        return data
-
     async with create_redis_source() as source:
         source.client._client = AsyncMock()
         with mock.patch.object(
             RedisClient,
             "validate_database",
-            return_value=await create_fake_coroutine(True),
+            return_value=AsyncMock(return_value=True),
         ):
             validation_result = await RedisAdvancedRulesValidator(source).validate(
                 advanced_rules
