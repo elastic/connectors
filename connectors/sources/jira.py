@@ -100,7 +100,7 @@ class JiraClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
-        self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
+        self.data_source_type = self.configuration["data_source"]
         self.host_url = self.configuration["jira_url"]
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -124,12 +124,12 @@ class JiraClient:
         """
         if self.session:
             return self.session
-        if self.is_cloud:
+        if self.data_source_type == JIRA_CLOUD:
             login, password = (
                 self.configuration["account_email"],
                 self.configuration["api_token"],
             )
-        elif self.configuration["data_source"] == JIRA_SERVER:
+        elif self.data_source_type == JIRA_SERVER:
             login, password = (
                 self.configuration["username"],
                 self.configuration["password"],
@@ -657,7 +657,7 @@ class JiraDataSource(BaseDataSource):
             return
 
         download_url = (
-            ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
+            ATTACHMENT_CLOUD if self.jira_client.data_source_type == JIRA_CLOUD else ATTACHMENT_SERVER
         )
 
         document = {

@@ -72,12 +72,12 @@ class ConfluenceClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
-        self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
+        self.data_source_type = self.configuration["data_source"]
         self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
-        if self.is_cloud:
+        if self.data_source_type == CONFLUENCE_CLOUD:
             self.host_url = os.path.join(self.host_url, "wiki")
 
         if self.ssl_enabled and self.certificate:
@@ -97,12 +97,12 @@ class ConfluenceClient:
         """
         if self.session:
             return self.session
-        if self.is_cloud:
+        if self.data_source_type == CONFLUENCE_CLOUD:
             auth = (
                 self.configuration["account_email"],
                 self.configuration["api_token"],
             )
-        elif self.configuration["data_source"] == CONFLUENCE_SERVER:
+        elif self.data_source_type == CONFLUENCE_SERVER:
             auth = (
                 self.configuration["username"],
                 self.configuration["password"],

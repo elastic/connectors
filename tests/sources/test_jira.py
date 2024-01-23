@@ -446,7 +446,6 @@ async def test_api_call_negative():
         with patch.object(
             aiohttp.ClientSession, "get", side_effect=Exception("Something went wrong")
         ):
-            source.jira_client.is_cloud = False
             with pytest.raises(Exception):
                 await anext(source.jira_client.api_call(url_name="ping"))
 
