@@ -97,13 +97,6 @@ class SyncJobRunner:
             msg = f"Sync job {self.sync_job.id} is already running."
             raise SyncJobRunningError(msg)
 
-        if (
-            self.sync_job.job_type == JobType.INCREMENTAL
-            and not self.connector.features.incremental_sync_enabled()
-        ):
-            msg = f"Connector {self.connector.id} does not support incremental sync."
-            raise SyncJobRunningError(msg)
-
         self.running = True
 
         await self.sync_starts()
@@ -221,6 +214,13 @@ class SyncJobRunner:
         )
 
     async def _execute_content_sync_job(self, job_type, bulk_options):
+        if (
+            self.sync_job.job_type == JobType.INCREMENTAL
+            and not self.connector.features.incremental_sync_enabled()
+        ):
+            msg = f"Connector {self.connector.id} does not support incremental sync."
+            raise UnsupportedJobType(msg)
+
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
         if sync_rules_enabled:
             await self.sync_job.validate_filtering(validator=self.data_provider)
