@@ -201,7 +201,7 @@ async def test_update_by_script():
 
 
 @pytest.mark.asyncio
-async def test_get_all_docs_with_error(mock_responses):
+async def test_get_all_docs_with_error(mock_responses, patch_logger):
     index = FakeIndex(index_name, config)
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
@@ -213,8 +213,12 @@ async def test_get_all_docs_with_error(mock_responses):
         status=500,
     )
 
-    docs = [doc async for doc in index.get_all_docs()]
-    assert len(docs) == 0
+    with pytest.raises(ApiError) as e:
+        [doc async for doc in index.get_all_docs()]
+        assert e.status == 500
+        patch_logger.assert_present(
+            f"Elasticsearch returned 500 for 'GET {index_name}/_search'"
+        )
 
     await index.close()
 

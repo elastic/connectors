@@ -55,6 +55,7 @@ spec:
         everyone:
           access_level: "READ_ONLY"
         ingestion-team: {}
+        search-productivity-team: {}
 
 ############################# Nightly Test Suites #############################
 # Declare daily/nightly tests pipeline
@@ -110,6 +111,7 @@ spec:
         everyone:
           access_level: "READ_ONLY"
         ingestion-team: {}
+        search-productivity-team: {}
 
 
 ############################# Nightly Test Suites #############################
@@ -150,6 +152,7 @@ spec:
         everyone:
           access_level: "READ_ONLY"
         ingestion-team: {}
+        search-productivity-team: {}
 
 ############################# Nightly Test Suites #############################
 ---
@@ -204,3 +207,4 @@ spec:
         everyone:
           access_level: "READ_ONLY"
         ingestion-team: {}
+        search-productivity-team: {}

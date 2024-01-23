@@ -1,0 +1,15 @@
+{
+  "tenant_id": "vault:connectors-sources/sharepoint-online:tenant-id",
+  "tenant_name": "vault:connectors-sources/sharepoint-online:tenant-name",
+  "use_text_extraction_service": false,
+  "fetch_drive_item_permissions": true,
+  "fetch_subsites": true,
+  "client_id": "vault:connectors-sources/sharepoint-online:client-id",
+  "fetch_unique_page_permissions": true,
+  "secret_value": "vault:connectors-sources/sharepoint-online:secret-value",
+  "enumerate_all_sites": false,
+  "fetch_unique_list_item_permissions": true,
+  "fetch_unique_list_permissions": true,
+  "site_collections": "Automatedtesting",
+  "use_document_level_security": false
+}
