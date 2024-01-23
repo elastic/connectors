@@ -657,7 +657,9 @@ class JiraDataSource(BaseDataSource):
             return
 
         download_url = (
-            ATTACHMENT_CLOUD if self.jira_client.data_source_type == JIRA_CLOUD else ATTACHMENT_SERVER
+            ATTACHMENT_CLOUD
+            if self.jira_client.data_source_type == JIRA_CLOUD
+            else ATTACHMENT_SERVER
         )
 
         document = {
