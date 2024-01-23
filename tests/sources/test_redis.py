@@ -17,7 +17,6 @@ from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.redis import (
     RedisAdvancedRulesValidator,
-    RedisClient,
     RedisDataSource,
 )
 from tests.commons import AsyncIterator
