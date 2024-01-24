@@ -893,9 +893,3 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
-
-
-def ensure_python_3_10_or_higher():
-    if sys.version_info < (3, 10):
-        msg = "Requires Python 3.10 or higher."
-        raise ValueError(msg)
