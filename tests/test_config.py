@@ -81,6 +81,7 @@ def test_nest_config_when_root_field_does_exists():
 
     assert config["test"] == 50
 
+
 @mock.patch("connectors.config.logger")
 def test_check_deprecated_fields_when_deprecated_option_is_present(logger_mock):
     deprecated_option = "elasticsearch.bulk.max_retries"
