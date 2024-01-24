@@ -11,7 +11,6 @@ from setuptools._vendor.packaging.markers import Marker
 
 try:
     ARCH = os.uname().machine
-    raise Exception("test")
 except Exception as e:
     ARCH = "x86_64"
     print(
