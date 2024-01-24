@@ -190,6 +190,7 @@ class TransientElasticsearchRetrier:
         self._logger = logger_
         self._sleeps = CancellableSleeps()
         self._keep_retrying = True
+        self._error_codes_to_retry = [429, 500, 502, 503, 504]
         self._max_retries = max_retries
         self._retry_timeout = retry_timeout
         self._retry_strategy = retry_strategy
@@ -223,7 +224,7 @@ class TransientElasticsearchRetrier:
                     f"Attempt {retry}: api error with status {e.status_code}"
                 )
 
-                if e.status_code != 429:
+                if e.status_code not in self._error_codes_to_retry:
                     raise
                 if retry >= self._max_retries:
                     raise
