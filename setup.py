@@ -18,12 +18,9 @@ except Exception as e:
         f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
     )
 
-def ensure_python_3_10_or_higher():
-    if sys.version_info < (3, 10):
-        msg = "Requires Python 3.10 or higher."
-        raise ValueError(msg)
-
-ensure_python_3_10_or_higher()
+if sys.version_info < (3, 10):
+    msg = "Requires Python 3.10 or higher."
+    raise ValueError(msg)
 
 from connectors import __version__  # NOQA
 
