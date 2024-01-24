@@ -328,6 +328,7 @@ class GoogleDriveDataSource(BaseDataSource):
     name = "Google Drive"
     service_type = "google_drive"
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Set up the data source.
