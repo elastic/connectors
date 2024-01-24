@@ -47,7 +47,7 @@ class ESClient:
         )
         self._sleeps = CancellableSleeps()
         self._retrier = TransientElasticsearchRetrier(
-            logger, config.get("max_retries", 5), config.get("retry_timeout", 10)
+            logger, config.get("max_retries", 5), config.get("retry_interval", 10)
         )
 
         options = {
@@ -184,7 +184,7 @@ class TransientElasticsearchRetrier:
         self,
         logger_,
         max_retries,
-        retry_timeout,
+        retry_interval,
         retry_strategy=RetryStrategy.LINEAR_BACKOFF,
     ):
         self._logger = logger_
@@ -192,7 +192,7 @@ class TransientElasticsearchRetrier:
         self._keep_retrying = True
         self._error_codes_to_retry = [429, 500, 502, 503, 504]
         self._max_retries = max_retries
-        self._retry_timeout = retry_timeout
+        self._retry_interval = retry_interval
         self._retry_strategy = retry_strategy
 
     async def close(self):
@@ -201,7 +201,7 @@ class TransientElasticsearchRetrier:
 
     async def _sleep(self, retry):
         time_to_sleep = time_to_sleep_between_retries(
-            self._retry_strategy, self._retry_timeout, retry
+            self._retry_strategy, self._retry_interval, retry
         )
         self._logger.debug(f"Attempt {retry}: sleeping for {time_to_sleep}")
         await self._sleeps.sleep(time_to_sleep)

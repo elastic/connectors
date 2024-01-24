@@ -247,13 +247,13 @@ class TestTransientElasticsearchRetrier:
         return 5
 
     @cached_property
-    def retry_timeout(self):
+    def retry_interval(self):
         return 50
 
     @pytest.mark.asyncio
     async def test_execute_with_retry(self, patch_sleep):
         retrier = TransientElasticsearchRetrier(
-            self.logger_mock, self.max_retries, self.retry_timeout
+            self.logger_mock, self.max_retries, self.retry_interval
         )
 
         async def _func():
@@ -266,7 +266,7 @@ class TestTransientElasticsearchRetrier:
     @pytest.mark.asyncio
     async def test_execute_with_retry_429_with_recovery(self, patch_sleep):
         retrier = TransientElasticsearchRetrier(
-            self.logger_mock, self.max_retries, self.retry_timeout
+            self.logger_mock, self.max_retries, self.retry_interval
         )
 
         # Emulate {nr_failed_requests} failures from Elasticsearch
@@ -293,7 +293,7 @@ class TestTransientElasticsearchRetrier:
     @pytest.mark.asyncio
     async def test_execute_with_retry_429_no_recovery(self, patch_sleep):
         retrier = TransientElasticsearchRetrier(
-            self.logger_mock, self.max_retries, self.retry_timeout
+            self.logger_mock, self.max_retries, self.retry_interval
         )
 
         # Emulate failures from Elasticsearch that we cannot recover from
@@ -312,7 +312,7 @@ class TestTransientElasticsearchRetrier:
     @pytest.mark.asyncio
     async def test_execute_with_retry_connection_timeout(self, patch_sleep):
         retrier = TransientElasticsearchRetrier(
-            self.logger_mock, self.max_retries, self.retry_timeout
+            self.logger_mock, self.max_retries, self.retry_interval
         )
 
         # Emulate failures from Elasticsearch that we cannot recover from
@@ -330,7 +330,7 @@ class TestTransientElasticsearchRetrier:
     @pytest.mark.asyncio
     async def test_execute_with_retry_cancelled_midway(self, patch_sleep):
         retrier = TransientElasticsearchRetrier(
-            self.logger_mock, self.max_retries, self.retry_timeout
+            self.logger_mock, self.max_retries, self.retry_interval
         )
 
         # Emulate failures from Elasticsearch that we cannot recover from

@@ -61,7 +61,7 @@ def _default_config():
                 "concurrent_downloads": 10,
             },
             "max_retries": 5,
-            "retry_timeout": 10,
+            "retry_interval": 10,
             "retry_on_timeout": True,
             "request_timeout": 120,
             "max_wait_duration": 120,
