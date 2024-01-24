@@ -13,7 +13,7 @@ try:
     ARCH = os.uname().machine
 except Exception as e:
     ARCH = "x86_64"
-    print(
+    print(  # noqa: T201
         f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
     )
 
