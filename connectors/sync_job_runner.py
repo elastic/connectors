@@ -14,6 +14,7 @@ from connectors.es.license import requires_platinum_license
 from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
+from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
@@ -193,7 +194,33 @@ class SyncJobRunner:
             options=bulk_options,
         )
 
+    def _skip_unchanged_documents_enabled(self, job_type, data_provider):
+        """
+        Check if timestamp optimization is enabled for the current data source.
+        Timestamp optimization can be enabled only for incremental jobs.
+        """
+        # The job type is not incremental, so we can't use timestamp optimization
+        if job_type != JobType.INCREMENTAL:
+            return False
+
+        # Data provider has to have the method get_docs_incrementally (inherent from BaseDataSource or implemented in a subclass)
+        if not hasattr(data_provider, "get_docs_incrementally"):
+            return False
+
+        # make sure that the data provider is not overriding the default implementation of get_docs_incrementally
+        return (
+            data_provider.get_docs_incrementally.__func__
+            is BaseDataSource.get_docs_incrementally
+        )
+
     async def _execute_content_sync_job(self, job_type, bulk_options):
+        if (
+            self.sync_job.job_type == JobType.INCREMENTAL
+            and not self.connector.features.incremental_sync_enabled()
+        ):
+            msg = f"Connector {self.connector.id} does not support incremental sync."
+            raise UnsupportedJobType(msg)
+
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
         if sync_rules_enabled:
             await self.sync_job.validate_filtering(validator=self.data_provider)
@@ -218,6 +245,9 @@ class SyncJobRunner:
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
+            skip_unchanged_documents=self._skip_unchanged_documents_enabled(
+                job_type, self.data_provider
+            ),
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
@@ -342,19 +372,28 @@ class SyncJobRunner:
             yield doc, lazy_download, operation
 
     async def generator(self):
-        match self.sync_job.job_type:
-            case JobType.FULL:
+        skip_unchanged_documents = self._skip_unchanged_documents_enabled(
+            self.sync_job.job_type, self.data_provider
+        )
+
+        match [self.sync_job.job_type, skip_unchanged_documents]:
+            case [JobType.FULL, _]:
                 async for doc, lazy_download in self.data_provider.get_docs(
                     filtering=self.sync_job.filtering
                 ):
                     yield doc, lazy_download, OP_INDEX
-            case JobType.INCREMENTAL:
+            case [JobType.INCREMENTAL, optimization] if optimization is False:
                 async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
                     yield doc, lazy_download, operation
-            case JobType.ACCESS_CONTROL:
+            case [JobType.INCREMENTAL, optimization] if optimization is True:
+                async for doc, lazy_download in self.data_provider.get_docs(
+                    filtering=self.sync_job.filtering
+                ):
+                    yield doc, lazy_download, OP_INDEX
+            case [JobType.ACCESS_CONTROL, _]:
                 async for doc in self.data_provider.get_access_control():
                     yield doc, None, None
             case _:
