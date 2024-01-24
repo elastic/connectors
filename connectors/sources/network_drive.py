@@ -15,7 +15,7 @@ import fastjsonschema
 import smbclient
 import winrm
 from requests.exceptions import ConnectionError
-from smbprotocol.exceptions import SMBException, SMBOSError
+from smbprotocol.exceptions import SMBConnectionClosed, SMBException, SMBOSError
 from smbprotocol.file_info import (
     InfoType,
 )
@@ -395,6 +395,12 @@ class NASDataSource(BaseDataSource):
             ),
         )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[SMBOSError, SMBException],
+    )
     async def get_files(self, path):
         """Fetches the metadata of the files and folders present on given path
 
@@ -407,6 +413,12 @@ class NASDataSource(BaseDataSource):
             files = await loop.run_in_executor(
                 executor=None, func=partial(smbclient.scandir, path, port=self.port)
             )
+        except SMBConnectionClosed as exception:
+            self._logger.exception(
+                f"Connection got closed. Error {exception}. Registering new session"
+            )
+            await loop.run_in_executor(executor=None, func=self.create_connection)
+            raise
         except (SMBOSError, SMBException) as exception:
             self._logger.exception(
                 f"Error while scanning the path {path}. Error {exception}"
@@ -703,7 +715,7 @@ class NASDataSource(BaseDataSource):
         else:
             matched_paths = (path for path, _, _ in self.get_directory_details)
             groups_info = {}
-            if self.drive_type == WINDOWS:
+            if self.drive_type == WINDOWS and self._dls_enabled():
                 groups_info = await self.fetch_groups_info()
 
             for path in matched_paths:
