@@ -17,6 +17,10 @@ from elasticsearch import (
 )
 
 from connectors import __version__
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_INTERVAL,
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+)
 from connectors.logger import logger, set_extra_logger
 from connectors.utils import (
     CancellableSleeps,
@@ -47,7 +51,9 @@ class ESClient:
         )
         self._sleeps = CancellableSleeps()
         self._retrier = TransientElasticsearchRetrier(
-            logger, config.get("max_retries", 5), config.get("retry_interval", 10)
+            logger,
+            config.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES),
+            config.get("retry_interval", DEFAULT_ELASTICSEARCH_MAX_INTERVAL),
         )
 
         options = {

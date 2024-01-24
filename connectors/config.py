@@ -10,6 +10,9 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
+DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
+DEFAULT_ELASTICSEARCH_MAX_INTERVAL = 10
+
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -19,6 +22,8 @@ def load_config(config_file):
         _nest_configs(nested_yaml_config, key, value)
     configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
+    _check_deprecated_fields(configuration)
+
     return configuration
 
 
@@ -44,6 +49,12 @@ log_level_mappings = {
 }
 
 
+def _deprecated_configs():
+    return [
+        ("elasticsearch.bulk.max_retries", "Use elasticsearch.max_retries instead.")
+    ]
+
+
 def _default_config():
     return {
         "elasticsearch": {
@@ -60,8 +71,8 @@ def _default_config():
                 "chunk_max_mem_size": 5,
                 "concurrent_downloads": 10,
             },
-            "max_retries": 5,
-            "retry_interval": 10,
+            "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+            "retry_interval": DEFAULT_ELASTICSEARCH_MAX_INTERVAL,
             "retry_on_timeout": True,
             "request_timeout": 120,
             "max_wait_duration": 120,
@@ -110,6 +121,25 @@ def _default_config():
             "box": "connectors.sources.box:BoxDataSource",
         },
     }
+
+
+def _check_deprecated_fields(configuration):
+    # We already expect configuration to be re-nested here
+    for config_option, message in _deprecated_configs():
+        field_hierarchy = config_option.split(".")
+        leaf = configuration
+
+        for field in field_hierarchy:
+            if field not in leaf:
+                leaf = None
+                break
+
+            leaf = leaf[field]
+
+        if leaf:
+            logger.warning(
+                f"Configuration option '{config_option}' is deprecated: {message}"
+            )
 
 
 def _ent_search_config(configuration):
