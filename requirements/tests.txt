@@ -12,3 +12,4 @@ freezegun==1.2.2
 pytest-fail-slow==0.3.0
 pyright==1.1.317
 requests==2.31.0
+faker==18.11.2
