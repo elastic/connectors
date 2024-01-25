@@ -13,6 +13,8 @@ from connectors.logger import logger
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_MAX_INTERVAL = 10
 
+DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
+
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -89,6 +91,7 @@ def _default_config():
             "max_errors_span": 600,
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
+            "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
         },
@@ -208,3 +211,28 @@ def _merge_dicts(hsh1, hsh2):
             yield (k, hsh1[k])
         else:
             yield (k, hsh2[k])
+
+
+class DataSourceFrameworkConfig:
+    """
+    The configs that will be exposed to DataSource instances.
+    This abstraction prevents DataSource instances from having access to all configuration, while also
+    preventing them from requiring substantial changes to access new configs that may be added.
+    """
+
+    def __init__(self, max_file_size):
+        """
+        Should not be called directly. Use the Builder.
+        """
+        self.max_file_size = max_file_size
+
+    class Builder:
+        def __init__(self):
+            self.max_file_size = DEFAULT_MAX_FILE_SIZE
+
+        def with_max_file_size(self, max_file_size):
+            self.max_file_size = max_file_size
+            return self
+
+        def build(self):
+            return DataSourceFrameworkConfig(self.max_file_size)

@@ -411,6 +411,7 @@ class ServiceNowDataSource(BaseDataSource):
     name = "ServiceNow"
     service_type = "servicenow"
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the ServiceNow instance.

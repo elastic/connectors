@@ -4,22 +4,22 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
+import sys
 
 from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
-
-from connectors.logger import logger
-from connectors.utils import ensure_python_3_10_or_higher
 
 try:
     ARCH = os.uname().machine
 except Exception as e:
     ARCH = "x86_64"
-    logger.info(
+    print(  # noqa: T201
         f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
     )
 
-ensure_python_3_10_or_higher()
+if sys.version_info < (3, 10):
+    msg = "Requires Python 3.10 or higher."
+    raise ValueError(msg)
 
 from connectors import __version__  # NOQA
 
