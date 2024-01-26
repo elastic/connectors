@@ -71,6 +71,7 @@ def _default_config():
                 "chunk_size": 1000,
                 "max_concurrency": 5,
                 "chunk_max_mem_size": 5,
+                "max_retries": 3,
                 "concurrent_downloads": 10,
             },
             "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
