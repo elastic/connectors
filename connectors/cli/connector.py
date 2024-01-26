@@ -100,11 +100,17 @@ class Connector:
                     index_name, language
                 )
 
-            api_key = await self.__create_api_key(index_name)
+            try:
+                api_key = await self.__create_api_key(index_name)
+                api_key_id = api_key["id"]
+                api_key_encoded = api_key["encoded"]
+            except:
+                api_key_id = None
+                api_key_encoded = None
 
             # TODO features still required
             doc = {
-                "api_key_id": api_key["id"],
+                "api_key_id": api_key_id,
                 "configuration": configuration,
                 "index_name": index_name,
                 "service_type": service_type,
@@ -135,7 +141,7 @@ class Connector:
             }
 
             connector = await self.connector_index.index(doc)
-            return {"id": connector["_id"], "api_key": api_key["encoded"]}
+            return {"id": connector["_id"], "api_key": api_key_encoded}
         finally:
             await self.connector_index.close()
 
