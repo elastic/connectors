@@ -24,7 +24,6 @@ def load_config(config_file):
         _nest_configs(nested_yaml_config, key, value)
     configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
-    _check_deprecated_fields(configuration)
 
     return configuration
 
@@ -49,12 +48,6 @@ log_level_mappings = {
     "fatal": "CRITICAL",
     "unknown": "NOTSET",
 }
-
-
-def _deprecated_configs():
-    return [
-        ("elasticsearch.bulk.max_retries", "Use elasticsearch.max_retries instead.")
-    ]
 
 
 def _default_config():
@@ -125,25 +118,6 @@ def _default_config():
             "box": "connectors.sources.box:BoxDataSource",
         },
     }
-
-
-def _check_deprecated_fields(configuration):
-    # We already expect configuration to be re-nested here
-    for config_option, message in _deprecated_configs():
-        field_hierarchy = config_option.split(".")
-        leaf = configuration
-
-        for field in field_hierarchy:
-            if field not in leaf:
-                leaf = None
-                break
-
-            leaf = leaf[field]
-
-        if leaf:
-            logger.warning(
-                f"Configuration option '{config_option}' is deprecated: {message}"
-            )
 
 
 def _ent_search_config(configuration):

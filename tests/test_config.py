@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from connectors.config import _check_deprecated_fields, _nest_configs, load_config
+from connectors.config import _nest_configs, load_config
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
@@ -80,16 +80,3 @@ def test_nest_config_when_root_field_does_exists():
     _nest_configs(config, "test", 50)
 
     assert config["test"] == 50
-
-
-@mock.patch("connectors.config.logger")
-def test_check_deprecated_fields_when_deprecated_option_is_present(logger_mock):
-    deprecated_option = "elasticsearch.bulk.max_retries"
-    config = {"elasticsearch": {"bulk": {"max_retries": 20}}}
-
-    _check_deprecated_fields(config)
-
-    logger_mock.warning.assert_called()
-    call_args = logger_mock.warning.call_args
-
-    assert deprecated_option in str(call_args[0])
