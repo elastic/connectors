@@ -1051,6 +1051,7 @@ def test_bulk_populate_stats(res, expected_result):
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
     sink._populate_stats(deepcopy(STATS), res)
 
@@ -1076,6 +1077,7 @@ async def test_batch_bulk_with_retry():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     with mock.patch.object(asyncio, "sleep"):
@@ -1189,6 +1191,7 @@ async def test_sink_fetch_doc():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     doc = await sink.fetch_doc()
@@ -1209,6 +1212,7 @@ async def test_force_canceled_sink_fetch_doc():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     sink.force_cancel()
@@ -1229,6 +1233,7 @@ async def test_force_canceled_sink_with_other_errors(patch_logger):
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     sink.force_cancel()
