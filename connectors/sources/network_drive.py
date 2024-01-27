@@ -58,7 +58,6 @@ GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, S
 SECURITY_INFO_DACL = 0x00000004
 
 MAX_CHUNK_SIZE = 65536
-DEFAULT_FILE_SIZE_LIMIT = 10485760
 RETRIES = 3
 RETRY_INTERVAL = 2
 
@@ -476,9 +475,9 @@ class NASDataSource(BaseDataSource):
         ):
             return
 
-        if int(file["size"]) > DEFAULT_FILE_SIZE_LIMIT:
+        if int(file["size"]) > self.framework_config.max_file_size:
             self._logger.warning(
-                f"File size {file['size']} of {file['title']} bytes is larger than {DEFAULT_FILE_SIZE_LIMIT} bytes. Discarding the file content"
+                f"File size {file['size']} of {file['title']} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
             )
             return
 

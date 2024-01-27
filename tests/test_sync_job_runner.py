@@ -99,12 +99,14 @@ def create_runner(
         connector = mock_connector()
 
     es_config = {}
+    service_config = {}
 
     return SyncJobRunner(
         source_klass=source_klass,
         sync_job=sync_job,
         connector=connector,
         es_config=es_config,
+        service_config=service_config,
     )
 
 
