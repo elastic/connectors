@@ -14,7 +14,7 @@ from unittest.mock import ANY, MagicMock
 
 import pytest
 import smbclient
-from smbprotocol.exceptions import LogonFailure, SMBOSError
+from smbprotocol.exceptions import LogonFailure, SMBConnectionClosed, SMBOSError
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -187,6 +187,37 @@ async def test_get_files_with_invalid_path(dir_mock):
         # Execute
         async for file in source.get_files(path=path):
             assert file == []
+
+
+@mock.patch("smbclient.scandir")
+@mock.patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_get_files_retried_on_smb_timeout(dir_mock):
+    """Tests the scandir method of smbclient is retried on SMBConnectionClosed error
+
+    Args:
+        dir_mock (patch): The patch of scandir method
+    """
+    with mock.patch.object(NASDataSource, "create_connection"):
+        async with create_source(NASDataSource) as source:
+            path = "some_path"
+            dir_mock.side_effect = [
+                SMBConnectionClosed,
+                SMBConnectionClosed,
+                [mock_file(name="a1.md")],
+            ]
+
+            expected_output = {
+                "_id": "1",
+                "_timestamp": "2022-04-21T12:12:30",
+                "path": "\\1.2.3.4/dummy_path/a1.md",
+                "title": "a1.md",
+                "created_at": "2022-01-11T12:12:30",
+                "size": "30",
+                "type": "file",
+            }
+            async for file in source.get_files(path=path):
+                assert file == expected_output
 
 
 @pytest.mark.asyncio
