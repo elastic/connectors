@@ -3,8 +3,11 @@ import asyncio
 from elasticsearch import ApiError
 
 from connectors.es.management_client import ESManagementClient
-from connectors.protocol import ConnectorIndex
-
+from connectors.protocol import (
+    CONCRETE_CONNECTORS_INDEX,
+    CONCRETE_JOBS_INDEX,
+    ConnectorIndex,
+)
 
 class Index:
     def __init__(self, config):
@@ -55,6 +58,10 @@ class Index:
 
     async def __index_or_connector_exists(self, index_name):
         try:
+            await self.es_management_client.ensure_exists(
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
+            )
+
             index_exists, connector_doc = await asyncio.gather(
                 self.es_management_client.index_exists(index_name),
                 self.connectors_index.get_connector_by_index(index_name),
