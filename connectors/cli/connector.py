@@ -99,11 +99,15 @@ class Connector:
                 await self.es_management_client.create_content_index(
                     index_name, language
                 )
+
             api_key_id = None
             api_key_encoded = None
             api_key_error = None
             api_key_skipped = False
-            if "api_key" in self.config:
+
+            # Skip creating an API key if the CLI is authenticated with an API key or if the connector is native
+            #
+            if "api_key" in self.config or not is_native:
                 api_key_skipped = True
             else:
                 try:

@@ -61,10 +61,16 @@ def cli(ctx, config):
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option("--host", prompt="Elastic host")
-@click.option("--username", prompt="Username")
-@click.option("--password", prompt="Password", hide_input=True)
-def login(host, username, password):
-    auth = Auth(host, username, password)
+@click.option('--method', prompt="Authentication method", type=click.Choice(['basic', 'apikey']), default='basic')
+def login(host, method):
+    if method == 'basic':
+        username = click.prompt("Username")
+        password = click.prompt("Password", hide_input=True)
+        auth = Auth(host, username, password)
+    else:
+        api_key = click.prompt("API key", hide_input=True)
+        auth = Auth(host, api_key=api_key)
+
     if auth.is_config_present():
         click.confirm(
             click.style(
