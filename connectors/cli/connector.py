@@ -1,6 +1,8 @@
 import asyncio
 from collections import OrderedDict
 
+import click
+
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.protocol import (
@@ -99,14 +101,27 @@ class Connector:
                 await self.es_management_client.create_content_index(
                     index_name, language
                 )
-
-            try:
-                api_key = await self.__create_api_key(index_name)
-                api_key_id = api_key["id"]
-                api_key_encoded = api_key["encoded"]
-            except:
-                api_key_id = None
-                api_key_encoded = None
+            api_key_id = None
+            api_key_encoded = None
+            if "api_key" in self.config:
+                click.echo(
+                    click.style(
+                        "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
+                        fg="yellow",
+                    )
+                )
+            else:
+                try:
+                    api_key = await self.__create_api_key(index_name)
+                    api_key_id = api_key["id"]
+                    api_key_encoded = api_key["encoded"]
+                except Exception as e:
+                    click.echo(
+                        click.style(
+                            f"Could not create a connector-specific API key. Elasticsearch reported the following error {e}",
+                            fg="yellow",
+                        )
+                    )
 
             # TODO features still required
             doc = {
