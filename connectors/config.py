@@ -11,7 +11,7 @@ from envyaml import EnvYAML
 from connectors.logger import logger
 
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
-DEFAULT_ELASTICSEARCH_MAX_INTERVAL = 10
+DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
 
 DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
 
@@ -65,11 +65,11 @@ def _default_config():
                 "max_concurrency": 5,
                 "chunk_max_mem_size": 5,
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
-                "retry_interval": DEFAULT_ELASTICSEARCH_MAX_INTERVAL,
+                "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": 10,
             },
             "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
-            "retry_interval": DEFAULT_ELASTICSEARCH_MAX_INTERVAL,
+            "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
             "retry_on_timeout": True,
             "request_timeout": 120,
             "max_wait_duration": 120,

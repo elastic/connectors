@@ -24,14 +24,16 @@ import logging
 import time
 from collections import defaultdict
 
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
+)
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
-    DEFAULT_BULK_MAX_RETRIES,
-    DEFAULT_BULK_RETRY_INTERVAL,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -783,8 +785,10 @@ class SyncOrchestrator:
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
-        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
-        retry_interval = options.get("retry_interval", DEFAULT_BULK_RETRY_INTERVAL)
+        max_bulk_retries = options.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES)
+        retry_interval = options.get(
+            "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
+        )
 
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
 

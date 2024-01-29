@@ -18,8 +18,8 @@ from elasticsearch import (
 
 from connectors import __version__
 from connectors.config import (
-    DEFAULT_ELASTICSEARCH_MAX_INTERVAL,
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
 from connectors.logger import logger, set_extra_logger
 from connectors.utils import (
@@ -53,7 +53,7 @@ class ESClient:
         self._retrier = TransientElasticsearchRetrier(
             logger,
             config.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES),
-            config.get("retry_interval", DEFAULT_ELASTICSEARCH_MAX_INTERVAL),
+            config.get("retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL),
         )
 
         options = {
