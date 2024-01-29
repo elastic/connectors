@@ -201,7 +201,6 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
             check_db = await self.source.client.validate_database(db=db)
             if not check_db:
                 invalid_db.append(db)
-                continue
         if invalid_db:
             msg = f"Database {','.join(map(str, invalid_db))} are not available."
             return SyncRuleValidationResult(

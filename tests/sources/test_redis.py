@@ -73,6 +73,9 @@ class RedisClientMock:
 
     async def memory_usage(self, key):
         return 10
+    
+    async def scan_iter(self, match, count, _type):
+        yield "0"
 
     async def validate_database(self, db=0):
         await self.execute_command()
@@ -227,7 +230,7 @@ async def test_get_db_records():
             {
                 ADVANCED_SNIPPET: {
                     "value": [
-                        {"database": 0},
+                        {"database": 0, "key_pattern": "0*", "_type": "string"},
                     ]
                 }
             }
@@ -239,7 +242,7 @@ async def test_get_db_records():
 async def test_get_docs_with_sync_rules(filtering):
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        source.get_db_records = AsyncIterator(items=DOCUMENT)
+        source.client._client = RedisClientMock()
         async for (doc, _) in source.get_docs(filtering):
             assert doc in DOCUMENT
 
@@ -296,6 +299,15 @@ async def test_get_docs_with_sync_rules(filtering):
                 validation_message=ANY,
             ),
         ),
+        (
+            # invalid database name
+            {"database": 0, "key_pattern": "abc*"},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
     ],
 )
 @pytest.mark.asyncio
@@ -306,17 +318,3 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
             advanced_rules
         )
         assert validation_result == expected_validation_result
-
-
-@pytest.mark.asyncio
-async def test_advanced_rules_validation_for_invalid_db():
-    async with create_redis_source() as source:
-        mocked_client = Mock()
-        mocked_client.validate_database = AsyncMock(return_value=True)
-        with mock.patch("redis.from_url", return_value=mocked_client):
-            validation_result = await RedisAdvancedRulesValidator(source).validate(
-                [{"database": 0, "key_pattern": "*"}]
-            )
-            assert (
-                validation_result.validation_message == "Database 0 are not available."
-            )
