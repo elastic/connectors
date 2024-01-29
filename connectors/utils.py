@@ -35,8 +35,6 @@ DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
-DEFAULT_BULK_MAX_RETRIES = 5
-DEFAULT_BULK_RETRY_INTERVAL = 10
 
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
