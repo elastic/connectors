@@ -73,7 +73,7 @@ class RedisClientMock:
 
     async def memory_usage(self, key):
         return 10
-    
+
     async def scan_iter(self, match, count, _type):
         yield "0"
 
