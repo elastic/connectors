@@ -25,7 +25,7 @@ async def inject_lines(redis_client, start, lines):
     text = fake_provider.get_text()
     rows = {}
     for row_id in range(lines):
-        key = f"user_{row_id + start}"
+        key = f"user_{row_id}_{start}"
         rows[key] = text
     await redis_client.mset(rows)
 
@@ -46,7 +46,7 @@ async def remove():
         print(f"Working on db {db}...")
         await redis_client.execute_command("SELECT", db)
         keys = [
-            f"user_{row_id}"
+            f"user_{row_id}_{db}"
             for row_id in random.sample(range(1, 100), RECORDS_TO_DELETE)
         ]
         await redis_client.delete(*keys)
