@@ -82,6 +82,14 @@
 #elasticsearch.log_level: INFO
 #
 #
+##  Maximum number of times failed Elasticsearch requests are retried, except bulk requests
+#elasticsearch.max_retries: 5
+#
+#
+##  Retry interval between failed Elasticsearch requests, except bulk requests
+#elasticsearch.retry_interval: 10
+#
+#
 ## ------------------------------- Elasticsearch: Bulk ------------------------
 #
 ##  Options for the Bulk API calls behavior - all options can be
@@ -120,6 +128,12 @@
 #elasticsearch.bulk.concurrent_downloads: 10
 #
 #
+##  Maximum number of times failed bulk requests are retried
+#elasticsearch.bulk.max_retries: 5
+#
+#
+##  Retry interval between failed bulk attempts
+#elasticsearch.bulk.retry_interval: 10
 ## ------------------------------- Service ----------------------------------
 #
 ##  Connector service/framework related configurations
@@ -156,6 +170,10 @@
 ##  The maximum number of concurrent access control syncs.
 #service.max_concurrent_access_control_syncs: 1
 #
+#
+##  The maximum size (in bytes) of files that the framework should be willing
+##    to download and/or process.
+#service.max_file_download_size: 10485760
 #
 ##  The interval (in seconds) to run job cleanup task.
 #service.job_cleanup_interval: 300

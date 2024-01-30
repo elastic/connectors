@@ -16,6 +16,8 @@ import os
 
 import click
 import yaml
+from colorama import Fore, Style
+from simple_term_menu import TerminalMenu
 from tabulate import tabulate
 
 from connectors import __version__  # NOQA
@@ -147,6 +149,19 @@ def validate_language(ctx, param, value):
     return value
 
 
+# override click's default 'choices' prompt with something a bit nicer
+def interactive_service_type_prompt():
+    options = list(_default_config()["sources"].keys())
+    print(f"{Fore.GREEN}?{Style.RESET_ALL} Service type:")  # noqa: T201
+    result = TerminalMenu(
+        options,
+        menu_cursor_style=("fg_green",),
+        clear_menu_on_exit=False,
+        show_search_hint=True,
+    ).show()
+    return options[result]
+
+
 @click.command(help="Creates a new connector and a search index")
 @click.option(
     "--index-name",
@@ -155,8 +170,8 @@ def validate_language(ctx, param, value):
 )
 @click.option(
     "--service-type",
-    prompt=f"{click.style('?', fg='green')} Service type",
-    type=click.Choice(list(_default_config()["sources"].keys()), case_sensitive=False),
+    prompt=False,
+    default=interactive_service_type_prompt,
 )
 @click.option(
     "--index-language",

@@ -24,13 +24,16 @@ import logging
 import time
 from collections import defaultdict
 
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
+)
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
-    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -96,6 +99,7 @@ class Sink:
         chunk_mem_size,
         max_concurrency,
         max_retries,
+        retry_interval,
         logger_=None,
     ):
         self.client = client
@@ -106,6 +110,7 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
+        self.retry_interval = retry_interval
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
@@ -130,7 +135,8 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        @retryable(retries=self.max_retires)
+        # TODO: make this retry policy work with unified retry strategy
+        @retryable(retries=self.max_retires, interval=self.retry_interval)
         async def _bulk_api_call():
             return await self.client.client.bulk(
                 operations=operations, pipeline=self.pipeline["name"]
@@ -143,7 +149,9 @@ class Sink:
             self._logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
-        res = await _bulk_api_call()
+
+        # TODO: retry 429s for individual items here
+        res = await self.client.bulk_insert(operations, self.pipeline["name"])
         if res.get("errors"):
             for item in res["items"]:
                 for op, data in item.items():
@@ -279,6 +287,7 @@ class Extractor:
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
+        skip_unchanged_documents=False,
     ):
         if filter_ is None:
             filter_ = Filter()
@@ -300,6 +309,7 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
+        self.skip_unchanged_documents = skip_unchanged_documents
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
@@ -336,7 +346,10 @@ class Extractor:
                 case JobType.FULL:
                     await self.get_docs(generator)
                 case JobType.INCREMENTAL:
-                    await self.get_docs_incrementally(generator)
+                    if self.skip_unchanged_documents:
+                        await self.get_docs(generator, skip_unchanged_documents=True)
+                    else:
+                        await self.get_docs_incrementally(generator)
                 case JobType.ACCESS_CONTROL:
                     await self.get_access_control_docs(generator)
                 case _:
@@ -361,30 +374,16 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator):
+    async def get_docs(self, generator, skip_unchanged_documents=False):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
-
-        A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
+
+        Args:
+           generator (generator): BaseDataSource child get_docs or get_docs_incrementally
+           skip_unchanged_documents (bool): if True, will skip documents that have not changed since last sync
         """
         generator = self._decorate_with_metrics_span(generator)
-
-        start = time.time()
-        self._logger.info("Collecting local document ids")
-        existing_ids = {
-            k: v
-            async for (k, v) in self.client.yield_existing_documents_metadata(
-                self.index
-            )
-        }
-        self._logger.debug(
-            f"Found {len(existing_ids)} docs in {self.index} (duration "
-            f"{int(time.time() - start)} seconds) "
-        )
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(
-                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
-            )
+        existing_ids = await self._load_existing_docs()
 
         self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
@@ -403,7 +402,24 @@ class Extractor:
 
                 if doc_id in existing_ids:
                     # pop out of existing_ids, so they do not get deleted
-                    existing_ids.pop(doc_id)
+                    ts = existing_ids.pop(doc_id)
+
+                    if (
+                        skip_unchanged_documents
+                        and TIMESTAMP_FIELD in doc
+                        and ts == doc[TIMESTAMP_FIELD]
+                    ):
+                        # cancel the download
+                        if (
+                            self.content_extraction_enabled
+                            and lazy_download is not None
+                        ):
+                            await lazy_download(doit=False)
+
+                        self._logger.debug(
+                            f"Skipping document with id '{doc_id}' because field '{TIMESTAMP_FIELD}' has not changed since last sync"
+                        )
+                        continue
 
                     self.total_docs_updated += 1
                 else:
@@ -437,6 +453,29 @@ class Extractor:
 
         await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc("END_DOCS")
+
+    async def _load_existing_docs(self):
+        start = time.time()
+        self._logger.info("Collecting local document ids")
+
+        existing_ids = {
+            k: v
+            async for (k, v) in self.client.yield_existing_documents_metadata(
+                self.index
+            )
+        }
+
+        self._logger.debug(
+            f"Found {len(existing_ids)} docs in {self.index} (duration "
+            f"{int(time.time() - start)} seconds) "
+        )
+
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(
+                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
+            )
+
+        return existing_ids
 
     async def get_docs_incrementally(self, generator):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
@@ -716,6 +755,7 @@ class SyncOrchestrator:
         sync_rules_enabled=False,
         content_extraction_enabled=True,
         options=None,
+        skip_unchanged_documents=False,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -745,7 +785,10 @@ class SyncOrchestrator:
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
-        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
+        max_bulk_retries = options.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES)
+        retry_interval = options.get(
+            "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
+        )
 
         stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
 
@@ -760,6 +803,7 @@ class SyncOrchestrator:
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
             logger_=self._logger,
+            skip_unchanged_documents=skip_unchanged_documents,
         )
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
@@ -774,6 +818,7 @@ class SyncOrchestrator:
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
             max_retries=max_bulk_retries,
+            retry_interval=retry_interval,
             logger_=self._logger,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

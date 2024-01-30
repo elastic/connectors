@@ -11,13 +11,15 @@ from setuptools._vendor.packaging.markers import Marker
 
 try:
     ARCH = os.uname().machine
-except Exception:
+except Exception as e:
     ARCH = "x86_64"
+    print(  # noqa: T201
+        f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
+    )
 
-if sys.version_info.major != 3:
-    raise ValueError("Requires Python 3")
-if sys.version_info.minor < 10:
-    raise ValueError("Requires Python 3.10 or superior.")
+if sys.version_info < (3, 10):
+    msg = "Requires Python 3.10 or higher."
+    raise ValueError(msg)
 
 from connectors import __version__  # NOQA
 
@@ -100,5 +102,6 @@ setup(
       elastic-ingest = connectors.service_cli:main
       fake-kibana = connectors.kibana:main
       connectors = connectors.connectors_cli:main
+      test-connectors = scripts.testing.cli:main
       """,
 )

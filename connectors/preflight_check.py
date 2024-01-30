@@ -150,10 +150,13 @@ class PreflightCheck:
             logger.warning(
                 "Please update your config.yml to configure at least one connector"
             )
+            logger.info(
+                "Using Kibana or the connectors CLI, create a connector. You will then be provided with the necessary fields (connector_id, service_type, api_key) to add to your config.yml"
+            )
 
         # Unset configuration
         if not configured_native_types and not configured_connectors:
-            logger.error("You must configure at least one connector")
+            logger.error("You must configure at least one connector. ")
             return False
 
         # Default configuration

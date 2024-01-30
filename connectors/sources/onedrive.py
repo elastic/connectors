@@ -429,6 +429,7 @@ class OneDriveDataSource(BaseDataSource):
     service_type = "onedrive"
     advanced_rules_enabled = True
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to OneDrive
