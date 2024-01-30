@@ -102,6 +102,7 @@ class Connector:
             api_key_id = None
             api_key_encoded = None
             api_key_error = None
+            api_key_skipped = False
             if "api_key" in self.config:
                 api_key_skipped = True
             else:
