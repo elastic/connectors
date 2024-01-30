@@ -43,7 +43,7 @@ def es_access_control_query(access_control):
                                 "terms": {
                                     "_allow_access_control.enum": {{#toJson}}access_control{{/toJson}}
                                 }
-                            },
+                            }
                         ]
                     }
                 }""",
