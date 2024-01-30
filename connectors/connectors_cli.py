@@ -301,7 +301,7 @@ def create(
         )
 
     if result["api_key_error"]:
-        click.echo(click.style(result.api_key_error, fg="yellow"))
+        click.echo(click.style(result["api_key_error"], fg="yellow"))
 
     click.echo(
         "Connector (name: "
