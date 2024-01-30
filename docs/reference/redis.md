@@ -31,7 +31,7 @@ The IP of your Redis server/cloud. Example:
 
 where the Redis server/cloud instance is hosted. Example:
 
-- `8000`
+- `6379`
 
 #### `username`  (optional)
 
