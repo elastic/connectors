@@ -106,8 +106,7 @@ class Connector:
             api_key_skipped = False
 
             # Skip creating an API key if the CLI is authenticated with an API key or if the connector is native
-            #
-            if "api_key" in self.config or not is_native:
+            if "api_key" in self.config or is_native:
                 api_key_skipped = True
             else:
                 try:
