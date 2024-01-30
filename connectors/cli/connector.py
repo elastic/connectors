@@ -1,8 +1,6 @@
 import asyncio
 from collections import OrderedDict
 
-import click
-
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.protocol import (
@@ -103,25 +101,16 @@ class Connector:
                 )
             api_key_id = None
             api_key_encoded = None
+            api_key_error = None
             if "api_key" in self.config:
-                click.echo(
-                    click.style(
-                        "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
-                        fg="yellow",
-                    )
-                )
+                api_key_skipped = True
             else:
                 try:
                     api_key = await self.__create_api_key(index_name)
                     api_key_id = api_key["id"]
                     api_key_encoded = api_key["encoded"]
                 except Exception as e:
-                    click.echo(
-                        click.style(
-                            f"Could not create a connector-specific API key. Elasticsearch reported the following error {e}",
-                            fg="yellow",
-                        )
-                    )
+                    api_key_error = f"Could not create a connector-specific API key. Elasticsearch reported the following error {e}"
 
             # TODO features still required
             doc = {
@@ -156,7 +145,12 @@ class Connector:
             }
 
             connector = await self.connector_index.index(doc)
-            return {"id": connector["_id"], "api_key": api_key_encoded}
+            return {
+                "id": connector["_id"],
+                "api_key": api_key_encoded,
+                "api_key_skipped": api_key_skipped,
+                "api_key_error": api_key_error,
+            }
         finally:
             await self.connector_index.close()
 

@@ -292,6 +292,17 @@ def create(
         from_index=from_index,
     )
 
+    if result["api_key_skipped"]:
+        click.echo(
+            click.style(
+                "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
+                fg="yellow",
+            )
+        )
+
+    if result["api_key_error"]:
+        click.echo(click.style(result.api_key_error, fg="yellow"))
+
     click.echo(
         "Connector (name: "
         + click.style(index_name, fg="green")
