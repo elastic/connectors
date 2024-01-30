@@ -5,7 +5,7 @@
 #
 from datetime import datetime
 from unittest import mock
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -120,9 +120,11 @@ class TestESManagementClient:
         description = "that's a pipeline"
         processors = ["something"]
 
-        es_management_client.client.ingest.get_pipeline.side_effect = (
-            ElasticNotFoundError("1", "2", "3")
-        )
+        error_meta = Mock()
+        error_meta.status = 404
+        error = ElasticNotFoundError("1", error_meta, "3")
+
+        es_management_client.client.ingest.get_pipeline.side_effect = error
 
         await es_management_client.ensure_ingest_pipeline_exists(
             pipeline_id, version, description, processors

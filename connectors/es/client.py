@@ -9,6 +9,7 @@ import os
 import time
 from enum import Enum
 
+from elastic_transport import ConnectionTimeout
 from elastic_transport.client_utils import url_to_node_config
 from elasticsearch import ApiError, AsyncElasticsearch, ConflictError
 from elasticsearch import (
@@ -16,8 +17,16 @@ from elasticsearch import (
 )
 
 from connectors import __version__
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
+)
 from connectors.logger import logger, set_extra_logger
-from connectors.utils import CancellableSleeps
+from connectors.utils import (
+    CancellableSleeps,
+    RetryStrategy,
+    time_to_sleep_between_retries,
+)
 
 
 class License(Enum):
@@ -41,6 +50,12 @@ class ESClient:
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
+        self._retrier = TransientElasticsearchRetrier(
+            logger,
+            config.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES),
+            config.get("retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL),
+        )
+
         options = {
             "hosts": [self.host],
             "request_timeout": config.get("request_timeout", 120),
@@ -100,7 +115,9 @@ class ESClient:
             Tuple: (boolean if `license_` is enabled and not expired, actual license Elasticsearch is using)
         """
 
-        license_response = await self.client.license.get()
+        license_response = await self._retrier.execute_with_retry(
+            self.client.license.get
+        )
         license_info = license_response.get("license", {})
         is_expired = license_info.get("status", "").lower() == "expired"
 
@@ -125,22 +142,8 @@ class ESClient:
         )
 
     async def close(self):
+        await self._retrier.close()
         await self.client.close()
-
-    async def ping(self):
-        try:
-            await self.client.info()
-        except ApiError as e:
-            logger.error(f"The server returned a {e.status_code} code")
-            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
-                logger.error(e.info["error"]["reason"])
-            return False
-        except ElasticConnectionError as e:
-            logger.error("Could not connect to the server")
-            if e.message is not None:
-                logger.error(e.message)
-            return False
-        return True
 
     async def wait(self):
         backoff = self.initial_backoff_duration
@@ -161,6 +164,81 @@ class ESClient:
 
         await self.close()
         return False
+
+    async def ping(self):
+        try:
+            await self.client.info()
+        except ApiError as e:
+            logger.error(f"The server returned a {e.status_code} code")
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
+                logger.error(e.info["error"]["reason"])
+            return False
+        except ElasticConnectionError as e:
+            logger.error("Could not connect to the server")
+            if e.message is not None:
+                logger.error(e.message)
+            return False
+        return True
+
+
+class RetryInterruptedError(Exception):
+    pass
+
+
+class TransientElasticsearchRetrier:
+    def __init__(
+        self,
+        logger_,
+        max_retries,
+        retry_interval,
+        retry_strategy=RetryStrategy.LINEAR_BACKOFF,
+    ):
+        self._logger = logger_
+        self._sleeps = CancellableSleeps()
+        self._keep_retrying = True
+        self._error_codes_to_retry = [429, 500, 502, 503, 504]
+        self._max_retries = max_retries
+        self._retry_interval = retry_interval
+        self._retry_strategy = retry_strategy
+
+    async def close(self):
+        self._sleeps.cancel()
+        self._keep_retrying = False
+
+    async def _sleep(self, retry):
+        time_to_sleep = time_to_sleep_between_retries(
+            self._retry_strategy, self._retry_interval, retry
+        )
+        self._logger.debug(f"Attempt {retry}: sleeping for {time_to_sleep}")
+        await self._sleeps.sleep(time_to_sleep)
+
+    async def execute_with_retry(self, func):
+        retry = 0
+        while self._keep_retrying and retry < self._max_retries:
+            retry += 1
+            try:
+                result = await func()
+
+                return result
+            except ConnectionTimeout:
+                self._logger.debug(f"Attempt {retry}: connection timeout")
+
+                if retry >= self._max_retries:
+                    raise
+            except ApiError as e:
+                self._logger.debug(
+                    f"Attempt {retry}: api error with status {e.status_code}"
+                )
+
+                if e.status_code not in self._error_codes_to_retry:
+                    raise
+                if retry >= self._max_retries:
+                    raise
+
+            await self._sleep(retry)
+
+        msg = "Retry operation was interrupted"
+        raise RetryInterruptedError(msg)
 
 
 def with_concurrency_control(retries=3):
