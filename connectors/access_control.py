@@ -46,7 +46,7 @@ def es_access_control_query(access_control):
                             },
                         ]
                     }
-                }"""
+                }""",
             }
         }
     }
