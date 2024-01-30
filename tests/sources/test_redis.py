@@ -308,6 +308,15 @@ async def test_get_docs_with_sync_rules(filtering):
                 validation_message=ANY,
             ),
         ),
+        (
+            # invalid: key_pattern or _type is missing
+            {"database": 0},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
     ],
 )
 @pytest.mark.asyncio

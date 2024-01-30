@@ -47,7 +47,7 @@ Password for your Redis server/cloud. Example:
 
 #### `database`  (required)
 
-List of database indices for your Redis server/cloud. * will fetch data from all databases. Example:
+List of database index for your Redis server/cloud. * will fetch data from all databases. Example:
 
 - `0,1,2`
 - `*`
@@ -59,7 +59,7 @@ List of database indices for your Redis server/cloud. * will fetch data from all
 ## Documents and syncs
 
 The connector syncs the following objects and entities:
-- KEYS and VALUES of every database indices
+- KEYS and VALUES of every database index
 
 
 *NOTE*:
@@ -71,7 +71,105 @@ The connector syncs the following objects and entities:
 
 ## Advanced Sync Rules
 
-Advanced sync rules are not available for this connector in the present version.
+Advanced sync rules are defined through a source-specific DSL JSON snippet.
+
+Use advanced sync rules to filter data to be fetched from Redis server/cloud. They take the following parameters:
+
+1. `database`: Database index of Redis server/cloud. The type of value should be integer.
+2. `key_pattern`: Pattern of the key for searching in Redis server/cloud
+3. `_type`: Type of key in Redis server/cloud. Supported values are HASH, LIST, SET, STREAM, STRING, ZSET
+
+*NOTE*:
+
+- `key_pattern` or `_type` is not required but any one of them is required to pass.
+
+### Advanced sync rules examples
+
+#### Fetch database records with keys starting with alpha.
+
+```json
+[
+  {
+    "database": 0,
+    "key_pattern": "alpha*"
+  }
+]
+
+
+```
+
+#### Fetch database records with exact match by specifying the full key name.
+
+```json
+[
+  {
+    "database": 0,
+    "key_pattern": "alpha"
+  }
+]
+
+
+```
+
+#### Fetch database records by specifying a character range inside square brackets to match any single character within that range.
+
+```json
+[
+  {
+    "database": 0,
+    "key_pattern": "test[123]"
+  }
+]
+
+```
+
+#### Fetch database records by specifying a character range inside square brackets to exclude characters from the match.
+
+```json
+[
+  {
+    "database": 0,
+    "key_pattern": "test[^123]"
+  }
+]
+```
+
+#### Fetch all database records.
+
+```json
+[
+  {
+    "database": 0,
+    "key_pattern": "*"
+  }
+]
+
+```
+
+#### Fetch all database records having redis type SET.
+
+```json
+[
+  {
+    "database": 0,
+    "key_pattern": "*",
+    "_type": "SET"
+  }
+]
+
+```
+
+#### Fetch records having redis type SET.
+
+```json
+[
+  {
+    "database": 0,
+    "_type": "SET"
+  }
+]
+
+```
 
 ## Connector Client operations
 
@@ -85,7 +183,7 @@ To perform E2E testing for Redis server/cloud connector, run the following comma
 $ make ftest NAME=redis
 ```
 
-ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `MEDIUM`.
+ℹ️ Users can generate the performance report using an argument i.e. `PERF8=yes`. Users can also mention the size of the data to be tested for E2E test amongst SMALL, MEDIUM and LARGE by setting up an argument `DATA_SIZE=SMALL`. By Default, it is set to `SMALL`.
 
 ℹ️ Users do not need to have a running Elasticsearch instance or a Redis server/cloud source to run this test. The docker compose file manages the complete setup of the development environment, i.e. both the mock Elastic instance and mock Redis server/cloud source using the docker image.
 
