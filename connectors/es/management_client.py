@@ -50,10 +50,8 @@ class ESManagementClient(ESClient):
                 logger.debug(f"Created index {index}")
 
     async def create_content_index(self, search_index_name, language_code):
-        settings = Settings(language_code=language_code,
-                            analysis_icu=False).to_hash()
-        mappings = Mappings.default_text_fields_mappings(
-            is_connectors_index=True)
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
         return await self._retrier.execute_with_retry(
             partial(
@@ -83,16 +81,15 @@ class ESManagementClient(ESClient):
                             self.client.indices.put_mapping,
                             index=index,
                             dynamic=mappings.get("dynamic", False),
-                            dynamic_templates=mappings.get(
-                                "dynamic_templates", []),
+                            dynamic_templates=mappings.get("dynamic_templates", []),
                             properties=mappings.get("properties", {}),
                         )
                     )
-                    logger.debug(
-                        "Successfully added mappings for index %s", index)
+                    logger.debug("Successfully added mappings for index %s", index)
                 except Exception as e:
                     logger.warning(
-                        f"Could not create mappings for index {index}, encountered error {e}")
+                        f"Could not create mappings for index {index}, encountered error {e}"
+                    )
             else:
                 logger.debug(
                     "Index %s has no mappings but no mappings are provided, skipping mappings creation"
@@ -122,8 +119,7 @@ class ESManagementClient(ESClient):
 
     async def delete_indices(self, indices):
         await self._retrier.execute_with_retry(
-            partial(self.client.indices.delete,
-                    index=indices, ignore_unavailable=True)
+            partial(self.client.indices.delete, index=indices, ignore_unavailable=True)
         )
 
     async def clean_index(self, index_name):
