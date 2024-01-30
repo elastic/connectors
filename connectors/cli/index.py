@@ -9,6 +9,7 @@ from connectors.protocol import (
     ConnectorIndex,
 )
 
+
 class Index:
     def __init__(self, config):
         self.elastic_config = config

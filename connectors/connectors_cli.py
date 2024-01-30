@@ -61,9 +61,9 @@ def cli(ctx, config):
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option("--host", prompt="Elastic host")
-@click.option('--method', prompt="Authentication method", type=click.Choice(['basic', 'apikey']), default='basic')
+@click.option("--method", type=click.Choice(["basic", "apikey"]), default="basic")
 def login(host, method):
-    if method == 'basic':
+    if method == "basic":
         username = click.prompt("Username")
         password = click.prompt("Password", hide_input=True)
         auth = Auth(host, username, password)
@@ -332,7 +332,7 @@ def create(
         + ", service_type: "
         + click.style(service_type, fg="green")
         + ", api_key: "
-        + click.style(result["api_key"], fg="green")
+        + click.style(result.get("api_key"), fg="green")
         + ") has been created!"
     )
 
@@ -351,7 +351,7 @@ def create(
                 {
                     "connector_id": result["id"],
                     "service_type": service_type,
-                    "api_key": result["api_key"],
+                    "api_key": result.get("api_key"),
                 }
             )
 
@@ -592,7 +592,7 @@ def view_job(obj, job_id, output_format):
         "index_name": job.index_name,
         "job_status": job.status.value,
         "job_type": job.job_type.value,
-        "documents_index,ed": job.indexed_document_count,
+        "documents_indexed": job.indexed_document_count,
         "volume_documents_indexed": job.indexed_document_volume,
         "documents_deleted": job.deleted_document_count,
     }
