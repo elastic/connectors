@@ -169,7 +169,7 @@ spec:
       description: "Connectors Service Nightly Dockers"
       links:
         - title: "Connector Service Nightly Pipeline"
-          url: "https://buildkite.com/elastic/connectors-nightly"
+          url: "https://buildkite.com/elastic/connectors-nightly-dockers"
     spec:
       pipeline_file: ".buildkite/nightly_docker.yml"
       provider_settings:
