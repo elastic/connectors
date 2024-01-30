@@ -5,6 +5,26 @@
 #
 
 ACCESS_CONTROL = "_allow_access_control"
+DLS_QUERY = """{
+                    "bool": {
+                        "should": [
+                            {
+                                "bool": {
+                                    "must_not": {
+                                        "exists": {
+                                            "field": "_allow_access_control"
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "terms": {
+                                    "_allow_access_control.enum": {{#toJson}}access_control{{/toJson}}
+                                }
+                            }
+                        ]
+                    }
+                }"""
 
 
 def prefix_identity(prefix, identity):
@@ -27,26 +47,7 @@ def es_access_control_query(access_control):
         "query": {
             "template": {
                 "params": {"access_control": filtered_access_control},
-                "source": """{
-                    "bool": {
-                        "should": [
-                            {
-                                "bool": {
-                                    "must_not": {
-                                        "exists": {
-                                            "field": "_allow_access_control"
-                                        }
-                                    }
-                                }
-                            },
-                            {
-                                "terms": {
-                                    "_allow_access_control.enum": {{#toJson}}access_control{{/toJson}}
-                                }
-                            }
-                        ]
-                    }
-                }""",
+                "source": DLS_QUERY,
             }
         }
     }

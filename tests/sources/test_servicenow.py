@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
 
+from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -817,27 +818,9 @@ async def test_get_access_control():
                         "username:demo.user",
                         "email:admin@email.com",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "user_id:id_1",
-                                            "username:demo.user",
-                                            "email:admin@email.com",
-                                        ]
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            },
+                },
+                "source": DLS_QUERY,
+            }
         },
     }
     async with create_service_now_source() as source:
