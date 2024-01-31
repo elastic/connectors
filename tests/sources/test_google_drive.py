@@ -1456,22 +1456,7 @@ async def test_prepare_access_control_doc(user, groups, access_control_doc):
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 result = await source.prepare_single_access_control_document(user=user)
-
-                # mustache templates are hard to verify, so let's strip the mustache
-                filtered_input_source = " ".join(
-                    access_control_doc["query"]["template"]["source"]
-                    .replace("{{toJson}}access_control{{/toJson}}", "[]")
-                    .split()
-                )
-                filtered_output_source = " ".join(
-                    result["query"]["template"]["source"]
-                    .replace("{{toJson}}access_control{{/toJson}}", "[]")
-                    .split()
-                )
-
-                assert access_control_doc["_id"] == result["_id"]
-                assert access_control_doc["identity"] == result["identity"]
-                assert filtered_input_source == filtered_output_source
+                assert access_control_doc == result
 
 
 @pytest.mark.parametrize(
@@ -1540,22 +1525,7 @@ async def test_prepare_access_control_documents(
                 result = await anext(
                     source.prepare_access_control_documents(users_page=users_page)
                 )
-
-                # mustache templates are hard to verify, so let's strip the mustache
-                filtered_input_source = " ".join(
-                    access_control_docs[0]["query"]["template"]["source"]
-                    .replace("{{toJson}}access_control{{/toJson}}", "[]")
-                    .split()
-                )
-                filtered_output_source = " ".join(
-                    result["query"]["template"]["source"]
-                    .replace("{{toJson}}access_control{{/toJson}}", "[]")
-                    .split()
-                )
-
-                assert access_control_docs[0]["_id"] == result["_id"]
-                assert access_control_docs[0]["identity"] == result["identity"]
-                assert filtered_input_source == filtered_output_source
+                assert access_control_docs[0] == result
 
 
 @pytest.mark.asyncio
