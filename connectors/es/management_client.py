@@ -75,16 +75,21 @@ class ESManagementClient(ESClient):
                 logger.debug(
                     "Index %s has no mappings or it's empty. Adding mappings...", index
                 )
-                await self._retrier.execute_with_retry(
-                    partial(
-                        self.client.indices.put_mapping,
-                        index=index,
-                        dynamic=mappings.get("dynamic", False),
-                        dynamic_templates=mappings.get("dynamic_templates", []),
-                        properties=mappings.get("properties", {}),
+                try:
+                    await self._retrier.execute_with_retry(
+                        partial(
+                            self.client.indices.put_mapping,
+                            index=index,
+                            dynamic=mappings.get("dynamic", False),
+                            dynamic_templates=mappings.get("dynamic_templates", []),
+                            properties=mappings.get("properties", {}),
+                        )
                     )
-                )
-                logger.debug("Successfully added mappings for index %s", index)
+                    logger.debug("Successfully added mappings for index %s", index)
+                except Exception as e:
+                    logger.warning(
+                        f"Could not create mappings for index {index}, encountered error {e}"
+                    )
             else:
                 logger.debug(
                     "Index %s has no mappings but no mappings are provided, skipping mappings creation"
