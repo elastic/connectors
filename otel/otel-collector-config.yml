@@ -1,0 +1,30 @@
+# /tmp/otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+exporters:
+  logging:
+    loglevel: debug
+  otlp/elastic:
+    # Elastic APM server https endpoint without the "https://" prefix
+    endpoint: "apm-endpoint"
+    headers:
+      # Elastic APM Server secret token
+      Authorization: "some token"
+processors:
+  batch:
+service:
+  pipelines:
+    traces:
+        receivers: [ otlp ]
+        exporters: [ logging, otlp/elastic ]
+    metrics:
+        receivers: [ otlp ]
+        exporters: [ logging, otlp/elastic ]
+    logs:
+        receivers: [ otlp ]
+        exporters: [ logging, otlp/elastic ]

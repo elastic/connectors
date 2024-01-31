@@ -28,6 +28,8 @@ from connectors.source import get_source_klass, get_source_klasses
 
 __all__ = ["main"]
 
+from connectors.telemetry.setup import Telemetry
+
 
 def _parser():
     """Parses command-line arguments using ArgumentParser and returns it"""
@@ -104,6 +106,11 @@ async def _start_service(actions, config, loop):
     - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
+
+    # initialize telemetry
+    telemetry = Telemetry(loop)
+    telemetry.start()
+
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))

@@ -23,6 +23,7 @@ export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
+export CONNECTOR_UNDER_FTEST=${NAME}
 export VERSION='8.11.0-SNAPSHOT'
 
 if [ "$PERF8_TRACE" == true ]; then
