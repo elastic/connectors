@@ -375,6 +375,7 @@ async def test_run_when_connector_fields_are_invalid(
 
     connector.error.assert_awaited_with(actual_error)
 
+
 @pytest.mark.asyncio
 @patch("connectors.services.job_scheduling.get_source_klass")
 async def test_run_when_connector_ping_fails(
