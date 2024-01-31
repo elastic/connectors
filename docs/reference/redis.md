@@ -77,11 +77,11 @@ Use advanced sync rules to filter data to be fetched from Redis server/cloud. Th
 
 1. `database`: Database index of Redis server/cloud. The type of value should be integer.
 2. `key_pattern`: Pattern of the key for searching in Redis server/cloud
-3. `_type`: Type of key in Redis server/cloud. Supported values are HASH, LIST, SET, STREAM, STRING, ZSET
+3. `type_`: Type of key in Redis server/cloud. Supported values are HASH, LIST, SET, STREAM, STRING, ZSET
 
 *NOTE*:
 
-- `key_pattern` or `_type` is not required but any one of them is required to pass.
+- Either `key_pattern` or `type_` must be provided, but it is not necessary to include both. However, at least one of them must be present to proceed.
 
 ### Advanced sync rules examples
 
@@ -153,7 +153,7 @@ Use advanced sync rules to filter data to be fetched from Redis server/cloud. Th
   {
     "database": 0,
     "key_pattern": "*",
-    "_type": "SET"
+    "type_": "SET"
   }
 ]
 
@@ -165,7 +165,7 @@ Use advanced sync rules to filter data to be fetched from Redis server/cloud. Th
 [
   {
     "database": 0,
-    "_type": "SET"
+    "type_": "SET"
   }
 ]
 

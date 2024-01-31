@@ -230,7 +230,7 @@ async def test_get_db_records():
             {
                 ADVANCED_SNIPPET: {
                     "value": [
-                        {"database": 0, "key_pattern": "0*", "_type": "string"},
+                        {"database": 0, "key_pattern": "0*", "type_": "string"},
                     ]
                 }
             }
@@ -242,7 +242,12 @@ async def test_get_db_records():
 async def test_get_docs_with_sync_rules(filtering):
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        source.client._client = RedisClientMock()
+        source.client._client = Mock()
+        source.client._client.scan_iter = AsyncIterator(["0"])
+        source.client._client.execute_command = AsyncMock(return_value=True)
+        source.client._client.type = AsyncMock(return_value="string")
+        source.client._client.get = AsyncMock(return_value="this is value")
+        source.client._client.memory_usage = AsyncMock(return_value=10)
         async for (doc, _) in source.get_docs(filtering):
             assert doc in DOCUMENT
 
@@ -275,7 +280,7 @@ async def test_get_docs_with_sync_rules(filtering):
             # valid: two custom patterns
             [
                 {"database": 0, "key_pattern": "test*"},
-                {"database": 1, "_type": "string"},
+                {"database": 1, "type_": "string"},
             ],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -309,7 +314,7 @@ async def test_get_docs_with_sync_rules(filtering):
             ),
         ),
         (
-            # invalid: key_pattern or _type is missing
+            # invalid: key_pattern or type_ is missing
             {"database": 0},
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,

@@ -87,20 +87,20 @@ class RedisClient:
                     exc_info=True,
                 )
 
-    async def get_paginated_key(self, db, pattern, _type=None):
+    async def get_paginated_key(self, db, pattern, type_=None):
         """Make a paginated call for fetching database keys.
 
         Args:
             db: Index of database
             pattern: keyname or pattern
-            _type: Datatype for filter data
+            type_: Datatype for filter data
 
         Yields:
             string: key in database
         """
         await self._client.execute_command("SELECT", db)
         async for key in self._client.scan_iter(
-            match=pattern, count=PAGE_SIZE, _type=_type
+            match=pattern, count=PAGE_SIZE, _type=type_
         ):
             yield key
 
@@ -159,7 +159,7 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "database": {"type": "integer", "minLength": 1, "minimum": 0},
             "key_pattern": {"type": "string", "minLength": 1},
-            "_type": {
+            "type_": {
                 "type": "string",
                 "minLength": 1,
             },
@@ -167,7 +167,7 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
         "required": ["database"],
         "anyOf": [
             {"required": ["key_pattern"]},
-            {"required": ["_type"]},
+            {"required": ["type_"]},
         ],
         "additionalProperties": False,
     }
@@ -317,9 +317,9 @@ class RedisDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Redis.")
             raise
 
-    async def get_db_records(self, db, pattern="*", _type=None):
+    async def get_db_records(self, db, pattern="*", type_=None):
         async for key in self.client.get_paginated_key(
-            db=db, pattern=pattern, _type=_type
+            db=db, pattern=pattern, type_=type_
         ):
             key_type, key_value, key_size = await self.client.get_key_metadata(key=key)
             yield await self.format_document(
@@ -344,7 +344,7 @@ class RedisDataSource(BaseDataSource):
                 async for document in self.get_db_records(
                     db=rule.get("database"),
                     pattern=rule.get("key_pattern"),
-                    _type=rule.get("_type"),
+                    type_=rule.get("type_"),
                 ):
                     yield document, None
         else:
