@@ -84,6 +84,24 @@ def test_login_successful(tmp_path):
         assert os.path.isfile(os.path.join(temp_dir, CONFIG_FILE_PATH))
 
 
+@patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
+def test_login_successful_with_apikey_method(tmp_path):
+    runner = CliRunner()
+    api_key = "testapikey"
+    with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
+        filename = os.path.join(temp_dir, CONFIG_FILE_PATH)
+        result = runner.invoke(
+            login, ["--method", "apikey"], input=f"http://localhost:9200/\n{api_key}\n"
+        )
+        assert result.exit_code == 0
+        assert "Authentication successful" in result.output
+        assert os.path.isfile(filename)
+
+        with open(CONFIG_FILE_PATH, "r") as f:
+            config = yaml.safe_load(f.read())
+            assert config["elasticsearch"]["api_key"] == api_key
+
+
 @patch("click.confirm")
 def test_login_when_credentials_file_exists(mocked_confirm, tmp_path):
     runner = CliRunner()
@@ -434,6 +452,7 @@ def test_connector_create_and_update_the_service_config():
                 ],
                 input=input_params,
             )
+
             config = yaml.load(open("config.yml"), Loader=yaml.FullLoader)[
                 "connectors"
             ][0]
@@ -443,7 +462,62 @@ def test_connector_create_and_update_the_service_config():
             assert config["api_key"] == "encoded_api_key"
             assert config["connector_id"] == connector_id
             assert config["service_type"] == service_type
+
             assert result.exit_code == 0
+            assert "has been created" in result.output
+
+
+@patch("click.confirm")
+@patch(
+    "connectors.cli.index.Index.index_or_connector_exists",
+    MagicMock(return_value=[True, False]),
+)
+def test_connector_create_native_connector(patched_confirm):
+    runner = CliRunner()
+
+    # configuration for the MongoDB connector
+    input_params = "\n".join(
+        [
+            "test-connector",
+            "en",
+            "http://localhost/",
+            "username",
+            "password",
+            "database",
+            "collection",
+            "False",
+        ]
+    )
+
+    with patch(
+        "connectors.cli.connector.Connector._Connector__create_api_key", AsyncMock()
+    ) as patched_create_api_key:
+        with patch(
+            "connectors.protocol.connectors.ConnectorIndex.index",
+            AsyncMock(return_value={"_id": "new_connector_id"}),
+        ) as patched_create:
+            result = runner.invoke(
+                cli,
+                [
+                    "connector",
+                    "create",
+                    "--service-type",
+                    "mongodb",
+                    "--from-index",
+                    "--native",
+                ],
+                input=input_params,
+            )
+
+            patched_create.assert_called_once()
+
+            call_args = patched_create.call_args[0][0]
+            assert call_args["is_native"] is True
+            assert call_args["api_key_id"] is None
+
+            patched_create_api_key.assert_not_called()
+            assert result.exit_code == 0
+
             assert "has been created" in result.output
 
 
