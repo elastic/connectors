@@ -9,9 +9,11 @@ Salesforce connector DLS supports for both standard & custom objects.
 
 Refer to [document level security](https://www.elastic.co/guide/en/enterprise-search/master/dls.html) for more information.
 
-Salesforce allows users to set permissions in different ways i.e. via Profiles, Permission sets and Permission set Groups. 
+Salesforce allows users to set permissions in different ways i.e. via Profiles, Permission sets and Permission set Groups.
 
 Refer this tutorial to get more idea on setting the permissions - [link](https://howtovideos.hubs.vidyard.com/watch/B1bQnMFg2VyZq7V6zXQjPg#:~:text=This%20is%20a%20must%20watch,records%20in%20your%20Salesforce%20organization.)
+
+To ingest any standard or custom objects, users must ensure that at least `Read` permission is granted to that object through any of the following methods for setting permissions.
 
 ### Set Permissions using Profiles
 
