@@ -61,6 +61,7 @@ END_SIGNAL = "FINISHED_TASK"
 
 CONFLUENCE_CLOUD = "confluence_cloud"
 CONFLUENCE_SERVER = "confluence_server"
+CONFLUENCE_DATA_CENTER = "confluence_data_center"
 WILDCARD = "*"
 
 
@@ -71,12 +72,12 @@ class ConfluenceClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
-        self.is_cloud = self.configuration["data_source"] == CONFLUENCE_CLOUD
+        self.data_source_type = self.configuration["data_source"]
         self.host_url = self.configuration["confluence_url"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
-        if self.is_cloud:
+        if self.data_source_type == CONFLUENCE_CLOUD:
             self.host_url = os.path.join(self.host_url, "wiki")
 
         if self.ssl_enabled and self.certificate:
@@ -96,13 +97,21 @@ class ConfluenceClient:
         """
         if self.session:
             return self.session
-        if self.is_cloud:
+        if self.data_source_type == CONFLUENCE_CLOUD:
             auth = (
                 self.configuration["account_email"],
                 self.configuration["api_token"],
             )
+        elif self.data_source_type == CONFLUENCE_SERVER:
+            auth = (
+                self.configuration["username"],
+                self.configuration["password"],
+            )
         else:
-            auth = self.configuration["username"], self.configuration["password"]
+            auth = (
+                self.configuration["data_center_username"],
+                self.configuration["data_center_password"],
+            )
 
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -233,6 +242,10 @@ class ConfluenceDataSource(BaseDataSource):
                 "options": [
                     {"label": "Confluence Cloud", "value": CONFLUENCE_CLOUD},
                     {"label": "Confluence Server", "value": CONFLUENCE_SERVER},
+                    {
+                        "label": "Confluence Data Center",
+                        "value": CONFLUENCE_DATA_CENTER,
+                    },
                 ],
                 "order": 1,
                 "type": "str",
@@ -251,49 +264,66 @@ class ConfluenceDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
+            "data_center_username": {
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
+                ],
+                "label": "Confluence Data Center username",
+                "order": 4,
+                "type": "str",
+            },
+            "data_center_password": {
+                "depends_on": [
+                    {"field": "data_source", "value": CONFLUENCE_DATA_CENTER}
+                ],
+                "label": "Confluence Data Center password",
+                "sensitive": True,
+                "order": 5,
+                "type": "str",
+            },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud account email",
-                "order": 4,
+                "order": 6,
                 "type": "str",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "label": "Confluence Cloud API token",
                 "sensitive": True,
-                "order": 5,
+                "order": 7,
                 "type": "str",
             },
             "confluence_url": {
                 "label": "Confluence URL",
-                "order": 6,
+                "order": 8,
                 "type": "str",
             },
             "spaces": {
                 "display": "textarea",
                 "label": "Confluence space keys",
-                "order": 7,
+                "order": 9,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 8,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 9,
+                "order": 11,
                 "type": "str",
             },
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 10,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -302,7 +332,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 11,
+                "order": 13,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -314,7 +344,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 12,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -322,7 +352,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 13,
+                "order": 15,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
