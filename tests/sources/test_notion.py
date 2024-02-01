@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
-
 import pytest
 from httpx import Response
 from notion_client import APIResponseError
