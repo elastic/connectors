@@ -16,6 +16,8 @@ import os
 
 import click
 import yaml
+from colorama import Fore, Style
+from simple_term_menu import TerminalMenu
 from tabulate import tabulate
 
 from connectors import __version__  # NOQA
@@ -59,10 +61,21 @@ def cli(ctx, config):
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
 @click.option("--host", prompt="Elastic host")
-@click.option("--username", prompt="Username")
-@click.option("--password", prompt="Password", hide_input=True)
-def login(host, username, password):
-    auth = Auth(host, username, password)
+@click.option(
+    "--method",
+    type=click.Choice(["basic", "apikey"]),
+    default="basic",
+    help="Authentication method",
+)
+def login(host, method):
+    if method == "basic":
+        username = click.prompt("Username")
+        password = click.prompt("Password", hide_input=True)
+        auth = Auth(host, username, password)
+    else:
+        api_key = click.prompt("API key", hide_input=True)
+        auth = Auth(host, api_key=api_key)
+
     if auth.is_config_present():
         click.confirm(
             click.style(
@@ -147,6 +160,19 @@ def validate_language(ctx, param, value):
     return value
 
 
+# override click's default 'choices' prompt with something a bit nicer
+def interactive_service_type_prompt():
+    options = list(_default_config()["sources"].keys())
+    print(f"{Fore.GREEN}?{Style.RESET_ALL} Service type:")  # noqa: T201
+    result = TerminalMenu(
+        options,
+        menu_cursor_style=("fg_green",),
+        clear_menu_on_exit=False,
+        show_search_hint=True,
+    ).show()
+    return options[result]
+
+
 @click.command(help="Creates a new connector and a search index")
 @click.option(
     "--index-name",
@@ -155,8 +181,8 @@ def validate_language(ctx, param, value):
 )
 @click.option(
     "--service-type",
-    prompt=f"{click.style('?', fg='green')} Service type",
-    type=click.Choice(list(_default_config()["sources"].keys()), case_sensitive=False),
+    prompt=False,
+    default=interactive_service_type_prompt,
 )
 @click.option(
     "--index-language",
@@ -292,6 +318,17 @@ def create(
         from_index=from_index,
     )
 
+    if result["api_key_skipped"]:
+        click.echo(
+            click.style(
+                "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
+                fg="yellow",
+            )
+        )
+
+    if result["api_key_error"]:
+        click.echo(click.style(result["api_key_error"], fg="yellow"))
+
     click.echo(
         "Connector (name: "
         + click.style(index_name, fg="green")
@@ -300,7 +337,7 @@ def create(
         + ", service_type: "
         + click.style(service_type, fg="green")
         + ", api_key: "
-        + click.style(result["api_key"], fg="green")
+        + click.style(result.get("api_key"), fg="green")
         + ") has been created!"
     )
 
@@ -319,7 +356,7 @@ def create(
                 {
                     "connector_id": result["id"],
                     "service_type": service_type,
-                    "api_key": result["api_key"],
+                    "api_key": result.get("api_key"),
                 }
             )
 
@@ -560,7 +597,7 @@ def view_job(obj, job_id, output_format):
         "index_name": job.index_name,
         "job_status": job.status.value,
         "job_type": job.job_type.value,
-        "documents_index,ed": job.indexed_document_count,
+        "documents_indexed": job.indexed_document_count,
         "volume_documents_indexed": job.indexed_document_volume,
         "documents_deleted": job.deleted_document_count,
     }

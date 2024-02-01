@@ -955,6 +955,8 @@ async def test_get_access_control_dls_enabled():
             "accountId": "607194d6bc3c3f006f4c35d6",
             "accountType": "atlassian",
             "displayName": "user1",
+            "locale": "en-US",
+            "emailAddress": "user1@dummy-domain.com",
             "active": True,
         },
         {
@@ -963,6 +965,8 @@ async def test_get_access_control_dls_enabled():
             "accountId": "607194d6bc3c3f006f4c35d7",
             "accountType": "atlassian",
             "displayName": "user2",
+            "locale": "en-US",
+            "emailAddress": "user2@dummy-domain.com",
             "active": False,
         },
         {
@@ -987,6 +991,8 @@ async def test_get_access_control_dls_enabled():
         "accountId": "607194d6bc3c3f006f4c35d6",
         "accountType": "atlassian",
         "displayName": "user1",
+        "locale": "en-US",
+        "emailAddress": "user1@dummy-domain.com",
         "active": True,
         "groups": {
             "size": 1,
@@ -1013,6 +1019,8 @@ async def test_get_access_control_dls_enabled():
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
             "display_name": "name:user1",
+            "locale": "locale:en-US",
+            "email_address": "email_address:user1@dummy-domain.com",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {
