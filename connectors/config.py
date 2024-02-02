@@ -59,6 +59,8 @@ def _default_config():
             "bulk": {
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,
+                "queue_refresh_interval": 1,
+                "queue_refresh_timeout": 600,
                 "display_every": 100,
                 "chunk_size": 1000,
                 "max_concurrency": 5,
@@ -66,7 +68,6 @@ def _default_config():
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
                 "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": 10,
-                "mem_queue": {"refresh_interval": 1, "refresh_timeout": 600},
             },
             "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
             "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
