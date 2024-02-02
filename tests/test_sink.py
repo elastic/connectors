@@ -1303,27 +1303,49 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
             es._extractor.force_cancel.assert_not_called()
             es._sink.force_cancel.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_update_authorization():
-    config = {"host": "http://nowhere.com:9200", "user": "someone", "password": "something"}
+    config = {
+        "host": "http://nowhere.com:9200",
+        "user": "someone",
+        "password": "something",
+    }
     sync_orchestrator = SyncOrchestrator(config)
 
-    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(return_value='secret-value')
+    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
+        return_value="secret-value"
+    )
     sync_orchestrator.es_management_client.client.options = AsyncMock()
 
-    await sync_orchestrator.update_authorization('my-index', 'my-secret-id')
+    await sync_orchestrator.update_authorization("my-index", "my-secret-id")
 
-    sync_orchestrator.es_management_client.get_connector_secret.assert_called_with('my-secret-id')
-    sync_orchestrator.es_management_client.client.options.assert_called_with(api_key='secret-value')
+    sync_orchestrator.es_management_client.get_connector_secret.assert_called_with(
+        "my-secret-id"
+    )
+    sync_orchestrator.es_management_client.client.options.assert_called_with(
+        api_key="secret-value"
+    )
+
 
 @pytest.mark.asyncio
 async def test_update_authorization_when_api_key_not_found():
-    config = {"host": "http://nowhere.com:9200", "user": "someone", "password": "something"}
+    config = {
+        "host": "http://nowhere.com:9200",
+        "user": "someone",
+        "password": "something",
+    }
     sync_orchestrator = SyncOrchestrator(config)
 
     error_meta = Mock()
     error_meta.status = 404
-    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(side_effect=ElasticNotFoundError('resource_not_found_exception', error_meta, f"No secret with id [my-secret-id]"))
+    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
+        side_effect=ElasticNotFoundError(
+            "resource_not_found_exception",
+            error_meta,
+            "No secret with id [my-secret-id]",
+        )
+    )
 
     with pytest.raises(ApiKeyNotFoundError):
-        await sync_orchestrator.update_authorization('my-index', 'my-secret-id')
+        await sync_orchestrator.update_authorization("my-index", "my-secret-id")

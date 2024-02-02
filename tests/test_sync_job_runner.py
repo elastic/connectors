@@ -896,6 +896,7 @@ async def test_unsupported_job_type():
     with pytest.raises(SyncJobStartError):
         await sync_job_runner.execute()
 
+
 @pytest.mark.parametrize(
     "job_type, sync_cursor",
     [
@@ -915,7 +916,9 @@ async def test_native_connector_sync_fails_when_api_key_secret_missing(
         "total_document_count": TOTAL_DOCUMENT_COUNT,
     }
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    sync_orchestrator_mock.update_authorization = AsyncMock(side_effect=ApiKeyNotFoundError())
+    sync_orchestrator_mock.update_authorization = AsyncMock(
+        side_effect=ApiKeyNotFoundError()
+    )
 
     sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor)
 
@@ -935,6 +938,7 @@ async def test_native_connector_sync_fails_when_api_key_secret_missing(
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+
 
 @pytest.mark.parametrize(
     "job_type, sync_cursor",
@@ -957,9 +961,13 @@ async def test_connector_client_sync_succeeds_when_api_key_secret_missing(
         "deleted_document_count": 20,
     }
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    sync_orchestrator_mock.update_authorization = AsyncMock(side_effect=ApiKeyNotFoundError())
+    sync_orchestrator_mock.update_authorization = AsyncMock(
+        side_effect=ApiKeyNotFoundError()
+    )
 
-    sync_job_runner = create_runner(job_type=job_type, connector=connector, sync_cursor=sync_cursor)
+    sync_job_runner = create_runner(
+        job_type=job_type, connector=connector, sync_cursor=sync_cursor
+    )
     await sync_job_runner.execute()
 
     ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT

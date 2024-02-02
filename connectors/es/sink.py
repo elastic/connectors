@@ -24,6 +24,10 @@ import logging
 import time
 from collections import defaultdict
 
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
+
 from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
@@ -47,9 +51,6 @@ from connectors.utils import (
     get_size,
     iso_utc,
     retryable,
-)
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -673,9 +674,9 @@ class SyncOrchestrator:
                 f"Using API key found in secrets storage for authorization for index [{index_name}]."
             )
             self.es_management_client.client.options(api_key=api_key)
-        except ElasticNotFoundError:
+        except ElasticNotFoundError as e:
             msg = f"API key not found in secrets storage for index [{index_name}]."
-            raise ApiKeyNotFoundError(msg)
+            raise ApiKeyNotFoundError(msg) from e
 
     async def has_active_license_enabled(self, license_):
         # TODO: think how to make it not a proxy method to the client
