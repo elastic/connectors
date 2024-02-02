@@ -48,6 +48,9 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 __all__ = ["SyncOrchestrator"]
 
@@ -71,6 +74,10 @@ class ForceCanceledError(Exception):
 
 
 class ContentIndexDoesNotExistError(Exception):
+    pass
+
+
+class ApiKeyNotFoundError(Exception):
     pass
 
 
@@ -657,6 +664,18 @@ class SyncOrchestrator:
 
     async def close(self):
         await self.es_management_client.close()
+
+    async def update_authorization(self, index_name, secret_id):
+        # Updates the ESManagementClient auth options for native connectors after fetching API key
+        try:
+            api_key = await self.es_management_client.get_connector_secret(secret_id)
+            self._logger.debug(
+                f"Using API key found in secrets storage for authorization for index [{index_name}]."
+            )
+            self.es_management_client.client.options(api_key=api_key)
+        except ElasticNotFoundError:
+            msg = f"API key not found in secrets storage for index [{index_name}]."
+            raise ApiKeyNotFoundError(msg)
 
     async def has_active_license_enabled(self, license_):
         # TODO: think how to make it not a proxy method to the client

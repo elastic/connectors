@@ -52,7 +52,8 @@ All communication will need to go through Elasticsearch. We've created a connect
 This is our main communication index, used to communicate the connector's configuration, status and other related data. All dates in UTC.
 ```
 {
-  api_key_id: string;   -> ID of the current API key in use
+  api_key_id: string;           -> ID of the current API key in use
+  api_key_secret_id: string;    -> ID of Connector Secret doc that stores the API key
   configuration: {
     [key]: {
       default_value: any;   -> The value used if `value` is empty (only for non-required fields)
@@ -188,6 +189,7 @@ This is our main communication index, used to communicate the connector's config
   "dynamic": false,
   "properties" : {
     "api_key_id" : { "type" : "keyword" },
+    "api_key_secret_id" : { "type" : "keyword" },
     "configuration" : { "type" : "object" },
     "custom_scheduling" : { "type" : "object" },
     "description" : { "type" : "text" },

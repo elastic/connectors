@@ -124,6 +124,7 @@ class SyncJobRunner:
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
+            self.sync_job.log_debug(f"Features: {self.connector.features}")
             self.data_provider.set_features(self.connector.features)
 
             self.sync_job.log_debug("Validating configuration")
@@ -142,6 +143,11 @@ class SyncJobRunner:
             self.sync_orchestrator = SyncOrchestrator(
                 self.es_config, self.sync_job.logger
             )
+
+            if self.connector.native and self.connector.features.native_connector_api_keys_enabled():
+                await self.sync_orchestrator.update_authorization(
+                    self.connector.index_name, self.connector.api_key_secret_id
+                )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -225,7 +231,7 @@ class SyncJobRunner:
             is BaseDataSource.get_docs_incrementally
         )
 
-    async def _execute_content_sync_job(self, job_type, bulk_options):
+    async def  _execute_content_sync_job(self, job_type, bulk_options):
         if (
             self.sync_job.job_type == JobType.INCREMENTAL
             and not self.connector.features.incremental_sync_enabled()
