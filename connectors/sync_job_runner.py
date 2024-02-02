@@ -124,7 +124,6 @@ class SyncJobRunner:
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
                 return
 
-            self.sync_job.log_debug(f"Features: {self.connector.features}")
             self.data_provider.set_features(self.connector.features)
 
             self.sync_job.log_debug("Validating configuration")
