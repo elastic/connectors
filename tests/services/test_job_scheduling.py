@@ -381,7 +381,7 @@ async def test_run_when_connector_fields_are_invalid(
 async def test_run_when_connector_ping_fails(
     get_source_klass_mock, connector_index_mock, set_env
 ):
-    error_message = "Something invalid is in config!"
+    error_message = "Something went wrong when trying to ping the data source!"
     actual_error = Exception(error_message)
 
     data_source_mock = Mock()
