@@ -12,6 +12,7 @@ from functools import cached_property, partial
 from io import BytesIO
 
 import fastjsonschema
+import logging
 import smbclient
 import winrm
 from requests.exceptions import ConnectionError
@@ -63,6 +64,10 @@ RETRY_INTERVAL = 2
 
 WINDOWS = "windows"
 LINUX = "linux"
+
+
+smb_root_logger = logging.getLogger('smbprotocol')
+smb_root_logger.setLevel(logging.DEBUG)
 
 
 def _prefix_user(user):
@@ -334,11 +339,13 @@ class NASDataSource(BaseDataSource):
 
     def create_connection(self):
         """Creates an SMB session to the shared drive."""
+        smbclient.ClientConfig(username=self.username, password=self.password)
         self.session = smbclient.register_session(
             server=self.server_ip,
             username=self.username,
             password=self.password,
             port=self.port,
+            auth_protocol="ntlm"
         )
 
     @cached_property
