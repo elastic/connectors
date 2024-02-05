@@ -213,7 +213,7 @@ class JobSchedulingService(BaseService):
 
             try:
                 next_sync = connector.next_sync(job_type, last_wake_up_time)
-                connector.log_debug(f"Next sync is at {next_sync}")
+                connector.log_debug(f"Next '{job_type_value}' sync is at {next_sync}")
             except Exception as e:
                 connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))
