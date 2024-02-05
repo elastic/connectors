@@ -114,8 +114,6 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
     "key_pattern": "alpha"
   }
 ]
-
-
 ```
 
 #### Fetch database records by specifying a character range inside square brackets to match any single character within that range.
