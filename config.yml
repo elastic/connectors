@@ -31,7 +31,14 @@
 #
 ## The host of the Elasticsearch deployment.
 #elasticsearch.host: http://localhost:9200
-#
+connectors:
+-
+  connector_id: "iiq9eI0Bo1R_AZosgjGc"
+  service_type: "postgresql"
+  api_key: "aXlxOWVJMEJvMVJfQVpvc3ZUSEU6MzU5WmV6TXVRdTZWcHVXT0VLRmV0dw=="
+elasticsearch:
+  host: "http://localhost:9200"
+  api_key: "aXlxOWVJMEJvMVJfQVpvc3ZUSEU6MzU5WmV6TXVRdTZWcHVXT0VLRmV0dw=="
 #
 ## The API key for Elasticsearch connection.
 ##    Using `api_key` is recommended instead of `username`/`password`.
