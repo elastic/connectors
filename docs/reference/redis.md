@@ -81,7 +81,7 @@ Use advanced sync rules to filter data to be fetched from Redis server/cloud. Th
 
 *NOTE*:
 
-- Either `key_pattern` or `type_` must be provided, but it is not necessary to include both. However, at least one of them must be present to proceed.
+Provide at least one of the following: `key_pattern` or `type_`, or both.
 
 ### Advanced sync rules examples
 
