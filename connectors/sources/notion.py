@@ -49,7 +49,6 @@ class NotionClient:
 
     @cached_property
     def _get_client(self):
-        """Authenticate with Notion API"""
         return AsyncClient(
             auth=self.notion_secret_key,
             base_url=BASE_URL,
@@ -57,7 +56,7 @@ class NotionClient:
 
     @cached_property
     def session(self):
-        """Generate aiohttp client session with configuration fields.
+        """Generate aiohttp client session.
 
         Returns:
             aiohttp.ClientSession: An instance of Client Session
@@ -98,7 +97,6 @@ class NotionClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def make_request(self, endpoint_key, method="GET", **kwargs):
-        """Execute a request to the Notion API"""
         try:
             path = ENDPOINTS.get(endpoint_key)
             if path:
@@ -207,7 +205,6 @@ class NotionDataSource(BaseDataSource):
         self.notion_client.set_logger(self._logger)
 
     async def ping(self):
-        """Verify the connection with Notion"""
         try:
             await self.notion_client.fetch_owner()
             self._logger.info("Successfully connected to Notion.")
@@ -216,10 +213,9 @@ class NotionDataSource(BaseDataSource):
             raise
 
     async def close(self):
-        """Closes unclosed client"""
         await self.notion_client.close()
 
-    async def _remote_validation(self, entity_type, entity_titles):
+    async def get_entities(self, entity_type, entity_titles):
         """Search for a database or page with the given title."""
         invalid_titles = []
         found_titles = set()
@@ -271,10 +267,8 @@ class NotionDataSource(BaseDataSource):
         """Validates if user configured databases and pages are available in notion."""
         await super().validate_config()
         await asyncio.gather(
-            self._remote_validation("page", self.configuration.get("pages", [])),
-            self._remote_validation(
-                "database", self.configuration.get("databases", [])
-            ),
+            self.get_entities("page", self.configuration.get("pages", [])),
+            self.get_entities("database", self.configuration.get("databases", [])),
         )
 
     @classmethod
@@ -423,7 +417,8 @@ class NotionDataSource(BaseDataSource):
                 }
 
     async def get_docs(self, filtering=None):
-        """Executes the logic to fetch Notion objects in async manner.
+        """Executes the logic to fetch following Notion objects: Users, Pages, Databases, Files,
+           Comments, Blocks, Child Blocks in async manner.
         Args:
             filtering (filtering, None): Filtering Rules. Defaults to None.
         Yields:
