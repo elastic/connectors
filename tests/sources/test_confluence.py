@@ -14,9 +14,12 @@ import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
+from connectors.access_control import DLS_QUERY
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
+    CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
@@ -25,6 +28,7 @@ from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
+ADVANCED_SNIPPET = "advanced_snippet"
 HOST_URL = "http://127.0.0.1:9696"
 CONTENT_QUERY = "limit=1&expand=children.attachment,history.lastUpdated,body.storage"
 RESPONSE_SPACE = {
@@ -376,6 +380,16 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
             }
         ),
         (
+            # Confluence Data Center with blank dependent fields
+            {
+                "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_username": "",
+                "data_center_password": "",
+                "account_email": "foo@bar.me",
+                "api_token": "foo",
+            }
+        ),
+        (
             # Confluence Cloud with blank dependent fields
             {
                 "data_source": CONFLUENCE_CLOUD,
@@ -414,6 +428,16 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
             }
         ),
         (
+            # Confluence Data Center with blank dependent fields
+            {
+                "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_username": "foo",
+                "data_center_password": "bar",
+                "account_email": "",
+                "api_token": "",
+            }
+        ),
+        (
             # Confluence Cloud with blank non-dependent fields
             {
                 "data_source": CONFLUENCE_CLOUD,
@@ -425,7 +449,12 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
         ),
         (
             # SSL certificate not enabled (empty ssl_ca okay)
-            {"ssl_enabled": False, "ssl_ca": ""}
+            {
+                "username": "foo",
+                "password": "bar",
+                "ssl_enabled": False,
+                "ssl_ca": "",
+            }
         ),
     ],
 )
@@ -446,6 +475,8 @@ async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_ra
 ):
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_confluence_source() as source:
+            source.configuration.get_field("username").value = "foo"
+            source.configuration.get_field("password").value = "foo"
             source.configuration.get_field("ssl_enabled").value = True
             source.configuration.get_field(
                 "ssl_ca"
@@ -541,6 +572,8 @@ class MockSSL:
         ("api_token", "confluence_cloud"),
         ("username", "confluence_server"),
         ("password", "confluence_server"),
+        ("data_center_username", "confluence_data_center"),
+        ("data_center_password", "confluence_data_center"),
     ],
 )
 @pytest.mark.asyncio
@@ -950,26 +983,8 @@ async def test_get_access_control_dls_enabled():
                         "group_id:607194d6bc3c3f006f4c35d8",
                         "role_key:607194d6bc3c3f006f4c35d9",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "account_id:607194d6bc3c3f006f4c35d6",
-                                            "group_id:607194d6bc3c3f006f4c35d8",
-                                            "role_key:607194d6bc3c3f006f4c35d9",
-                                        ]
-                                    }
-                                },
-                            ]
-                        }
-                    }
-                }
+                },
+                "source": DLS_QUERY,
             },
         },
     }
@@ -1073,3 +1088,37 @@ async def test_get_docs_dls_enabled(
         async for item, _ in source.get_docs():
             item.get("_allow_access_control", []).sort()
             assert item in expected_responses
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_docs",
+    [
+        (
+            Filter({ADVANCED_SNIPPET: {"value": [{"query": "space = DEMO"}]}}),
+            [
+                EXPECTED_SPACE,
+                EXPECTED_ATTACHMENT,
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering, expected_docs):
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceDataSource,
+            "search_by_query",
+            side_effect=[
+                (AsyncIterator([[copy(EXPECTED_ATTACHMENT), "download-url"]])),
+                (AsyncIterator([[copy(EXPECTED_SPACE), None]])),
+            ],
+        ):
+            with patch.object(
+                ConfluenceDataSource,
+                "download_attachment",
+                return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
+            ):
+                source.get_content = mock.Mock(return_value=EXPECTED_ATTACHMENT)
+
+                async for item, _ in source.get_docs(filtering):
+                    assert item in expected_docs
