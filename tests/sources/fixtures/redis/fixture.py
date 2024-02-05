@@ -21,11 +21,11 @@ ENDPOINT = "redis://localhost:6379/"
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
 
-async def inject_lines(redis_client, start, lines):
+async def inject_lines(redis_client, lines):
     text = fake_provider.get_text()
     rows = {}
     for row_id in range(lines):
-        key = f"user_{row_id}_{start}"
+        key = f"user_{row_id}"
         rows[key] = text
     await redis_client.mset(rows)
 
@@ -36,7 +36,7 @@ async def load():
     for db in range(NUM_DB):
         print(f"Adding data in {db}...")
         await redis_client.execute_command("SELECT", db)
-        await inject_lines(redis_client, db, EACH_ROW_ITEMS)
+        await inject_lines(redis_client, EACH_ROW_ITEMS)
 
 
 async def remove():
@@ -46,7 +46,7 @@ async def remove():
         print(f"Working on db {db}...")
         await redis_client.execute_command("SELECT", db)
         keys = [
-            f"user_{row_id}_{db}"
+            f"user_{row_id}"
             for row_id in random.sample(range(1, 100), RECORDS_TO_DELETE)
         ]
         await redis_client.delete(*keys)
