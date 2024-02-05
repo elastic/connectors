@@ -75,7 +75,7 @@ Advanced sync rules are defined through a source-specific DSL JSON snippet.
 
 Use advanced sync rules to filter data to be fetched from Redis server/cloud. They take the following parameters:
 
-1. `database`: Database index of Redis server/cloud. The type of value should be integer.
+1. `database`:  Specify the Redis database index as an integer value.
 2. `key_pattern`: Pattern of the key for searching in Redis server/cloud
 3. `type_`: Type of key in Redis server/cloud. Supported values are HASH, LIST, SET, STREAM, STRING, ZSET
 
