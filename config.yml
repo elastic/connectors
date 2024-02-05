@@ -182,11 +182,11 @@
 ##  Connector service log level.
 #service.log_level: INFO
 #
-##  Log ids of deleted documents.
+##  Enable to log ids of deleted documents.
 #service.log_deleted_doc_ids: false
 #
 #
-##  Log-level for logging deleted document ids.
+##  Log level for logging deleted document ids.
 #service.log_deleted_doc_ids_log_level: DEBUG
 #
 ## ------------------------------- Extraction Service ----------------------------------
