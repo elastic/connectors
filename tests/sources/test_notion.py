@@ -237,7 +237,7 @@ async def test_close_with_client():
     ],
 )
 @patch("connectors.sources.notion.NotionClient", autospec=True)
-async def test_remote_validation(
+async def test_get_entities(
     mock_notion_client, entity_type, entity_titles, mock_search_results
 ):
     mock_notion_client.return_value.make_request.return_value = mock_search_results
@@ -245,7 +245,7 @@ async def test_remote_validation(
         NotionDataSource,
         databases=["Database1"],
     ) as source:
-        await source._remote_validation(entity_type, entity_titles)
+        await source.get_entities(entity_type, entity_titles)
 
     mock_notion_client.return_value.make_request.assert_called_once_with(
         "search",
@@ -266,7 +266,7 @@ async def test_remote_validation(
     ],
 )
 @patch("connectors.sources.notion.NotionClient")
-async def test_remote_validation_entity_not_found(
+async def test_get_entities_entity_not_found(
     mock_notion_client, entity_type, entity_titles, configuration_key
 ):
     mock_search_results = {"results": []}
@@ -280,7 +280,7 @@ async def test_remote_validation_entity_not_found(
     source = NotionDataSource(configuration=configuration)
 
     with pytest.raises(ConfigurableFieldValueError):
-        await source._remote_validation(entity_type, entity_titles)
+        await source.get_entities(entity_type, entity_titles)
 
 
 @pytest.mark.asyncio
@@ -303,11 +303,11 @@ async def test_make_request():
 
 
 @pytest.mark.asyncio
-async def test_remote_validation_exception():
+async def test_get_entities_exception():
     async with create_source(NotionDataSource) as source:
         with patch.object(NotionClient, "make_request", side_effect=Exception()):
             with pytest.raises(Exception):
-                await source._remote_validation("pages", ["abc"])
+                await source.get_entities("pages", ["abc"])
 
 
 @pytest.mark.asyncio
