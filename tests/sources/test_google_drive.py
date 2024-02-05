@@ -16,6 +16,7 @@ from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
+from connectors.access_control import DLS_QUERY
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_drive import RETRIES, GoogleDriveDataSource
 from tests.commons import AsyncIterator
@@ -1426,29 +1427,9 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
                                 "group:group-2@test.com",
                                 "group:group-3@test.com",
                             ]
-                        }
-                    },
-                    "source": {
-                        "bool": {
-                            "filter": {
-                                "bool": {
-                                    "should": [
-                                        {
-                                            "terms": {
-                                                "_allow_access_control.enum": [
-                                                    "user:user1@test.com",
-                                                    "domain:test.com",
-                                                    "group:group-1@test.com",
-                                                    "group:group-2@test.com",
-                                                    "group:group-3@test.com",
-                                                ]
-                                            }
-                                        },
-                                    ]
-                                }
-                            }
-                        }
-                    },
+                        },
+                        "source": DLS_QUERY,
+                    }
                 },
             },
         ),
@@ -1474,10 +1455,8 @@ async def test_prepare_access_control_doc(user, groups, access_control_doc):
             Aiogoogle, "as_service_account", return_value=expected_response_object
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
-                assert (
-                    access_control_doc
-                    == await source.prepare_single_access_control_document(user=user)
-                )
+                result = await source.prepare_single_access_control_document(user=user)
+                assert access_control_doc == result
 
 
 @pytest.mark.parametrize(
@@ -1512,29 +1491,9 @@ async def test_prepare_access_control_doc(user, groups, access_control_doc):
                                     "group:group-2@test.com",
                                     "group:group-3@test.com",
                                 ]
-                            }
-                        },
-                        "source": {
-                            "bool": {
-                                "filter": {
-                                    "bool": {
-                                        "should": [
-                                            {
-                                                "terms": {
-                                                    "_allow_access_control.enum": [
-                                                        "user:user1@test.com",
-                                                        "domain:test.com",
-                                                        "group:group-1@test.com",
-                                                        "group:group-2@test.com",
-                                                        "group:group-3@test.com",
-                                                    ]
-                                                }
-                                            },
-                                        ]
-                                    }
-                                }
-                            }
-                        },
+                            },
+                            "source": DLS_QUERY,
+                        }
                     },
                 },
             ],
@@ -1563,9 +1522,10 @@ async def test_prepare_access_control_documents(
             Aiogoogle, "as_service_account", return_value=expected_response_object
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
-                assert access_control_docs[0] == await anext(
+                result = await anext(
                     source.prepare_access_control_documents(users_page=users_page)
                 )
+                assert access_control_docs[0] == result
 
 
 @pytest.mark.asyncio
