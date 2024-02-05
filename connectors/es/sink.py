@@ -791,9 +791,19 @@ class SyncOrchestrator(ESClient):
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
-        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
+        max_bulk_retries = options.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES)
+        retry_interval = options.get(
+            "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
+        )
+        mem_queue_refresh_timeout = options.get("queue_refresh_timeout", 60)
+        mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
 
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
+        stream = MemQueue(
+            maxsize=queue_size,
+            maxmemsize=queue_mem_size * 1024 * 1024,
+            refresh_timeout=mem_queue_refresh_timeout,
+            refresh_interval=mem_queue_refresh_interval,
+        )
 
         # start the fetcher
         self._extractor = Extractor(
