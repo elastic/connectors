@@ -101,8 +101,6 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
     "key_pattern": "alpha*"
   }
 ]
-
-
 ```
 
 #### Fetch database records with exact match by specifying the full key name.
