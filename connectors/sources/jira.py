@@ -40,6 +40,7 @@ RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 
 FETCH_SIZE = 100
+MAX_USER_FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
@@ -66,7 +67,7 @@ URLS = {
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
     USERS: "/rest/api/3/users/search",
-    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center
+    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
     PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?{key}&permissions=BROWSE&maxResults={max_results}&startAt={start_at}",
     PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
     ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
@@ -410,7 +411,7 @@ class JiraDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enable document level security",
                 "order": 14,
-                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents. Only 1000 users can be fetched for Jira Data Center.",
                 "type": "bool",
                 "value": False,
             },
@@ -453,13 +454,13 @@ class JiraDataSource(BaseDataSource):
                 url_name=PERMISSIONS_BY_KEY,
                 key=key,
                 start_at=start_at,
-                max_results=1000,
+                max_results=MAX_USER_FETCH_LIMIT,
             ):
                 response = await users.json()
                 if len(response) == 0:
                     return
                 yield response
-                start_at += 1000
+                start_at += MAX_USER_FETCH_LIMIT
 
     async def _project_access_control(self, project):
         if not self._dls_enabled():
