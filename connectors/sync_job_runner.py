@@ -94,6 +94,10 @@ class SyncJobRunner:
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
         self.running = False
+        self._log_deleted_doc_ids = self.service_config.get("log_deleted_doc_ids")
+        self._log_deleted_doc_ids_log_level = self.service_config.get(
+            "log_deleted_doc_ids_log_level"
+        )
 
     async def execute(self):
         if self.running:
@@ -204,6 +208,8 @@ class SyncJobRunner:
             self.sync_job.pipeline,
             job_type,
             options=bulk_options,
+            log_deleted_doc_ids=self._log_deleted_doc_ids,
+            log_deleted_doc_ids_log_level=self._log_deleted_doc_ids_log_level,
         )
 
     def _skip_unchanged_documents_enabled(self, job_type, data_provider):
@@ -260,6 +266,8 @@ class SyncJobRunner:
             skip_unchanged_documents=self._skip_unchanged_documents_enabled(
                 job_type, self.data_provider
             ),
+            log_deleted_doc_ids=self._log_deleted_doc_ids,
+            log_deleted_doc_ids_log_level=self._log_deleted_doc_ids_log_level,
         )
 
     async def _sync_done(self, sync_status, sync_error=None):

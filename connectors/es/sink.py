@@ -101,6 +101,8 @@ class Sink:
         max_retries,
         retry_interval,
         logger_=None,
+        log_deleted_doc_ids=False,
+        log_deleted_doc_ids_log_level="DEBUG",
     ):
         self.client = client
         self.queue = queue
@@ -116,6 +118,8 @@ class Sink:
         self.deleted_document_count = 0
         self._logger = logger_ or logger
         self._canceled = False
+        self._log_deleted_doc_ids = log_deleted_doc_ids
+        self._log_deleted_doc_ids_log_level = log_deleted_doc_ids_log_level
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -129,9 +133,21 @@ class Sink:
                 {"doc": doc["doc"], "doc_as_upsert": True},
             ]
         if operation == OP_DELETE:
+            self._log_deleted_doc_id_if_enabled(doc_id)
+
             return [{operation: {"_index": index, "_id": doc_id}}]
 
         raise TypeError(operation)
+
+    def _log_deleted_doc_id_if_enabled(self, doc_id):
+        if self._log_deleted_doc_ids:
+            msg = f"Deleted document with id '{doc_id}'"
+
+            if self._log_deleted_doc_ids_log_level == "INFO":
+                self._logger.info(msg)
+
+            elif self._log_deleted_doc_ids_log_level == "DEBUG":
+                self._logger.debug(msg)
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
@@ -756,6 +772,8 @@ class SyncOrchestrator:
         content_extraction_enabled=True,
         options=None,
         skip_unchanged_documents=False,
+        log_deleted_doc_ids=False,
+        log_deleted_doc_ids_log_level="DEBUG",
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -820,5 +838,7 @@ class SyncOrchestrator:
             max_retries=max_bulk_retries,
             retry_interval=retry_interval,
             logger_=self._logger,
+            log_deleted_doc_ids=log_deleted_doc_ids,
+            log_deleted_doc_ids_log_level=log_deleted_doc_ids_log_level,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

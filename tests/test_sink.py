@@ -1298,3 +1298,47 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
         else:
             es._extractor.force_cancel.assert_not_called()
             es._sink.force_cancel.assert_not_called()
+
+
+def test_log_deleted_doc_id_if_enabled(patch_logger):
+    queue = Mock()
+    sink = Sink(
+        None,
+        queue,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+        log_deleted_doc_ids=True,
+    )
+
+    doc_id = "some random doc id"
+    log_msg = f"Deleted document with id '{doc_id}'"
+
+    sink._log_deleted_doc_id_if_enabled(doc_id)
+
+    patch_logger.assert_present(log_msg)
+
+
+def test_log_deleted_doc_id_if_disabled(patch_logger):
+    queue = Mock()
+    sink = Sink(
+        None,
+        queue,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+        log_deleted_doc_ids=False,
+    )
+
+    doc_id = "some random doc id"
+    log_msg = f"Deleted document with id '{doc_id}'"
+
+    sink._log_deleted_doc_id_if_enabled(doc_id)
+
+    patch_logger.assert_not_present(log_msg)
