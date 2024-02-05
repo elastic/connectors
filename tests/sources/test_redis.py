@@ -250,6 +250,9 @@ async def test_get_docs_with_sync_rules(filtering):
         source.client._client.memory_usage = AsyncMock(return_value=10)
         async for (doc, _) in source.get_docs(filtering):
             assert doc in DOCUMENT
+        source.client._client.scan_iter.assert_called_once_with(
+            match="0*", count=1000, _type="string"
+        )
 
 
 @pytest.mark.parametrize(

@@ -92,7 +92,7 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
 
 ### Advanced sync rules examples
 
-#### Fetch database records with keys starting with alpha.
+#### **Fetch database records where keys start with `alpha`**
 
 ```json
 [
@@ -114,7 +114,7 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
 ]
 ```
 
-#### Fetch database records by specifying a character range inside square brackets to match any single character within that range.
+#### **Fetch database records where keys start with `test1`, `test2` or `test3`**
 
 ```json
 [
@@ -126,7 +126,7 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
 
 ```
 
-#### Fetch database records by specifying a character range inside square brackets to exclude characters from the match.
+#### **Exclude database records where keys start with `test1`, `test2` or `test3`**
 
 ```json
 [
@@ -146,10 +146,9 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
     "key_pattern": "*"
   }
 ]
-
 ```
 
-#### Fetch all database records having redis type SET.
+#### Fetch all database records where type is SET.
 
 ```json
 [
@@ -159,10 +158,9 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
     "type_": "SET"
   }
 ]
-
 ```
 
-#### Fetch records having redis type SET.
+#### Fetch database records where type is SET.
 
 ```json
 [
@@ -171,7 +169,6 @@ Provide at least one of the following: `key_pattern` or `type_`, or both.
     "type_": "SET"
   }
 ]
-
 ```
 
 ## Connector Client operations
@@ -192,7 +189,7 @@ $ make ftest NAME=redis
 
 ## Known issues
 
-- Last modified time is not available in Redis server/cloud while fetching key/value from the database. So all objects will be **indexed** every time.
+- The last modified time is unavailable when retrieving keys/values from the Redis database. As a result, **all objects** are indexed each time an advanced sync rule query is executed.
 
 Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
 
