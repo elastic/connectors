@@ -432,7 +432,6 @@ class NASDataSource(BaseDataSource):
 
         for file in files:
             file_details = file._dir_info.fields
-            print(f"FILE {file.name} DETAILS:\nEA SIZE is: {file_details['ea_size'].get_value()}, ALLOC SIZE is: {file_details['allocation_size'].get_value()}")
             yield {
                 "path": file.path,
                 "size": 1000,
