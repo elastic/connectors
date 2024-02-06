@@ -350,7 +350,11 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def get_directory_details(self):
-        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+        print("Getting directory details")
+        directory_details = list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+        print("Directory details is:")
+        print(directory_details)
+        return directory_details
 
     def find_matching_paths(self, advanced_rules):
         """
@@ -720,7 +724,9 @@ class NASDataSource(BaseDataSource):
                 groups_info = await self.fetch_groups_info()
 
             for path in matched_paths:
+                print(f"Checking path {path}")
                 async for file in self.get_files(path=path):
+                    print(f"Getting {file['type']}: {file.get('path')}")
                     if file["type"] == "folder":
                         yield await self._decorate_with_access_control(
                             file, file.get("path"), file.get("type"), groups_info
