@@ -159,7 +159,7 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "database": {"type": "integer", "minLength": 1, "minimum": 0},
             "key_pattern": {"type": "string", "minLength": 1},
-            "type_": {
+            "type": {
                 "type": "string",
                 "minLength": 1,
             },
@@ -167,7 +167,7 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
         "required": ["database"],
         "anyOf": [
             {"required": ["key_pattern"]},
-            {"required": ["type_"]},
+            {"required": ["type"]},
         ],
         "additionalProperties": False,
     }
@@ -344,7 +344,7 @@ class RedisDataSource(BaseDataSource):
                 async for document in self.get_db_records(
                     db=rule.get("database"),
                     pattern=rule.get("key_pattern"),
-                    type_=rule.get("type_"),
+                    type_=rule.get("type"),
                 ):
                     yield document, None
         else:

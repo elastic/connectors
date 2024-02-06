@@ -230,7 +230,7 @@ async def test_get_db_records():
             {
                 ADVANCED_SNIPPET: {
                     "value": [
-                        {"database": 0, "key_pattern": "0*", "type_": "string"},
+                        {"database": 0, "key_pattern": "0*", "type": "string"},
                     ]
                 }
             }
@@ -283,7 +283,7 @@ async def test_get_docs_with_sync_rules(filtering):
             # valid: two custom patterns
             [
                 {"database": 0, "key_pattern": "test*"},
-                {"database": 1, "type_": "string"},
+                {"database": 1, "type": "string"},
             ],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -317,7 +317,7 @@ async def test_get_docs_with_sync_rules(filtering):
             ),
         ),
         (
-            # invalid: key_pattern or type_ is missing
+            # invalid: key_pattern or type is missing
             {"database": 0},
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
