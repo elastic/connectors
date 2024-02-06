@@ -432,11 +432,10 @@ class NASDataSource(BaseDataSource):
 
         for file in files:
             file_details = file._dir_info.fields
-            print(f"FILE {file.name} DETAILS:")
-            print(file_details)
+            print(f"FILE {file.name} DETAILS:\nEA SIZE is: {file_details['ea_size'].get_value()}, ALLOC SIZE is: {file_details['allocation_size'].get_value()}")
             yield {
                 "path": file.path,
-                "size": file_details["allocation_size"].get_value(),
+                "size": 1000,
                 "_id": file_details["file_id"].get_value(),
                 "created_at": iso_utc(file_details["creation_time"].get_value()),
                 "_timestamp": iso_utc(file_details["change_time"].get_value()),
