@@ -7,12 +7,12 @@
 """
 import asyncio
 import csv
+import logging
 import os
 from functools import cached_property, partial
 from io import BytesIO
 
 import fastjsonschema
-import logging
 import smbclient
 import winrm
 from requests.exceptions import ConnectionError
@@ -66,7 +66,7 @@ WINDOWS = "windows"
 LINUX = "linux"
 
 
-smb_root_logger = logging.getLogger('smbprotocol')
+smb_root_logger = logging.getLogger("smbprotocol")
 smb_root_logger.setLevel(logging.DEBUG)
 
 
@@ -340,18 +340,22 @@ class NASDataSource(BaseDataSource):
     def create_connection(self):
         """Creates an SMB session to the shared drive."""
         smbclient.ClientConfig(username=self.username, password=self.password)
+        print("Creating connection")
         self.session = smbclient.register_session(
             server=self.server_ip,
             username=self.username,
             password=self.password,
             port=self.port,
-            auth_protocol="ntlm"
+            auth_protocol="ntlm",
         )
+        print("Created connection")
 
     @cached_property
     def get_directory_details(self):
         print("Getting directory details")
-        directory_details = list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+        directory_details = list(
+            smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}")
+        )
         print("Directory details is:")
         print(directory_details)
         return directory_details
@@ -387,8 +391,10 @@ class NASDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Network Drive"""
+        print("Pinging")
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(executor=None, func=self.create_connection)
+        print("Pinged")
         self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
@@ -415,10 +421,13 @@ class NASDataSource(BaseDataSource):
         Args:
             path (str): The path of a folder in the Network Drive
         """
+        print("Get files")
         files = []
         loop = asyncio.get_running_loop()
         try:
+            print("Running scandir")
             files = await loop.run_in_executor(None, smbclient.scandir, path)
+            print("Done running scandir")
         except SMBConnectionClosed as exception:
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
@@ -449,6 +458,7 @@ class NASDataSource(BaseDataSource):
             path (str): The file path of the file on the Network Drive
         """
         try:
+            print(f"Fetching file content in path {path}")
             with smbclient.open_file(
                 path=path, encoding="utf-8", errors="ignore", mode="rb"
             ) as file:
