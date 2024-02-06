@@ -345,8 +345,7 @@ class NASDataSource(BaseDataSource):
             server=self.server_ip,
             username=self.username,
             password=self.password,
-            port=self.port,
-            auth_protocol="ntlm",
+            port=self.port
         )
         print("Created connection")
 
