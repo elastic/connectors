@@ -27,13 +27,13 @@
                         "label": "Port",
                         "order": 2,
                         "type": "int",
-                        "value": 9090
+                        "value": 1521
                 },
                 "username": {
                         "label": "Username",
                         "order": 3,
                         "type": "str",
-                        "value": "admin"
+                        "value": "c##admin"
                 },
                 "password": {
                         "label": "Password",
@@ -46,7 +46,7 @@
                         "label": "Database",
                         "order": 5,
                         "type": "str",
-                        "value": "xe"
+                        "value": "FREE"
                 },
                 "tables": {
                         "display": "textarea",
