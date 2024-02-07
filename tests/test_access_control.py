@@ -7,7 +7,6 @@
 import pytest
 
 from connectors.access_control import (
-    ACCESS_CONTROL,
     es_access_control_query,
     prefix_identity,
 )
@@ -20,18 +19,29 @@ async def test_access_control_query():
 
     assert access_control_query == {
         "query": {
-            "template": {"params": {"access_control": access_control}},
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {"terms": {f"{ACCESS_CONTROL}.enum": access_control}},
-                            ]
-                        }
+            "template": {
+                "params": {"access_control": access_control},
+                "source": """{
+                    "bool": {
+                        "should": [
+                            {
+                                "bool": {
+                                    "must_not": {
+                                        "exists": {
+                                            "field": "_allow_access_control"
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "terms": {
+                                    "_allow_access_control.enum": {{#toJson}}access_control{{/toJson}}
+                                }
+                            }
+                        ]
                     }
-                }
-            },
+                }""",
+            }
         }
     }
 
