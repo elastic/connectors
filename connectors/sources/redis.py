@@ -7,8 +7,13 @@ import json
 from enum import Enum
 from functools import cached_property
 
+import fastjsonschema
 import redis.asyncio as redis
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import hash_id, iso_utc
@@ -82,20 +87,20 @@ class RedisClient:
                     exc_info=True,
                 )
 
-    async def get_paginated_key(self, db, pattern, _type=None):
+    async def get_paginated_key(self, db, pattern, type_=None):
         """Make a paginated call for fetching database keys.
 
         Args:
             db: Index of database
             pattern: keyname or pattern
-            _type: Datatype for filter data
+            type_: Datatype for filter data
 
         Yields:
             string: key in database
         """
         await self._client.execute_command("SELECT", db)
         async for key in self._client.scan_iter(
-            match=pattern, count=PAGE_SIZE, _type=_type
+            match=pattern, count=PAGE_SIZE, _type=type_
         ):
             yield key
 
@@ -148,11 +153,72 @@ class RedisClient:
         await self._client.ping()
 
 
+class RedisAdvancedRulesValidator(AdvancedRulesValidator):
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "database": {"type": "integer", "minLength": 1, "minimum": 0},
+            "key_pattern": {"type": "string", "minLength": 1},
+            "type": {
+                "type": "string",
+                "minLength": 1,
+            },
+        },
+        "required": ["database"],
+        "anyOf": [
+            {"required": ["key_pattern"]},
+            {"required": ["type"]},
+        ],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+        return await self._remote_validation(advanced_rules)
+
+    async def _remote_validation(self, advanced_rules):
+        try:
+            RedisAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+        invalid_db = []
+        database_to_filter = [rule["database"] for rule in advanced_rules]
+        for db in database_to_filter:
+            check_db = await self.source.client.validate_database(db=db)
+            if not check_db:
+                invalid_db.append(db)
+        if invalid_db:
+            msg = f"Database {','.join(map(str, invalid_db))} are not available."
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=msg,
+            )
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
+
+
 class RedisDataSource(BaseDataSource):
     """Redis"""
 
     name = "Redis"
     service_type = "redis"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -187,6 +253,9 @@ class RedisDataSource(BaseDataSource):
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
+
+    def advanced_rules_validators(self):
+        return [RedisAdvancedRulesValidator(self)]
 
     async def close(self):
         await self.client.close()
@@ -248,9 +317,9 @@ class RedisDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Redis.")
             raise
 
-    async def get_db_records(self, db, pattern="*", _type=None):
+    async def get_db_records(self, db, pattern="*", type_=None):
         async for key in self.client.get_paginated_key(
-            db=db, pattern=pattern, _type=_type
+            db=db, pattern=pattern, type_=type_
         ):
             key_type, key_value, key_size = await self.client.get_key_metadata(key=key)
             yield await self.format_document(
@@ -270,6 +339,15 @@ class RedisDataSource(BaseDataSource):
         Yields:
             dictionary: Document from Redis.
         """
-        async for db in self.client.get_databases():
-            async for document in self.get_db_records(db=db):
-                yield document, None
+        if filtering and filtering.has_advanced_rules():
+            for rule in filtering.get_advanced_rules():
+                async for document in self.get_db_records(
+                    db=rule.get("database"),
+                    pattern=rule.get("key_pattern"),
+                    type_=rule.get("type"),
+                ):
+                    yield document, None
+        else:
+            async for db in self.client.get_databases():
+                async for document in self.get_db_records(db=db):
+                    yield document, None
