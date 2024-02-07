@@ -22,11 +22,11 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        RECORD_COUNT = 5000
+        RECORD_COUNT = 2000  # Total no. of docs: ~20k. Total volume: ~4 GB
     case "medium":
-        RECORD_COUNT = 7000
+        RECORD_COUNT = 4500  # Total no. of docs: ~50k. Total volume: ~10 GB
     case "large":
-        RECORD_COUNT = 10000
+        RECORD_COUNT = 7000  # Total no. of docs: ~80k. Total volume: ~16 GB
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
         raise Exception(msg)
@@ -163,7 +163,7 @@ def token():
 def query(version):
     query = request.args.get("q")
     table_name = re.findall(r"\bFROM\s+(\w+)", query)[-1]
-    done = random.choice([True, False])
+    done = False
 
     response = {"done": done, "records": generate_records(table_name)}
 
