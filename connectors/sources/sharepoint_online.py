@@ -209,6 +209,10 @@ class MicrosoftSecurityToken:
         self._client_secret = client_secret
 
         self._token_cache = CacheWithTimeout()
+        self.proxy = None
+
+    def enable_proxy(self, host, username, password):
+        self.proxy = {'host': host, 'username': username, 'password':password}
 
     async def get(self):
         """Get bearer token for provided credentials.
@@ -274,7 +278,15 @@ class GraphAPIToken(MicrosoftSecurityToken):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"client_id={self._client_id}&scope=https://graph.microsoft.com/.default&client_secret={self._client_secret}&grant_type=client_credentials"
 
-        async with self._http_session.post(url, headers=headers, data=data) as resp:
+        call_kwargs = { 'headers': headers, 'data': data}
+
+        if self.proxy:
+            call_kwargs['proxy'] = self.proxy['host']
+            proxy_auth = aiohttp.BasicAuth(self.proxy['username'], self.proxy['password'])
+            call_kwargs['proxy_auth'] = proxy_auth
+
+
+        async with self._http_session.post(url, **call_kwargs) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
@@ -303,7 +315,15 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        async with self._http_session.post(url, headers=headers, data=data) as resp:
+        call_kwargs = {'headers': headers, 'data': data}
+
+        if self.proxy:
+            call_kwargs['proxy'] = self.proxy['host']
+            proxy_auth = aiohttp.BasicAuth(self.proxy['username'], self.proxy['password'])
+            call_kwargs['proxy_auth'] = proxy_auth
+
+
+        async with self._http_session.post(url, **call_kwargs) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
@@ -348,6 +368,11 @@ class MicrosoftAPISession:
         self._scroll_field = scroll_field
         self._sleeps = CancellableSleeps()
         self._logger = logger_
+        self.proxy = None
+
+    def enable_proxy(self, host, username, password):
+        self.proxy = {'host': host, 'username': username, 'password':password}
+
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -407,8 +432,15 @@ class MicrosoftAPISession:
             headers = {"authorization": f"Bearer {token}"}
             self._logger.debug(f"Posting to Sharepoint Endpoint: {absolute_url}.")
 
+            call_kwargs = {'headers': headers, 'json': payload}
+
+            if self.proxy:
+                call_kwargs['proxy'] = self.proxy['host']
+                proxy_auth = aiohttp.BasicAuth(self.proxy['username'], self.proxy['password'])
+                call_kwargs['proxy_auth'] = proxy_auth
+
             async with self._http_session.post(
-                absolute_url, headers=headers, json=payload
+                absolute_url, **call_kwargs
             ) as resp:
                 if absolute_url.endswith("/$batch"):  # response code of $batch lies
                     await self._check_batch_items_for_errors(absolute_url, resp)
@@ -448,9 +480,16 @@ class MicrosoftAPISession:
             headers = {"authorization": f"Bearer {token}"}
             self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
+            call_kwargs = {'headers': headers}
+
+            if self.proxy:
+                call_kwargs['proxy'] = self.proxy['host']
+                proxy_auth = aiohttp.BasicAuth(self.proxy['username'], self.proxy['password'])
+                call_kwargs['proxy_auth'] = proxy_auth
+
             async with self._http_session.get(
                 absolute_url,
-                headers=headers,
+                **call_kwargs,
             ) as resp:
                 yield resp
         except aiohttp.client_exceptions.ClientOSError:
@@ -556,6 +595,12 @@ class SharepointOnlineClient:
         self._rest_api_client = MicrosoftAPISession(
             self._http_session, self.rest_api_token, "odata.nextLink", self._logger
         )
+
+    def enable_proxy(self, hostname, username, password):
+        self._graph_api_client.enable_proxy(hostname, username, password)
+        self._rest_api_client.enable_proxy(hostname, username, password)
+        self.graph_api_token.enable_proxy(hostname, username, password)
+        self.rest_api_token.enable_proxy(hostname, username, password)
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -1143,9 +1188,16 @@ class SharepointOnlineDataSource(BaseDataSource):
             client_id = self.configuration["client_id"]
             client_secret = self.configuration["secret_value"]
 
+
             self._client = SharepointOnlineClient(
                 tenant_id, tenant_name, client_id, client_secret
             )
+
+            if self.configuration["enable_proxy"]:
+                proxy_host = self.configuration["proxy_address"]
+                proxy_username = self.configuration["proxy_username"]
+                proxy_password = self.configuration["proxy_password"]
+                self._client.enable_proxy(proxy_host, proxy_username, proxy_password)
 
         return self._client
 
@@ -1249,6 +1301,33 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
+            },
+            "enable_proxy": {
+                "display": "toggle",
+                "label": "Enable Proxy",
+                "tooltip": "If enabled, all requests to Sharepoint Online will go through a proxy",
+                "order": 14,
+                "type": "bool",
+                "value": True,
+            },
+            "proxy_address": {
+                "label": "Proxy Host",
+                "order": 15,
+                "type": "str",
+                "depends_on": [{"field": "enable_proxy", "value": True}],
+            },
+            "proxy_username": {
+                "label": "Proxy Username",
+                "order": 16,
+                "type": "str",
+                "depends_on": [{"field": "enable_proxy", "value": True}],
+            },
+            "proxy_password": {
+                "label": "Proxy Password",
+                "order": 17,
+                "type": "str",
+                "sensitive": True,
+                "depends_on": [{"field": "enable_proxy", "value": True}],
             },
         }
 
