@@ -13,7 +13,11 @@ from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
-from connectors.sync_job_runner import SyncJobRunner, SyncJobStartError
+from connectors.source import BaseDataSource
+from connectors.sync_job_runner import (
+    SyncJobRunner,
+    SyncJobStartError,
+)
 from tests.commons import AsyncIterator
 
 SEARCH_INDEX_NAME = "search-mysql"
@@ -27,6 +31,7 @@ def mock_connector():
     connector.id = "1"
     connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
+    connector.features.incremental_sync_enabled.return_value = True
     connector.sync_cursor = SYNC_CURSOR
     connector.document_count = AsyncMock(return_value=TOTAL_DOCUMENT_COUNT)
     connector.sync_starts = AsyncMock(return_value=True)
@@ -68,6 +73,7 @@ def create_runner(
     job_type=JobType.FULL,
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
+    connector=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -81,17 +87,26 @@ def create_runner(
         data_provider.ping.side_effect = Exception()
     data_provider.sync_cursor = Mock(return_value=sync_cursor)
     data_provider.close = AsyncMock()
+
+    # mock get_docs_incrementally to not rely on a call to `execute`
+    data_provider.get_docs_incrementally = Mock()
+    data_provider.get_docs_incrementally.__func__ = Mock()
+
     source_klass.return_value = data_provider
 
     sync_job = mock_sync_job(job_type=job_type, index_name=index_name)
-    connector = mock_connector()
+    if not connector:
+        connector = mock_connector()
+
     es_config = {}
+    service_config = {}
 
     return SyncJobRunner(
         source_klass=source_klass,
         sync_job=sync_job,
         connector=connector,
         es_config=es_config,
+        service_config=service_config,
     )
 
 
@@ -188,6 +203,24 @@ async def test_connector_access_control_sync_starts_fail():
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_incremental_sync_job_starts_fail():
+    connector = mock_connector()
+    # disable incremental sync
+    connector.features.incremental_sync_enabled.return_value = False
+
+    sync_job_runner = create_runner(job_type=JobType.INCREMENTAL, connector=connector)
+
+    await sync_job_runner.execute()
+
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -751,3 +784,110 @@ async def test_sync_job_runner_sets_features_for_data_provider():
     await sync_job_runner.execute()
 
     assert sync_job_runner.data_provider.set_features.called
+
+
+def test_skip_unchanged_documents_enabled():
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+    assert (
+        sync_job_runner._skip_unchanged_documents_enabled(
+            data_provider=MockDataSource(Mock()),
+            job_type=JobType.INCREMENTAL,
+        )
+        is True
+    )
+
+
+def test_skip_unchanged_documents_enabled_disabled():
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+        def get_docs_incrementally(self, sync_cursor, filtering=None):
+            pass
+
+    assert (
+        sync_job_runner._skip_unchanged_documents_enabled(
+            data_provider=MockDataSource(Mock()),
+            job_type=JobType.INCREMENTAL,
+        )
+        is False
+    )
+
+
+def test_skip_unchanged_documents_enabled_disabled_by_full_sync():
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+    assert (
+        sync_job_runner._skip_unchanged_documents_enabled(
+            data_provider=MockDataSource(Mock()),
+            job_type=JobType.FULL,
+        )
+        is False
+    )
+
+
+@patch(
+    "connectors.sync_job_runner.SyncJobRunner._skip_unchanged_documents_enabled",
+    Mock(return_value=True),
+)
+@pytest.mark.asyncio
+async def test_incremental_sync_with_skip_unchanged_documents_generator():
+    sync_job_runner = create_runner(job_type=JobType.INCREMENTAL)
+
+    data_provider = Mock()
+    data_provider.sync_job.filtering = {}
+    data_provider.get_docs.return_value = AsyncIterator([])
+    sync_job_runner.data_provider = data_provider
+
+    async for _doc, _, _ in sync_job_runner.generator():
+        pass
+
+    sync_job_runner.data_provider.get_docs.assert_called_once_with(
+        filtering=data_provider.sync_job.filtering
+    )
+
+
+@patch(
+    "connectors.sync_job_runner.SyncJobRunner._skip_unchanged_documents_enabled",
+    Mock(return_value=False),
+)
+@pytest.mark.asyncio
+async def test_incremental_sync_without_skip_unchanged_documents_generator():
+    connector = mock_connector()
+    connector.sync_cursor = {}
+
+    sync_job_runner = create_runner(job_type=JobType.INCREMENTAL, connector=connector)
+
+    data_provider = Mock()
+    data_provider.get_docs_incrementally = AsyncIterator([])
+    data_provider.sync_job.filtering = {}
+    data_provider.get_docs.return_value = AsyncIterator([])
+    sync_job_runner.data_provider = data_provider
+
+    async for _doc, _, _ in sync_job_runner.generator():
+        pass
+
+    sync_job_runner.data_provider.get_docs_incrementally.assert_called_once_with(
+        filtering=data_provider.sync_job.filtering, sync_cursor=connector.sync_cursor
+    )
+
+
+async def test_unsupported_job_type():
+    connector = mock_connector()
+    connector.sync_cursor = {}
+
+    sync_job_runner = create_runner(job_type="unsupported_type", connector=connector)
+
+    with pytest.raises(SyncJobStartError):
+        await sync_job_runner.execute()

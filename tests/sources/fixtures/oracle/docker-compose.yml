@@ -74,11 +74,11 @@ services:
       - esnet
 
   oracle:
-    image: gvenzl/oracle-xe:latest
+    image: container-registry.oracle.com/database/free:latest
     ports:
-      - 9090:1521
-    environment: 
-      - ORACLE_PASSWORD=Password_123
+      - 1521:1521
+    environment:
+      - ORACLE_PWD=Password_123
     restart: always
 
 networks:

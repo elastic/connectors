@@ -434,6 +434,7 @@ class SharepointServerDataSource(BaseDataSource):
 
     name = "SharePoint Server"
     service_type = "sharepoint_server"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the SharePoint

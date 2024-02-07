@@ -14,7 +14,6 @@ import re
 import shutil
 import ssl
 import subprocess
-import sys
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -36,7 +35,6 @@ DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
-DEFAULT_BULK_MAX_RETRIES = 3
 
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
@@ -893,9 +891,3 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
-
-
-def ensure_python_3_10_or_higher():
-    if sys.version_info < (3, 10):
-        msg = "Requires Python 3.10 or higher."
-        raise ValueError(msg)

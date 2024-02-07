@@ -11,6 +11,7 @@ import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
@@ -446,27 +447,9 @@ EXPECTED_ACCESS_CONTROL = [
                         "username:demo-user",
                         "email:demo@example.com",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "user_id:#123",
-                                            "username:demo-user",
-                                            "email:demo@example.com",
-                                        ]
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            },
+                },
+                "source": DLS_QUERY,
+            }
         },
     }
 ]

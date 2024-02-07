@@ -88,9 +88,19 @@ class JobSchedulingService(BaseService):
             raise DataSourceError(msg)
 
         source_klass = get_source_klass(self.source_list[connector.service_type])
+        data_source = source_klass(connector.configuration)
+        data_source.set_logger(connector.logger)
+
+        connector.log_debug("Validating configuration")
+        try:
+            data_source.validate_config_fields()
+            await data_source.validate_config()
+        except Exception as e:
+            connector.log_error(e, exc_info=True)
+            await connector.error(e)
+            return
+
         if connector.features.sync_rules_enabled():
-            data_source = source_klass(connector.configuration)
-            data_source.set_logger(connector.logger)
             try:
                 await connector.validate_filtering(validator=data_source)
             finally:
@@ -200,7 +210,7 @@ class JobSchedulingService(BaseService):
 
             try:
                 next_sync = connector.next_sync(job_type, last_wake_up_time)
-                connector.log_debug(f"Next sync is at {next_sync}")
+                connector.log_debug(f"Next '{job_type_value}' sync is at {next_sync}")
             except Exception as e:
                 connector.log_critical(e, exc_info=True)
                 await connector.error(str(e))

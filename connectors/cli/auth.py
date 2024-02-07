@@ -10,8 +10,17 @@ CONFIG_FILE_PATH = ".cli/config.yml"
 
 
 class Auth:
-    def __init__(self, host, username, password):
-        self.elastic_config = {"host": host, "username": username, "password": password}
+    def __init__(self, host, username=None, password=None, api_key=None):
+        elastic_config = {
+            "host": host,
+            "username": username,
+            "password": password,
+            "api_key": api_key,
+        }
+
+        # remove empty values
+        self.elastic_config = {k: v for k, v in elastic_config.items() if v is not None}
+
         self.es_management_client = ESManagementClient(self.elastic_config)
 
     def authenticate(self):

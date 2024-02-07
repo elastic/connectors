@@ -151,6 +151,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
     name = "Google Cloud Storage"
     service_type = "google_cloud_storage"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Google Cloud Storage Client.
