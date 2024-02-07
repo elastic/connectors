@@ -183,3 +183,13 @@ class ESManagementClient(ESClient):
             timestamp = source.get(TIMESTAMP_FIELD)
 
             yield doc_id, timestamp
+
+    async def get_connector_secret(self, connector_secret_id):
+        secret = await self._retrier.execute_with_retry(
+            partial(
+                self.client.perform_request,
+                "GET",
+                f"/_connector/_secret/{connector_secret_id}",
+            )
+        )
+        return secret.get("value")
