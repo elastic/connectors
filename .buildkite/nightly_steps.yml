@@ -116,3 +116,8 @@ steps:
       - ".buildkite/run_nigthly.sh box"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Redis"
+    command:
+      - ".buildkite/run_nigthly.sh redis"
+    artifact_paths:
+      - "perf8-report-*/**/*"
