@@ -52,6 +52,22 @@ List of database index for your Redis server/cloud. * will fetch data from all d
 - `0,1,2`
 - `*`
 
+#### `tls_enabled`
+
+Toggle to use the SSL/TLS enabled option. Disabled by default.
+
+#### `mutual_tls_enabled`
+
+Toggle to use the secure mutual SSL/TLS enabled option. Ensure that your Redis deployment supports mutual SSL/TLS connections. Disabled by default.
+
+#### `tls_certfile`
+
+Specifies the certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Redis instance. This field depends on **mutual_tls_enabled**
+
+#### `tls_keyfile`
+
+Specifies the client private key. The value of the key is used to validate the connection in Redis instance. This field depends on **mutual_tls_enabled**
+
 *NOTE*:
 
 - This field is ignored when using advanced sync rules.

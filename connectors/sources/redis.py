@@ -324,7 +324,7 @@ class RedisDataSource(BaseDataSource):
                 "label": "client private key file for SSL/TLS",
                 "order": 9,
                 "required": False,
-                "tooltip": "Specifies the client private key from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Redis instance.",
+                "tooltip": "Specifies the client private key from the Certificate Authority. The value of the key is used to validate the connection in Redis instance",
                 "type": "str",
             },
         }
