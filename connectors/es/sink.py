@@ -569,40 +569,29 @@ class Extractor:
                 self._log_progress()
 
             doc_id = doc["id"] = doc.pop("_id")
-            doc_exists = doc_id in existing_ids
 
-            if doc_exists:
-                last_update_timestamp = existing_ids.pop(doc_id)
-                doc_not_updated = (
-                    TIMESTAMP_FIELD in doc
-                    and last_update_timestamp == doc[TIMESTAMP_FIELD]
-                )
+            self.total_docs_created += 1
 
-                if doc_not_updated:
-                    continue
+            if TIMESTAMP_FIELD not in doc:
+                doc[TIMESTAMP_FIELD] = iso_utc()
 
-                self.total_docs_updated += 1
+            self._logger.debug(f"Creating or updating role with id '{doc_id}'")
+            role_creation_or_update_result = await self.client.client.security.put_role(
+                name=doc_id,
+                cluster=["all"],
+                indices=[
+                    {
+                        "names": ["search-spo"],
+                        "privileges": ["all"],
+                        "query": doc.get("query")
+                    }
+                ],
 
-                operation = OP_UPSERT
-            else:
-                self.total_docs_created += 1
-
-                if TIMESTAMP_FIELD not in doc:
-                    doc[TIMESTAMP_FIELD] = iso_utc()
-
-                operation = OP_INDEX
-
-            await self.put_doc(
-                {
-                    "_op_type": operation,
-                    "_index": self.index,
-                    "_id": doc_id,
-                    "doc": doc,
-                }
             )
+            self._logger.debug(f"Role creation or udpate result: {role_creation_or_update_result}")
+
             await asyncio.sleep(0)
 
-        await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc("END_DOCS")
 
     async def enqueue_docs_to_delete(self, existing_ids):
