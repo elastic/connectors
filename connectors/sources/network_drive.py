@@ -343,9 +343,7 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def get_directory_details(self):
-        return list(
-            smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}", port=self.port)
-        )
+        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
 
     def find_matching_paths(self, advanced_rules):
         """
@@ -409,9 +407,7 @@ class NASDataSource(BaseDataSource):
         files = []
         loop = asyncio.get_running_loop()
         try:
-            files = await loop.run_in_executor(
-                executor=None, func=partial(smbclient.scandir, path, port=self.port)
-            )
+            files = await loop.run_in_executor(None, smbclient.scandir, path)
         except SMBConnectionClosed as exception:
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
@@ -443,7 +439,7 @@ class NASDataSource(BaseDataSource):
         """
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
+                path=path, encoding="utf-8", errors="ignore", mode="rb"
             ) as file:
                 file_content, chunk = BytesIO(), True
                 while chunk:
@@ -504,7 +500,6 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
-                port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL

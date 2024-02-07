@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aioresponses import CallbackResult
 
+from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.salesforce import (
@@ -2033,26 +2034,9 @@ async def test_get_access_control_dls_enabled(mock_responses):
         "_timestamp": "2023-12-25T01:01:01Z",
         "query": {
             "template": {
-                "params": {"access_control": ["user:Dummy User", "user_id:user_id"]}
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "user:Dummy User",
-                                            "user_id:user_id",
-                                        ]
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            },
+                "params": {"access_control": ["user:Dummy User", "user_id:user_id"]},
+                "source": DLS_QUERY,
+            }
         },
     }
 
