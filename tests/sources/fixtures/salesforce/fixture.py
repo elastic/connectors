@@ -15,16 +15,16 @@ from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
 
-fake_provider = WeightedFakeProvider()
+fake_provider = WeightedFakeProvider(weights=[0.6, 0.2, 0.15, 0.05])
 fake = fake_provider.fake
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        RECORD_COUNT = 500
+        RECORD_COUNT = 5000
     case "medium":
-        RECORD_COUNT = 2000
+        RECORD_COUNT = 7000
     case "large":
         RECORD_COUNT = 10000
     case _:
@@ -132,12 +132,6 @@ def generate_records(table_name):
 
 
 def generate_content_document_records():
-    # 1 in every 12 docs gets 1 attached file
-    # 1 in every 12 docs gets 2 attached files
-    d6 = random.choice(range(6))
-    if d6 > 1:
-        return []
-
     return [
         {
             "ContentDocument": {
@@ -147,7 +141,6 @@ def generate_content_document_records():
                 },
             }
         }
-        for _ in range(random.choice([1, 2]))
     ]
 
 
@@ -203,7 +196,7 @@ def describe_sobject(_version, _sobject):
 
 @app.route("/sfc/servlet.shepherd/version/download/<_download_id>", methods=["GET"])
 def download(_download_id):
-    return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
+    return io.BytesIO(bytes(fake_provider.get_text(), encoding="utf-8"))
 
 
 if __name__ == "__main__":
