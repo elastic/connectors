@@ -261,7 +261,7 @@ class GraphQLDataSource(BaseDataSource):
         }
 
     def is_query(self, graphql_query):
-        ast = parse(graphql_query)
+        ast = parse(graphql_query)  # pyright: ignore
         operation_type = ast.definitions[0].operation  # pyright: ignore
         if operation_type.value == "query":
             return True
