@@ -12,6 +12,9 @@ from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 from elasticsearch import ApiError, BadRequestError
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
@@ -19,6 +22,7 @@ from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
     OP_UPSERT,
+    ApiKeyNotFoundError,
     AsyncBulkRunningError,
     Extractor,
     ForceCanceledError,
@@ -1340,3 +1344,50 @@ def test_log_on_doc_id_tracing_enabled_if_disabled(patch_logger):
     sink._log_on_doc_id_tracing_enabled(log_msg)
 
     patch_logger.assert_not_present(log_msg)
+
+  
+@pytest.mark.asyncio
+async def test_update_authorization():
+    config = {
+        "host": "http://nowhere.com:9200",
+        "user": "someone",
+        "password": "something",
+    }
+    sync_orchestrator = SyncOrchestrator(config)
+
+    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
+        return_value="secret-value"
+    )
+    sync_orchestrator.es_management_client.client.options = AsyncMock()
+
+    await sync_orchestrator.update_authorization("my-index", "my-secret-id")
+
+    sync_orchestrator.es_management_client.get_connector_secret.assert_called_with(
+        "my-secret-id"
+    )
+    sync_orchestrator.es_management_client.client.options.assert_called_with(
+        api_key="secret-value"
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_authorization_when_api_key_not_found():
+    config = {
+        "host": "http://nowhere.com:9200",
+        "user": "someone",
+        "password": "something",
+    }
+    sync_orchestrator = SyncOrchestrator(config)
+
+    error_meta = Mock()
+    error_meta.status = 404
+    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
+        side_effect=ElasticNotFoundError(
+            "resource_not_found_exception",
+            error_meta,
+            "No secret with id [my-secret-id]",
+        )
+    )
+
+    with pytest.raises(ApiKeyNotFoundError):
+        await sync_orchestrator.update_authorization("my-index", "my-secret-id")

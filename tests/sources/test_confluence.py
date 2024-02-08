@@ -14,6 +14,7 @@ import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
+from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.confluence import (
@@ -982,26 +983,8 @@ async def test_get_access_control_dls_enabled():
                         "group_id:607194d6bc3c3f006f4c35d8",
                         "role_key:607194d6bc3c3f006f4c35d9",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "account_id:607194d6bc3c3f006f4c35d6",
-                                            "group_id:607194d6bc3c3f006f4c35d8",
-                                            "role_key:607194d6bc3c3f006f4c35d9",
-                                        ]
-                                    }
-                                },
-                            ]
-                        }
-                    }
-                }
+                },
+                "source": DLS_QUERY,
             },
         },
     }

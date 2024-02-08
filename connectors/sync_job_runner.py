@@ -146,6 +146,14 @@ class SyncJobRunner:
                 self.es_config, self.sync_job.logger
             )
 
+            if (
+                self.connector.native
+                and self.connector.features.native_connector_api_keys_enabled()
+            ):
+                await self.sync_orchestrator.update_authorization(
+                    self.connector.index_name, self.connector.api_key_secret_id
+                )
+
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
                 await self._execute_content_sync_job(job_type, bulk_options)
