@@ -194,7 +194,7 @@ def describe_sobject(_version, _sobject):
 
 @app.route("/sfc/servlet.shepherd/version/download/<_download_id>", methods=["GET"])
 def download(_download_id):
-    return io.BytesIO(bytes(fake_provider.get_text(), encoding="utf-8"))
+    return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 
 if __name__ == "__main__":
