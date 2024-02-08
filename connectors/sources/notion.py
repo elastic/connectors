@@ -304,7 +304,7 @@ class NotionDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enable indexing comments",
                 "order": 4,
-                "tooltip": "Enabling this would significantly degrade the connector performance due to increased amount of network calls to the source",
+                "tooltip": "Enabling this will increase the amount of network calls to the source, and may decrease performance",
                 "type": "bool",
                 "value": False,
             },
