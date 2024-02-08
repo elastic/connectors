@@ -354,7 +354,15 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_file_metadata():
+@pytest.mark.parametrize(
+    "file_name",
+    [
+        ("some.file.with.periods"),
+        ("some file with spaces"),
+        ("some/file/with/slashes"),
+    ],
+)
+async def test_get_file_metadata(file_name):
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_get_file_metadata_key",
@@ -365,7 +373,7 @@ async def test_get_file_metadata():
 
             mock_response.content_length = 2048
             mock_response.url = Mock()
-            mock_response.url.path = "http://example.com/some_file.ext"
+            mock_response.url.path = "http://example.com/{file_name}.ext"
             mock_get.return_value.__aenter__.return_value = mock_response
             attachment_metadata = {}
             await source.get_file_metadata(

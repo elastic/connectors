@@ -42,7 +42,6 @@ class NotionClient:
         self.configuration = configuration
         self._logger = logger
         self.notion_secret_key = self.configuration["notion_secret_key"]
-        self.retry_count = self.configuration["retry_count"]
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -75,6 +74,7 @@ class NotionClient:
         skipped_exceptions=NotFound,
     )
     async def get_via_session(self, url):
+        self._logger.debug(f"Fetching data from url {url}")
         try:
             async with self.session.get(url=url) as response:
                 yield response
@@ -97,17 +97,22 @@ class NotionClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def make_request(self, endpoint_key, method="GET", **kwargs):
+        self._logger.debug(f"Making request to {endpoint_key} with params {kwargs}")
         try:
-            path = ENDPOINTS.get(endpoint_key)
-            if path:
+            if path := ENDPOINTS.get(endpoint_key):
                 return await self._get_client.request(
                     path=path, method=method, **kwargs
                 )
         except APIResponseError as api_error:
             self._logger.exception(f"Notion API Error - {api_error}")
-            raise
-        except aiohttp.ClientError as client_error:
-            self._logger.exception(f"Client Error - {client_error}")
+            if api_error.code == "rate_limited" and api_error.status == 429:
+                retry_after = (
+                    api_error.headers.get("retry-after") or DEFAULT_RETRY_SECONDS
+                )
+                self._logger.info(
+                    f"Connector will attempt to retry after {int(retry_after)} seconds."
+                )
+                await self._sleeps.sleep(int(retry_after))
             raise
 
     async def fetch_owner(self):
@@ -148,7 +153,7 @@ class NotionClient:
         async for block in async_iterate_paginated_api(
             self._get_client.blocks.children.list, block_id=block_id
         ):
-            if block.get("type") not in ["child_database", "child_page"]:
+            if block.get("type") not in ["child_database", "child_page", "unsupported"]:
                 yield block
                 async for child in fetch_children_recursively(block):
                     yield child
@@ -308,20 +313,11 @@ class NotionDataSource(BaseDataSource):
                 "type": "bool",
                 "value": False,
             },
-            "retry_count": {
-                "default_value": 3,
-                "display": "numeric",
-                "label": "Retry Count",
-                "order": 5,
-                "required": False,
-                "type": "int",
-                "ui_restrictions": ["advanced"],
-            },
             "concurrent_downloads": {
                 "default_value": 20,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 6,
+                "order": 5,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -355,9 +351,10 @@ class NotionDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        attachment = await self.get_file_metadata(attachment, file_url)
-        if attachment == []:
+        if not attachment:
             self._logger.info("skipping attachment")
+            return
+        attachment = await self.get_file_metadata(attachment, file_url)
         attachment_size = int(attachment["size"])
 
         attachment_name = attachment["name"]
@@ -424,17 +421,21 @@ class NotionDataSource(BaseDataSource):
         Yields:
             dict: Documents from Notion.
         """
-
+        self._logger.info("Fetching users")
         async for user_document in self.notion_client.fetch_users():
             yield self._format_doc(user_document), None
 
         block_ids_store = []
         for query in self.generate_query():
+            self._logger.info(f"Fetching pages and databases using query {query}")
+
             async for page_database in self.notion_client.fetch_by_query(query=query):
                 block_id = page_database.get("id")
                 block_ids_store.append(block_id)
 
                 yield self._format_doc(page_database), None
+                self._logger.info(f"Fetching child blocks for block {block_id}")
+
                 async for child_block in self.notion_client.fetch_child_blocks(
                     block_id=block_id
                 ):
@@ -443,7 +444,9 @@ class NotionDataSource(BaseDataSource):
                     if child_block.get("type") != "file":
                         yield self._format_doc(child_block), None
                     else:
-                        file_url = child_block.get("file").get("file").get("url")
+                        file_url = (
+                            child_block.get("file", {}).get("file", {}).get("url")
+                        )
                         child_block = self._format_doc(child_block)
                         yield child_block, partial(
                             self.get_content, copy(child_block), file_url
@@ -451,6 +454,7 @@ class NotionDataSource(BaseDataSource):
 
         if self.index_comments is True:
             for block_id in block_ids_store:
+                self._logger.info(f"Fetching comments for block {block_id}")
                 async for comment in self.notion_client.fetch_comments(
                     block_id=block_id
                 ):
