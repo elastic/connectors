@@ -1345,7 +1345,7 @@ def test_log_on_doc_id_tracing_enabled_if_disabled(patch_logger):
 
     patch_logger.assert_not_present(log_msg)
 
-  
+
 @pytest.mark.asyncio
 async def test_update_authorization():
     config = {
