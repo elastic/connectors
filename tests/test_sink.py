@@ -20,11 +20,11 @@ from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
 from connectors.es.sink import (
     OP_DELETE,
-    ElasticsearchOverloadedError,
     OP_INDEX,
     OP_UPSERT,
     ApiKeyNotFoundError,
     AsyncBulkRunningError,
+    ElasticsearchOverloadedError,
     Extractor,
     ForceCanceledError,
     Sink,
