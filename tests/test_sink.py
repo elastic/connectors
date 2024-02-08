@@ -384,6 +384,7 @@ async def setup_extractor(
     basic_rule_engine=None,
     sync_rules_enabled=False,
     content_extraction_enabled=False,
+    custom_params=None,
 ):
     config = {
         "username": "elastic",
@@ -399,13 +400,14 @@ async def setup_extractor(
         INDEX,
         filter_=filter_mock,
         content_extraction_enabled=content_extraction_enabled,
+        custom_params=custom_params,
     )
     extractor.basic_rule_engine = basic_rule_engine if sync_rules_enabled else None
     return extractor
 
 
 @pytest.mark.parametrize(
-    "existing_docs, docs_from_source, doc_should_ingest, sync_rules_enabled, content_extraction_enabled, expected_queue_operations, "
+    "existing_docs, docs_from_source, doc_should_ingest, sync_rules_enabled, content_extraction_enabled, parameters, expected_queue_operations, "
     "expected_total_docs_updated, expected_total_docs_created, expected_total_docs_deleted, expected_total_downloads",
     [
         (
@@ -415,6 +417,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -428,6 +431,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [delete_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(0),
@@ -441,6 +445,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [index_operation(DOC_ONE), delete_operation(DOC_TWO), end_docs_operation()],
             updated(0),
             created(1),
@@ -454,6 +459,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [
                 # update happens through overwriting
                 index_operation(DOC_ONE),
@@ -471,6 +477,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [
                 # update happens through overwriting
                 index_operation(DOC_ONE_DIFFERENT_TIMESTAMP),
@@ -488,6 +495,7 @@ async def setup_extractor(
             (False,),
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [
                 # should not ingest doc 1
                 end_docs_operation()
@@ -505,6 +513,7 @@ async def setup_extractor(
             (False,),
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [
                 delete_operation(DOC_ONE),
                 end_docs_operation(),
@@ -522,6 +531,7 @@ async def setup_extractor(
             (False,),
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [delete_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(0),
@@ -535,6 +545,7 @@ async def setup_extractor(
             [Exception()],
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             ["FETCH_ERROR"],
             updated(0),
             created(0),
@@ -548,6 +559,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -561,6 +573,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(1),
             created(0),
@@ -581,6 +594,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [index_operation(DOC_ONE_DIFFERENT_TIMESTAMP), end_docs_operation()],
             updated(1),
             created(0),
@@ -594,6 +608,7 @@ async def setup_extractor(
             (False,),
             SYNC_RULES_DISABLED,
             CONTENT_EXTRACTION_ENABLED,
+            None,
             [
                 # should ingest doc 1 as sync rules are disabled
                 index_operation(DOC_ONE),
@@ -612,6 +627,7 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,
+            None,
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -626,6 +642,49 @@ async def setup_extractor(
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_DISABLED,
+            None,
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # no docs exist, data source has doc 1, params limit to 1 -> ingest doc 1
+            [],
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            {"limit": 1},
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(0),
+            created(1),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # no docs exist, data source has doc 1, params limit to 0 -> ingest no docs
+            [],
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            {"limit": 0},
+            [end_docs_operation()],
+            updated(0),
+            created(0),
+            deleted(0),
+            total_downloads(0),
+        ),
+        (
+            # doc 2 is present, data source has doc 1, limited to 1 -> doc 2 is not deleted
+            [DOC_TWO],
+            [(DOC_ONE, None, "index")],
+            NO_FILTERING,
+            SYNC_RULES_ENABLED,
+            CONTENT_EXTRACTION_ENABLED,
+            {"limit": 1},
             [index_operation(DOC_ONE), end_docs_operation()],
             updated(0),
             created(1),
@@ -645,6 +704,7 @@ async def test_get_docs(
     doc_should_ingest,
     sync_rules_enabled,
     content_extraction_enabled,
+    parameters,
     expected_queue_operations,
     expected_total_docs_updated,
     expected_total_docs_created,
@@ -670,6 +730,7 @@ async def test_get_docs(
             basic_rule_engine=basic_rule_engine,
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
+            custom_params=parameters,
         )
 
         await extractor.run(doc_generator, JobType.FULL)

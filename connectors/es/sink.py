@@ -409,7 +409,7 @@ class Extractor:
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
-                if limit and count >= limit:
+                if limit is not None and count >= limit:
                     break
 
                 doc, lazy_download, operation = doc
