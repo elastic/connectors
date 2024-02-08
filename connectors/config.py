@@ -1,4 +1,3 @@
-#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -10,6 +9,11 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
+DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
+DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
+
+DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
+
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -19,6 +23,7 @@ def load_config(config_file):
         _nest_configs(nested_yaml_config, key, value)
     configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
+
     return configuration
 
 
@@ -54,13 +59,18 @@ def _default_config():
             "bulk": {
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,
+                "queue_refresh_interval": 1,
+                "queue_refresh_timeout": 600,
                 "display_every": 100,
                 "chunk_size": 1000,
                 "max_concurrency": 5,
                 "chunk_max_mem_size": 5,
+                "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+                "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": 10,
-                "max_retries": 3,
             },
+            "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+            "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
             "retry_on_timeout": True,
             "request_timeout": 120,
             "max_wait_duration": 120,
@@ -77,6 +87,7 @@ def _default_config():
             "max_errors_span": 600,
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
+            "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
         },
@@ -177,3 +188,28 @@ def _merge_dicts(hsh1, hsh2):
             yield (k, hsh1[k])
         else:
             yield (k, hsh2[k])
+
+
+class DataSourceFrameworkConfig:
+    """
+    The configs that will be exposed to DataSource instances.
+    This abstraction prevents DataSource instances from having access to all configuration, while also
+    preventing them from requiring substantial changes to access new configs that may be added.
+    """
+
+    def __init__(self, max_file_size):
+        """
+        Should not be called directly. Use the Builder.
+        """
+        self.max_file_size = max_file_size
+
+    class Builder:
+        def __init__(self):
+            self.max_file_size = DEFAULT_MAX_FILE_SIZE
+
+        def with_max_file_size(self, max_file_size):
+            self.max_file_size = max_file_size
+            return self
+
+        def build(self):
+            return DataSourceFrameworkConfig(self.max_file_size)

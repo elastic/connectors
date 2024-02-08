@@ -16,6 +16,7 @@ from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
 
+from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.jira import (
@@ -415,6 +416,8 @@ def side_effect_function(url, ssl):
         ("account_email", "jira_cloud"),
         ("username", "jira_server"),
         ("password", "jira_server"),
+        ("data_center_username", "jira_data_center"),
+        ("data_center_password", "jira_data_center"),
     ],
 )
 @pytest.mark.asyncio
@@ -444,7 +447,6 @@ async def test_api_call_negative():
         with patch.object(
             aiohttp.ClientSession, "get", side_effect=Exception("Something went wrong")
         ):
-            source.jira_client.is_cloud = False
             with pytest.raises(Exception):
                 await anext(source.jira_client.api_call(url_name="ping"))
 
@@ -954,6 +956,8 @@ async def test_get_access_control_dls_enabled():
             "accountId": "607194d6bc3c3f006f4c35d6",
             "accountType": "atlassian",
             "displayName": "user1",
+            "locale": "en-US",
+            "emailAddress": "user1@dummy-domain.com",
             "active": True,
         },
         {
@@ -962,6 +966,8 @@ async def test_get_access_control_dls_enabled():
             "accountId": "607194d6bc3c3f006f4c35d7",
             "accountType": "atlassian",
             "displayName": "user2",
+            "locale": "en-US",
+            "emailAddress": "user2@dummy-domain.com",
             "active": False,
         },
         {
@@ -986,6 +992,8 @@ async def test_get_access_control_dls_enabled():
         "accountId": "607194d6bc3c3f006f4c35d6",
         "accountType": "atlassian",
         "displayName": "user1",
+        "locale": "en-US",
+        "emailAddress": "user1@dummy-domain.com",
         "active": True,
         "groups": {
             "size": 1,
@@ -1012,6 +1020,8 @@ async def test_get_access_control_dls_enabled():
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
             "display_name": "name:user1",
+            "locale": "locale:en-US",
+            "email_address": "email_address:user1@dummy-domain.com",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {
@@ -1022,26 +1032,8 @@ async def test_get_access_control_dls_enabled():
                         "group_id:607194d6bc3c3f006f4c35d8",
                         "role_key:607194d6bc3c3f006f4c35d9",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "account_id:607194d6bc3c3f006f4c35d6",
-                                            "group_id:607194d6bc3c3f006f4c35d8",
-                                            "role_key:607194d6bc3c3f006f4c35d9",
-                                        ]
-                                    }
-                                },
-                            ]
-                        }
-                    }
-                }
+                },
+                "source": DLS_QUERY,
             },
         },
     }

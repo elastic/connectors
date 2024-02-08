@@ -201,6 +201,7 @@ def test_utc():
 
 mongo = {
     "api_key_id": "",
+    "api_key_secret_id": "",
     "configuration": {
         "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
         "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
@@ -321,6 +322,7 @@ async def test_connector_properties():
     connector_src = {
         "_id": "test",
         "_source": {
+            "api_key_secret_id": "api-key-secret-id",
             "service_type": "test",
             "index_name": "search-some-index",
             "configuration": {},
@@ -360,6 +362,7 @@ async def test_connector_properties():
     assert connector.incremental_sync_scheduling["enabled"]
     assert connector.incremental_sync_scheduling["interval"] == "* * * * *"
     assert connector.sync_cursor == SYNC_CURSOR
+    assert connector.api_key_secret_id == "api-key-secret-id"
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)

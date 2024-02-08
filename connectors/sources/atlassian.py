@@ -80,6 +80,14 @@ def prefix_account_name(account_name):
     return prefix_identity("name", account_name.replace(" ", "-"))
 
 
+def prefix_account_email(email):
+    return prefix_identity("email_address", email)
+
+
+def prefix_account_locale(locale):
+    return prefix_identity("locale", locale)
+
+
 class AtlassianAccessControl:
     def __init__(self, source, client):
         self.source = source
@@ -119,7 +127,9 @@ class AtlassianAccessControl:
                     "_id": <account_id>,
                     "identity": {
                         "account_id": <prefixed_account_id>,
-                        "display_name": <_prefixed_account_name>
+                        "display_name": <_prefixed_account_name>,
+                        "locale": <prefix_account_locale>,
+                        "emailAddress": prefix_account_email,
                     },
                     "created_at": <iso_utc_timestamp>,
                     ACCESS_CONTROL: [<prefixed_account_id>, <prefixed_group_ids>, <prefixed_role_keys>]
@@ -127,9 +137,13 @@ class AtlassianAccessControl:
         """
         account_id = user.get("accountId")
         account_name = user.get("displayName")
+        email = user.get("emailAddress")
+        locale = user.get("locale")
 
+        prefixed_account_email = prefix_account_email(email=email)
         prefixed_account_id = prefix_account_id(account_id=account_id)
         prefixed_account_name = prefix_account_name(account_name=account_name)
+        prefixed_account_locale = prefix_account_locale(locale=locale)
 
         prefixed_group_ids = {
             prefix_group_id(group_id=group.get("groupId", ""))
@@ -145,6 +159,8 @@ class AtlassianAccessControl:
             "identity": {
                 "account_id": prefixed_account_id,
                 "display_name": prefixed_account_name,
+                "email_address": prefixed_account_email,
+                "locale": prefixed_account_locale,
             },
             "created_at": iso_utc(),
         }

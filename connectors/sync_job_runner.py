@@ -8,12 +8,14 @@ import time
 
 import elasticsearch
 
+from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
 from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
+from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
@@ -79,13 +81,15 @@ class SyncJobRunner:
         sync_job,
         connector,
         es_config,
+        service_config,
     ):
         self.source_klass = source_klass
         self.data_provider = None
         self.sync_job = sync_job
         self.connector = connector
         self.es_config = es_config
-        self.elastic_server = None
+        self.service_config = service_config
+        self.sync_orchestrator = None
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
@@ -112,6 +116,9 @@ class SyncJobRunner:
                 configuration=self.sync_job.configuration
             )
             self.data_provider.set_logger(self.sync_job.logger)
+            self.data_provider.set_framework_config(
+                self._data_source_framework_config()
+            )
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
@@ -132,7 +139,17 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.elastic_server = SyncOrchestrator(self.es_config, self.sync_job.logger)
+            self.sync_orchestrator = SyncOrchestrator(
+                self.es_config, self.sync_job.logger
+            )
+
+            if (
+                self.connector.native
+                and self.connector.features.native_connector_api_keys_enabled()
+            ):
+                await self.sync_orchestrator.update_authorization(
+                    self.connector.index_name, self.connector.api_key_secret_id
+                )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -147,10 +164,10 @@ class SyncJobRunner:
                 self.update_ingestion_stats(JOB_REPORTING_INTERVAL)
             )
 
-            while not self.elastic_server.done():
+            while not self.sync_orchestrator.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
-            fetch_error = self.elastic_server.fetch_error()
+            fetch_error = self.sync_orchestrator.fetch_error()
             sync_status = (
                 JobStatus.COMPLETED if fetch_error is None else JobStatus.ERROR
             )
@@ -164,24 +181,32 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
-            if self.elastic_server is not None:
-                await self.elastic_server.close()
+            if self.sync_orchestrator is not None:
+                await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
+
+    def _data_source_framework_config(self):
+        builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
+            self.service_config.get("max_file_download_size")
+        )
+        return builder.build()
 
     async def _execute_access_control_sync_job(self, job_type, bulk_options):
         if requires_platinum_license(self.sync_job, self.connector, self.source_klass):
             (
                 is_platinum_license_enabled,
                 license_enabled,
-            ) = await self.elastic_server.has_active_license_enabled(License.PLATINUM)
+            ) = await self.sync_orchestrator.has_active_license_enabled(
+                License.PLATINUM
+            )
 
             if not is_platinum_license_enabled:
                 raise InsufficientESLicenseError(
                     required_license=License.PLATINUM, actual_license=license_enabled
                 )
 
-        await self.elastic_server.async_bulk(
+        await self.sync_orchestrator.async_bulk(
             self.sync_job.index_name,
             self.generator(),
             self.sync_job.pipeline,
@@ -189,14 +214,40 @@ class SyncJobRunner:
             options=bulk_options,
         )
 
+    def _skip_unchanged_documents_enabled(self, job_type, data_provider):
+        """
+        Check if timestamp optimization is enabled for the current data source.
+        Timestamp optimization can be enabled only for incremental jobs.
+        """
+        # The job type is not incremental, so we can't use timestamp optimization
+        if job_type != JobType.INCREMENTAL:
+            return False
+
+        # Data provider has to have the method get_docs_incrementally (inherent from BaseDataSource or implemented in a subclass)
+        if not hasattr(data_provider, "get_docs_incrementally"):
+            return False
+
+        # make sure that the data provider is not overriding the default implementation of get_docs_incrementally
+        return (
+            data_provider.get_docs_incrementally.__func__
+            is BaseDataSource.get_docs_incrementally
+        )
+
     async def _execute_content_sync_job(self, job_type, bulk_options):
+        if (
+            self.sync_job.job_type == JobType.INCREMENTAL
+            and not self.connector.features.incremental_sync_enabled()
+        ):
+            msg = f"Connector {self.connector.id} does not support incremental sync."
+            raise UnsupportedJobType(msg)
+
         sync_rules_enabled = self.connector.features.sync_rules_enabled()
         if sync_rules_enabled:
             await self.sync_job.validate_filtering(validator=self.data_provider)
 
         logger.debug("Preparing the content index")
 
-        await self.elastic_server.prepare_content_index(
+        await self.sync_orchestrator.prepare_content_index(
             index=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
@@ -205,7 +256,7 @@ class SyncJobRunner:
             or self.sync_job.pipeline["extract_binary_content"]
         )
 
-        await self.elastic_server.async_bulk(
+        await self.sync_orchestrator.async_bulk(
             self.sync_job.index_name,
             self.prepare_docs(),
             self.sync_job.pipeline,
@@ -214,11 +265,14 @@ class SyncJobRunner:
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
             options=bulk_options,
+            skip_unchanged_documents=self._skip_unchanged_documents_enabled(
+                job_type, self.data_provider
+            ),
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
-        if self.elastic_server is not None and not self.elastic_server.done():
-            await self.elastic_server.cancel()
+        if self.sync_orchestrator is not None and not self.sync_orchestrator.done():
+            await self.sync_orchestrator.cancel()
         if self.job_reporting_task is not None and not self.job_reporting_task.done():
             self.job_reporting_task.cancel()
             try:
@@ -227,7 +281,9 @@ class SyncJobRunner:
                 self.sync_job.log_debug("Job reporting task is stopped.")
 
         result = (
-            {} if self.elastic_server is None else self.elastic_server.ingestion_stats()
+            {}
+            if self.sync_orchestrator is None
+            else self.sync_orchestrator.ingestion_stats()
         )
         ingestion_stats = {
             "indexed_document_count": result.get("indexed_document_count", 0),
@@ -336,19 +392,28 @@ class SyncJobRunner:
             yield doc, lazy_download, operation
 
     async def generator(self):
-        match self.sync_job.job_type:
-            case JobType.FULL:
+        skip_unchanged_documents = self._skip_unchanged_documents_enabled(
+            self.sync_job.job_type, self.data_provider
+        )
+
+        match [self.sync_job.job_type, skip_unchanged_documents]:
+            case [JobType.FULL, _]:
                 async for doc, lazy_download in self.data_provider.get_docs(
                     filtering=self.sync_job.filtering
                 ):
                     yield doc, lazy_download, OP_INDEX
-            case JobType.INCREMENTAL:
+            case [JobType.INCREMENTAL, optimization] if optimization is False:
                 async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
                     yield doc, lazy_download, operation
-            case JobType.ACCESS_CONTROL:
+            case [JobType.INCREMENTAL, optimization] if optimization is True:
+                async for doc, lazy_download in self.data_provider.get_docs(
+                    filtering=self.sync_job.filtering
+                ):
+                    yield doc, lazy_download, OP_INDEX
+            case [JobType.ACCESS_CONTROL, _]:
                 async for doc in self.data_provider.get_access_control():
                     yield doc, None, None
             case _:
@@ -361,7 +426,7 @@ class SyncJobRunner:
             if not await self.reload_sync_job():
                 break
 
-            result = self.elastic_server.ingestion_stats()
+            result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
                 "indexed_document_count": result.get("indexed_document_count", 0),
                 "indexed_document_volume": result.get("indexed_document_volume", 0),

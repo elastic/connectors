@@ -343,3 +343,65 @@ async def test_run_when_sync_fails_then_continues_service_execution(
     # assert that service did not crash and kept asking index for connectors
     # we don't have a good criteria of what a "crashed service is"
     assert connector_index_mock.supported_connectors.call_count > 1
+
+
+@pytest.mark.asyncio
+@patch("connectors.services.job_scheduling.get_source_klass")
+async def test_run_when_connector_fields_are_invalid(
+    get_source_klass_mock, connector_index_mock, set_env
+):
+    error_message = "Something invalid is in config!"
+    actual_error = Exception(error_message)
+
+    data_source_mock = Mock()
+
+    def _source_klass(config):
+        return data_source_mock
+
+    get_source_klass_mock.return_value = _source_klass
+
+    data_source_mock.validate_config_fields = Mock()
+    data_source_mock.validate_config = AsyncMock(side_effect=[actual_error])
+    data_source_mock.ping = AsyncMock()
+    data_source_mock.close = AsyncMock()
+
+    connector = mock_connector(next_sync=datetime.utcnow())
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+
+    data_source_mock.validate_config_fields.assert_called()
+    data_source_mock.validate_config.assert_awaited_once()
+    data_source_mock.ping.assert_not_awaited()
+
+    connector.error.assert_awaited_with(actual_error)
+
+
+@pytest.mark.asyncio
+@patch("connectors.services.job_scheduling.get_source_klass")
+async def test_run_when_connector_ping_fails(
+    get_source_klass_mock, connector_index_mock, set_env
+):
+    error_message = "Something went wrong when trying to ping the data source!"
+    actual_error = Exception(error_message)
+
+    data_source_mock = Mock()
+
+    def _source_klass(config):
+        return data_source_mock
+
+    get_source_klass_mock.return_value = _source_klass
+
+    data_source_mock.validate_config_fields = Mock()
+    data_source_mock.validate_config = AsyncMock()
+    data_source_mock.ping = AsyncMock(side_effect=[actual_error])
+    data_source_mock.close = AsyncMock()
+
+    connector = mock_connector(next_sync=datetime.utcnow())
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+
+    data_source_mock.validate_config_fields.assert_called()
+    data_source_mock.validate_config.assert_awaited_once()
+    data_source_mock.ping.assert_awaited_once()
+
+    connector.error.assert_awaited_with(actual_error)

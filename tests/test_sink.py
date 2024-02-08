@@ -11,7 +11,10 @@ from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
-from elasticsearch import BadRequestError
+from elasticsearch import ApiError, BadRequestError
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
@@ -19,6 +22,7 @@ from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
     OP_UPSERT,
+    ApiKeyNotFoundError,
     AsyncBulkRunningError,
     Extractor,
     ForceCanceledError,
@@ -1051,6 +1055,7 @@ def test_bulk_populate_stats(res, expected_result):
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
     sink._populate_stats(deepcopy(STATS), res)
 
@@ -1076,11 +1081,18 @@ async def test_batch_bulk_with_retry():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     with mock.patch.object(asyncio, "sleep"):
         # first call raises exception, and the second call succeeds
-        client.client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
+        error_meta = Mock()
+        error_meta.status = 429
+        first_call_error = ApiError(429, meta=error_meta, body="error")
+        second_call_result = {"items": []}
+        client.client.bulk = AsyncMock(
+            side_effect=[first_call_error, second_call_result]
+        )
         await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
 
         assert client.client.bulk.await_count == 2
@@ -1101,7 +1113,7 @@ async def test_batch_bulk_with_retry():
     ],
 )
 @pytest.mark.asyncio
-async def test_elastic_server_done(
+async def test_sync_orchestrator_done(
     extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
     if extractor_task is not None:
@@ -1183,6 +1195,7 @@ async def test_sink_fetch_doc():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     doc = await sink.fetch_doc()
@@ -1203,6 +1216,7 @@ async def test_force_canceled_sink_fetch_doc():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     sink.force_cancel()
@@ -1223,6 +1237,7 @@ async def test_force_canceled_sink_with_other_errors(patch_logger):
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     sink.force_cancel()
@@ -1287,3 +1302,50 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
         else:
             es._extractor.force_cancel.assert_not_called()
             es._sink.force_cancel.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_authorization():
+    config = {
+        "host": "http://nowhere.com:9200",
+        "user": "someone",
+        "password": "something",
+    }
+    sync_orchestrator = SyncOrchestrator(config)
+
+    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
+        return_value="secret-value"
+    )
+    sync_orchestrator.es_management_client.client.options = AsyncMock()
+
+    await sync_orchestrator.update_authorization("my-index", "my-secret-id")
+
+    sync_orchestrator.es_management_client.get_connector_secret.assert_called_with(
+        "my-secret-id"
+    )
+    sync_orchestrator.es_management_client.client.options.assert_called_with(
+        api_key="secret-value"
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_authorization_when_api_key_not_found():
+    config = {
+        "host": "http://nowhere.com:9200",
+        "user": "someone",
+        "password": "something",
+    }
+    sync_orchestrator = SyncOrchestrator(config)
+
+    error_meta = Mock()
+    error_meta.status = 404
+    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
+        side_effect=ElasticNotFoundError(
+            "resource_not_found_exception",
+            error_meta,
+            "No secret with id [my-secret-id]",
+        )
+    )
+
+    with pytest.raises(ApiKeyNotFoundError):
+        await sync_orchestrator.update_authorization("my-index", "my-secret-id")
