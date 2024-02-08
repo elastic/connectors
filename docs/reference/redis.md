@@ -52,7 +52,7 @@ List of database index for your Redis server/cloud. * will fetch data from all d
 - `0,1,2`
 - `*`
 
-#### `tls_enabled`
+#### `ssl_enabled`
 
 Toggle to use the SSL/TLS enabled option. Disabled by default.
 

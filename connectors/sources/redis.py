@@ -43,7 +43,7 @@ class RedisClient:
         self.database = self.configuration["database"]
         self.username = self.configuration["username"]
         self.password = self.configuration["password"]
-        self.tls_enabled = self.configuration["tls_enabled"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
         self.mutual_tls_enabled = self.configuration["mutual_tls_enabled"]
         self.tls_certfile = self.configuration["tls_certfile"]
         self.tls_keyfile = self.configuration["tls_keyfile"]
@@ -55,11 +55,12 @@ class RedisClient:
         self._logger = logger_
 
     def store_ssl_key(self, key, suffix):
-        pem_certificates = get_pem_format(key=key)
         if suffix == ".key":
             pem_certificates = get_pem_format(
                 key=key, postfix="-----END RSA PRIVATE KEY-----"
             )
+        else:
+            pem_certificates = get_pem_format(key=key)
         with NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as cert:
             cert.write(pem_certificates)
             return cert.name
@@ -71,13 +72,13 @@ class RedisClient:
                     os.remove(file_path)
                 except Exception as exception:
                     self._logger.warning(
-                        f"Something went wrong while removing temporary certificate file. Exception: {exception}",
+                        f"Something went wrong while removing temporary certificate file: {file_path}. Exception: {exception}",
                         exc_info=True,
                     )
 
     @cached_property
     def _client(self):
-        if self.tls_enabled and self.mutual_tls_enabled:
+        if self.ssl_enabled and self.mutual_tls_enabled:
             self.cert_file = self.store_ssl_key(key=self.tls_certfile, suffix=".crt")
             self.key_file = self.store_ssl_key(key=self.tls_keyfile, suffix=".key")
             query = f"ssl_certfile={self.cert_file}&ssl_keyfile={self.key_file}"
@@ -85,7 +86,7 @@ class RedisClient:
                 f"rediss://{self.username}:{self.password}@{self.host}:{self.port}?{query}",
                 decode_responses=True,
             )
-        elif self.tls_enabled:
+        elif self.ssl_enabled:
             self._redis_client = redis.from_url(
                 f"rediss://{self.username}:{self.password}@{self.host}:{self.port}",
                 decode_responses=True,
@@ -101,7 +102,7 @@ class RedisClient:
     async def close(self):
         if self._redis_client:
             await self._client.aclose()  # pyright: ignore
-            self.remove_temp_files()
+        self.remove_temp_files()
 
     async def validate_database(self, db):
         try:
@@ -294,7 +295,7 @@ class RedisDataSource(BaseDataSource):
                 "tooltip": "Databases are ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
-            "tls_enabled": {
+            "ssl_enabled": {
                 "display": "toggle",
                 "label": "SSL/TLS Connection",
                 "order": 6,
@@ -303,7 +304,7 @@ class RedisDataSource(BaseDataSource):
                 "value": False,
             },
             "mutual_tls_enabled": {
-                "depends_on": [{"field": "tls_enabled", "value": True}],
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "display": "toggle",
                 "label": "Mutual SSL/TLS Connection",
                 "order": 7,

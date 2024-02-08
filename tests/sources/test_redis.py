@@ -338,10 +338,10 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 
 
 @pytest.mark.asyncio
-async def test_ping_when_mutual_ssl_enabled():
+async def test_client_when_mutual_ssl_enabled():
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        source.client.tls_enabled = True
+        source.client.ssl_enabled = True
         source.client.mutual_tls_enabled = True
         source.client.tls_certfile = (
             "-----BEGIN CERTIFICATE----- Invalid-Certificate -----END CERTIFICATE-----"
@@ -352,17 +352,19 @@ async def test_ping_when_mutual_ssl_enabled():
             "redis.from_url",
             return_value=mocked_client,
         ):
-            await source.client._client
+            redis_client = source.client._client
+            assert hasattr(redis_client, "ping")
 
 
 @pytest.mark.asyncio
 async def test_client_when_ssl_enabled():
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        source.client.tls_enabled = True
+        source.client.ssl_enabled = True
         mocked_client = Mock()
         with mock.patch(
             "redis.from_url",
             return_value=mocked_client,
         ):
-            await source.client._client
+            redis_client = source.client._client
+            assert hasattr(redis_client, "ping")
