@@ -163,14 +163,12 @@ def token():
 def query(version):
     query = request.args.get("q")
     table_name = re.findall(r"\bFROM\s+(\w+)", query)[-1]
-    done = False
 
-    response = {"done": done, "records": generate_records(table_name)}
-
-    if not done:
-        response["nextRecordsUrl"] = f"/services/data/{version}/query/{table_name}"
-
-    return response
+    return {
+        "done": False,
+        "records": generate_records(table_name),
+        "nextRecordsUrl": f"/services/data/{version}/query/{table_name}",
+    }
 
 
 @app.route("/services/data/<_version>/query/<table_name>", methods=["GET"])
