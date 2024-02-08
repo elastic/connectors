@@ -77,6 +77,11 @@ class ForceCanceledError(Exception):
 class ContentIndexDoesNotExistError(Exception):
     pass
 
+class ElasticsearchOverloadedError(Exception):
+    def __init__(self, message, cause=None):
+        super().__init__(message)
+        self.__cause__ = cause
+
 
 class ApiKeyNotFoundError(Exception):
     pass
@@ -203,6 +208,9 @@ class Sink:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Sink...")
             raise
+        except asyncio.QueueFull as e:
+            msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
+            raise ElasticsearchOverloadedError(msg) from e
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
@@ -365,6 +373,14 @@ class Extractor:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Extractor...")
             raise
+        except asyncio.QueueFull as e:
+            self._logger.critical("Throttled by Elasticsearch", exc_info=True)
+            # We clear the queue as we could not actually ingest anything.
+            # After that we indicate that we've encountered an error
+            self.queue.clear()
+            await self.put_doc("FETCH_ERROR")
+            msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
+            self.fetch_error = ElasticsearchOverloadedError(msg, e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
