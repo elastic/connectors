@@ -77,6 +77,7 @@ class ForceCanceledError(Exception):
 class ContentIndexDoesNotExistError(Exception):
     pass
 
+
 class ElasticsearchOverloadedError(Exception):
     def __init__(self, message, cause=None):
         super().__init__(message)
