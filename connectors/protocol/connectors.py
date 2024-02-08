@@ -1003,7 +1003,7 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector, trigger_method, job_type):
+    async def create(self, connector, trigger_method, job_type, parameters=None):
         filtering = connector.filtering.get_active_filter().transform_filtering()
         index_name = connector.index_name
 
@@ -1029,6 +1029,8 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
+        if parameters:
+            job_def["parameters"] = parameters
         api_response = await self.index(job_def)
 
         return api_response["_id"]

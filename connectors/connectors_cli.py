@@ -13,6 +13,7 @@ executes the `main` function of this module, which starts the service.
 import asyncio
 import json
 import os
+from json.decoder import JSONDecodeError
 
 import click
 import yaml
@@ -475,6 +476,12 @@ def job(obj):
     required=True,
 )
 @click.option(
+    "-p",
+    help="JSON representation of job parameters",
+    required=False,
+    default=None,
+)
+@click.option(
     "-o",
     "--format",
     "output_format",
@@ -482,10 +489,22 @@ def job(obj):
     help="Output format",
     type=click.Choice(["json", "text"]),
 )
-def start(obj, i, t, output_format):
+def start(obj, i, t, p, output_format):
     job_cli = Job(config=obj["config"]["elasticsearch"])
-    job_id = job_cli.start(connector_id=i, job_type=t)
-
+    parameters = None
+    if p:
+        try:
+            parameters = json.loads(p)
+        except (TypeError, JSONDecodeError):
+            click.echo(
+                click.style(
+                    "The '-p' option must be passed as a JSON string. Like: '{\"limit\": 1}'",
+                    fg="red",
+                ),
+                err=True,
+            )
+            return
+    job_id = job_cli.start(connector_id=i, job_type=t, parameters=parameters)
     if job:
         if output_format == "json":
             click.echo(json.dumps({"id": job_id}, indent=4))

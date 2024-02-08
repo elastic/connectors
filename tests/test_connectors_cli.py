@@ -737,24 +737,50 @@ def test_job_list_one_job():
         assert result.exit_code == 0
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        (["job", "start", "-i", "test_id", "-t", "full"]),
+        (["job", "start", "-i", "test_id", "-t", "full", "-p", '{"limit": 1}']),
+        (["job", "start", "-i", "test_id", "-t", "full", "-p", "{}"]),
+    ],
+)
 @patch(
     "connectors.protocol.connectors.ConnectorIndex.fetch_by_id",
     AsyncMock(return_value=MagicMock()),
 )
-def test_job_start():
+def test_job_start(args):
     runner = CliRunner()
-    connector_id = "test_connector_id"
     job_id = "test_job_id"
 
     with patch(
         "connectors.protocol.connectors.SyncJobIndex.create",
         AsyncMock(return_value=job_id),
     ) as patched_create:
-        result = runner.invoke(cli, ["job", "start", "-i", connector_id, "-t", "full"])
+        result = runner.invoke(cli, args)
 
         patched_create.assert_called_once()
         assert f"The job {job_id} has been started" in result.output
         assert result.exit_code == 0
+
+
+@patch(
+    "connectors.protocol.connectors.ConnectorIndex.fetch_by_id",
+    AsyncMock(return_value=MagicMock()),
+)
+def test_job_start_with_bad_params():
+    runner = CliRunner()
+    connector_id = "test_connector_id"
+
+    result = runner.invoke(
+        cli, ["job", "start", "-i", connector_id, "-t", "full", "-p", "foo"]
+    )
+
+    assert (
+        "The '-p' option must be passed as a JSON string. Like: '{\"limit\": 1}'"
+        in result.output
+    )
+    assert result.exit_code == 0
 
 
 def test_job_view():

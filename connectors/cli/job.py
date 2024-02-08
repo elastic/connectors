@@ -28,8 +28,8 @@ class Job:
     def cancel(self, connector_id=None, index_name=None, job_id=None):
         return asyncio.run(self.__async_cancel_jobs(connector_id, index_name, job_id))
 
-    def start(self, connector_id, job_type):
-        return asyncio.run(self.__async_start(connector_id, job_type))
+    def start(self, connector_id, job_type, parameters):
+        return asyncio.run(self.__async_start(connector_id, job_type, parameters))
 
     def job(self, job_id):
         return asyncio.run(self.__async_job(job_id))
@@ -45,13 +45,14 @@ class Job:
             await self.sync_job_index.close()
             await self.es_management_client.close()
 
-    async def __async_start(self, connector_id, job_type):
+    async def __async_start(self, connector_id, job_type, parameters):
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
             job_id = await self.sync_job_index.create(
                 connector=connector,
                 trigger_method=JobTriggerMethod.ON_DEMAND,
                 job_type=JobType(job_type),
+                parameters=parameters,
             )
 
             return job_id
