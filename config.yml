@@ -182,12 +182,10 @@
 ##  Connector service log level.
 #service.log_level: INFO
 #
-##  Enable to log ids of deleted documents.
-#service.log_deleted_doc_ids: false
+##  Enable to log ids of created/updated/deleted documents during a sync.
+##    This will be logged on 'DEBUG' log level.
+#service.enable_doc_id_trace_logging: false
 #
-#
-##  Log level for logging deleted document ids.
-#service.log_deleted_doc_ids_log_level: DEBUG
 #
 ## ------------------------------- Extraction Service ----------------------------------
 #

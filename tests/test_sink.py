@@ -1300,7 +1300,7 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
             es._sink.force_cancel.assert_not_called()
 
 
-def test_log_deleted_doc_id_if_enabled(patch_logger):
+def test_log_on_doc_id_tracing_enabled_if_enabled(patch_logger):
     queue = Mock()
     sink = Sink(
         None,
@@ -1311,18 +1311,17 @@ def test_log_deleted_doc_id_if_enabled(patch_logger):
         max_concurrency=0,
         max_retries=3,
         retry_interval=10,
-        log_deleted_doc_ids=True,
+        enable_doc_id_trace_logging=True,
     )
 
-    doc_id = "some random doc id"
-    log_msg = f"Deleted document with id '{doc_id}'"
+    log_msg = "Deleted document with id 'some id'"
 
-    sink._log_deleted_doc_id_if_enabled(doc_id)
+    sink._log_on_doc_id_tracing_enabled(log_msg)
 
     patch_logger.assert_present(log_msg)
 
 
-def test_log_deleted_doc_id_if_disabled(patch_logger):
+def test_log_on_doc_id_tracing_enabled_if_disabled(patch_logger):
     queue = Mock()
     sink = Sink(
         None,
@@ -1333,12 +1332,11 @@ def test_log_deleted_doc_id_if_disabled(patch_logger):
         max_concurrency=0,
         max_retries=3,
         retry_interval=10,
-        log_deleted_doc_ids=False,
+        enable_doc_id_trace_logging=False,
     )
 
-    doc_id = "some random doc id"
-    log_msg = f"Deleted document with id '{doc_id}'"
+    log_msg = "Deleted document with id 'some id'"
 
-    sink._log_deleted_doc_id_if_enabled(doc_id)
+    sink._log_on_doc_id_tracing_enabled(log_msg)
 
     patch_logger.assert_not_present(log_msg)

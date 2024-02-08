@@ -89,8 +89,7 @@ def _default_config():
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
-            "log_deleted_doc_ids": False,
-            "log_deleted_doc_ids_log_level": "DEBUG",
+            "enable_doc_id_trace_logging": False,
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
