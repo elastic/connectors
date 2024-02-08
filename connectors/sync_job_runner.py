@@ -268,6 +268,7 @@ class SyncJobRunner:
             skip_unchanged_documents=self._skip_unchanged_documents_enabled(
                 job_type, self.data_provider
             ),
+            custom_params=self.sync_job.params,
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
@@ -327,12 +328,14 @@ class SyncJobRunner:
 
     @with_concurrency_control()
     async def sync_starts(self):
+        logger.debug("Made it to sync_starts")
         if not await self.reload_connector():
             msg = f"Couldn't reload connector {self.connector.id}"
             raise SyncJobStartError(msg)
 
         job_type = self.sync_job.job_type
 
+        logger.debug(f"Job type is {job_type}")
         if job_type in [JobType.FULL, JobType.INCREMENTAL]:
             if self.connector.last_sync_status == JobStatus.IN_PROGRESS:
                 logger.debug(

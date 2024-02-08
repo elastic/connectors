@@ -283,6 +283,10 @@ class SyncJob(ESDocument):
     def job_type(self):
         return JobType(self.get("job_type"))
 
+    @property
+    def params(self):
+        return self.get("parameters", default=None)
+
     def is_content_sync(self):
         return self.job_type in (JobType.FULL, JobType.INCREMENTAL)
 

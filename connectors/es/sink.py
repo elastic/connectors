@@ -296,6 +296,7 @@ class Extractor:
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
         skip_unchanged_documents=False,
+        custom_params=None,
     ):
         if filter_ is None:
             filter_ = Filter()
@@ -318,6 +319,7 @@ class Extractor:
         self._logger = logger_ or logger
         self._canceled = False
         self.skip_unchanged_documents = skip_unchanged_documents
+        self.custom_params = custom_params
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
@@ -352,7 +354,16 @@ class Extractor:
         try:
             match job_type:
                 case JobType.FULL:
-                    await self.get_docs(generator)
+                    if self.custom_params:
+                        self._logger.info(
+                            f"Running full sync job with parameters: {self.custom_params}"
+                        )
+                        await self.get_docs(generator, **self.custom_params)
+                    else:
+                        self._logger.info(
+                            "No special parameters found - running default full sync job"
+                        )
+                        await self.get_docs(generator)
                 case JobType.INCREMENTAL:
                     if self.skip_unchanged_documents:
                         await self.get_docs(generator, skip_unchanged_documents=True)
@@ -382,13 +393,14 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator, skip_unchanged_documents=False):
+    async def get_docs(self, generator, skip_unchanged_documents=False, limit=None):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
         Extraction happens in a separate task, when a document contains files.
 
         Args:
            generator (generator): BaseDataSource child get_docs or get_docs_incrementally
            skip_unchanged_documents (bool): if True, will skip documents that have not changed since last sync
+           limit: If provided, this limits how many documents are fetched from the generator, and skips document deletion
         """
         generator = self._decorate_with_metrics_span(generator)
         existing_ids = await self._load_existing_docs()
@@ -397,6 +409,9 @@ class Extractor:
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
+                if limit and count >= limit:
+                    break
+
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
                     self._log_progress()
@@ -459,7 +474,8 @@ class Extractor:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        await self.enqueue_docs_to_delete(existing_ids)
+        if not limit:
+            await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc("END_DOCS")
 
     async def _load_existing_docs(self):
@@ -776,6 +792,7 @@ class SyncOrchestrator:
         content_extraction_enabled=True,
         options=None,
         skip_unchanged_documents=False,
+        custom_params=None,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -831,6 +848,7 @@ class SyncOrchestrator:
             concurrent_downloads=concurrent_downloads,
             logger_=self._logger,
             skip_unchanged_documents=skip_unchanged_documents,
+            custom_params=custom_params,
         )
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
