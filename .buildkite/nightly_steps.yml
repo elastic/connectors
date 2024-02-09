@@ -116,3 +116,8 @@ steps:
       - ".buildkite/run_nigthly.sh box"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Notion"
+    command:
+      - ".buildkite/run_nigthly.sh notion"
+    artifact_paths:
+      - "perf8-report-*/**/*"
