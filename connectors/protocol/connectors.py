@@ -962,7 +962,7 @@ class Connector(ESDocument):
         }
 
 
-IDLE_JOBS_THRESHOLD = 60 * 15  # 15 minutes
+IDLE_JOBS_THRESHOLD = 60 * 5  # 5 minutes
 
 
 class SyncJobIndex(ESIndex):
