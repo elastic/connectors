@@ -645,6 +645,7 @@ class OutlookDataSource(BaseDataSource):
 
     name = "Outlook"
     service_type = "outlook"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Outlook
