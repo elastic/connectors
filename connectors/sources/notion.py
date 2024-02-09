@@ -5,6 +5,7 @@
 #
 """Notion source module responsible to fetch documents from the Notion Platform."""
 import asyncio
+import os
 from copy import copy
 from functools import cached_property, partial
 from urllib.parse import unquote
@@ -28,6 +29,9 @@ ENDPOINTS = {
     "search": "/search",
     "owner": "/users/me",
 }
+
+if "OVERRIDE_URL" in os.environ:
+    BASE_URL = os.environ["OVERRIDE_URL"]
 
 
 class NotFound(Exception):
