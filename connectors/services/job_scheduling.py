@@ -91,13 +91,10 @@ class JobSchedulingService(BaseService):
         data_source = source_klass(connector.configuration)
         data_source.set_logger(connector.logger)
 
+        connector.log_debug("Validating configuration")
         try:
-            connector.log_debug("Validating configuration")
             data_source.validate_config_fields()
             await data_source.validate_config()
-
-            connector.log_debug("Pinging the backend")
-            await data_source.ping()
         except Exception as e:
             connector.log_error(e, exc_info=True)
             await connector.error(e)
