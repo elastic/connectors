@@ -467,6 +467,8 @@ class Features:
     BASIC_RULES_OLD = "basic_rules_old"
     ADVANCED_RULES_OLD = "advanced_rules_old"
 
+    NATIVE_CONNECTOR_API_KEYS = "native_connector_api_keys"
+
     def __init__(self, features=None):
         if features is None:
             features = {}
@@ -481,6 +483,11 @@ class Features:
     def document_level_security_enabled(self):
         return self._nested_feature_enabled(
             ["document_level_security", "enabled"], default=False
+        )
+
+    def native_connector_api_keys_enabled(self):
+        return self._nested_feature_enabled(
+            ["native_connector_api_keys", "enabled"], default=False
         )
 
     def sync_rules_enabled(self):
@@ -623,6 +630,10 @@ class Connector(ESDocument):
     @property
     def sync_cursor(self):
         return self.get("sync_cursor")
+
+    @property
+    def api_key_secret_id(self):
+        return self.get("api_key_secret_id")
 
     async def heartbeat(self, interval):
         if (

@@ -24,13 +24,20 @@ import logging
 import time
 from collections import defaultdict
 
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
+
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
+)
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
-    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -71,6 +78,10 @@ class ContentIndexDoesNotExistError(Exception):
     pass
 
 
+class ApiKeyNotFoundError(Exception):
+    pass
+
+
 class Sink:
     """Send bulk operations in batches by consuming a queue.
 
@@ -96,6 +107,7 @@ class Sink:
         chunk_mem_size,
         max_concurrency,
         max_retries,
+        retry_interval,
         logger_=None,
     ):
         self.client = client
@@ -106,6 +118,7 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
+        self.retry_interval = retry_interval
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
@@ -130,7 +143,8 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        @retryable(retries=self.max_retires)
+        # TODO: make this retry policy work with unified retry strategy
+        @retryable(retries=self.max_retires, interval=self.retry_interval)
         async def _bulk_api_call():
             return await self.client.client.bulk(
                 operations=operations, pipeline=self.pipeline["name"]
@@ -143,7 +157,9 @@ class Sink:
             self._logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
-        res = await _bulk_api_call()
+
+        # TODO: retry 429s for individual items here
+        res = await self.client.bulk_insert(operations, self.pipeline["name"])
         if res.get("errors"):
             for item in res["items"]:
                 for op, data in item.items():
@@ -650,6 +666,18 @@ class SyncOrchestrator:
     async def close(self):
         await self.es_management_client.close()
 
+    async def update_authorization(self, index_name, secret_id):
+        # Updates the ESManagementClient auth options for native connectors after fetching API key
+        try:
+            api_key = await self.es_management_client.get_connector_secret(secret_id)
+            self._logger.debug(
+                f"Using API key found in secrets storage for authorization for index [{index_name}]."
+            )
+            self.es_management_client.client.options(api_key=api_key)
+        except ElasticNotFoundError as e:
+            msg = f"API key not found in secrets storage for index [{index_name}]."
+            raise ApiKeyNotFoundError(msg) from e
+
     async def has_active_license_enabled(self, license_):
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
@@ -777,9 +805,19 @@ class SyncOrchestrator:
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
-        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
+        max_bulk_retries = options.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES)
+        retry_interval = options.get(
+            "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
+        )
+        mem_queue_refresh_timeout = options.get("queue_refresh_timeout", 60)
+        mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
 
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
+        stream = MemQueue(
+            maxsize=queue_size,
+            maxmemsize=queue_mem_size * 1024 * 1024,
+            refresh_timeout=mem_queue_refresh_timeout,
+            refresh_interval=mem_queue_refresh_interval,
+        )
 
         # start the fetcher
         self._extractor = Extractor(
@@ -807,6 +845,7 @@ class SyncOrchestrator:
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
             max_retries=max_bulk_retries,
+            retry_interval=retry_interval,
             logger_=self._logger,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

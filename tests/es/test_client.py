@@ -4,15 +4,18 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import base64
+from functools import cached_property
 from unittest import mock
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from elasticsearch import ConflictError, ConnectionError
+from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
 from connectors.es.client import (
     ESClient,
     License,
+    RetryInterruptedError,
+    TransientElasticsearchRetrier,
     with_concurrency_control,
 )
 
@@ -232,3 +235,113 @@ class TestESClient:
             # Execute
             assert not await es_client.ping()
             await es_client.close()
+
+
+class TestTransientElasticsearchRetrier:
+    @cached_property
+    def logger_mock(self):
+        return Mock()
+
+    @cached_property
+    def max_retries(self):
+        return 5
+
+    @cached_property
+    def retry_interval(self):
+        return 50
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry(self, patch_sleep):
+        retrier = TransientElasticsearchRetrier(
+            self.logger_mock, self.max_retries, self.retry_interval
+        )
+
+        async def _func():
+            pass
+
+        await retrier.execute_with_retry(_func)
+
+        assert patch_sleep.not_called()
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry_429_with_recovery(self, patch_sleep):
+        retrier = TransientElasticsearchRetrier(
+            self.logger_mock, self.max_retries, self.retry_interval
+        )
+
+        # Emulate {nr_failed_requests} failures from Elasticsearch
+        nr_failed_requests = 2
+
+        global attempt
+        attempt = 0
+
+        async def _func():
+            global attempt
+
+            meta_mock = Mock()
+            meta_mock.status = 429
+
+            if attempt < nr_failed_requests:
+                attempt += 1
+                raise ApiError(429, meta_mock, "data")
+            pass
+
+        await retrier.execute_with_retry(_func)
+
+        assert patch_sleep.awaited_exactly(2)
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry_429_no_recovery(self, patch_sleep):
+        retrier = TransientElasticsearchRetrier(
+            self.logger_mock, self.max_retries, self.retry_interval
+        )
+
+        # Emulate failures from Elasticsearch that we cannot recover from
+
+        async def _func():
+            meta_mock = Mock()
+            meta_mock.status = 429
+            raise ApiError(429, meta_mock, "data")
+
+        with pytest.raises(ApiError) as e:
+            await retrier.execute_with_retry(_func)
+
+        assert e is not None
+        assert patch_sleep.awaited_exactly(self.max_retries)
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry_connection_timeout(self, patch_sleep):
+        retrier = TransientElasticsearchRetrier(
+            self.logger_mock, self.max_retries, self.retry_interval
+        )
+
+        # Emulate failures from Elasticsearch that we cannot recover from
+
+        async def _func():
+            msg = ":stop:"
+            raise ConnectionTimeout(msg)
+
+        with pytest.raises(ConnectionTimeout) as e:
+            await retrier.execute_with_retry(_func)
+
+        assert e is not None
+        assert patch_sleep.awaited_exactly(self.max_retries)
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry_cancelled_midway(self, patch_sleep):
+        retrier = TransientElasticsearchRetrier(
+            self.logger_mock, self.max_retries, self.retry_interval
+        )
+
+        # Emulate failures from Elasticsearch that we cannot recover from
+
+        async def _func():
+            await retrier.close()
+            msg = ":stop:"
+            raise ConnectionTimeout(msg)
+
+        with pytest.raises(RetryInterruptedError) as e:
+            await retrier.execute_with_retry(_func)
+
+        assert e is not None
+        assert patch_sleep.not_awaited()

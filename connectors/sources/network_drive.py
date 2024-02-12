@@ -15,7 +15,7 @@ import fastjsonschema
 import smbclient
 import winrm
 from requests.exceptions import ConnectionError
-from smbprotocol.exceptions import SMBException, SMBOSError
+from smbprotocol.exceptions import SMBConnectionClosed, SMBException, SMBOSError
 from smbprotocol.file_info import (
     InfoType,
 )
@@ -343,9 +343,7 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def get_directory_details(self):
-        return list(
-            smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}", port=self.port)
-        )
+        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
 
     def find_matching_paths(self, advanced_rules):
         """
@@ -394,6 +392,12 @@ class NASDataSource(BaseDataSource):
             ),
         )
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[SMBOSError, SMBException],
+    )
     async def get_files(self, path):
         """Fetches the metadata of the files and folders present on given path
 
@@ -403,9 +407,13 @@ class NASDataSource(BaseDataSource):
         files = []
         loop = asyncio.get_running_loop()
         try:
-            files = await loop.run_in_executor(
-                executor=None, func=partial(smbclient.scandir, path, port=self.port)
+            files = await loop.run_in_executor(None, smbclient.scandir, path)
+        except SMBConnectionClosed as exception:
+            self._logger.exception(
+                f"Connection got closed. Error {exception}. Registering new session"
             )
+            await loop.run_in_executor(executor=None, func=self.create_connection)
+            raise
         except (SMBOSError, SMBException) as exception:
             self._logger.exception(
                 f"Error while scanning the path {path}. Error {exception}"
@@ -431,7 +439,7 @@ class NASDataSource(BaseDataSource):
         """
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
+                path=path, encoding="utf-8", errors="ignore", mode="rb"
             ) as file:
                 file_content, chunk = BytesIO(), True
                 while chunk:
@@ -492,7 +500,6 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
-                port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL
@@ -702,7 +709,7 @@ class NASDataSource(BaseDataSource):
         else:
             matched_paths = (path for path, _, _ in self.get_directory_details)
             groups_info = {}
-            if self.drive_type == WINDOWS:
+            if self.drive_type == WINDOWS and self._dls_enabled():
                 groups_info = await self.fetch_groups_info()
 
             for path in matched_paths:

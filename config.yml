@@ -82,6 +82,14 @@
 #elasticsearch.log_level: INFO
 #
 #
+##  Maximum number of times failed Elasticsearch requests are retried, except bulk requests
+#elasticsearch.max_retries: 5
+#
+#
+##  Retry interval between failed Elasticsearch requests, except bulk requests
+#elasticsearch.retry_interval: 10
+#
+#
 ## ------------------------------- Elasticsearch: Bulk ------------------------
 #
 ##  Options for the Bulk API calls behavior - all options can be
@@ -102,6 +110,17 @@
 #elasticsearch.bulk.queue_max_mem_size: 25
 #
 #
+##  Minimal interval of time between MemQueue checks for being full
+#elasticsearch.bulk.queue_refresh_interval: 1
+#
+#
+##  Maximal interval of time during which MemQueue does not dequeue a single document
+##  For example, if no documents were sent to Elasticsearch within 60 seconds because of
+##  Elasticsearch being overloaded, then an error will be raised.
+##  This mechanism exists to be a circuit-breaker for stuck jobs and stuck Elasticsearch.
+#elasticsearch.bulk.queue_refresh_timeout: 60
+#
+#
 ##  The max size in MB of a bulk request.
 ##    When the next request being prepared reaches that size, the query is
 ##    emitted even if `chunk_size` is not yet reached.
@@ -118,6 +137,14 @@
 #
 ##  Maximum number of concurrent downloads in the backend.
 #elasticsearch.bulk.concurrent_downloads: 10
+#
+#
+##  Maximum number of times failed bulk requests are retried
+#elasticsearch.bulk.max_retries: 5
+#
+#
+##  Retry interval between failed bulk attempts
+#elasticsearch.bulk.retry_interval: 10
 #
 #
 ## ------------------------------- Service ----------------------------------

@@ -22,6 +22,9 @@ Connectors CLI is in tech preview.
 2. Provide credentials
 3. The command will create or ask to rewrite an existing configuration file in `./cli/config.yml`
 
+By default, the CLI uses basic authentication method (username, password) however an API key can be used too. 
+Run `./bin/connectors login --method apikey` to authenticate the CLI via your API key. 
+
 When you run any command you can specify a configuration file using `-c` argument.
 Example:
 
