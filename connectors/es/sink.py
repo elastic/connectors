@@ -79,8 +79,9 @@ class ContentIndexDoesNotExistError(Exception):
 
 
 class ElasticsearchOverloadedError(Exception):
-    def __init__(self, message, cause=None):
-        super().__init__(message)
+    def __init__(self, cause=None):
+        msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
+        super().__init__(msg)
         self.__cause__ = cause
 
 
@@ -210,8 +211,7 @@ class Sink:
             self._logger.info("Task is canceled, stop Sink...")
             raise
         except asyncio.QueueFull as e:
-            msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
-            raise ElasticsearchOverloadedError(msg) from e
+            raise ElasticsearchOverloadedError from e
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
@@ -380,8 +380,7 @@ class Extractor:
             # After that we indicate that we've encountered an error
             self.queue.clear()
             await self.put_doc("FETCH_ERROR")
-            msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources, content index is healthy or increase \"elasticsearch.bulk.queue_refresh_timeout\" setting."
-            self.fetch_error = ElasticsearchOverloadedError(msg, e)
+            self.fetch_error = ElasticsearchOverloadedError(e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
