@@ -1293,6 +1293,7 @@ class SalesforceDataSource(BaseDataSource):
     service_type = "salesforce"
     advanced_rules_enabled = True
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
