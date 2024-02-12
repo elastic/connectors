@@ -375,12 +375,12 @@ class Extractor:
             self._logger.info("Task is canceled, stop Extractor...")
             raise
         except asyncio.QueueFull as e:
-            self._logger.critical("Throttled by Elasticsearch", exc_info=True)
+            self._logger.error("Sync was throttled by Elasticsearch")
             # We clear the queue as we could not actually ingest anything.
             # After that we indicate that we've encountered an error
             self.queue.clear()
             await self.put_doc("FETCH_ERROR")
-            msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
+            msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources, content index is healthy or increase \"elasticsearch.bulk.queue_refresh_timeout\" setting."
             self.fetch_error = ElasticsearchOverloadedError(msg, e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
