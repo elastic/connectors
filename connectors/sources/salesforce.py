@@ -405,15 +405,22 @@ class SalesforceClient:
         async for records in self._yield_non_bulk_query_pages(query):
             case_feeds_by_case_id = {}
             if await self._is_queryable("CaseFeed") and records:
-                case_ids = [x.get("Id") for x in records]
-                case_feeds = await self.get_case_feeds(case_ids)
+                all_case_ids = [x.get("Id") for x in records]
+                case_ids_list = [
+                    all_case_ids[i : i + 800] for i in range(0, len(all_case_ids), 800)
+                ]
+
+                all_case_feeds = []
+                for case_ids in case_ids_list:
+                    case_feeds = await self.get_case_feeds(case_ids)
+                    all_case_feeds.extend(case_feeds)
 
                 # groupby requires pre-sorting apparently
-                case_feeds.sort(key=lambda x: x.get("ParentId", ""))
+                all_case_feeds.sort(key=lambda x: x.get("ParentId", ""))
                 case_feeds_by_case_id = {
                     k: list(feeds)
                     for k, feeds in groupby(
-                        case_feeds, key=lambda x: x.get("ParentId", "")
+                        all_case_feeds, key=lambda x: x.get("ParentId", "")
                     )
                 }
 
