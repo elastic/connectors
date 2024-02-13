@@ -68,7 +68,7 @@ class NotionAPI:
         return users
 
     def get_block_children(self, block_id):
-        has_start_cursor =  request.args.get("start_cursor")
+        has_start_cursor = request.args.get("start_cursor")
         if has_start_cursor:
             response = {
                 "object": "list",
