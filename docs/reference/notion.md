@@ -10,42 +10,44 @@ This connector is in **beta** and is subject to change. The design and code is l
 
 ## Usage
 
-To use this connector as a **connector client**, use the **Notion** tile from the connectors list **Customized connector** workflow.
+To use this connector as a **connector client**, select the **Notion** tile when creating a new connector under **Search -> Connectors**.
 
 For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
 
 ## Connecting to Notion
 
-To connect to Notion, the user needs to [create an Internal Integration](https://www.notion.so/help/create-integrations-with-the-notion-api#create-an-internal-integration) for their Notion workspace that can access resources using the Internal Integration Secret Token. Further, configure the Integration with following settings:
+To connect to Notion, the user needs to [create an internal integration](https://www.notion.so/help/create-integrations-with-the-notion-api#create-an-internal-integration) for their Notion workspace, which can access resources using the Internal Integration Secret Token. Configure the Integration with following settings:
 
-1. Users need to grant `READ` permission for content, comment and user capabilities for that integration from the Capabilities tab.
+1. Users must grant `READ` permission for content, comment and user capabilities for that integration from the Capabilities tab.
 
-2. Users have to manually [add the integration as a connection](https://www.notion.so/help/add-and-manage-connections-with-the-api#add-connections-to-pages) in each page and database that needs to be retrieved.
+2. Users must manually [add the integration as a connection](https://www.notion.so/help/add-and-manage-connections-with-the-api#add-connections-to-pages) to each page and database that needs to be retrieved.
 
-After completion, use the following configuration parameters to configure the connector.
+Once completed, use the following parameters to configure the connector.
 
 ## Configuration
 
 ### Configure Notion connector
 
-The following configuration fields are required:
+Note the following configuration fields:
 
 #### `Notion Secret Key`  (required)
 
-Secret Token assigned to your Integration, for the particular workspace. Example:
+Secret token assigned to your integration, for a particular workspace. Example:
 
 - `zyx-123453-12a2-100a-1123-93fd09d67394`
 
 #### `Databases`  (required)
 
-Comma-separated list of database names that would be fetched by the connector. If the value is `*`, connector will fetch all the databases available in the workspace. Example:
+Comma-separated list of database names to be fetched by the connector. If the value is `*`, connector will fetch all the databases available in the workspace. Example:
 
-- `databse1, database2`
+- `database1, database2`
+- `*`
 
 #### `Pages`  (required)
 
-Comma-separated list of page names that would be fetched by the connector. If the value is `*`, connector will fetch all the pages available in the workspace. Example:
+Comma-separated list of page names to be fetched by the connector. If the value is `*`, connector will fetch all the pages available in the workspace. Examples:
 
+- `*`
 - `Page1, Page2`
 
 #### `Index Comments`
