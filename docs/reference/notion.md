@@ -48,6 +48,10 @@ Comma-separated list of page names that would be fetched by the connector. If th
 
 - `Page1, Page2`
 
+#### `Index Comments`
+
+Toggle to enable fetching and indexing of comments from the Notion workspace for the configured pages, databases and the corresponding child blocks. Default value is `False`.
+
 ### Content Extraction
 
 Refer to [content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html) in the official docs.
@@ -63,6 +67,8 @@ The connector syncs the following objects and entities:
     - Includes metadata such as name, id, records, size, etc.
 - **Users**
     - Includes metadata such as name, id, email address, etc.
+- **Comments**
+    - Includes the content and metadata such as id, last updated time, created by, etc.
 
 *NOTE*:
 - Files bigger than 10 MB won't be extracted.
