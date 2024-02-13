@@ -7,7 +7,7 @@
 """Module to handle api calls received from connector."""
 import os
 
-from flask import Flask
+from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
 
@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
-_SIZES = {"small": 10, "medium": 15, "large": 20}
+_SIZES = {"small": 5, "medium": 10, "large": 15}
 NUMBER_OF_DATABASES_PAGES = _SIZES[DATA_SIZE]
 
 fake_provider = WeightedFakeProvider()
@@ -68,13 +68,27 @@ class NotionAPI:
         return users
 
     def get_block_children(self, block_id):
-        response = {
-            "object": "list",
-            "next_cursor": None,
-            "has_more": False,
-            "type": "block",
-            "request_id": "fake-request-id",
-        }
+        has_start_cursor =  request.args.get("start_cursor")
+        if has_start_cursor:
+            response = {
+                "object": "list",
+                "next_cursor": None,
+                "has_more": False,
+                "type": "block",
+                "request_id": "fake-request-id",
+            }
+            start_range = 101
+            end_range = 201
+        else:
+            response = {
+                "object": "list",
+                "next_cursor": "fake_next_cursor",
+                "has_more": True,
+                "type": "block",
+                "request_id": "fake-request-id",
+            }
+            start_range = 1
+            end_range = 101
 
         response["results"] = [
             {
@@ -95,7 +109,7 @@ class NotionAPI:
                     ]
                 },
             }
-            for i in range(1, 101)
+            for i in range(start_range, end_range)
         ]
         return response
 
