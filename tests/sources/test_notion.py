@@ -354,6 +354,13 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
+async def test_get_content_when_url_is_empty():
+    async with create_source(NotionDataSource) as source:
+        content = await source.get_content(FILE_BLOCK, None)
+    assert content is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "file_name",
     [
@@ -528,3 +535,29 @@ async def test_get_via_session_client_response_error():
                 await anext(
                     source.notion_client.get_via_session("some_nonexistent_file_url")
                 )
+
+
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_get_via_session_with_429_status():
+    retried_response = AsyncMock()
+
+    async with create_source(
+        NotionDataSource,
+        notion_secret_key="test_get_via_session_client_response_error_key",
+    ) as source:
+        with patch("aiohttp.ClientSession.get") as mock_get:
+            mock_get.return_value.__aenter__.side_effect = [
+                aiohttp.ClientResponseError(
+                    request_info=Mock(),
+                    history=Mock(),
+                    status=429,
+                    message="rate-limited",
+                    headers={"Retry-After": 0.1},
+                ),
+                retried_response,
+            ]
+            response = await anext(
+                source.notion_client.get_via_session("some_nonexistent_file_url")
+            )
+        assert response == retried_response
