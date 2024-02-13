@@ -355,8 +355,10 @@ class NotionDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
-        if not attachment:
-            self._logger.info("skipping attachment")
+        if not file_url:
+            self._logger.debug(
+                f"skipping attachment with id {attachment['id']} as url is empty"
+            )
             return
         attachment = await self.get_file_metadata(attachment, file_url)
         attachment_size = int(attachment["size"])
