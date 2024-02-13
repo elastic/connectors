@@ -148,19 +148,19 @@ class NotionClient:
             dict: Child block information."""
 
         async def fetch_children_recursively(block):
-            if block.get("has_children") is True:
-                async for child_block in async_iterate_paginated_api(
-                    self._get_client.blocks.children.list, block_id=block.get("id")
-                ):
-                    yield child_block
+            async for child_block in async_iterate_paginated_api(
+                self._get_client.blocks.children.list, block_id=block.get("id")
+            ):
+                yield child_block
 
         async for block in async_iterate_paginated_api(
             self._get_client.blocks.children.list, block_id=block_id
         ):
             if block.get("type") not in ["child_database", "child_page", "unsupported"]:
                 yield block
-                async for child in fetch_children_recursively(block):
-                    yield child
+                if block.get("has_children") is True:
+                    async for child in fetch_children_recursively(block):
+                        yield child
             if block.get("type") == "child_database":
                 async for record in self.query_database(block.get("id")):
                     yield record
@@ -437,7 +437,8 @@ class NotionDataSource(BaseDataSource):
 
             async for page_database in self.notion_client.fetch_by_query(query=query):
                 block_id = page_database.get("id")
-                block_ids_store.append(block_id)
+                if self.index_comments is True:
+                    block_ids_store.append(block_id)
 
                 yield self._format_doc(page_database), None
                 self._logger.info(f"Fetching child blocks for block {block_id}")
@@ -445,7 +446,8 @@ class NotionDataSource(BaseDataSource):
                 async for child_block in self.notion_client.fetch_child_blocks(
                     block_id=block_id
                 ):
-                    block_ids_store.append(child_block.get("id"))
+                    if self.index_comments is True:
+                        block_ids_store.append(child_block.get("id"))
 
                     if child_block.get("type") != "file":
                         yield self._format_doc(child_block), None
