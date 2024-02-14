@@ -839,6 +839,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
     name = "Microsoft Teams"
     service_type = "microsoft_teams"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Microsoft Teams.
