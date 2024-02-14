@@ -341,6 +341,13 @@ class MemQueue(asyncio.Queue):
 
         super().put_nowait((item_size, item))
 
+    def clear(self):
+        while not self.empty():
+            # Depending on your program, you may want to
+            # catch QueueEmpty
+            self.get_nowait()
+            self.task_done()
+
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
