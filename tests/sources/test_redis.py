@@ -169,7 +169,7 @@ async def test_get_databases_with_asterisk():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_negative():
+async def test_get_databases_expect_no_databases_on_auth_error():
     async with create_redis_source() as source:
         source.client.database = ["*"]
         mocked_client = Mock()
