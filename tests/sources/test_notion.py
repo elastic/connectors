@@ -536,7 +536,6 @@ async def test_get_via_session_with_429_status():
         assert response == retried_response
 
 
-# add a test to cover method fetch_children_recursively(block) in line 122
 @pytest.mark.asyncio
 async def test_fetch_children_recursively():
     async with create_source(
