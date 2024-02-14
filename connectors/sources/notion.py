@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
-from notion_client import APIResponseError, AsyncClient
+from notion_client import AsyncClient
 from notion_client.helpers import async_iterate_paginated_api
 
 from connectors.logger import logger
@@ -25,10 +25,6 @@ DEFAULT_RETRY_SECONDS = 30
 BASE_URL = "https://api.notion.com"
 MAX_CONCURRENT_CLIENT_SUPPORT = 3
 
-ENDPOINTS = {
-    "search": "/search",
-    "owner": "/users/me",
-}
 
 if "OVERRIDE_URL" in os.environ:
     BASE_URL = os.environ["OVERRIDE_URL"]
@@ -95,33 +91,9 @@ class NotionClient:
             else:
                 raise
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def make_request(self, endpoint_key, method="GET", **kwargs):
-        self._logger.debug(f"Making request to {endpoint_key} with params {kwargs}")
-        try:
-            if path := ENDPOINTS.get(endpoint_key):
-                return await self._get_client.request(
-                    path=path, method=method, **kwargs
-                )
-        except APIResponseError as api_error:
-            self._logger.exception(f"Notion API Error - {api_error}")
-            if api_error.code == "rate_limited" and api_error.status == 429:
-                retry_after = (
-                    api_error.headers.get("retry-after") or DEFAULT_RETRY_SECONDS
-                )
-                self._logger.info(
-                    f"Connector will attempt to retry after {int(retry_after)} seconds."
-                )
-                await self._sleeps.sleep(int(retry_after))
-            raise
-
     async def fetch_owner(self):
         """Fetch integration authorized owner"""
-        await self.make_request("owner", method="GET")
+        await self._get_client.users.me()
 
     async def close(self):
         self._sleeps.cancel()
@@ -148,10 +120,16 @@ class NotionClient:
             dict: Child block information."""
 
         async def fetch_children_recursively(block):
-            async for child_block in async_iterate_paginated_api(
-                self._get_client.blocks.children.list, block_id=block.get("id")
-            ):
-                yield child_block
+            if block.get("has_children") is True:
+                async for child_block in async_iterate_paginated_api(
+                    self._get_client.blocks.children.list, block_id=block.get("id")
+                ):
+                    yield child_block
+
+                    async for grandchild in fetch_children_recursively(
+                        child_block
+                    ):  # pyright: ignore
+                        yield grandchild
 
         async for block in async_iterate_paginated_api(
             self._get_client.blocks.children.list, block_id=block_id
@@ -235,9 +213,10 @@ class NotionDataSource(BaseDataSource):
                     "query": " ".join(entity_titles),
                     "filter": {"value": entity_type, "property": "object"},
                 }
-                search_results = await self.notion_client.make_request(
-                    "search", method="POST", body=data
-                )
+                search_results = []
+                async for response in self.notion_client.fetch_by_query(data):
+                    search_results.extend(response)
+
                 get_title = {
                     "database": lambda result: result.get("title", [{}])[0]
                     .get("plain_text", "")
@@ -250,13 +229,10 @@ class NotionDataSource(BaseDataSource):
                     .lower(),
                 }.get(entity_type)
                 if get_title is not None:
-                    found_titles = {
-                        get_title(result)
-                        for result in search_results.get("results", [])
-                    }
+                    found_titles = {get_title(result) for result in search_results}
                     exact_match_results = [
                         result
-                        for result in search_results.get("results", [])
+                        for result in search_results
                         if get_title(result).lower() in map(str.lower, entity_titles)
                     ]
                 invalid_titles = [

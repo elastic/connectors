@@ -216,23 +216,19 @@ async def test_close_with_client():
 @pytest.mark.parametrize(
     "entity_type, entity_titles, mock_search_results",
     [
-        (
-            "database",
-            ["My Database"],
-            {"results": [{"title": [{"plain_text": "My Database"}]}]},
-        ),
+        ("database", ["My Database"], [[{"title": [{"plain_text": "My Database"}]}]]),
         (
             "page",
             ["My Page"],
-            {
-                "results": [
+            [
+                [
                     {
                         "properties": {
                             "title": {"title": [{"text": {"content": "My Page"}}]}
                         }
                     }
                 ]
-            },
+            ],
         ),
     ],
 )
@@ -240,21 +236,14 @@ async def test_close_with_client():
 async def test_get_entities(
     mock_notion_client, entity_type, entity_titles, mock_search_results
 ):
-    mock_notion_client.return_value.make_request.return_value = mock_search_results
+    mock_notion_client.return_value.fetch_by_query = AsyncIterator(mock_search_results)
     async with create_source(
         NotionDataSource,
         databases=["Database1"],
     ) as source:
         await source.get_entities(entity_type, entity_titles)
 
-    mock_notion_client.return_value.make_request.assert_called_once_with(
-        "search",
-        method="POST",
-        body={
-            "query": " ".join(entity_titles),
-            "filter": {"value": entity_type, "property": "object"},
-        },
-    )
+    mock_notion_client.return_value.fetch_by_query.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -284,56 +273,11 @@ async def test_get_entities_entity_not_found(
 
 
 @pytest.mark.asyncio
-async def test_make_request():
-    async_client_mock = AsyncMock()
-    with patch("connectors.sources.notion.AsyncClient", return_value=async_client_mock):
-        configuration = DataSourceConfiguration(
-            {"notion_secret_key": "test_secret_key", "retry_count": 3}
-        )
-        notion_client = NotionClient(configuration=configuration)
-        response_mock = AsyncMock()
-        async_client_mock.request.return_value = response_mock
-        result = await notion_client.make_request(
-            "owner", method="GET", param1="value1"
-        )
-        async_client_mock.request.assert_called_once_with(
-            path="/users/me", method="GET", param1="value1"
-        )
-        assert result == response_mock
-
-
-@pytest.mark.asyncio
 async def test_get_entities_exception():
     async with create_source(NotionDataSource) as source:
-        with patch.object(NotionClient, "make_request", side_effect=Exception()):
+        with patch.object(NotionClient, "fetch_by_query", side_effect=Exception()):
             with pytest.raises(Exception):
                 await source.get_entities("pages", ["abc"])
-
-
-@pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", MagicMock(return_value=0))
-async def test_make_request_api_response_error():
-    async with create_source(NotionDataSource) as source:
-        source.notion_client._get_client.request = MagicMock(
-            side_effect=APIResponseError(
-                code=401,
-                message="Invalid API key",
-                response=Response(status_code=401, text="Unauthorized"),
-            )
-        )
-        with pytest.raises(APIResponseError):
-            await source.notion_client.make_request("owner", method="GET")
-
-
-@pytest.mark.asyncio
-@patch("connectors.utils.time_to_sleep_between_retries", MagicMock(return_value=0))
-async def test_make_request_client_error():
-    async with create_source(NotionDataSource) as source:
-        source.notion_client._get_client.request = MagicMock(
-            side_effect=aiohttp.ClientError()
-        )
-        with pytest.raises(aiohttp.ClientError):
-            await source.notion_client.make_request("owner", method="GET")
 
 
 @pytest.mark.asyncio
