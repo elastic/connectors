@@ -312,5 +312,15 @@ steps:
               label: "🔨 Notion"
               command:
                 - ".buildkite/run_nigthly.sh notion small"
+          
+          - path:
+            - "connectors/sources/redis.py"
+            - "tests/sources/fixtures/redis/**"
+            - "tests/sources/fixtures/fixture.py"
+            - "Dockerfile.ftest"
+            config:
+              label: "🔨 Redis"
+              command:
+                - ".buildkite/run_nigthly.sh redis small"
               artifact_paths:
                 - "perf8-report-*/**/*"

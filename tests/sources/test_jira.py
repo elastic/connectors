@@ -16,6 +16,7 @@ from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
 
+from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.jira import (
@@ -200,6 +201,8 @@ MOCK_USER = (
         "accountType": "atlassian",
         "displayName": "user1",
         "active": True,
+        "email_address": "user.test@gmail.com",
+        "locale": "US",
     },
 )
 
@@ -377,22 +380,22 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=0"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE&maxResults=1000&startAt=0"
     ):
         return get_json_mock(mock_response=MOCK_USER)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=100"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE&maxResults=1000&startAt=1000"
     ):
         return get_json_mock(mock_response=[])
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=0"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE&maxResults=1000&startAt=0"
     ):
         return get_json_mock(mock_response=MOCK_USER)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=100"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE&maxResults=1000&startAt=1000"
     ):
         return get_json_mock(mock_response=[])
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1?fields=security":
@@ -991,9 +994,9 @@ async def test_get_access_control_dls_enabled():
         "accountId": "607194d6bc3c3f006f4c35d6",
         "accountType": "atlassian",
         "displayName": "user1",
-        "locale": "en-US",
-        "emailAddress": "user1@dummy-domain.com",
         "active": True,
+        "emailAddress": "user1.test@gmail.com",
+        "locale": "US",
         "groups": {
             "size": 1,
             "items": [
@@ -1019,8 +1022,8 @@ async def test_get_access_control_dls_enabled():
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
             "display_name": "name:user1",
-            "locale": "locale:en-US",
-            "email_address": "email_address:user1@dummy-domain.com",
+            "email_address": "email_address:user1.test@gmail.com",
+            "locale": "locale:US",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {
@@ -1031,26 +1034,8 @@ async def test_get_access_control_dls_enabled():
                         "group_id:607194d6bc3c3f006f4c35d8",
                         "role_key:607194d6bc3c3f006f4c35d9",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "account_id:607194d6bc3c3f006f4c35d6",
-                                            "group_id:607194d6bc3c3f006f4c35d8",
-                                            "role_key:607194d6bc3c3f006f4c35d9",
-                                        ]
-                                    }
-                                },
-                            ]
-                        }
-                    }
-                }
+                },
+                "source": DLS_QUERY,
             },
         },
     }

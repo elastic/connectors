@@ -32,5 +32,6 @@ pywinrm==0.4.3
 click==8.1.7
 colorama==0.4.6
 tabulate==0.9.0
+redis==5.0.1
 simple-term-menu==1.6.4
 notion-client==2.2.1

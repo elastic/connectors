@@ -24,6 +24,10 @@ import logging
 import time
 from collections import defaultdict
 
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
+
 from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
@@ -71,6 +75,10 @@ class ForceCanceledError(Exception):
 
 
 class ContentIndexDoesNotExistError(Exception):
+    pass
+
+
+class ApiKeyNotFoundError(Exception):
     pass
 
 
@@ -658,6 +666,18 @@ class SyncOrchestrator:
     async def close(self):
         await self.es_management_client.close()
 
+    async def update_authorization(self, index_name, secret_id):
+        # Updates the ESManagementClient auth options for native connectors after fetching API key
+        try:
+            api_key = await self.es_management_client.get_connector_secret(secret_id)
+            self._logger.debug(
+                f"Using API key found in secrets storage for authorization for index [{index_name}]."
+            )
+            self.es_management_client.client.options(api_key=api_key)
+        except ElasticNotFoundError as e:
+            msg = f"API key not found in secrets storage for index [{index_name}]."
+            raise ApiKeyNotFoundError(msg) from e
+
     async def has_active_license_enabled(self, license_):
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
@@ -789,8 +809,15 @@ class SyncOrchestrator:
         retry_interval = options.get(
             "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
         )
+        mem_queue_refresh_timeout = options.get("queue_refresh_timeout", 60)
+        mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
 
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
+        stream = MemQueue(
+            maxsize=queue_size,
+            maxmemsize=queue_mem_size * 1024 * 1024,
+            refresh_timeout=mem_queue_refresh_timeout,
+            refresh_interval=mem_queue_refresh_interval,
+        )
 
         # start the fetcher
         self._extractor = Extractor(

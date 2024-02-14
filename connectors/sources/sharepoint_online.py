@@ -1021,7 +1021,7 @@ class SharepointOnlineClient:
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
         if self._tenant_name != actual_tenant_name:
-            msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
+            msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}. For url: {url}"
             raise InvalidSharepointTenant(msg)
 
     async def close(self):

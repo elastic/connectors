@@ -103,8 +103,8 @@ class NotionAPI:
                     "rich_text": [
                         {
                             "type": "text",
-                            "text": {"content": fake_provider.get_text()},
-                            "plain_text": fake_provider.get_text(),
+                            "text": {"content": fake_provider.fake.text(10*1024)},
+                            "plain_text": fake_provider.fake.text(10*1024),
                         }
                     ]
                 },

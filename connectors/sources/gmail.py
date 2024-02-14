@@ -32,7 +32,7 @@ from connectors.utils import (
 
 CUSTOMER_ID_LABEL = "Google customer id"
 
-SUBJECT_LABEL = "Subject"
+SUBJECT_LABEL = "Google Workspace admin email"
 
 SERVICE_ACCOUNT_CREDENTIALS_LABEL = "GMail service account JSON"
 
@@ -109,6 +109,7 @@ class GMailDataSource(BaseDataSource):
     service_type = "gmail"
     advanced_rules_enabled = True
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -180,7 +181,7 @@ class GMailDataSource(BaseDataSource):
         subject = self.configuration["subject"]
 
         if not validate_email_address(subject):
-            msg = f"Subject field value needs to be a valid email address. '{subject}' is invalid."
+            msg = f"{SUBJECT_LABEL} field value needs to be a valid email address. '{subject}' is invalid."
             raise ConfigurableFieldValueError(msg)
 
         await self._validate_google_directory_auth()

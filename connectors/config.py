@@ -1,4 +1,3 @@
-#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -60,6 +59,8 @@ def _default_config():
             "bulk": {
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,
+                "queue_refresh_interval": 1,
+                "queue_refresh_timeout": 600,
                 "display_every": 100,
                 "chunk_size": 1000,
                 "max_concurrency": 5,
@@ -118,6 +119,7 @@ def _default_config():
             "zoom": "connectors.sources.zoom:ZoomDataSource",
             "box": "connectors.sources.box:BoxDataSource",
             "notion": "connectors.sources.notion:NotionDataSource",
+            "redis": "connectors.sources.redis:RedisDataSource",
         },
     }
 
