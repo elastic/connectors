@@ -21,12 +21,12 @@ steps:
       imagePrefix: ci-amazonlinux-2
     steps:
       - label: "Building amd64 Docker image"
-        command: ".buildkite/build-docker.sh"
+        command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_amd64"
         artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
       - label: "Testing amd64 Docker image"
         depends_on: "build_docker_image_amd64"
-        command: ".buildkite/test-docker.sh"
+        command: ".buildkite/publish/test-docker.sh"
   # ----
   # Docker builds for arm64
   # ----
@@ -43,12 +43,12 @@ steps:
       diskName: '/dev/xvda'
     steps:
       - label: "Building arm64 Docker image"
-        command: ".buildkite/build-docker.sh"
+        command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_arm64"
         artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
       - label: "Testing arm64 Docker image"
         depends_on: "build_docker_image_arm64"
-        command: ".buildkite/test-docker.sh"
+        command: ".buildkite/publish/test-docker.sh"
   # ----
   # Multiarch Docker image build and push
   # ----
@@ -68,7 +68,7 @@ steps:
         commands:
           - "mkdir -p .artifacts"
           - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_amd64
-          - ".buildkite/push-docker.sh"
+          - ".buildkite/publish/push-docker.sh"
       - label: "Push arm64 Docker image"
         key: "push_arm64_docker_image"
         env:
@@ -82,9 +82,9 @@ steps:
         commands:
           - "mkdir -p .artifacts"
           - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64
-          - ".buildkite/push-docker.sh"
+          - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image"
-        command: ".buildkite/build-multiarch-docker.sh"
+        command: ".buildkite/publish/build-multiarch-docker.sh"
         depends_on:
           - "push_amd64_docker_image"
           - "push_arm64_docker_image"

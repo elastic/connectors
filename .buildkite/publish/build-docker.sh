@@ -6,7 +6,8 @@ function realpath {
   echo "$(cd "$(dirname "$1")"; pwd)"/"$(basename "$1")";
 }
 
-BUILDKITE_DIR=$(realpath "$(dirname "$0")")
+SCRIPT_DIR=$(realpath "$(dirname "$0")")
+BUILDKITE_DIR=$(realpath "$(dirname "$SCRIPT_DIR")")
 PROJECT_ROOT=$(realpath "$(dirname "$BUILDKITE_DIR")")
 
 if [[ "${ARCHITECTURE:-}" == "" ]]; then
@@ -23,10 +24,13 @@ if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
 fi
 
 pushd $PROJECT_ROOT
-TAG_NAME="docker.elastic.co/enterprise-search/elastic-connectors-$(ARCHITECTURE):$(VERSION)
+TAG_NAME="docker.elastic.co/enterprise-search/elastic-connectors-${ARCHITECTURE}:${VERSION}"
 OUTPUT_PATH="$PROJECT_ROOT/.artifacts"
 OUTPUT_FILE="$OUTPUT_PATH/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.tar.gz"
+
 docker build -t $TAG_NAME .
+
 mkdir -p $OUTPUT_PATH
 docker save -o $TAG_NAME | gzip > $OUTPUT_FILE
+
 popd
