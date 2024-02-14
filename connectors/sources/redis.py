@@ -299,7 +299,7 @@ class RedisDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "SSL/TLS Connection",
                 "order": 6,
-                "tooltip": "This option establishes a secure connection to the Redis using SSL/TLS encryption. Ensure that your Redis deployment supports SSL/TLS connections.",
+                "tooltip": "This option establishes a secure connection to Redis using SSL/TLS encryption. Ensure that your Redis deployment supports SSL/TLS connections.",
                 "type": "bool",
                 "value": False,
             },
