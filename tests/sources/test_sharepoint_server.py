@@ -967,7 +967,7 @@ async def test_api_call_successfully():
         ):
             source.sharepoint_client._get_session()
             async for response in source.sharepoint_client._api_call(
-                url_name="ping", site_collections="abc", host_url="sharepoint.com"
+                url_name="ping", parent_site_url="abc", host_url="sharepoint.com"
             ):
                 assert response == [{"name": "dummy_project", "id": "test123"}]
 
