@@ -52,7 +52,7 @@ Comma-separated list of page names to be fetched by the connector. If the value 
 
 #### `Index Comments`
 
-Toggle to enable fetching and indexing of comments from the Notion workspace for the configured pages, databases and the corresponding child blocks. Default value is `False`.
+Toggle to enable fetching and indexing of comments from the Notion workspace for the configured pages, databases and the corresponding child blocks. Default value is `False`. **Note**: Enabling it might decrease the performance of connector due to increased network calls. Therefore, default value is `False`. 
 
 ### Content Extraction
 
@@ -70,7 +70,7 @@ The connector syncs the following objects and entities:
 - **Users**
     - Includes metadata such as name, id, email address, etc.
 - **Comments**
-    - Includes the content and metadata such as id, last updated time, created by, etc.
+    - Includes the content and metadata such as id, last updated time, created by, etc. **Note**: Comments are excluded by default.
 
 *NOTE*:
 - Files bigger than 10 MB won't be extracted.
