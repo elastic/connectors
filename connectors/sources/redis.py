@@ -308,7 +308,7 @@ class RedisDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Mutual SSL/TLS Connection",
                 "order": 7,
-                "tooltip": "This option establishes a secure connection to the Redis using mutual SSL/TLS encryption. Ensure that your Redis deployment supports mutual SSL/TLS connections.",
+                "tooltip": "This option establishes a secure connection to Redis using mutual SSL/TLS encryption. Ensure that your Redis deployment supports mutual SSL/TLS connections.",
                 "type": "bool",
                 "value": False,
             },
