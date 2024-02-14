@@ -24,7 +24,7 @@ from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
-DOCUMENT = [
+DOCUMENTS = [
     {
         "_id": "aa00c4c0f44c5cb7cad68df40e8f8877",
         "key": "0",
@@ -146,9 +146,9 @@ async def test_get_docs():
             "redis.from_url",
             return_value=AsyncMock(),
         ):
-            source.get_db_records = AsyncIterator(items=DOCUMENT)
+            source.get_db_records = AsyncIterator(items=DOCUMENTS)
             async for (doc, _) in source.get_docs():
-                assert doc in DOCUMENT
+                assert doc in DOCUMENTS
 
 
 @pytest.mark.asyncio
@@ -220,7 +220,7 @@ async def test_get_db_records():
         source.client._client = RedisClientMock()
         source.client.get_paginated_key = AsyncIterator(["0"])
         async for record in source.get_db_records(db=0):
-            assert record == DOCUMENT[0]
+            assert record == DOCUMENTS[0]
 
 
 @pytest.mark.parametrize(
@@ -249,7 +249,7 @@ async def test_get_docs_with_sync_rules(filtering):
         source.client._client.get = AsyncMock(return_value="this is value")
         source.client._client.memory_usage = AsyncMock(return_value=10)
         async for (doc, _) in source.get_docs(filtering):
-            assert doc in DOCUMENT
+            assert doc in DOCUMENTS
         source.client._client.scan_iter.assert_called_once_with(
             match="0*", count=1000, _type="string"
         )
