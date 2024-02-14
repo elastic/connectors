@@ -40,6 +40,7 @@ RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 
 FETCH_SIZE = 100
+MAX_USER_FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
@@ -52,7 +53,8 @@ ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
 USERS = "users"
-PROJECT_PERMISSIONS_BY_KEY = "project_permissions_by_key"
+USERS_FOR_DATA_CENTER = "users_for_data_center"
+PERMISSIONS_BY_KEY = "permissions_by_key"
 ISSUE_SECURITY_LEVEL = "issue_security_level"
 SECURITY_LEVEL_MEMBERS = "issue_security_members"
 PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
@@ -65,7 +67,8 @@ URLS = {
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
     USERS: "/rest/api/3/users/search",
-    PROJECT_PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?projectKey={project_key}&permissions=BROWSE_PROJECTS&maxResults={max_results}&startAt={start_at}",
+    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
+    PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?{key}&permissions=BROWSE&maxResults={max_results}&startAt={start_at}",
     PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
     ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
     SECURITY_LEVEL_MEMBERS: "/rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
@@ -406,10 +409,9 @@ class JiraDataSource(BaseDataSource):
             },
             "use_document_level_security": {
                 "display": "toggle",
-                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Enable document level security",
                 "order": 14,
-                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents. Only 1000 users can be fetched for Jira Data Center.",
                 "type": "bool",
                 "value": False,
             },
@@ -445,32 +447,45 @@ class JiraDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_information_list(self, project):
+    async def _user_information_list(self, key):
         start_at = 0
         while True:
             async for users in self.jira_client.api_call(
-                url_name=PROJECT_PERMISSIONS_BY_KEY,
-                project_key=project["key"],
+                url_name=PERMISSIONS_BY_KEY,
+                key=key,
                 start_at=start_at,
-                max_results=FETCH_SIZE,
+                max_results=MAX_USER_FETCH_LIMIT,
             ):
                 response = await users.json()
                 if len(response) == 0:
                     return
                 yield response
-                start_at += FETCH_SIZE
+                start_at += MAX_USER_FETCH_LIMIT
 
     async def _project_access_control(self, project):
         if not self._dls_enabled():
             return []
 
         access_control = set()
-        async for actors in self._user_information_list(project=project):
+        async for actors in self._user_information_list(
+            key=f"projectKey={project['key']}"
+        ):
             for actor in actors:
-                if actor["accountType"] == ATLASSIAN:
+                if (
+                    self.jira_client.data_source_type == JIRA_CLOUD
+                    and actor["accountType"] == ATLASSIAN
+                ):
                     access_control.add(
                         prefix_account_id(account_id=actor.get("accountId"))
                     )
+                    access_control.add(
+                        prefix_account_name(account_name=actor.get("displayName"))
+                    )
+                elif self.jira_client.data_source_type in [
+                    JIRA_SERVER,
+                    JIRA_DATA_CENTER,
+                ]:
+                    access_control.add(prefix_account_id(account_id=actor.get("name")))
                     access_control.add(
                         prefix_account_name(account_name=actor.get("displayName"))
                     )
@@ -527,6 +542,17 @@ class JiraDataSource(BaseDataSource):
             return []
 
         access_control = set()
+        if self.jira_client.data_source_type != JIRA_CLOUD:
+            async for actors in self._user_information_list(
+                key=f"issueKey={issue_key}"
+            ):
+                for actor in actors:
+                    access_control.add(prefix_account_id(account_id=actor.get("name")))
+                    access_control.add(
+                        prefix_account_name(account_name=actor.get("displayName"))
+                    )
+            return list(access_control)
+
         async for response in self._issue_security_level(issue_key=issue_key):
             if security := response.get("fields", {}).get("security"):
                 level_id = security.get("id")
@@ -597,7 +623,12 @@ class JiraDataSource(BaseDataSource):
             return
 
         self._logger.info("Fetching all users")
-        url = parse.urljoin(self.configuration["jira_url"], URLS[USERS])
+        users_endpoint = (
+            URLS[USERS]
+            if self.jira_client.data_source_type == JIRA_CLOUD
+            else URLS[USERS_FOR_DATA_CENTER]
+        )
+        url = parse.urljoin(self.configuration["jira_url"], users_endpoint)
         async for users in self.atlassian_access_control.fetch_all_users(url=url):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users

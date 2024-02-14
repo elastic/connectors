@@ -23,4 +23,5 @@
 - [SharePoint Online](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint-online.html)
 - [SharePoint Server](https://www.elastic.co/guide/en/enterprise-search/master/connectors-sharepoint.html)
 - [Zoom](https://www.elastic.co/guide/en/enterprise-search/master/connectors-zoom.html)
+- [Redis](https://www.elastic.co/guide/en/enterprise-search/master/connectors-redis.html)
 
