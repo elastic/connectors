@@ -160,7 +160,7 @@ async def test_get_databases_for_multiple_db():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_with_astric():
+async def test_get_databases_with_asterisk():
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client._client = RedisClientMock()
