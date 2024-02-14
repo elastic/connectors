@@ -74,7 +74,7 @@ The connector syncs the following objects and entities:
 
 *NOTE*:
 - Files bigger than 10 MB won't be extracted.
-- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to that Elastic Deployment.
+- Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to the destination Elasticsearch index.
 
 ## Sync rules
 
