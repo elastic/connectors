@@ -5,6 +5,7 @@
 #
 """GraphQL source module responsible to fetch documents based on GraphQL Query."""
 import json
+import re
 from copy import deepcopy
 from functools import cached_property
 
@@ -47,8 +48,9 @@ class GraphQLClient:
         self._logger = logger
         self.graphql_query = self.configuration["graphql_query"]
         self.url = self.configuration["http_endpoint"]
-        self.graphql_objects = self.configuration["object_list"]
+        self.graphql_object_list = self.configuration["graphql_object_list"]
         self.http_method = self.configuration["http_method"]
+        self.authentication_method = self.configuration["authentication_method"]
         self.variables = {}
         self.headers = {}
 
@@ -56,9 +58,9 @@ class GraphQLClient:
         self._logger = logger_
 
     @cached_property
-    def _get_session(self):
-        timeout = aiohttp.ClientTimeout(total=300)
-        if self.configuration["authentication_method"] == "bearer":
+    def session(self):
+        timeout = aiohttp.ClientTimeout(total=self.configuration["connection_timeout"])
+        if self.authentication_method == "bearer":
             self.headers.update(
                 {
                     "Authorization": f"Bearer {self.configuration['token']}",
@@ -69,7 +71,7 @@ class GraphQLClient:
                 timeout=timeout,
                 raise_for_status=True,
             )
-        elif self.configuration["authentication_method"] == "basic":
+        elif self.authentication_method == "basic":
             basic_auth = aiohttp.BasicAuth(
                 login=self.configuration["username"],
                 password=self.configuration["password"],
@@ -87,15 +89,24 @@ class GraphQLClient:
                 raise_for_status=True,
             )
 
-    def boil_down_data(self, key, data):
-        if key in self.graphql_objects:
+    def extract_graphql_data_items(self, key, data):
+        """Returns sub objects from the response based on graphql_object_list
+
+        Args:
+            key (string): Key of data.
+            data (dict): data to extract
+
+        Yields:
+            dictionary/list: Documents from the response
+        """
+        if key in self.graphql_object_list:
             yield data
         if isinstance(data, dict):
             for key, item in data.items():
-                yield from self.boil_down_data(key=key, data=item)
+                yield from self.extract_graphql_data_items(key=key, data=item)
         if isinstance(data, list):
             for doc in data:
-                yield from self.boil_down_data(key=None, data=doc)
+                yield from self.extract_graphql_data_items(key=None, data=doc)
 
     @retryable(
         retries=RETRIES,
@@ -119,7 +130,7 @@ class GraphQLClient:
 
     async def get(self, graphql_query):
         params = {"query": graphql_query}
-        async with self._get_session.get(url=self.url, params=params) as response:
+        async with self.session.get(url=self.url, params=params) as response:
             json_response = await response.json()
             if not json_response.get("errors"):
                 data = json_response.get("data", {})
@@ -142,7 +153,7 @@ class GraphQLClient:
             "query": graphql_query,
             "variables": self.variables,
         }
-        async with self._get_session.post(url=self.url, json=query_data) as response:
+        async with self.session.post(url=self.url, json=query_data) as response:
             json_response = await response.json()
             if not json_response.get("errors"):
                 data = json_response.get("data", {})
@@ -152,8 +163,8 @@ class GraphQLClient:
 
     async def close(self):
         self._sleeps.cancel()
-        await self._get_session.close()
-        del self._get_session
+        await self.session.close()
+        del self.session
 
     async def ping(self):
         await self.make_request(graphql_query=PING_QUERY)
@@ -247,9 +258,10 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
                 "required": False,
             },
-            "object_list": {
+            "graphql_object_list": {
                 "label": "GraphQL Objects List",
                 "order": 9,
+                "tooltip": "List of object names from the query that needs to be indexed.",
                 "type": "list",
             },
             "headers": {
@@ -258,12 +270,34 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
                 "required": False,
             },
+            "connection_timeout": {
+                "default_value": 300,
+                "display": "numeric",
+                "label": "Connection Timeout",
+                "order": 11,
+                "required": False,
+                "type": "int",
+                "ui_restrictions": ["advanced"],
+            },
         }
 
     def is_query(self, graphql_query):
-        ast = parse(graphql_query)  # pyright: ignore
-        operation_type = ast.definitions[0].operation  # pyright: ignore
-        if operation_type.value == "query":
+        try:
+            ast = parse(graphql_query)  # pyright: ignore
+            for definition in ast.definitions:  # pyright: ignore
+                if (
+                    hasattr(definition, "operation")
+                    and definition.operation.value != "query"
+                ):
+                    return False
+            return True
+        except Exception as e:
+            self._logger.error(f"Failed to parse GraphQL query. Error: {e}")
+            return False
+
+    def validate_endpoints(self):
+        URL_regex = "^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
+        if re.match(URL_regex, self.graphql_client.url):
             return True
         return False
 
@@ -272,8 +306,13 @@ class GraphQLDataSource(BaseDataSource):
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
         await super().validate_config()
-        if self.is_query(graphql_query=self.graphql_client.graphql_query) is False:
-            msg = "Mutation is not supported."
+
+        if not self.validate_endpoints():
+            msg = "HTTP URL & Endpoint are not structured."
+            raise ConfigurableFieldValueError(msg)
+
+        if not self.is_query(graphql_query=self.graphql_client.graphql_query):
+            msg = "Configured Query is not supported by the connector."
             raise ConfigurableFieldValueError(msg)
 
         headers = self.graphql_client.configuration["headers"]
@@ -282,14 +321,14 @@ class GraphQLDataSource(BaseDataSource):
             try:
                 self.graphql_client.headers = json.loads(headers)
             except Exception as exception:
-                msg = f"Error while processing headers. Exception: {exception}"
+                msg = f"Error while processing configured GraphQL headers. Exception: {exception}"
                 raise ConfigurableFieldValueError(msg) from exception
 
         if graphql_variables:
             try:
                 self.graphql_client.variables = json.loads(graphql_variables)
             except Exception as exception:
-                msg = f"Error while processing variables. Exception: {exception}"
+                msg = f"Error while processing configured GraphQL variables. Exception: {exception}"
                 raise ConfigurableFieldValueError(msg) from exception
 
     async def close(self):
@@ -305,7 +344,9 @@ class GraphQLDataSource(BaseDataSource):
 
     async def fetch_data(self, graphql_query):
         data = await self.graphql_client.make_request(graphql_query=graphql_query)
-        for documents in self.graphql_client.boil_down_data(key="data", data=data):
+        for documents in self.graphql_client.extract_graphql_data_items(
+            key="data", data=data
+        ):
             if isinstance(documents, dict):
                 yield documents
             elif isinstance(documents, list):

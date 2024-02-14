@@ -45,7 +45,7 @@ async def create_graphql_source(
         http_endpoint="http://127.0.0.1:1234",
         authentication_method="none",
         graphql_query=graphql_query,
-        object_list=["users", "name"],
+        graphql_object_list=["users", "name"],
         headers=headers,
         graphql_variables=graphql_variables,
     ) as source:
@@ -53,9 +53,44 @@ async def create_graphql_source(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "data, expected_result",
+    [
+        (
+            {"data": {"basicInfo": {"name": "xyz", "id": "abc#123"}}},
+            {"name": "xyz", "id": "abc#123"},
+        ),
+        (
+            {
+                "data": {
+                    "basicInfo": [
+                        {"name": "xyz", "id": "abc#123"},
+                        {"name": "pqr", "id": "pqr#456"},
+                    ]
+                }
+            },
+            [{"name": "xyz", "id": "abc#123"}, {"name": "pqr", "id": "pqr#456"}],
+        ),
+        (
+            {"data": {"empData": {"basicInfo": {"name": "xyz", "id": "abc#123"}}}},
+            {"name": "xyz", "id": "abc#123"},
+        ),
+    ],
+)
+async def test_extract_graphql_data_items(data, expected_result):
+    async with create_graphql_source() as source:
+        # graphql_object_list is "basicInfo"
+        source.graphql_client.graphql_object_list = ["basicInfo"]
+        for actual_response in source.graphql_client.extract_graphql_data_items(
+            "data", data
+        ):
+            assert actual_response == expected_result
+
+
+@pytest.mark.asyncio
 async def test_get():
     async with create_graphql_source() as source:
-        source.graphql_client._get_session.get = Mock(
+        source.graphql_client.session.get = Mock(
             return_value=get_json_mock(
                 mock_response={"data": {"users": "xyz"}}, status=200
             )
@@ -68,7 +103,7 @@ async def test_get():
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_errors():
     async with create_graphql_source() as source:
-        source.graphql_client._get_session.get = Mock(
+        source.graphql_client.session.get = Mock(
             return_value=get_json_mock(
                 mock_response={
                     "errors": [{"type": "QUERY", "message": "Invalid query"}]
@@ -83,7 +118,7 @@ async def test_get_with_errors():
 @pytest.mark.asyncio
 async def test_post():
     async with create_graphql_source() as source:
-        source.graphql_client._get_session.post = Mock(
+        source.graphql_client.session.post = Mock(
             return_value=get_json_mock(
                 mock_response={"data": {"users": "xyz"}}, status=200
             )
@@ -96,7 +131,7 @@ async def test_post():
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_post_with_errors():
     async with create_graphql_source() as source:
-        source.graphql_client._get_session.post = Mock(
+        source.graphql_client.session.post = Mock(
             return_value=get_json_mock(
                 mock_response={
                     "errors": [{"type": "QUERY", "message": "Invalid query"}]
@@ -112,7 +147,7 @@ async def test_post_with_errors():
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_make_request_with_unauthorized():
     async with create_graphql_source() as source:
-        source.graphql_client._get_session.post = Mock(
+        source.graphql_client.session.post = Mock(
             side_effect=ClientResponseError(
                 status=401,
                 request_info=aiohttp.RequestInfo(
@@ -129,7 +164,7 @@ async def test_make_request_with_unauthorized():
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_make_request_with_429_exception():
     async with create_graphql_source() as source:
-        source.graphql_client._get_session.post = Mock(
+        source.graphql_client.session.post = Mock(
             side_effect=ClientResponseError(
                 status=429,
                 request_info=aiohttp.RequestInfo(
@@ -140,6 +175,14 @@ async def test_make_request_with_429_exception():
         )
         with pytest.raises(Exception):
             await source.graphql_client.make_request("query")
+
+
+@pytest.mark.asyncio
+async def test_validate_config_with_invalid_url():
+    async with create_graphql_source() as source:
+        source.graphql_client.url = "dummy_url"
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
 
 
 @pytest.mark.asyncio
@@ -190,9 +233,10 @@ async def test_ping_negative():
 
 @pytest.mark.asyncio
 async def test_fetch_data():
-    expected_respones = [{"name": {"firstName": "xyz"}}, {"firstName": "xyz"}]
+    expected_respones = [{"name": {"firstName": "xyz"}}]
     actual_response = []
     async with create_graphql_source() as source:
+        source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
             return_value={"data": {"users": [{"name": {"firstName": "xyz"}}]}}
         )
