@@ -20,7 +20,7 @@ To connect to Notion, the user needs to [create an internal integration](https:/
 
 1. Users must grant `READ` permission for content, comment and user capabilities for that integration from the Capabilities tab.
 
-2. Users must manually [add the integration as a connection](https://www.notion.so/help/add-and-manage-connections-with-the-api#add-connections-to-pages) to each page and database that needs to be retrieved.
+2. Users must manually [add the integration as a connection](https://www.notion.so/help/add-and-manage-connections-with-the-api#add-connections-to-pages) only to the top-level pages in a workspace, sub-pages will inherit the connections of parent page automatically.
 
 Once completed, use the following parameters to configure the connector.
 
