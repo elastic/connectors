@@ -221,12 +221,12 @@ class TransientElasticsearchRetrier:
 
                 return result
             except ConnectionTimeout:
-                self._logger.debug(f"Attempt {retry}: connection timeout")
+                self._logger.warning(f"Attempt {retry}: connection timeout")
 
                 if retry >= self._max_retries:
                     raise
             except ApiError as e:
-                self._logger.debug(
+                self._logger.warning(
                     f"Attempt {retry}: api error with status {e.status_code}"
                 )
 
