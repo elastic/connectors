@@ -107,7 +107,6 @@ class RedisClient:
     async def validate_database(self, db):
         try:
             await self._client.execute_command("SELECT", db)
-            await self._client.ping()
             return True
         except Exception as exception:
             self._logger.warning(f"Database {db} not found. Error: {exception}")
