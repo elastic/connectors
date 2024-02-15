@@ -13,18 +13,20 @@ steps:
   - group: ":package: amd64 Build and Test"
     key: "build_and_test_amd64"
     if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/)"
-    env:
-      - ARCHITECTURE="amd64"
     agents:
       provider: aws
       instanceType: m6i.xlarge
       imagePrefix: ci-amazonlinux-2
     steps:
       - label: "Building amd64 Docker image"
+        env:
+          - ARCHITECTURE="amd64"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_amd64"
         artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
       - label: "Testing amd64 Docker image"
+        env:
+          - ARCHITECTURE="amd64"
         depends_on: "build_docker_image_amd64"
         command: ".buildkite/publish/test-docker.sh"
   # ----
@@ -33,8 +35,6 @@ steps:
   - group: ":package: arm64 Build and Test"
     key: "build_and_test_arm64"
     if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/)"
-    env:
-      - ARCHITECTURE="arm64"
     agents:
       provider: aws
       instanceType: m6g.xlarge
@@ -43,10 +43,14 @@ steps:
       diskName: '/dev/xvda'
     steps:
       - label: "Building arm64 Docker image"
+        env:
+          - ARCHITECTURE="arm64"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_arm64"
         artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
       - label: "Testing arm64 Docker image"
+        env:
+          - ARCHITECTURE="arm64"
         depends_on: "build_docker_image_arm64"
         command: ".buildkite/publish/test-docker.sh"
   # ----
