@@ -1,3 +1,5 @@
+#!/bin/bash
+
 set -exu
 set -o pipefail
 
@@ -8,11 +10,6 @@ function realpath {
 SCRIPT_DIR=$(realpath "$(dirname "$0")")
 BUILDKITE_DIR=$(realpath "$(dirname "$SCRIPT_DIR")")
 PROJECT_ROOT=$(realpath "$(dirname "$BUILDKITE_DIR")")
-
-if [[ "${ARCHITECTURE:-}" == "" ]]; then
-  echo "!! ARCHITECTURE is not set. Exiting."
-  exit 2
-fi
 
 VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
 VERSION=$(cat $VERSION_PATH)
