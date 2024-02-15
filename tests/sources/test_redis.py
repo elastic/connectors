@@ -104,8 +104,8 @@ async def test_ping_positive():
 @pytest.mark.asyncio
 async def test_ping_negative():
     async with create_redis_source() as source:
-        mocked_client = Mock()
-        with mock.patch("redis.from_url", return_value=mocked_client):
+        mocked_client = AsyncMock()
+        with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
             mocked_client.ping = AsyncMock(
                 side_effect=redis.exceptions.AuthenticationError
             )
@@ -117,7 +117,7 @@ async def test_ping_negative():
 async def test_validate_config_when_database_is_not_integer():
     async with create_redis_source() as source:
         source.client.database = ["db123", "db456"]
-        with mock.patch("redis.from_url", return_value=Mock()):
+        with mock.patch("redis.asyncio.from_url", return_value=AsyncMock()):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
 
@@ -127,7 +127,7 @@ async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
         source.client.database = ["123"]
         source.client.validate_database = AsyncMock(return_value=False)
-        with mock.patch("redis.from_url", return_value=Mock()):
+        with mock.patch("redis.asyncio.from_url", return_value=AsyncMock()):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
 
@@ -139,7 +139,7 @@ async def test_get_docs():
         source.client.database = [1]
 
         with mock.patch(
-            "redis.from_url",
+            "redis.asyncio.from_url",
             return_value=AsyncMock(),
         ):
             source.get_db_records = AsyncIterator(items=DOCUMENTS)
@@ -168,8 +168,8 @@ async def test_get_databases_with_asterisk():
 async def test_get_databases_expect_no_databases_on_auth_error():
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        mocked_client = Mock()
-        with mock.patch("redis.from_url", return_value=mocked_client):
+        mocked_client = AsyncMock()
+        with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
             mocked_client.ping = AsyncMock(
                 side_effect=redis.exceptions.AuthenticationError
             )
@@ -372,6 +372,6 @@ async def test_ping_when_mutual_ssl_enabled():
         with mock.patch(
             "redis.asyncio.from_url",
             return_value=AsyncMock(),
-        ) as from_url_mock:
-            await source.client.ping()
-            from_url_mock.assert_called_once()
+        ):
+            await source.ping()
+            source.client._redis_client.ping.assert_awaited_once()
