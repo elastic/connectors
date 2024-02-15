@@ -9,6 +9,7 @@ import asyncio
 import os
 from copy import copy
 from functools import partial
+from urllib.parse import urljoin
 
 import aiohttp
 from aiohttp.client_exceptions import ServerDisconnectedError
@@ -19,8 +20,12 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
+    prefix_account_email,
     prefix_account_id,
+    prefix_account_name,
+    prefix_group,
     prefix_group_id,
+    prefix_user,
 )
 from connectors.utils import (
     CancellableSleeps,
@@ -32,6 +37,7 @@ from connectors.utils import (
 
 RETRY_INTERVAL = 2
 SPACE = "space"
+SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
 PAGE = "page"
 ATTACHMENT = "attachment"
@@ -39,6 +45,7 @@ CONTENT = "content"
 DOWNLOAD = "download"
 SEARCH = "search"
 USER = "user"
+USERS_FOR_DATA_CENTER = "users_for_data_center"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
 CONTENT_QUERY = "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
@@ -47,10 +54,12 @@ USER_QUERY = "expand=groups,applicationRoles"
 
 URLS = {
     SPACE: "rest/api/space?{api_query}",
+    SPACE_PERMISSION: "rest/extender/1.0/permission/space/{space_key}/getSpacePermissionActors/VIEWSPACE",
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
     USER: "rest/api/3/users/search",
+    USERS_FOR_DATA_CENTER: "rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt={start_at}&maxResults={max_results}",
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
@@ -341,7 +350,6 @@ class ConfluenceDataSource(BaseDataSource):
                 ],
             },
             "use_document_level_security": {
-                "depends_on": [{"field": "data_source", "value": CONFLUENCE_CLOUD}],
                 "display": "toggle",
                 "label": "Enable document level security",
                 "order": 14,
@@ -382,23 +390,64 @@ class ConfluenceDataSource(BaseDataSource):
 
         return document
 
-    async def get_access_control(self):
-        """Get access control documents for active Atlassian users.
+    async def user_access_control_confluence_server(self, user):
+        """Generate a user access control document for confluence server.
 
-        This method fetches access control documents for active Atlassian users when document level security (DLS)
-        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
-        If DLS is enabled, the method fetches all users from the Confluence API, filters out active Atlassian users,
-        and fetches additional information for each active user using the fetch_user method. After gathering the user information,
-        it generates an access control document for each user using the user_access_control_doc method and yields the results.
+        This method generates a user access control document based on the provided user information.
+        The document includes the user's account ID, prefixed account ID, and prefixed account name
+        The access control list is then constructed using these values.
 
-        Yields:
-            dict: An access control document for each active Atlassian user.
+        Args:
+            user (dict): A dictionary containing user information, such as account ID, display name and email.
+
+        Returns:
+            dict: A user access control document with the following structure:
+                {
+                    "_id": <account_id>,
+                    "identity": {
+                        "account_id": <prefixed_account_id>,
+                        "display_name": <prefixed_account_name>
+                        "email_address": <prefixed_account_email>
+                    },
+                    "created_at": <iso_utc_timestamp>,
+                    ACCESS_CONTROL: [<prefixed_account_id>, <prefixed_account_email>, <prefixed_account_name>]
+                }
         """
-        if not self._dls_enabled():
-            self._logger.warning("DLS is not enabled. Skipping")
-            return
+        account_id = user.get("key") or user.get("name")
+        account_name = user.get("fullName")
+        email = user.get("email")
 
-        self._logger.info("Fetching all users")
+        prefixed_account_email = prefix_account_email(email=email)
+        prefixed_account_id = prefix_account_id(account_id=account_id)
+        prefixed_account_name = prefix_account_name(account_name=account_name)
+
+        access_control = [
+            prefixed_account_id,
+            prefixed_account_email,
+            prefixed_account_name,
+        ]
+
+        return {
+            "_id": account_id,
+            "identity": {
+                "account_id": prefixed_account_id,
+                "display_name": prefixed_account_name,
+                "email_address": prefixed_account_email,
+            },
+            "created_at": iso_utc(),
+        } | self.atlassian_access_control.access_control_query(
+            access_control=access_control
+        )
+
+    async def get_user_for_server(self):
+        url = urljoin(self.configuration["confluence_url"], URLS[USERS_FOR_DATA_CENTER])
+        async for users in self.atlassian_access_control.fetch_confluence_server_users(
+            url=url
+        ):
+            for user_info in users:
+                yield await self.user_access_control_confluence_server(user=user_info)
+
+    async def get_user(self):
         url = os.path.join(self.configuration["confluence_url"], URLS[USER])
         async for users in self.atlassian_access_control.fetch_all_users(url=url):
             active_atlassian_users = filter(
@@ -418,6 +467,31 @@ class ConfluenceDataSource(BaseDataSource):
                 yield await self.atlassian_access_control.user_access_control_doc(
                     user=user
                 )
+
+    async def get_access_control(self):
+        """Get access control documents for active Atlassian users.
+
+        This method fetches access control documents for active Atlassian users when document level security (DLS)
+        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        If DLS is enabled, the method fetches all users from the Confluence API, filters out active Atlassian users,
+        and fetches additional information for each active user using the fetch_user method. After gathering the user information,
+        it generates an access control document for each user using the user_access_control_doc method and yields the results.
+
+        Yields:
+            dict: An access control document for each active Atlassian user.
+        """
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        self._logger.info("Fetching all users")
+        if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+            users = self.get_user()
+        else:
+            users = self.get_user_for_server()
+
+        async for user in users:
+            yield user
 
     def _get_access_control_from_permission(self, permissions, target_type):
         if not self._dls_enabled():
@@ -452,6 +526,22 @@ class ConfluenceDataSource(BaseDataSource):
                 identities.add(prefix_account_id(account_id=item.get("accountId", "")))
             elif item_type == "group":
                 identities.add(prefix_group_id(group_id=item.get("id", "")))
+
+        return identities
+
+    def _extract_identities_for_datacenter(self, response):
+        if not self._dls_enabled():
+            return set()
+        identities = set()
+        user_results = response.get("user", {}).get("results", [])
+        group_results = response.get("group", {}).get("results", [])
+
+        for item in user_results + group_results:
+            item_type = item.get("type")
+            if item_type == "known":
+                identities.add(prefix_user(item.get("username")))
+            elif item_type == "group":
+                identities.add(prefix_group(item.get("name", "")))
 
         return identities
 
@@ -528,7 +618,33 @@ class ConfluenceDataSource(BaseDataSource):
                         "title": space["name"],
                         "_timestamp": iso_utc(),
                         "url": space_url,
-                    }, space.get("permissions", [])
+                    }, space.get("permissions", []), space.get("key")
+
+    async def get_permission(self, permission):
+        permissions = set()
+        if permission.get("users"):
+            for user in permission.get("users"):
+                permissions.add(prefix_user(user))
+
+        if permission.get("groups"):
+            for group in permission.get("groups"):
+                permissions.add(prefix_group(group))
+
+        return permissions
+
+    async def fetch_server_space_permission(self, space_key):
+        if not self._dls_enabled():
+            return []
+
+        url = URLS[SPACE_PERMISSION].format(space_key=space_key)
+        async for permissions in self.confluence_client.api_call(
+            url=os.path.join(self.confluence_client.host_url, url),
+        ):
+            permission = await permissions.json()
+            permission = await self.get_permission(
+                permission=permission.get("permissions", {}).get("VIEWSPACE")
+            )
+            return permission
 
     async def fetch_documents(self, api_query):
         """Get pages and blog posts with the help of REST APIs
@@ -563,7 +679,9 @@ class ConfluenceDataSource(BaseDataSource):
                     "space": document["space"]["name"],
                     "body": document["body"]["storage"]["value"],
                     "url": document_url,
-                }, attachment_count, document.get("space", {}).get(
+                }, attachment_count, document.get("space", {}).get("key"), document.get(
+                    "space", {}
+                ).get(
                     "permissions", []
                 ), document.get(
                     "restrictions", {}
@@ -725,12 +843,17 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
-        async for space, permissions in self.fetch_spaces():
-            access_control = list(
-                self._get_access_control_from_permission(
-                    permissions=permissions, target_type=SPACE
+        async for space, permissions, key in self.fetch_spaces():
+            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+                access_control = list(
+                    self._get_access_control_from_permission(
+                        permissions=permissions, target_type=SPACE
+                    )
                 )
-            )
+            else:
+                access_control = list(
+                    await self.fetch_server_space_permission(space_key=key)
+                )
             space = self._decorate_with_access_control(
                 document=space, access_control=access_control
             )
@@ -744,18 +867,27 @@ class ConfluenceDataSource(BaseDataSource):
             api_query (str): API Query Parameters for fetching page/blogpost
             target_type (str): Type of object to filter permission
         """
-        async for document, attachment_count, permissions, restrictions in self.fetch_documents(
+        async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
             api_query
         ):
             # Pages/Bolgpost are open to viewing or editing by default, but you can restrict either viewing or editing to certain users or groups.
-            access_control = list(self._extract_identities(response=restrictions))
-            if len(access_control) == 0:
-                # Every space has its own independent set of permissions, managed by the space admin(s), which determine the access settings for different users and groups.
-                access_control = list(
-                    self._get_access_control_from_permission(
-                        permissions=permissions, target_type=target_type
+            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+                access_control = list(self._extract_identities(response=restrictions))
+                if len(access_control) == 0:
+                    # Every space has its own independent set of permissions, managed by the space admin(s), which determine the access settings for different users and groups.
+                    access_control = list(
+                        self._get_access_control_from_permission(
+                            permissions=permissions, target_type=target_type
+                        )
                     )
+            else:
+                access_control = list(
+                    self._extract_identities_for_datacenter(response=restrictions)
                 )
+                if len(access_control) == 0:
+                    access_control = list(
+                        await self.fetch_server_space_permission(space_key=space_key)
+                    )
             document = self._decorate_with_access_control(
                 document=document, access_control=access_control
             )

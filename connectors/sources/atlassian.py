@@ -17,6 +17,11 @@ from connectors.utils import RetryStrategy, iso_utc, retryable
 RETRIES = 3
 RETRY_INTERVAL = 2
 USER_BATCH = 50
+DATA_CENTER_USER_BATCH = 1000
+JIRA_CLOUD = "jira_cloud"
+JIRA_SERVER = "jira_server"
+CONFLUENCE_CLOUD = "confluence_cloud"
+CONFLUENCE_SERVER = "confluence_server"
 
 
 class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
@@ -88,6 +93,16 @@ def prefix_account_locale(locale):
     return prefix_identity("locale", locale)
 
 
+def prefix_user(user):
+    if not user:
+        return
+    return prefix_identity("user", user)
+
+
+def prefix_group(group):
+    return prefix_identity("group", group)
+
+
 class AtlassianAccessControl:
     def __init__(self, source, client):
         self.source = source
@@ -99,12 +114,35 @@ class AtlassianAccessControl:
     async def fetch_all_users(self, url):
         start_at = 0
         while True:
-            async for users in self.client.api_call(url=f"{url}?startAt={start_at}"):
+            url_ = (
+                f"{url}?startAt={start_at}"
+                if self.source.configuration["data_source"]
+                in [JIRA_CLOUD, CONFLUENCE_CLOUD]
+                else url.format(start_at=start_at, max_results=DATA_CENTER_USER_BATCH)
+            )
+            async for users in self.client.api_call(url=url_):
                 response = await users.json()
                 if len(response) == 0:
                     return
                 yield response
-                start_at += USER_BATCH
+                if self.source.configuration["data_source"] not in [
+                    JIRA_CLOUD,
+                    CONFLUENCE_CLOUD,
+                ]:
+                    start_at += DATA_CENTER_USER_BATCH
+                else:
+                    start_at += USER_BATCH
+
+    async def fetch_confluence_server_users(self, url):
+        start_at = 0
+        while True:
+            url_ = url.format(start_at=start_at, max_results=DATA_CENTER_USER_BATCH)
+            async for users in self.client.api_call(url=url_):
+                response = await users.json()
+                if len(response.get("users")) == 0:
+                    return
+                yield response.get("users")
+                start_at += DATA_CENTER_USER_BATCH
 
     async def fetch_user(self, url):
         async for user in self.client.api_call(url=url):
@@ -135,7 +173,7 @@ class AtlassianAccessControl:
                     ACCESS_CONTROL: [<prefixed_account_id>, <prefixed_group_ids>, <prefixed_role_keys>]
                 }
         """
-        account_id = user.get("accountId")
+        account_id = user.get("accountId") or user.get("name")
         account_name = user.get("displayName")
         email = user.get("emailAddress")
         locale = user.get("locale")
@@ -186,7 +224,10 @@ class AtlassianAccessControl:
             )
             return False
 
-        if user_info.get("accountType") != "atlassian":
+        if (
+            self.source.configuration["data_source"] in [JIRA_CLOUD, CONFLUENCE_CLOUD]
+            and user_info.get("accountType") != "atlassian"
+        ):
             self.source._logger.debug(
                 f"Skipping {user_name} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
             )
