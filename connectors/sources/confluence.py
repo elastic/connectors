@@ -852,7 +852,9 @@ class ConfluenceDataSource(BaseDataSource):
                 )
             else:
                 access_control = list(
-                    await self.fetch_server_space_permission(space_key=key)
+                    await self.fetch_server_space_permission(
+                        space_key=key
+                    )  # pyright: ignore
                 )
             space = self._decorate_with_access_control(
                 document=space, access_control=access_control
@@ -886,7 +888,9 @@ class ConfluenceDataSource(BaseDataSource):
                 )
                 if len(access_control) == 0:
                     access_control = list(
-                        await self.fetch_server_space_permission(space_key=space_key)
+                        await self.fetch_server_space_permission(
+                            space_key=space_key
+                        )  # pyright: ignore
                     )
             document = self._decorate_with_access_control(
                 document=document, access_control=access_control
