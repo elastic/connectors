@@ -27,6 +27,9 @@ TAG_NAME="docker.elastic.co/enterprise-search/elastic-connectors-${ARCHITECTURE}
 echo "Loading image from archive file..."
 docker load < "$PROJECT_ROOT/.artifacts/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.tar.gz"
 
+# ensure +x is set to avoid writing any sensitive information to the console
+set +x
+
 VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 VAULT_USER="docker-swiftypeadmin"
 DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors/${VAULT_USER})

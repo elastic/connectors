@@ -27,18 +27,24 @@ TAG_NAME="${BASE_TAG_NAME}:${VERSION}"
 AMD64_TAG="${BASE_TAG_NAME}-amd64:${VERSION}"
 ARM64_TAG="${BASE_TAG_NAME}-arm64:${VERSION}"
 
+# ensure +x is set to avoid writing any sensitive information to the console
+set +x
+
 VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
 VAULT_USER="docker-swiftypeadmin"
 DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors/${VAULT_USER})
 DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors/${VAULT_USER})
 
+echo "Logging into docker..."
 buildah login --username="${DOCKER_USER}" --password="${DOCKER_PASSWORD}" docker.elastic.co
 
+echo "Creating manifest..."
 buildah manifest create $TAG_NAME \
   $AMD64_TAG \
   $ARM64_TAG
 
+echo "Pushing manifest..."
 buildah manifest push $TAG_NAME docker://$TAG_NAME
 
-echo "Built and pushed multiarch image... dumping manifest..."
+echo "Built and pushed multiarch image... dumping final manifest..."
 buildah manifest inspect $TAG_NAME

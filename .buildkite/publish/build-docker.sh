@@ -31,6 +31,6 @@ OUTPUT_FILE="$OUTPUT_PATH/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.t
 docker build -t $TAG_NAME .
 
 mkdir -p $OUTPUT_PATH
-docker save -o $TAG_NAME | gzip > $OUTPUT_FILE
+docker save $TAG_NAME | gzip > $OUTPUT_FILE
 
 popd

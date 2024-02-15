@@ -14,6 +14,23 @@ if [[ "${ARCHITECTURE:-}" == "" ]]; then
   exit 2
 fi
 
+arch_name=`uname -sr`
+
+case "$arch_name" in
+    Darwin*)
+        echo "detected MacOS platform"
+        LOCAL_MACHINE_ARCH="MacOS"
+        ;;
+    Linux*)
+        echo "detected Linux platform"
+        LOCAL_MACHINE_ARCH="Linux"
+        ;;
+    *)
+        echo "Unsupported platform: $arch_name"
+        exit 2
+        ;;
+esac
+
 VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
 VERSION=$(cat $VERSION_PATH)
 
@@ -35,21 +52,27 @@ if [[ ! -f "$TEST_EXEC" ]]; then
   mkdir -p "$BIN_DIR"
 
   pushd "$BIN_DIR"
-  curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-$ARCHITECTURE
-  mv container-structure-test-linux-$ARCHITECTURE container-structure-test
+  if [[ "$LOCAL_MACHINE_ARCH" == "MacOS" ]]; then
+    curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-darwin-$ARCHITECTURE
+    mv container-structure-test-darwin-$ARCHITECTURE container-structure-test
+  else
+    curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-$ARCHITECTURE
+    mv container-structure-test-linux-$ARCHITECTURE container-structure-test
+  fi
+
   chmod +x container-structure-test
   popd
 fi
 
-TEST_CONFIG="$PROJECT_ROOT/.buildkite/publish/container-structure-test.yaml"
+TEST_CONFIG_FILE="$PROJECT_ROOT/.buildkite/publish/container-structure-test.yaml"
 
-if [[ -f "$TEST_CONFIG" ]]; then
-  rm -f "$TEST_CONFIG"
+if [[ -f "$TEST_CONFIG_FILE" ]]; then
+  rm -f "$TEST_CONFIG_FILE"
 fi
 
-ESCAPED_VERSION=${$VERSION//./\\\\.}
+ESCAPED_VERSION=${VERSION//./\\\\.}
 
-read -r -d '' TEST_CONFIG_TEXT <<-EOF_TEST_CONFIG
+TEST_CONFIG_TEXT='
 schemaVersion: "2.0.0"
 
 commandTests:
@@ -61,10 +84,10 @@ commandTests:
   - name: "Connectors Installation"
     command: "/app/bin/elastic-ingest"
     args: ["--version"]
-    expectedOutput: ["${ESCAPED_VERSION}*"]
-EOF_TEST_CONFIG
+    expectedOutput: ["'"${ESCAPED_VERSION}"'*"]
+'
 
-cat "$TEST_CONFIG_TEXT" > "$TEST_CONFIG"
+printf '%s\n' "$TEST_CONFIG_TEXT" > "$TEST_CONFIG_FILE"
 
 echo "Running container-structure-test"
-"$TEST_EXEC" test --image "$TAG_NAME" --config "$TEST_CONFIG"
+"$TEST_EXEC" test --image "$TAG_NAME" --config "$TEST_CONFIG_FILE"
