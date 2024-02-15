@@ -122,6 +122,35 @@ CHILD_BLOCK = {
         ]
     },
 }
+CHILD_BLOCK_WITH_CHILDREN = {
+    "object": "block",
+    "id": "b8f5a3e8-5a8a-4ac0-9b52-9fb62772a9bd",
+    "created_time": "2021-05-13T16:48:00.000Z",
+    "last_edited_time": "2021-05-13T16:48:00.000Z",
+    "has_children": True,
+    "type": "paragraph",
+    "paragraph": {
+        "text": [
+            {
+                "type": "text",
+                "text": {
+                    "content": "This is a test paragraph block.",
+                    "link": None,
+                },
+                "annotations": {
+                    "bold": False,
+                    "italic": False,
+                    "strikethrough": False,
+                    "underline": False,
+                    "code": False,
+                    "color": "default",
+                },
+                "plain_text": "This is a test paragraph block.",
+                "href": None,
+            }
+        ]
+    },
+}
 USER = {
     "object": "user",
     "id": "18e0bf6c-ae79-4e4e-81f5-4a8a1ebd615a",
@@ -505,3 +534,25 @@ async def test_get_via_session_with_429_status():
                 source.notion_client.get_via_session("some_nonexistent_file_url")
             )
         assert response == retried_response
+
+
+@pytest.mark.asyncio
+async def test_fetch_children_recursively():
+    async with create_source(
+        NotionDataSource,
+        notion_secret_key="test_fetch_children_recursively_key",
+    ) as source:
+        with patch(
+            "connectors.sources.notion.async_iterate_paginated_api",
+            side_effect=[
+                AsyncIterator([CHILD_BLOCK_WITH_CHILDREN]),
+                AsyncIterator([CHILD_BLOCK]),
+            ],
+        ):
+            async for block in source.notion_client.fetch_child_blocks("some_block_id"):
+                assert block["object"] == "block"
+                assert block["type"] == "paragraph"
+                assert (
+                    block["paragraph"]["text"][0]["plain_text"]
+                    == "This is a test paragraph block."
+                )
