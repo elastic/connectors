@@ -219,9 +219,6 @@ class TransientElasticsearchRetrier:
         while self._keep_retrying and retry < self._max_retries:
             retry += 1
             try:
-                self._logger.debug(
-                    f"Calling Elasticsearch via client method '{func_name}'"
-                )
                 result = await func()
 
                 return result
