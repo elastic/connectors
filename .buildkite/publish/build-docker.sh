@@ -1,36 +1,31 @@
 #!/bin/bash
 
+########
+# Builds the docker image and saves it to an archive file
+# so it can be stored as an artifact in Buildkite
+########
+
 set -exu
 set -o pipefail
-
-function realpath {
-  echo "$(cd "$(dirname "$1")"; pwd)"/"$(basename "$1")";
-}
-
-SCRIPT_DIR=$(realpath "$(dirname "$0")")
-BUILDKITE_DIR=$(realpath "$(dirname "$SCRIPT_DIR")")
-PROJECT_ROOT=$(realpath "$(dirname "$BUILDKITE_DIR")")
 
 if [[ "${ARCHITECTURE:-}" == "" ]]; then
   echo "!! ARCHITECTURE is not set. Exiting."
   exit 2
 fi
 
-VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
-VERSION=$(cat $VERSION_PATH)
-
-if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
-  echo "Adding SNAPSHOT labeling"
-  VERSION="${VERSION}-SNAPSHOT"
-fi
+# Load our common environment variables for publishing
+export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+source $CURDIR/publish-common.sh
 
 pushd $PROJECT_ROOT
-TAG_NAME="docker.elastic.co/enterprise-search/elastic-connectors-${ARCHITECTURE}:${VERSION}"
-OUTPUT_PATH="$PROJECT_ROOT/.artifacts"
-OUTPUT_FILE="$OUTPUT_PATH/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.tar.gz"
 
+# set our complete tag name and build the image
+TAG_NAME="$BASE_TAG_NAME-${ARCHITECTURE}:${VERSION}"
 docker build -t $TAG_NAME .
 
+# save the image to an archive file
+OUTPUT_PATH="$PROJECT_ROOT/.artifacts"
+OUTPUT_FILE="$OUTPUT_PATH/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.tar.gz"
 mkdir -p $OUTPUT_PATH
 docker save $TAG_NAME | gzip > $OUTPUT_FILE
 
