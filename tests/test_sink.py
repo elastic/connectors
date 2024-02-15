@@ -24,6 +24,7 @@ from connectors.es.sink import (
     OP_UPSERT,
     ApiKeyNotFoundError,
     AsyncBulkRunningError,
+    ElasticsearchOverloadedError,
     Extractor,
     ForceCanceledError,
     Sink,
@@ -1349,3 +1350,38 @@ async def test_update_authorization_when_api_key_not_found():
 
     with pytest.raises(ApiKeyNotFoundError):
         await sync_orchestrator.update_authorization("my-index", "my-secret-id")
+
+
+async def test_extractor_run_when_mem_full_is_raised():
+    docs_from_source = [
+        {"_id": 1},
+        {"_id": 2},
+        {"_id": 3},
+    ]
+    es_client = AsyncMock()
+    es_client.yield_existing_documents_metadata = Mock(return_value=AsyncIterator([]))
+
+    queue = await queue_mock()
+    queue.clear = Mock()
+
+    def _put_side_effect(value):
+        if isinstance(value, str):
+            pass
+        else:
+            raise asyncio.QueueFull()
+
+    queue.put = AsyncMock(side_effect=_put_side_effect)
+    # deep copying docs is needed as get_access_control_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([(doc, None, "") for doc in docs_from_source])
+
+    extractor = Extractor(
+        es_client,
+        queue,
+        INDEX,
+    )
+
+    await extractor.run(doc_generator, JobType.FULL)
+
+    queue.clear.assert_called_once()
+    assert isinstance(extractor.fetch_error, ElasticsearchOverloadedError)

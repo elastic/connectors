@@ -118,6 +118,8 @@ def _default_config():
             "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "zoom": "connectors.sources.zoom:ZoomDataSource",
             "box": "connectors.sources.box:BoxDataSource",
+            "notion": "connectors.sources.notion:NotionDataSource",
+            "redis": "connectors.sources.redis:RedisDataSource",
         },
     }
 
