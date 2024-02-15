@@ -20,7 +20,7 @@ steps:
           instanceType: m6i.xlarge
           imagePrefix: ci-amazonlinux-2
         env:
-          - ARCHITECTURE="amd64"
+          ARCHITECTURE: "amd64"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_amd64"
         artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
@@ -30,7 +30,7 @@ steps:
           instanceType: m6i.xlarge
           imagePrefix: ci-amazonlinux-2
         env:
-          - ARCHITECTURE="amd64"
+          ARCHITECTURE: "amd64"
         depends_on: "build_docker_image_amd64"
         command: ".buildkite/publish/test-docker.sh"
   # ----
@@ -48,7 +48,7 @@ steps:
           diskSizeGb: 40
           diskName: '/dev/xvda'
         env:
-          - ARCHITECTURE="arm64"
+          ARCHITECTURE: "arm64"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_arm64"
         artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
@@ -60,7 +60,7 @@ steps:
           diskSizeGb: 40
           diskName: '/dev/xvda'
         env:
-          - ARCHITECTURE="arm64"
+          ARCHITECTURE: "arm64"
         depends_on: "build_docker_image_arm64"
         command: ".buildkite/publish/test-docker.sh"
   # ----
@@ -75,7 +75,7 @@ steps:
       - label: "Push amd64 Docker image"
         key: "push_amd64_docker_image"
         env:
-          - ARCHITECTURE="amd64"
+          ARCHITECTURE: "amd64"
         agents:
           provider: aws
           instanceType: m6i.xlarge
@@ -87,7 +87,7 @@ steps:
       - label: "Push arm64 Docker image"
         key: "push_arm64_docker_image"
         env:
-          - ARCHITECTURE="arm64"
+          ARCHITECTURE: "arm64"
         agents:
           provider: aws
           instanceType: m6g.xlarge
