@@ -15,13 +15,13 @@
 						"method": "PUT",
 						"header": [],
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_check_in",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_check_in",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_check_in"
 							]
 						}
@@ -48,13 +48,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234"
+								"{{CONNECTOR_ID}}"
 							]
 						}
 					},
@@ -97,13 +97,13 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234"
+								"{{CONNECTOR_ID}}"
 							]
 						}
 					},
@@ -120,13 +120,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234"
+								"{{CONNECTOR_ID}}"
 							]
 						}
 					},
@@ -914,13 +914,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_configuration",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_configuration",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_configuration"
 							]
 						}
@@ -942,13 +942,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_configuration",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_configuration",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_configuration"
 							]
 						}
@@ -970,13 +970,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/spo/_configuration",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_configuration",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"spo",
+								"{{CONNECTOR_ID}}",
 								"_configuration"
 							]
 						}
@@ -1003,13 +1003,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_scheduling",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_scheduling",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_scheduling"
 							]
 						}
@@ -1036,13 +1036,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_error",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_error",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_error"
 							]
 						}
@@ -1069,13 +1069,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_pipeline",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_pipeline",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_pipeline"
 							]
 						}
@@ -1102,13 +1102,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_last_sync",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_last_sync",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_last_sync"
 							]
 						}
@@ -1135,13 +1135,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_name",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_name",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_name"
 							]
 						}
@@ -1168,13 +1168,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_filtering",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_filtering",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_filtering"
 							]
 						}
@@ -1201,13 +1201,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/xd/_service_type",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_service_type",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"xd",
+								"{{CONNECTOR_ID}}",
 								"_service_type"
 							]
 						}
@@ -1234,13 +1234,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_index_name",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_index_name",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_index_name"
 							]
 						}
@@ -1267,13 +1267,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_native",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_native",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_native"
 							]
 						}
@@ -1300,13 +1300,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_status",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_status",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_status"
 							]
 						}
@@ -1364,6 +1364,11 @@
 		{
 			"key": "ES_PASSWORD",
 			"value": "password",
+			"type": "string"
+		},
+		{
+			"key": "CONNECTOR_ID",
+			"value": "1234",
 			"type": "string"
 		}
 	]
