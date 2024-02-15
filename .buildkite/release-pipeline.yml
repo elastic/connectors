@@ -32,7 +32,10 @@ steps:
         env:
           ARCHITECTURE: "amd64"
         depends_on: "build_docker_image_amd64"
-        command: ".buildkite/publish/test-docker.sh"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_amd64
+          - ".buildkite/publish/test-docker.sh"
   # ----
   # Docker builds for arm64
   # ----
@@ -62,7 +65,10 @@ steps:
         env:
           ARCHITECTURE: "arm64"
         depends_on: "build_docker_image_arm64"
-        command: ".buildkite/publish/test-docker.sh"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64
+          - ".buildkite/publish/test-docker.sh"
   # ----
   # Multiarch Docker image build and push
   # ----
