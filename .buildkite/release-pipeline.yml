@@ -106,7 +106,7 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.18.1"
+          image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
           ephemeralStorage: "20G"
           memory: "4G"
         command: ".buildkite/publish/build-multiarch-docker.sh"
