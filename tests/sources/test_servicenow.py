@@ -266,8 +266,10 @@ async def test_filter_services_when_sysparm_fields_missing():
                 ]
             ),
         ):
-            result = await source.servicenow_client.filter_services(source.servicenow_client.services)
-            assert result[0] == {"Incident": 'incident'}
+            result = await source.servicenow_client.filter_services(
+                source.servicenow_client.services
+            )
+            assert result[0] == {"Incident": "incident"}
             assert sorted(result[1]) == sorted(["Feature", "User"])
 
 
@@ -291,8 +293,10 @@ async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table()
                 ]
             ),
         ):
-            result = await source.servicenow_client.filter_services(source.servicenow_client.services)
-            assert result[0] == {"Incident": 'incident', "Feature": "feature"}
+            result = await source.servicenow_client.filter_services(
+                source.servicenow_client.services
+            )
+            assert result[0] == {"Incident": "incident", "Feature": "feature"}
             # unrelated tables are ignored and don't cause errors
             assert result[1] == []
 

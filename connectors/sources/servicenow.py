@@ -326,13 +326,13 @@ class ServiceNowClient:
                     for mapping in table_data:  # pyright: ignore
                         name = mapping.get("name")
                         if not name:
-                            msg = f"Entry in sys_db_object without sysparm_field 'name' was found. This is a non-issue if no invalid services are flagged."
+                            msg = "Entry in sys_db_object without sysparm_field 'name' was found. This is a non-issue if no invalid services are flagged."
                             self._logger.debug(msg)
                             continue
 
                         label = mapping.get("label")
                         if not label:
-                            msg = f"Entry in sys_db_object without sysparm_field 'label' was found. This is a non-issue if no invalid services are flagged."
+                            msg = "Entry in sys_db_object without sysparm_field 'label' was found. This is a non-issue if no invalid services are flagged."
                             self._logger.debug(msg)
                             continue
 
