@@ -324,9 +324,21 @@ class ServiceNowClient:
                 ]
                 async for table_data in self.get_data(batched_apis=batched_apis):
                     for mapping in table_data:  # pyright: ignore
-                        if mapping["label"] in invalid_services:
-                            servicenow_mapping[mapping["label"]] = mapping["name"]
-                            invalid_services.remove(mapping["label"])
+                        name = mapping.get("name")
+                        if not name:
+                            msg = f"Entry in sys_db_object without sysparm_field 'name' was found. This is a non-issue if no invalid services are flagged."
+                            self._logger.debug(msg)
+                            continue
+
+                        label = mapping.get("label")
+                        if not label:
+                            msg = f"Entry in sys_db_object without sysparm_field 'label' was found. This is a non-issue if no invalid services are flagged."
+                            self._logger.debug(msg)
+                            continue
+
+                        if label in invalid_services:
+                            servicenow_mapping[label] = name
+                            invalid_services.remove(label)
 
             return servicenow_mapping, invalid_services
 

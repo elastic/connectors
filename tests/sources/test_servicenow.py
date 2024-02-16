@@ -248,6 +248,56 @@ async def test_filter_services_with_exception():
 
 
 @pytest.mark.asyncio
+async def test_filter_services_when_sysparm_fields_missing():
+    async with create_service_now_source() as source:
+        source.servicenow_client.services = ["Incident", "Feature", "User"]
+
+        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=3)
+        with mock.patch.object(
+            ServiceNowClient,
+            "get_data",
+            return_value=AsyncIterator(
+                [
+                    [
+                        {"name": "user"},
+                        {"label": "Feature"},
+                        {"name": "incident", "label": "Incident"},
+                    ]
+                ]
+            ),
+        ):
+            result = await source.servicenow_client.filter_services(source.servicenow_client.services)
+            assert result[0] == {"Incident": 'incident'}
+            assert sorted(result[1]) == sorted(["Feature", "User"])
+
+
+@pytest.mark.asyncio
+async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table():
+    async with create_service_now_source() as source:
+        source.servicenow_client.services = ["Incident", "Feature"]
+
+        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=3)
+        with mock.patch.object(
+            ServiceNowClient,
+            "get_data",
+            return_value=AsyncIterator(
+                [
+                    [
+                        {"name": "feature", "label": "Feature"},
+                        {"name": "incident", "label": "Incident"},
+                        {"name": "Label-less Foo"},
+                        {"label": "nameless_bar"},
+                    ]
+                ]
+            ),
+        ):
+            result = await source.servicenow_client.filter_services(source.servicenow_client.services)
+            assert result[0] == {"Incident": 'incident', "Feature": "feature"}
+            # unrelated tables are ignored and don't cause errors
+            assert result[1] == []
+
+
+@pytest.mark.asyncio
 async def test_get_docs_with_skipping_table_data():
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
