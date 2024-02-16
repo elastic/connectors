@@ -25,18 +25,18 @@ DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 sec
 echo "Logging into docker..."
 DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors/${VAULT_USER})
 vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors/${VAULT_USER} | \
-  drivah login --username="${DOCKER_USER}" --password-stdin docker.elastic.co
+  buildah login --username="${DOCKER_USER}" --password-stdin docker.elastic.co
 
 # Create the manifest for the multiarch image
 echo "Creating manifest..."
-drivah manifest create $TAG_NAME \
+buildah manifest create $TAG_NAME \
   $AMD64_TAG \
   $ARM64_TAG
 
 # ... and push it
 echo "Pushing manifest..."
-drivah manifest push $TAG_NAME docker://$TAG_NAME
+buildah manifest push $TAG_NAME docker://$TAG_NAME
 
 # Write out the final manifest for debugging purposes
 echo "Built and pushed multiarch image... dumping final manifest..."
-drivah manifest inspect $TAG_NAME
+buildah manifest inspect $TAG_NAME
