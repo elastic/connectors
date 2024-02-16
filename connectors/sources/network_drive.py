@@ -376,6 +376,8 @@ class NASDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Network Drive"""
+        if self.session is not None:
+            return
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(executor=None, func=self.create_connection)
         self._logger.info("Successfully connected to the Network Drive")
