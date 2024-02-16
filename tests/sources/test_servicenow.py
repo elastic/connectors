@@ -278,7 +278,7 @@ async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table()
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["Incident", "Feature"]
 
-        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=3)
+        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=4)
         with mock.patch.object(
             ServiceNowClient,
             "get_data",
