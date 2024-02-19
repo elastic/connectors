@@ -348,7 +348,7 @@ class ServiceNowClient:
             raise
 
     def _log_missing_sysparm_field(self, sys_id, field):
-        msg = f"Entry in sys_db_object with id '{sys_id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
+        msg = f"Entry in sys_db_object with sys_id '{sys_id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
         self._logger.debug(msg)
 
     async def ping(self):
