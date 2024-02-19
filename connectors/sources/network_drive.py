@@ -478,11 +478,17 @@ class NASDataSource(BaseDataSource):
                 f"File size {file['size']} of {file['title']} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
             )
             return
-
+        content = ""
         loop = asyncio.get_running_loop()
-        content = await loop.run_in_executor(
-            executor=None, func=partial(self.fetch_file_content, path=file["path"])
-        )
+        try:
+            content = await loop.run_in_executor(
+                executor=None, func=partial(self.fetch_file_content, path=file["path"])
+            )
+        except SMBConnectionClosed as exception:
+            self._logger.exception(
+                f"Connection got closed. Error {exception}. Registering new session"
+            )
+            await loop.run_in_executor(executor=None, func=self.create_connection)
 
         if not content:
             return
