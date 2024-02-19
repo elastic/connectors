@@ -30,6 +30,7 @@ from connectors.utils import (
     NonBlockingBoundedSemaphore,
     RetryStrategy,
     UnknownRetryStrategyError,
+    alphanumericize_string,
     base64url_to_base64,
     convert_to_b64,
     decode_base64_value,
@@ -1055,3 +1056,7 @@ async def test_time_to_sleep_between_retries_invalid_strategy():
         time_to_sleep_between_retries("lalala", 1, 1)
 
     assert e is not None
+
+
+def test_alphanumericize_string():
+    assert alphanumericize_string("ABC/def!123#_-'$%^&") == "ABCdef123"

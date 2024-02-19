@@ -86,14 +86,23 @@ def mock_connector(
     last_sync_status=JobStatus.COMPLETED,
     last_access_control_sync_status=JobStatus.COMPLETED,
     document_level_security_enabled=True,
+    is_native=False,
+    api_key_secret_id=None,
+    native_connector_api_keys_enabled=True,
 ):
     connector = Mock()
     connector.id = "1"
+    connector.index_name = "my-index"
     connector.last_sync_status = last_sync_status
     connector.last_access_control_sync_status = last_access_control_sync_status
+    connector.is_native = is_native
+    connector.api_key_secret_id = api_key_secret_id
     connector.features = Mock()
     connector.features.document_level_security_enabled = Mock(
         return_value=document_level_security_enabled
+    )
+    connector.features.native_connector_api_keys_enabled = Mock(
+        return_value=native_connector_api_keys_enabled
     )
 
     return connector
@@ -365,3 +374,105 @@ async def test_job_execution_new_sync_job_not_blocked(
 
     sync_job_pool_mock.try_put.assert_called_with(sync_job_runner_mock.execute)
     assert sync_job_pool_mock.try_put.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "service_klass, job_type",
+    [
+        (ContentSyncJobExecutionService, JobType.FULL),
+        (AccessControlSyncJobExecutionService, JobType.ACCESS_CONTROL),
+    ],
+)
+async def test_job_execution_native_connector_with_api_key_secret(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mocks,
+    sync_job_runner_mock,
+    service_klass,
+    job_type,
+    set_env,
+):
+    sync_job_pool_mock = concurrent_tasks_mocks
+
+    connector = mock_connector(is_native=True, api_key_secret_id="secret-id")
+
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+
+    sync_job = mock_sync_job(job_type=job_type)
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+
+    await create_and_run_service(service_klass)
+
+    sync_job_pool_mock.try_put.assert_called_once_with(sync_job_runner_mock.execute)
+
+
+@pytest.mark.parametrize(
+    "service_klass, job_type",
+    [
+        (ContentSyncJobExecutionService, JobType.FULL),
+        (AccessControlSyncJobExecutionService, JobType.ACCESS_CONTROL),
+    ],
+)
+async def test_job_execution_native_connector_when_api_key_secret_empty(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mocks,
+    sync_job_runner_mock,
+    service_klass,
+    job_type,
+    set_env,
+):
+    expected_doc_update = {"api_key_id": "api-key-id", "api_key_secret_id": "secret-id"}
+
+    sync_job_pool_mock = concurrent_tasks_mocks
+
+    connector = mock_connector(is_native=True)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+    connector_index_mock.update = AsyncMock(return_value={"result": "updated"})
+
+    sync_job = mock_sync_job(job_type=job_type)
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+
+    with patch(
+        "connectors.es.management_client.ESManagementClient.generate_and_store_api_key",
+        AsyncMock(return_value=expected_doc_update),
+    ) as api_key_generation_mock:
+        await create_and_run_service(service_klass)
+
+        sync_job_pool_mock.try_put.assert_called_once_with(sync_job_runner_mock.execute)
+        api_key_generation_mock.assert_called_once_with(connector.index_name)
+        connector_index_mock.update.assert_called_once_with(
+            connector.id, expected_doc_update
+        )
+
+
+@pytest.mark.parametrize(
+    "service_klass, job_type",
+    [
+        (ContentSyncJobExecutionService, JobType.FULL),
+        (AccessControlSyncJobExecutionService, JobType.ACCESS_CONTROL),
+    ],
+)
+async def test_job_execution_native_connector_when_feature_disabled(
+    connector_index_mock,
+    sync_job_index_mock,
+    concurrent_tasks_mocks,
+    sync_job_runner_mock,
+    service_klass,
+    job_type,
+    set_env,
+):
+    sync_job_pool_mock = concurrent_tasks_mocks
+
+    connector = mock_connector(is_native=True, native_connector_api_keys_enabled=False)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    connector_index_mock.fetch_by_id = AsyncMock(return_value=connector)
+
+    sync_job = mock_sync_job(job_type=job_type)
+    sync_job_index_mock.pending_jobs.return_value = AsyncIterator([sync_job])
+
+    await create_and_run_service(service_klass)
+
+    sync_job_pool_mock.try_put.assert_called_once_with(sync_job_runner_mock.execute)
