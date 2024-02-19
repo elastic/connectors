@@ -82,7 +82,7 @@ class JobExecutionService(BaseService):
             return
 
         if (
-            connector.is_native
+            connector.native
             and connector.features.native_connector_api_keys_enabled()
             and not connector.api_key_secret_id
         ):

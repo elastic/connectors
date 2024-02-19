@@ -95,7 +95,7 @@ def mock_connector(
     connector.index_name = "my-index"
     connector.last_sync_status = last_sync_status
     connector.last_access_control_sync_status = last_access_control_sync_status
-    connector.is_native = is_native
+    connector.native = is_native
     connector.api_key_secret_id = api_key_secret_id
     connector.features = Mock()
     connector.features.document_level_security_enabled = Mock(
