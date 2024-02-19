@@ -315,7 +315,7 @@ class TestESManagementClient:
     ):
         index_name = "index-1"
         expected_role_descriptors = {
-            f"index1-connector-role": {
+            "index1-connector-role": {
                 "cluster": ["monitor"],
                 "index": [
                     {
