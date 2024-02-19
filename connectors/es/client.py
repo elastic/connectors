@@ -25,6 +25,7 @@ from connectors.logger import logger, set_extra_logger
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
+    func_human_readable_name,
     time_to_sleep_between_retries,
 )
 
@@ -213,6 +214,7 @@ class TransientElasticsearchRetrier:
         await self._sleeps.sleep(time_to_sleep)
 
     async def execute_with_retry(self, func):
+        func_name = func_human_readable_name(func)
         retry = 0
         while self._keep_retrying and retry < self._max_retries:
             retry += 1
@@ -221,13 +223,15 @@ class TransientElasticsearchRetrier:
 
                 return result
             except ConnectionTimeout:
-                self._logger.debug(f"Attempt {retry}: connection timeout")
+                self._logger.warning(
+                    f"Client method '{func_name}' retry {retry}: connection timeout"
+                )
 
                 if retry >= self._max_retries:
                     raise
             except ApiError as e:
-                self._logger.debug(
-                    f"Attempt {retry}: api error with status {e.status_code}"
+                self._logger.warning(
+                    f"Client method '{func_name}' retry {retry}: api error with status {e.status_code}"
                 )
 
                 if e.status_code not in self._error_codes_to_retry:

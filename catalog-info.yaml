@@ -89,6 +89,10 @@ spec:
           branch: '8.12'
           cronline: '@daily'
           message: "Runs daily `8.12` e2e test"
+        Daily 8_13:
+          branch: '8.13'
+          cronline: '@daily'
+          message: "Runs daily `8.13` e2e test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -131,6 +135,10 @@ spec:
           branch: '8.12'
           cronline: '@daily'
           message: "Runs daily `8.12` e2e aarch64 test"
+        Daily 8_13:
+          branch: '8.13'
+          cronline: '@daily'
+          message: "Runs daily `8.13` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -182,3 +190,35 @@ spec:
           access_level: "READ_ONLY"
         ingestion-team: {}
         search-productivity-team: {}
+
+########
+# Docker image build and publish - manual release
+########
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-docker-build-publish"
+  description: "Docker image build and publish for Elastic connectors"
+  links:
+    - title: "Connectors Docker Build and Publish"
+      url: "https://buildkite.com/elastic/connectors-docker-build-publish"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:ingestion-team"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-docker-build-publish"
+    spec:
+      repository: "elastic/connectors"
+      pipeline_file: ".buildkite/release-pipeline.yml"
+      provider_settings:
+        trigger_mode: "none"
+      teams:
+        ingestion-team: {}
+        search-productivity-team: {}
+        everyone:
+          access_level: "READ_ONLY"
