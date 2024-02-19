@@ -286,7 +286,7 @@ class ServiceNowClient:
             self._logger.debug("Filtering services")
             servicenow_mapping, invalid_services = {}, configured_service
 
-            payload = {"sysparm_fields": "label, name"}
+            payload = {"sysparm_fields": "sys_id, label, name"}
             table_length = await self.get_table_length(table_name="sys_db_object")
             record_apis = self.get_record_apis(
                 url=ENDPOINTS["TABLE"].format(table="sys_db_object"),
@@ -300,9 +300,20 @@ class ServiceNowClient:
                 ]
                 async for table_data in self.get_data(batched_apis=batched_apis):
                     for mapping in table_data:  # pyright: ignore
-                        if mapping["label"] in invalid_services:
-                            servicenow_mapping[mapping["label"]] = mapping["name"]
-                            invalid_services.remove(mapping["label"])
+                        sys_id = mapping.get("sys_id")
+                        name = mapping.get("name")
+                        if not name:
+                            self._log_missing_sysparm_field(sys_id, "name")
+                            continue
+
+                        label = mapping.get("label")
+                        if not label:
+                            self._log_missing_sysparm_field(sys_id, "label")
+                            continue
+
+                        if label in invalid_services:
+                            servicenow_mapping[label] = name
+                            invalid_services.remove(label)
 
             return servicenow_mapping, invalid_services
 
@@ -311,6 +322,10 @@ class ServiceNowClient:
                 f"Error while filtering services. Exception: {exception}."
             )
             raise
+
+    def _log_missing_sysparm_field(self, sys_id, field):
+        msg = f"Entry in sys_db_object with sys_id '{sys_id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
+        self._logger.debug(msg)
 
     async def ping(self):
         await self.get_table_length(table_name="sys_db_object")

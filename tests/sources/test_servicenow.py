@@ -102,8 +102,8 @@ async def test_validate_configuration_with_invalid_service_then_raise():
                 return_value=AsyncIterator(
                     [
                         [
-                            {"name": "name_1", "label": "label_1"},
-                            {"name": "name_2", "label": "label_2"},
+                            {"sys_id": "id_1", "name": "name_1", "label": "label_1"},
+                            {"sys_id": "id_2", "name": "name_2", "label": "label_2"},
                         ]
                     ]
                 ),
@@ -244,6 +244,60 @@ async def test_filter_services_with_exception():
         ):
             with pytest.raises(Exception):
                 await source.servicenow_client.filter_services()
+
+
+@pytest.mark.asyncio
+async def test_filter_services_when_sysparm_fields_missing():
+    async with create_service_now_source() as source:
+        source.servicenow_client.services = ["Incident", "Feature", "User"]
+
+        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=3)
+        with mock.patch.object(
+            ServiceNowClient,
+            "get_data",
+            return_value=AsyncIterator(
+                [
+                    [
+                        {"sys_id": "id_1", "name": "user"},
+                        {"sys_id": "id_2", "label": "Feature"},
+                        {"sys_id": "id_3", "name": "incident", "label": "Incident"},
+                    ]
+                ]
+            ),
+        ):
+            result = await source.servicenow_client.filter_services(
+                source.servicenow_client.services
+            )
+            assert result[0] == {"Incident": "incident"}
+            assert sorted(result[1]) == sorted(["Feature", "User"])
+
+
+@pytest.mark.asyncio
+async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table():
+    async with create_service_now_source() as source:
+        source.servicenow_client.services = ["Incident", "Feature"]
+
+        source.servicenow_client.get_table_length = mock.AsyncMock(return_value=4)
+        with mock.patch.object(
+            ServiceNowClient,
+            "get_data",
+            return_value=AsyncIterator(
+                [
+                    [
+                        {"sys_id": "id_1", "name": "feature", "label": "Feature"},
+                        {"sys_id": "id_2", "name": "incident", "label": "Incident"},
+                        {"sys_id": "id_3", "name": "Label-less Foo"},
+                        {"sys_id": "id_4", "label": "nameless_bar"},
+                    ]
+                ]
+            ),
+        ):
+            result = await source.servicenow_client.filter_services(
+                source.servicenow_client.services
+            )
+            assert result[0] == {"Incident": "incident", "Feature": "feature"}
+            # unrelated tables are ignored and don't cause errors
+            assert result[1] == []
 
 
 @pytest.mark.asyncio
