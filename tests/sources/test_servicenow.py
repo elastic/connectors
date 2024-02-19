@@ -103,8 +103,8 @@ async def test_validate_configuration_with_invalid_service_then_raise():
                 return_value=AsyncIterator(
                     [
                         [
-                            {"name": "name_1", "label": "label_1"},
-                            {"name": "name_2", "label": "label_2"},
+                            {"sys_id": "id_1", "name": "name_1", "label": "label_1"},
+                            {"sys_id": "id_2", "name": "name_2", "label": "label_2"},
                         ]
                     ]
                 ),
@@ -259,9 +259,9 @@ async def test_filter_services_when_sysparm_fields_missing():
             return_value=AsyncIterator(
                 [
                     [
-                        {"name": "user"},
-                        {"label": "Feature"},
-                        {"name": "incident", "label": "Incident"},
+                        {"sys_id": "id_1", "name": "user"},
+                        {"sys_id": "id_2", "label": "Feature"},
+                        {"sys_id": "id_3", "name": "incident", "label": "Incident"},
                     ]
                 ]
             ),
@@ -285,10 +285,10 @@ async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table()
             return_value=AsyncIterator(
                 [
                     [
-                        {"name": "feature", "label": "Feature"},
-                        {"name": "incident", "label": "Incident"},
-                        {"name": "Label-less Foo"},
-                        {"label": "nameless_bar"},
+                        {"sys_id": "id_1", "name": "feature", "label": "Feature"},
+                        {"sys_id": "id_2", "name": "incident", "label": "Incident"},
+                        {"sys_id": "id_3", "name": "Label-less Foo"},
+                        {"sys_id": "id_4", "label": "nameless_bar"},
                     ]
                 ]
             ),
