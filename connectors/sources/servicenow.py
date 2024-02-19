@@ -324,15 +324,15 @@ class ServiceNowClient:
                 ]
                 async for table_data in self.get_data(batched_apis=batched_apis):
                     for mapping in table_data:  # pyright: ignore
-                        id = mapping.get("sys_id")
+                        sys_id = mapping.get("sys_id")
                         name = mapping.get("name")
                         if not name:
-                            self._log_missing_sysparm_field(id, "name")
+                            self._log_missing_sysparm_field(sys_id, "name")
                             continue
 
                         label = mapping.get("label")
                         if not label:
-                            self._log_missing_sysparm_field(id, "label")
+                            self._log_missing_sysparm_field(sys_id, "label")
                             continue
 
                         if label in invalid_services:
@@ -347,8 +347,8 @@ class ServiceNowClient:
             )
             raise
 
-    def _log_missing_sysparm_field(self, id, field):
-        msg = f"Entry in sys_db_object with id '{id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
+    def _log_missing_sysparm_field(self, sys_id, field):
+        msg = f"Entry in sys_db_object with id '{sys_id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
         self._logger.debug(msg)
 
     async def ping(self):
