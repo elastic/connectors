@@ -89,24 +89,23 @@ class GraphQLClient:
                 raise_for_status=True,
             )
 
-    def extract_graphql_data_items(self, key, data):
+    def extract_graphql_data_items(self, data):
         """Returns sub objects from the response based on graphql_object_list
 
         Args:
-            key (string): Key of data.
             data (dict): data to extract
 
         Yields:
             dictionary/list: Documents from the response
         """
-        if key in self.graphql_object_list:
-            yield data
-        if isinstance(data, dict):
-            for key, item in data.items():
-                yield from self.extract_graphql_data_items(key=key, data=item)
-        if isinstance(data, list):
-            for doc in data:
-                yield from self.extract_graphql_data_items(key=None, data=doc)
+        # Checks only top level of the json response.
+        for graphql_object in self.graphql_object_list:
+            if graphql_object in data.keys():
+                yield data.get(graphql_object)
+            else:
+                self._logger.warning(
+                    f"{graphql_object} is not present in the response. Skipping {graphql_object} object."
+                )
 
     @retryable(
         retries=RETRIES,
@@ -344,9 +343,7 @@ class GraphQLDataSource(BaseDataSource):
 
     async def fetch_data(self, graphql_query):
         data = await self.graphql_client.make_request(graphql_query=graphql_query)
-        for documents in self.graphql_client.extract_graphql_data_items(
-            key="data", data=data
-        ):
+        for documents in self.graphql_client.extract_graphql_data_items(data=data):
             if isinstance(documents, dict):
                 yield documents
             elif isinstance(documents, list):

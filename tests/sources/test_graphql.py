@@ -57,23 +57,21 @@ async def create_graphql_source(
     "data, expected_result",
     [
         (
-            {"data": {"basicInfo": {"name": "xyz", "id": "abc#123"}}},
+            {"basicInfo": {"name": "xyz", "id": "abc#123"}},
             {"name": "xyz", "id": "abc#123"},
         ),
         (
             {
-                "data": {
-                    "basicInfo": [
-                        {"name": "xyz", "id": "abc#123"},
-                        {"name": "pqr", "id": "pqr#456"},
-                    ]
-                }
+                "basicInfo": [
+                    {"name": "xyz", "id": "abc#123"},
+                    {"name": "pqr", "id": "pqr#456"},
+                ]
             },
             [{"name": "xyz", "id": "abc#123"}, {"name": "pqr", "id": "pqr#456"}],
         ),
         (
-            {"data": {"empData": {"basicInfo": {"name": "xyz", "id": "abc#123"}}}},
-            {"name": "xyz", "id": "abc#123"},
+            {"empData": {"basicInfo": {"name": "xyz", "id": "abc#123"}}},
+            None,
         ),
     ],
 )
@@ -81,9 +79,7 @@ async def test_extract_graphql_data_items(data, expected_result):
     async with create_graphql_source() as source:
         # graphql_object_list is "basicInfo"
         source.graphql_client.graphql_object_list = ["basicInfo"]
-        for actual_response in source.graphql_client.extract_graphql_data_items(
-            "data", data
-        ):
+        for actual_response in source.graphql_client.extract_graphql_data_items(data):
             assert actual_response == expected_result
 
 
@@ -238,7 +234,7 @@ async def test_fetch_data():
     async with create_graphql_source() as source:
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
-            return_value={"data": {"users": [{"name": {"firstName": "xyz"}}]}}
+            return_value={"users": [{"name": {"firstName": "xyz"}}]}
         )
         async for doc in source.fetch_data("{users {name}}}"):
             actual_response.append(doc)
