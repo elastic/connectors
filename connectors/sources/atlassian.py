@@ -16,7 +16,8 @@ from connectors.utils import RetryStrategy, iso_utc, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-USER_BATCH = 50
+CLOUD_USER_BATCH = 50
+NON_CLOUD_USER_BATCH = 1000
 
 
 class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
@@ -97,14 +98,29 @@ class AtlassianAccessControl:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
+        from connectors.sources.confluence import CONFLUENCE_CLOUD
+        from connectors.sources.jira import JIRA_CLOUD
+
         start_at = 0
         while True:
-            async for users in self.client.api_call(url=f"{url}?startAt={start_at}"):
+            url_ = (
+                f"{url}?startAt={start_at}"
+                if self.source.configuration["data_source"]
+                in [JIRA_CLOUD, CONFLUENCE_CLOUD]
+                else url.format(start_at=start_at, max_results=NON_CLOUD_USER_BATCH)
+            )
+            async for users in self.client.api_call(url=url_):
                 response = await users.json()
                 if len(response) == 0:
                     return
                 yield response
-                start_at += USER_BATCH
+                if self.source.configuration["data_source"] not in [
+                    JIRA_CLOUD,
+                    CONFLUENCE_CLOUD,
+                ]:
+                    start_at += NON_CLOUD_USER_BATCH
+                else:
+                    start_at += CLOUD_USER_BATCH
 
     async def fetch_user(self, url):
         async for user in self.client.api_call(url=url):
@@ -135,7 +151,7 @@ class AtlassianAccessControl:
                     ACCESS_CONTROL: [<prefixed_account_id>, <prefixed_group_ids>, <prefixed_role_keys>]
                 }
         """
-        account_id = user.get("accountId")
+        account_id = user.get("accountId") or user.get("name")
         account_name = user.get("displayName")
         email = user.get("emailAddress")
         locale = user.get("locale")
@@ -172,6 +188,9 @@ class AtlassianAccessControl:
         return user_document | self.access_control_query(access_control=access_control)
 
     def is_active_atlassian_user(self, user_info):
+        from connectors.sources.confluence import CONFLUENCE_CLOUD
+        from connectors.sources.jira import JIRA_CLOUD
+
         user_url = user_info.get("self")
         user_name = user_info.get("displayName", "user")
         if not user_url:
@@ -186,7 +205,10 @@ class AtlassianAccessControl:
             )
             return False
 
-        if user_info.get("accountType") != "atlassian":
+        if (
+            self.source.configuration["data_source"] in [JIRA_CLOUD, CONFLUENCE_CLOUD]
+            and user_info.get("accountType") != "atlassian"
+        ):
             self.source._logger.debug(
                 f"Skipping {user_name} because the account type is {user_info.get('accountType')}. Only 'atlassian' account type is supported."
             )
