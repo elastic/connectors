@@ -16,12 +16,8 @@ from connectors.utils import RetryStrategy, iso_utc, retryable
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-USER_BATCH = 50
-DATA_CENTER_USER_BATCH = 1000
-JIRA_CLOUD = "jira_cloud"
-JIRA_SERVER = "jira_server"
-CONFLUENCE_CLOUD = "confluence_cloud"
-CONFLUENCE_SERVER = "confluence_server"
+CLOUD_USER_BATCH = 50
+NON_CLOUD_USER_BATCH = 1000
 
 
 class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
@@ -112,13 +108,16 @@ class AtlassianAccessControl:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
+        from connectors.sources.confluence import CONFLUENCE_CLOUD
+        from connectors.sources.jira import JIRA_CLOUD
+
         start_at = 0
         while True:
             url_ = (
                 f"{url}?startAt={start_at}"
                 if self.source.configuration["data_source"]
                 in [JIRA_CLOUD, CONFLUENCE_CLOUD]
-                else url.format(start_at=start_at, max_results=DATA_CENTER_USER_BATCH)
+                else url.format(start_at=start_at, max_results=NON_CLOUD_USER_BATCH)
             )
             async for users in self.client.api_call(url=url_):
                 response = await users.json()
@@ -129,20 +128,20 @@ class AtlassianAccessControl:
                     JIRA_CLOUD,
                     CONFLUENCE_CLOUD,
                 ]:
-                    start_at += DATA_CENTER_USER_BATCH
+                    start_at += NON_CLOUD_USER_BATCH
                 else:
-                    start_at += USER_BATCH
+                    start_at += CLOUD_USER_BATCH
 
     async def fetch_confluence_server_users(self, url):
         start_at = 0
         while True:
-            url_ = url.format(start_at=start_at, max_results=DATA_CENTER_USER_BATCH)
+            url_ = url.format(start_at=start_at, max_results=NON_CLOUD_USER_BATCH)
             async for users in self.client.api_call(url=url_):
                 response = await users.json()
                 if len(response.get("users")) == 0:
                     return
                 yield response.get("users")
-                start_at += DATA_CENTER_USER_BATCH
+                start_at += NON_CLOUD_USER_BATCH
 
     async def fetch_user(self, url):
         async for user in self.client.api_call(url=url):
@@ -210,6 +209,9 @@ class AtlassianAccessControl:
         return user_document | self.access_control_query(access_control=access_control)
 
     def is_active_atlassian_user(self, user_info):
+        from connectors.sources.confluence import CONFLUENCE_CLOUD
+        from connectors.sources.jira import JIRA_CLOUD
+
         user_url = user_info.get("self")
         user_name = user_info.get("displayName", "user")
         if not user_url:

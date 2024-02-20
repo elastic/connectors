@@ -190,3 +190,35 @@ spec:
           access_level: "READ_ONLY"
         ingestion-team: {}
         search-productivity-team: {}
+
+########
+# Docker image build and publish - manual release
+########
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-docker-build-publish"
+  description: "Docker image build and publish for Elastic connectors"
+  links:
+    - title: "Connectors Docker Build and Publish"
+      url: "https://buildkite.com/elastic/connectors-docker-build-publish"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:ingestion-team"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-docker-build-publish"
+    spec:
+      repository: "elastic/connectors"
+      pipeline_file: ".buildkite/release-pipeline.yml"
+      provider_settings:
+        trigger_mode: "none"
+      teams:
+        ingestion-team: {}
+        search-productivity-team: {}
+        everyone:
+          access_level: "READ_ONLY"
