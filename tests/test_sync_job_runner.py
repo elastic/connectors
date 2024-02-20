@@ -951,7 +951,7 @@ async def test_native_connector_sync_fails_when_api_key_secret_missing(
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
 
-    sync_job_runner.sync_orchestrator is None
+    assert sync_job_runner.sync_orchestrator is None
 
     sync_job_runner.connector.sync_starts.assert_awaited_with(job_type)
     sync_job_runner.connector.sync_done.assert_awaited_with(
