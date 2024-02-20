@@ -241,3 +241,14 @@
 ##    An example is:
 ##    sources:
 ##      mongodb: connectors.sources.mongo:MongoDataSource
+
+elasticsearch.host: http://host.docker.internal:9200
+# elasticsearch.api_key: <ELASTICSEARCH_API_KEY>
+
+connectors:
+  - connector_id: "ENFrw40BEbO6Ri4cMOOI"
+    service_type: "local_sql_rar"
+    api_key: "RWRGcnc0MEJFYk82Umk0Y1VPUDA6b3JRZTVPWkFTMmVFd0d0czFGN2MzZw=="
+elasticsearch:
+  host: "http://localhost:9200"
+  api_key: "RWRGcnc0MEJFYk82Umk0Y1VPUDA6b3JRZTVPWkFTMmVFd0d0czFGN2MzZw=="

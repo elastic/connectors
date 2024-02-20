@@ -47,6 +47,7 @@ services:
       - kibana
     volumes:
       - ${CURDIR}/connectors-config:/config
+      - ../../../connectors:/app/connectors
     command: /app/bin/elastic-ingest -c /config/config.yml
     network_mode: "host"
 

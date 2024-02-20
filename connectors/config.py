@@ -92,6 +92,7 @@ def _default_config():
             "log_level": "INFO",
         },
         "sources": {
+            "local_sql_rar": "connectors.sources.local_sql_rar:RARCoreDataSource",
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
             "confluence": "connectors.sources.confluence:ConfluenceDataSource",
             "dir": "connectors.sources.directory:DirectoryDataSource",
