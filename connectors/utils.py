@@ -898,3 +898,17 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
+
+
+def func_human_readable_name(func):
+    if isinstance(func, functools.partial):
+        return func.func.__name__
+
+    try:
+        return func.__name__
+    except AttributeError:
+        return str(func)
+
+
+def alphanumericize_string(value):
+    return "".join(char for char in value if char.isalnum())
