@@ -104,6 +104,7 @@ def mock_connector(
     connector.features.native_connector_api_keys_enabled = Mock(
         return_value=native_connector_api_keys_enabled
     )
+    connector.reload = AsyncMock()
 
     return connector
 

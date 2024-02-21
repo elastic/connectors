@@ -100,7 +100,7 @@ class JobExecutionService(BaseService):
                     f"API key stored as secret: {storage_result}, updating connector doc..."
                 )
                 await self.connector_index.update(connector_id, storage_result)
-                connector = await self.connector_index.fetch_by_id(connector_id)
+                await connector.reload()
             except Exception as e:
                 sync_job.log_error(
                     f"Couldn't generate and store an API key for native connector {connector_id}. Error: {e}."
