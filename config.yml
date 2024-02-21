@@ -11,9 +11,10 @@
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
 ##    connectors:
-##      - connector_id: changeme # the ID of the connector.
-##        service_type: changeme # The service type of the connector.
-##        api_key: changeme # The Elasticsearch API key used to write data into the content index.
+##      - 
+        connector_id: "2cK3zI0BKeqTtDcSwKkG"
+        service_type: "confluence"
+        api_key: "MnNMS3pJMEJLZXFUdERjUzg2bU86NVJIamJpbFRSUW1LRlViTm1MS0RQQQ=="
 #connectors: []
 #
 #
@@ -35,7 +36,7 @@
 #
 ## The API key for Elasticsearch connection.
 ##    Using `api_key` is recommended instead of `username`/`password`.
-#elasticsearch.api_key: null
+#elasticsearch.api_key: "MnNMS3pJMEJLZXFUdERjUzg2bU86NVJIamJpbFRSUW1LRlViTm1MS0RQQQ=="
 #
 #
 ##  The username for the Elasticsearch connection.
