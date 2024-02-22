@@ -60,7 +60,7 @@ class JobExecutionService(BaseService):
         connector_id = sync_job.connector_id
 
         sync_job.log_debug(
-            f"Detected PENDING '{sync_job.job_type}' sync with id '{sync_job.id}'."
+            f"Detected PENDING '{sync_job.job_type}' sync job with id '{sync_job.id}'."
         )
 
         try:
