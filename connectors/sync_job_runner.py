@@ -110,7 +110,7 @@ class SyncJobRunner:
 
         self.running = True
 
-        job_type = self.sync_job.job_type.value
+        job_type = self.sync_job.job_type
 
         self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
 

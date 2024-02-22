@@ -59,7 +59,7 @@ class JobExecutionService(BaseService):
         source_klass = get_source_klass(self.source_list[sync_job.service_type])
         connector_id = sync_job.connector_id
 
-        sync_job.log_debug(f"Detected pending {sync_job.job_type.value} sync.")
+        sync_job.log_debug(f"Detected pending {sync_job.job_type} sync.")
 
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
@@ -90,7 +90,7 @@ class JobExecutionService(BaseService):
             service_config=self.service_config,
         )
 
-        sync_job.log_debug(f"Attempting to start {sync_job.job_type.value} sync.")
+        sync_job.log_debug(f"Attempting to start {sync_job.job_type} sync.")
 
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
             sync_job.log_debug(
