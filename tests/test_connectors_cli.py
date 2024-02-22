@@ -206,8 +206,8 @@ def test_connector_create(patch_click_confirm):
 @pytest.mark.parametrize(
     "native_flag, input_index_name, expected_index_name",
     (
-        ["--native", "test", "search-test"],
-        ["--native", "search-test", "search-search-test"],
+        ["--native", "test", "test"],
+        ["--native", "search-test", "search-test"],
         [None, "test", "test"],
         [None, "search-test", "search-test"],
     ),

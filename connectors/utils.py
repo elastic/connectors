@@ -898,3 +898,7 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
+
+
+def alphanumericize_string(value):
+    return "".join(char for char in value if char.isalnum())
