@@ -7,11 +7,15 @@ import asyncio
 import time
 
 import elasticsearch
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
+from connectors.es.management_client import ESManagementClient
 from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
@@ -59,6 +63,10 @@ class ConnectorJobNotRunningError(Exception):
         super().__init__(
             f"Connector job (ID: {job_id}) is not running but in status of {status}."
         )
+
+
+class ApiKeyNotFoundError(Exception):
+    pass
 
 
 class SyncJobRunner:
@@ -139,17 +147,16 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.sync_orchestrator = SyncOrchestrator(
-                self.es_config, self.sync_job.logger
-            )
-
             if (
                 self.connector.native
                 and self.connector.features.native_connector_api_keys_enabled()
             ):
-                await self.sync_orchestrator.update_authorization(
-                    self.connector.index_name, self.connector.api_key_secret_id
-                )
+                # Update the config so native connectors can use API key authentication during sync
+                await self._update_native_connector_authentication()
+
+            self.sync_orchestrator = SyncOrchestrator(
+                self.es_config, self.sync_job.logger
+            )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -185,6 +192,33 @@ class SyncJobRunner:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
+
+    async def _update_native_connector_authentication(self):
+        """
+        The connector secrets API endpoint can only be accessed by the Enterprise Search system role,
+        so we need to use a client initialised with the config's username and password to first fetch
+        the API key for native connectors.
+        After that, we can provide the API key to the sync orchestrator to initialise a new client
+        so that an API key can be used for the sync.
+        This function should not be run for connector clients.
+        """
+        es_management_client = ESManagementClient(self.es_config)
+        try:
+            self.sync_job.log_debug(
+                f"Checking secrets storage for API key for index [{self.connector.index_name}]..."
+            )
+            api_key = await es_management_client.get_connector_secret(
+                self.connector.api_key_secret_id
+            )
+            self.sync_job.log_debug(
+                f"API key found in secrets storage for index [{self.connector.index_name}], will use this for authorization."
+            )
+            self.es_config["api_key"] = api_key
+        except ElasticNotFoundError as e:
+            msg = f"API key not found in secrets storage for index [{self.connector.index_name}]."
+            raise ApiKeyNotFoundError(msg) from e
+        finally:
+            await es_management_client.close()
 
     def _data_source_framework_config(self):
         builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
