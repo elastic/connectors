@@ -606,6 +606,9 @@ class OutlookClient:
 
     async def get_mails(self, account):
         for mail_type in MAIL_TYPES:
+            self._logger.debug(
+                f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
+            )
             if mail_type["folder"] == "archive":
                 # If 'Archive' folder is not present, skipping the iteration
                 try:
@@ -831,6 +834,7 @@ class OutlookDataSource(BaseDataSource):
         yield content
 
     async def _fetch_attachments(self, attachment_type, outlook_object, timezone):
+        self._logger.debug(f"Fetching attachments for {attachment_type}")
         for attachment in outlook_object.attachments:
             await self.queue.put(
                 (
@@ -874,6 +878,7 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_contacts(self, account, timezone):
+        self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
             await self.queue.put(
                 (
@@ -887,6 +892,7 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_tasks(self, account, timezone):
+        self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
             await self.queue.put(
                 (
@@ -909,6 +915,7 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_calendars(self, account, timezone):
+        self._logger.debug(f"Fetching calendars for {account.primary_smtp_address}")
         async for calendar in self.client.get_calendars(account=account):
             await self._enqueue_calendars(
                 calendar=calendar, child_calendar=calendar, timezone=timezone
@@ -917,6 +924,9 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_child_calendars(self, account, timezone):
+        self._logger.debug(
+            f"Fetching child calendars for {account.primary_smtp_address}"
+        )
         async for calendar, child_calendar in self.client.get_child_calendars(
             account=account
         ):
