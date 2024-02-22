@@ -133,7 +133,7 @@ class SyncJobRunner:
             )
 
             self.sync_job.log_debug(
-                f"Instantiated data provided for sync job '{self.sync_job.id}'."
+                f"Instantiated data provider for sync job '{self.sync_job.id}'."
             )
 
             if not await self.data_provider.changed():
