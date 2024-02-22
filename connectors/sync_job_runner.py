@@ -110,7 +110,9 @@ class SyncJobRunner:
 
         self.running = True
 
-        self.sync_job.log_debug(f"Starting sync job '{self.sync_job.id}'.")
+        job_type = self.sync_job.job_type.value
+
+        self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
 
         await self.sync_starts()
         sync_cursor = (
@@ -121,7 +123,7 @@ class SyncJobRunner:
         await self.sync_job.claim(sync_cursor=sync_cursor)
         self._start_time = time.time()
 
-        self.sync_job.log_debug(f"Successfully claimed sync job '{self.sync_job.id}'.")
+        self.sync_job.log_debug("Successfully claimed the sync job.")
 
         try:
             self.data_provider = self.source_klass(
@@ -132,9 +134,7 @@ class SyncJobRunner:
                 self._data_source_framework_config()
             )
 
-            self.sync_job.log_debug(
-                f"Instantiated data provider for sync job '{self.sync_job.id}'."
-            )
+            self.sync_job.log_debug("Instantiated data provider for the sync job.")
 
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
@@ -336,9 +336,9 @@ class SyncJobRunner:
 
         if await self.reload_sync_job():
             if await self.reload_connector():
-                ingestion_stats["total_document_count"] = (
-                    await self.connector.document_count()
-                )
+                ingestion_stats[
+                    "total_document_count"
+                ] = await self.connector.document_count()
 
             if sync_status == JobStatus.ERROR:
                 await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
