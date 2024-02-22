@@ -472,7 +472,7 @@ class ConfluenceDataSource(BaseDataSource):
         """Get access control documents for active Atlassian users.
 
         This method fetches access control documents for active Atlassian users when document level security (DLS)
-        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        is enabled.
         If DLS is enabled, the method fetches all users from the Confluence API, filters out active Atlassian users,
         and fetches additional information for each active user using the fetch_user method. After gathering the user information,
         it generates an access control document for each user using the user_access_control_doc method and yields the results.
