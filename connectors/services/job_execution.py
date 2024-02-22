@@ -59,6 +59,10 @@ class JobExecutionService(BaseService):
         source_klass = get_source_klass(self.source_list[sync_job.service_type])
         connector_id = sync_job.connector_id
 
+        sync_job.log_debug(
+            f"Detected PENDING '{sync_job.job_type}' sync for '{sync_job.service_type}' connector with id '{connector_id}'."
+        )
+
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
         except DocumentNotFoundError:
@@ -87,6 +91,11 @@ class JobExecutionService(BaseService):
             es_config=self._override_es_config(connector),
             service_config=self.service_config,
         )
+
+        sync_job.log_debug(
+            f"Attempting to start '{sync_job.job_type}' sync for '{sync_job.service_type}' connector with id '{connector_id}'."
+        )
+
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
             sync_job.log_debug(
                 f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore

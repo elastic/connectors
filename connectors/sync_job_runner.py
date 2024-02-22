@@ -110,6 +110,8 @@ class SyncJobRunner:
 
         self.running = True
 
+        self.sync_job.log_debug(f"Starting sync job '{self.sync_job.id}'.")
+
         await self.sync_starts()
         sync_cursor = (
             self.connector.sync_cursor
@@ -119,6 +121,8 @@ class SyncJobRunner:
         await self.sync_job.claim(sync_cursor=sync_cursor)
         self._start_time = time.time()
 
+        self.sync_job.log_debug(f"Successfully claimed sync job '{self.sync_job.id}'.")
+
         try:
             self.data_provider = self.source_klass(
                 configuration=self.sync_job.configuration
@@ -127,6 +131,11 @@ class SyncJobRunner:
             self.data_provider.set_framework_config(
                 self._data_source_framework_config()
             )
+
+            self.sync_job.log_debug(
+                f"Instantiated data provided for sync job '{self.sync_job.id}'."
+            )
+
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
@@ -327,9 +336,9 @@ class SyncJobRunner:
 
         if await self.reload_sync_job():
             if await self.reload_connector():
-                ingestion_stats[
-                    "total_document_count"
-                ] = await self.connector.document_count()
+                ingestion_stats["total_document_count"] = (
+                    await self.connector.document_count()
+                )
 
             if sync_status == JobStatus.ERROR:
                 await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
@@ -437,7 +446,11 @@ class SyncJobRunner:
                 ):
                     yield doc, lazy_download, OP_INDEX
             case [JobType.INCREMENTAL, optimization] if optimization is False:
-                async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
+                async for (
+                    doc,
+                    lazy_download,
+                    operation,
+                ) in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
