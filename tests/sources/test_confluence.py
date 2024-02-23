@@ -355,12 +355,6 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
-@pytest.fixture
-def patch_default_wait_multiplier():
-    with mock.patch("connectors.sources.confluence.RETRY_INTERVAL", 0):
-        yield
-
-
 @pytest.mark.asyncio
 async def test_validate_configuration_with_invalid_concurrent_downloads():
     """Test validate configuration method of BaseDataSource class with invalid concurrent downloads"""
@@ -1244,7 +1238,7 @@ async def test_fetch_server_space_permission():
 
 
 @pytest.mark.asyncio
-async def test_api_call_for_exception(patch_default_wait_multiplier):
+async def test_api_call_for_exception(patch_sleep):
     """This function test _api_call when credentials are incorrect"""
     async with create_confluence_source() as source:
         source.confluence_client.retry_count = 1

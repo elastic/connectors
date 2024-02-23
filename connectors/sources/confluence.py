@@ -620,7 +620,7 @@ class ConfluenceDataSource(BaseDataSource):
                         "url": space_url,
                     }, space.get("permissions", []), space.get("key")
 
-    async def get_permission(self, permission):
+    def get_permission(self, permission):
         permissions = set()
         if permission.get("users"):
             for user in permission.get("users"):
@@ -634,16 +634,13 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def fetch_server_space_permission(self, space_key):
         if not self._dls_enabled():
-            return []
+            return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
         async for permissions in self.confluence_client.api_call(
             url=os.path.join(self.confluence_client.host_url, url),
         ):
             permission = await permissions.json()
-            permission = await self.get_permission(
-                permission=permission.get("permissions", {}).get("VIEWSPACE")
-            )
             return permission
 
     async def fetch_documents(self, api_query):
@@ -851,10 +848,11 @@ class ConfluenceDataSource(BaseDataSource):
                     )
                 )
             else:
+                permission = await self.fetch_server_space_permission(space_key=key)
                 access_control = list(
-                    await self.fetch_server_space_permission(
-                        space_key=key
-                    )  # pyright: ignore
+                    self.get_permission(
+                        permission=permission.get("permissions", {}).get("VIEWSPACE")
+                    )
                 )
             space = self._decorate_with_access_control(
                 document=space, access_control=access_control
@@ -887,10 +885,15 @@ class ConfluenceDataSource(BaseDataSource):
                     self._extract_identities_for_datacenter(response=restrictions)
                 )
                 if len(access_control) == 0:
+                    permission = await self.fetch_server_space_permission(
+                        space_key=space_key
+                    )
                     access_control = list(
-                        await self.fetch_server_space_permission(
-                            space_key=space_key
-                        )  # pyright: ignore
+                        self.get_permission(
+                            permission=permission.get("permissions", {}).get(
+                                "VIEWSPACE"
+                            )
+                        )
                     )
             document = self._decorate_with_access_control(
                 document=document, access_control=access_control
