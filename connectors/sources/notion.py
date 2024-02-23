@@ -215,7 +215,7 @@ class NotionDataSource(BaseDataSource):
                 }
                 search_results = []
                 async for response in self.notion_client.fetch_by_query(data):
-                    search_results.extend(response)
+                    search_results.append(response)
 
                 get_title = {
                     "database": lambda result: result.get("title", [{}])[0]
