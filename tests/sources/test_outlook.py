@@ -278,6 +278,7 @@ class MockAccount:
         self.tasks = MockOutlookObject(object_type=TASK)
         self.calendar = MockOutlookObject(object_type=CALENDAR)
         self.root = CustomPath()
+        self.primary_smtp_address = "alex.wilber@gmail.com"
 
 
 class MockAttachment:
