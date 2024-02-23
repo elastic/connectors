@@ -245,19 +245,11 @@ async def test_close_with_client():
 @pytest.mark.parametrize(
     "entity_type, entity_titles, mock_search_results",
     [
-        ("database", ["My Database"], [[{"title": [{"plain_text": "My Database"}]}]]),
+        ("database", ["My Database"], [{"title": [{"plain_text": "My Database"}]}]),
         (
             "page",
             ["My Page"],
-            [
-                [
-                    {
-                        "properties": {
-                            "title": {"title": [{"text": {"content": "My Page"}}]}
-                        }
-                    }
-                ]
-            ],
+            [{"properties": {"title": {"title": [{"text": {"content": "My Page"}}]}}}],
         ),
     ],
 )
