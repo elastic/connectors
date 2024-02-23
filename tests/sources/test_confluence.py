@@ -1260,3 +1260,17 @@ async def test_get_permission():
         actual_permission = {"users": ["admin"], "groups": ["group"]}
         permisssions = source.get_permission(permission=actual_permission)
         assert permisssions == {"group:group", "user:admin"}
+
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_documents",
+    side_effect=[
+        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}]])),
+    ],
+)
+@pytest.mark.asyncio
+async def test_page_blog_coro(fetch_documents):
+    async with create_confluence_source() as source:
+        await source._page_blog_coro("api_query", "target")
+
