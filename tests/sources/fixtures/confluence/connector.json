@@ -26,7 +26,7 @@
                         ],
                         "order": 1,
                         "type": "str",
-                        "value": "confluence_cloud"
+                        "value": "confluence_server"
                 },
                 "username": {
                         "depends_on": [{"field": "data_source", "value": "confluence_server"}],

@@ -851,7 +851,9 @@ class ConfluenceDataSource(BaseDataSource):
                 permission = await self.fetch_server_space_permission(space_key=key)
                 access_control = list(
                     self.get_permission(
-                        permission=permission.get("permissions", {}).get("VIEWSPACE")
+                        permission=permission.get("permissions", {}).get(
+                            "VIEWSPACE", {}
+                        )
                     )
                 )
             space = self._decorate_with_access_control(
@@ -891,7 +893,7 @@ class ConfluenceDataSource(BaseDataSource):
                     access_control = list(
                         self.get_permission(
                             permission=permission.get("permissions", {}).get(
-                                "VIEWSPACE"
+                                "VIEWSPACE", {}
                             )
                         )
                     )
