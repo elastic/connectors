@@ -343,7 +343,10 @@ class NASDataSource(BaseDataSource):
 
     @cached_property
     def get_directory_details(self):
-        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+        self._logger.debug("Fetching the directory tree from remote server")
+        return list(
+            smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}", port=self.port)
+        )
 
     def find_matching_paths(self, advanced_rules):
         """
@@ -356,6 +359,9 @@ class NASDataSource(BaseDataSource):
             matched_paths (set): Set of paths that match the advanced rules.
             invalid_rules (list): List of advanced rules that have no matching paths.
         """
+        self._logger.debug(
+            "Fetching the matched directory paths using the list of advanced rules configured"
+        )
         invalid_rules = []
         matched_paths = set()
         for rule in advanced_rules:
@@ -404,6 +410,7 @@ class NASDataSource(BaseDataSource):
         Args:
             path (str): The path of a folder in the Network Drive
         """
+        self._logger.debug(f"Fetching the content of directory on path: {path}")
         files = []
         loop = asyncio.get_running_loop()
         try:
@@ -423,7 +430,7 @@ class NASDataSource(BaseDataSource):
             file_details = file._dir_info.fields
             yield {
                 "path": file.path,
-                "size": file_details["allocation_size"].get_value(),
+                "size": file_details["end_of_file"].get_value(),
                 "_id": file_details["file_id"].get_value(),
                 "created_at": iso_utc(file_details["creation_time"].get_value()),
                 "_timestamp": iso_utc(file_details["change_time"].get_value()),
@@ -437,6 +444,7 @@ class NASDataSource(BaseDataSource):
         Args:
             path (str): The file path of the file on the Network Drive
         """
+        self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
             with smbclient.open_file(
                 path=path, encoding="utf-8", errors="ignore", mode="rb"
@@ -467,7 +475,6 @@ class NASDataSource(BaseDataSource):
             doit
             and (os.path.splitext(file["title"])[-1]).lower()
             in TIKA_SUPPORTED_FILETYPES
-            and file["size"]
         ):
             return
 
