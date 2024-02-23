@@ -834,8 +834,8 @@ class OutlookDataSource(BaseDataSource):
         yield content
 
     async def _fetch_attachments(self, attachment_type, outlook_object, timezone):
-        self._logger.debug(f"Fetching attachments for {attachment_type}")
         for attachment in outlook_object.attachments:
+            self._logger.debug(f"Fetching attachment for {attachment.name}")
             await self.queue.put(
                 (
                     self.doc_formatter.attachment_doc_formatter(
