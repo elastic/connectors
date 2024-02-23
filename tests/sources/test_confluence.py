@@ -1261,6 +1261,7 @@ async def test_get_permission():
         permisssions = source.get_permission(permission=actual_permission)
         assert permisssions == {"group:group", "user:admin"}
 
+
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_documents",
@@ -1273,4 +1274,3 @@ async def test_get_permission():
 async def test_page_blog_coro(fetch_documents):
     async with create_confluence_source() as source:
         await source._page_blog_coro("api_query", "target")
-
