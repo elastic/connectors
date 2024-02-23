@@ -872,6 +872,7 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
 
         # Execute
         documents = []
+        source.confluence_client.data_source_type = "confluence_cloud"
         async for item, _ in source.get_docs():
             documents.append(item)
 
@@ -1234,7 +1235,11 @@ async def test_fetch_server_space_permission():
         }
         source.confluence_client.api_call = AsyncIterator([JSONAsyncMock(payload)])
         expected_response = await source.fetch_server_space_permission(space_key="key")
-        assert expected_response == {"group:confluence-users", "user:admin"}
+        assert expected_response == {
+            "permissions": {
+                "VIEWSPACE": {"groups": ["confluence-users"], "users": ["admin"]}
+            }
+        }
 
 
 @pytest.mark.asyncio
