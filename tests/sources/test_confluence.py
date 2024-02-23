@@ -1252,3 +1252,11 @@ async def test_api_call_for_exception(patch_sleep):
         ):
             with pytest.raises(Exception):
                 await anext(source.confluence_client.api_call(url="abc"))
+
+
+@pytest.mark.asyncio
+async def test_get_permission():
+    async with create_confluence_source() as source:
+        actual_permission = {"users": ["admin"], "groups": ["group"]}
+        permisssions = source.get_permission(permission=actual_permission)
+        assert permisssions == {"group:group", "user:admin"}
