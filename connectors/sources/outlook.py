@@ -150,10 +150,10 @@ def ews_format_to_datetime(source_datetime, timezone):
     Returns:
         Datetime: Date format as user account timezone
     """
-    if isinstance(source_datetime, exchangelib.ewsdatetime.EWSDateTime):
-        return (source_datetime.astimezone(pytz.timezone(str(timezone)))).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+    if isinstance(source_datetime, exchangelib.ewsdatetime.EWSDateTime) and isinstance(
+        timezone, exchangelib.ewsdatetime.EWSTimeZone
+    ):
+        return (source_datetime.astimezone(timezone)).strftime("%Y-%m-%dT%H:%M:%SZ")
     elif isinstance(source_datetime, exchangelib.ewsdatetime.EWSDate) or isinstance(
         source_datetime, date
     ):
