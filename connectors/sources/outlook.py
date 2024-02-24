@@ -13,7 +13,6 @@ from functools import cached_property, partial
 import aiofiles
 import aiohttp
 import exchangelib
-import pytz
 import requests.adapters
 from aiofiles.os import remove
 from exchangelib import (
