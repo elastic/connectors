@@ -10,10 +10,10 @@
 ##  The list of connector clients/customized connectors configurations.
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
-##    connectors:
-##      - connector_id: changeme # the ID of the connector.
-##        service_type: changeme # The service type of the connector.
-##        api_key: changeme # The Elasticsearch API key used to write data into the content index.
+    connectors:
+      - connector_id: "55RU8Y0BnAYNFmvJPeH-" # the ID of the connector.
+        service_type: "postgresql" # The service type of the connector.
+        api_key: "NkpSbDhZMEJuQVlORm12Sk1lR3o6OVQ3azFETy1RaWVmSXdMeWoza1RCUQ==" # The Elasticsearch API key used to write data into the content index.
 #connectors: []
 #
 #
@@ -30,24 +30,24 @@
 ## ------------------------------- Elasticsearch -------------------------------
 #
 ## The host of the Elasticsearch deployment.
-#elasticsearch.host: http://localhost:9200
+elasticsearch.host: http://localhost:9200
 #
 #
 ## The API key for Elasticsearch connection.
 ##    Using `api_key` is recommended instead of `username`/`password`.
-#elasticsearch.api_key: null
+elasticsearch.api_key: "NkpSbDhZMEJuQVlORm12Sk1lR3o6OVQ3azFETy1RaWVmSXdMeWoza1RCUQ=="
 #
 #
 ##  The username for the Elasticsearch connection.
 ##    Using `username` requires `password` to also be configured.
 ##    However, `elasticsearch.api_key` is the recommended configuration choice.
-#elasticsearch.username: elastic
+elasticsearch.username: elastic
 #
 #
 ##  The password for the Elasticsearch connection.
 ##    Using `password` requires `username` to also be configured.
 ##    However, `elasticsearch.api_key` is the recommended configuration choice.
-#elasticsearch.password: changeme
+elasticsearch.password: 6qIyB6hHY1bYVucJDveV
 #
 #
 ##  Whether SSL is used for the Elasticsearch connection.
@@ -241,3 +241,4 @@
 ##    An example is:
 ##    sources:
 ##      mongodb: connectors.sources.mongo:MongoDataSource
+        postgresql: connectors.sources.postgresql:PostgreSQLDataSource
