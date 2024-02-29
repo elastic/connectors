@@ -43,7 +43,6 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
-MAX_CONCURRENCY = 2000
 
 OUTLOOK_SERVER = "outlook_server"
 OUTLOOK_CLOUD = "outlook_cloud"
@@ -766,15 +765,6 @@ class OutlookDataSource(BaseDataSource):
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
                 "value": False,
-            },
-            "max_concurrent_tasks": {
-                "default_value": MAX_CONCURRENCY,
-                "display": "numeric",
-                "label": "Maximum concurrent tasks",
-                "tooltip": "This value denotes the number of tasks that run in parallel. It depends on the number of accounts in the Azure AD.",
-                "order": 13,
-                "required": False,
-                "type": "int",
             },
         }
 
