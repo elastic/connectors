@@ -20,7 +20,7 @@ source $CURDIR/publish-common.sh
 pushd $PROJECT_ROOT
 
 # set our complete tag name and build the image
-TAG_NAME="$BASE_TAG_NAME-${ARCHITECTURE}:${VERSION}"
+TAG_NAME="$BASE_TAG_NAME:${VERSION}-${ARCHITECTURE}"
 docker build -t $TAG_NAME .
 
 # save the image to an archive file

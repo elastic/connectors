@@ -30,6 +30,6 @@ vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-con
   docker login -u $DOCKER_USER --password-stdin docker.elastic.co
 
 # Set our tag name and push the image
-TAG_NAME="$BASE_TAG_NAME-${ARCHITECTURE}:${VERSION}"
+TAG_NAME="$BASE_TAG_NAME:${VERSION}-${ARCHITECTURE}"
 echo "Pushing image to docker with tag: $TAG_NAME"
 docker push $TAG_NAME

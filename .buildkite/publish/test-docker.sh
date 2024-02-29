@@ -84,5 +84,5 @@ printf '%s\n' "$TEST_CONFIG_TEXT" > "$TEST_CONFIG_FILE"
 
 # Finally, run the tests
 echo "Running container-structure-test"
-TAG_NAME="$BASE_TAG_NAME-${ARCHITECTURE}:${VERSION}"
+TAG_NAME="$BASE_TAG_NAME:${VERSION}-${ARCHITECTURE}"
 "$TEST_EXEC" test --image "$TAG_NAME" --config "$TEST_CONFIG_FILE"
