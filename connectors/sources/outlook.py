@@ -5,6 +5,7 @@
 #
 """Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms.
 """
+import asyncio
 import os
 from copy import copy
 from datetime import date
@@ -32,8 +33,6 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     CancellableSleeps,
-    ConcurrentTasks,
-    MemQueue,
     RetryStrategy,
     get_pem_format,
     html_to_text,
@@ -619,27 +618,30 @@ class OutlookClient:
             else:
                 folder_object = getattr(account, mail_type["folder"])
 
-            for mail in folder_object.all().only(*MAIL_FIELDS):
+            for mail in await asyncio.to_thread(folder_object.all().only, *MAIL_FIELDS):
                 yield mail, mail_type
 
     async def get_calendars(self, account):
-        for calendar in account.calendar.all().only(*CALENDAR_FIELDS):
+        for calendar in await asyncio.to_thread(
+            account.calendar.all().only, *CALENDAR_FIELDS
+        ):
             yield calendar
 
     async def get_child_calendars(self, account):
         for child_calendar in account.calendar.children:
-            for calendar in child_calendar.all().only(*CALENDAR_FIELDS):
+            for calendar in await asyncio.to_thread(
+                child_calendar.all().only, *CALENDAR_FIELDS
+            ):
                 yield calendar, child_calendar
 
     async def get_tasks(self, account):
-        for task in account.tasks.all().only(*TASK_FIELDS):
+        for task in await asyncio.to_thread(account.tasks.all().only, *TASK_FIELDS):
             yield task
 
     async def get_contacts(self, account):
         folder = account.root / "Top of Information Store" / "Contacts"
-        for contact in folder.all().only(*CONTACT_FIELDS):
-            if isinstance(contact, exchangelib.items.contact.Contact):
-                yield contact
+        for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
+            yield contact
 
 
 class OutlookDataSource(BaseDataSource):
@@ -659,12 +661,6 @@ class OutlookDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.configuration = configuration
         self.doc_formatter = OutlookDocFormatter()
-
-        self.tasks = 0
-        self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
-        self.fetchers = ConcurrentTasks(
-            max_concurrency=self.configuration["max_concurrent_tasks"]
-        )
 
     @cached_property
     def client(self):
@@ -834,92 +830,58 @@ class OutlookDataSource(BaseDataSource):
 
     async def _fetch_attachments(self, attachment_type, outlook_object, timezone):
         for attachment in outlook_object.attachments:
-            await self.queue.put(
-                (
-                    self.doc_formatter.attachment_doc_formatter(
-                        attachment=attachment,
-                        attachment_type=attachment_type,
-                        timezone=timezone,
-                    ),
-                    partial(
-                        self.get_content, attachment=copy(attachment), timezone=timezone
-                    ),
-                )
-            )
-
-        await self.queue.put(END_SIGNAL)
+            yield self.doc_formatter.attachment_doc_formatter(
+                attachment=attachment,
+                attachment_type=attachment_type,
+                timezone=timezone,
+            ), partial(self.get_content, attachment=copy(attachment), timezone=timezone)
 
     async def _fetch_mails(self, account, timezone):
         async for mail, mail_type in self.client.get_mails(account=account):
-            await self.queue.put(
-                (
-                    self.doc_formatter.mails_doc_formatter(
-                        mail=mail,
-                        mail_type=mail_type,
-                        timezone=timezone,
-                    ),
-                    None,
-                )
-            )
+            yield self.doc_formatter.mails_doc_formatter(
+                mail=mail,
+                mail_type=mail_type,
+                timezone=timezone,
+            ), None
 
             if mail.has_attachments:
-                await self.fetchers.put(
-                    partial(
-                        self._fetch_attachments,
-                        attachment_type=MAIL_ATTACHMENT,
-                        outlook_object=mail,
-                        timezone=timezone,
-                    )
-                )
-                self.tasks += 1
-
-        await self.queue.put(END_SIGNAL)
+                async for doc in self._fetch_attachments(
+                    attachment_type=MAIL_ATTACHMENT,
+                    outlook_object=mail,
+                    timezone=timezone,
+                ):
+                    yield doc
 
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            await self.queue.put(
-                (
-                    self.doc_formatter.contact_doc_formatter(
-                        contact=contact,
-                        timezone=timezone,
-                    ),
-                    None,
-                )
-            )
-        await self.queue.put(END_SIGNAL)
+            yield self.doc_formatter.contact_doc_formatter(
+                contact=contact,
+                timezone=timezone,
+            ), None
 
     async def _fetch_tasks(self, account, timezone):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
-            await self.queue.put(
-                (
-                    self.doc_formatter.task_doc_formatter(task=task, timezone=timezone),
-                    None,
-                )
-            )
+            yield self.doc_formatter.task_doc_formatter(
+                task=task, timezone=timezone
+            ), None
 
             if task.has_attachments:
-                await self.fetchers.put(
-                    partial(
-                        self._fetch_attachments,
-                        attachment_type=TASK_ATTACHMENT,
-                        outlook_object=task,
-                        timezone=timezone,
-                    )
-                )
-                self.tasks += 1
-
-        await self.queue.put(END_SIGNAL)
+                async for doc in self._fetch_attachments(
+                    attachment_type=TASK_ATTACHMENT,
+                    outlook_object=task,
+                    timezone=timezone,
+                ):
+                    yield doc
 
     async def _fetch_calendars(self, account, timezone):
         self._logger.debug(f"Fetching calendars for {account.primary_smtp_address}")
         async for calendar in self.client.get_calendars(account=account):
-            await self._enqueue_calendars(
+            async for doc in self._enqueue_calendars(
                 calendar=calendar, child_calendar=calendar, timezone=timezone
-            )
-
-        await self.queue.put(END_SIGNAL)
+            ):
+                yield doc
 
     async def _fetch_child_calendars(self, account, timezone):
         self._logger.debug(
@@ -928,52 +890,30 @@ class OutlookDataSource(BaseDataSource):
         async for calendar, child_calendar in self.client.get_child_calendars(
             account=account
         ):
-            await self._enqueue_calendars(
+            async for doc in self._enqueue_calendars(
                 calendar=calendar, child_calendar=child_calendar, timezone=timezone
-            )
-
-        await self.queue.put(END_SIGNAL)
+            ):
+                yield doc
 
     async def _enqueue_calendars(self, calendar, child_calendar, timezone):
-        await self.queue.put(
-            (
-                self.doc_formatter.calendar_doc_formatter(
-                    calendar=calendar,
-                    child_calendar=str(child_calendar),
-                    timezone=timezone,
-                ),
-                None,
-            )
-        )
+        yield self.doc_formatter.calendar_doc_formatter(
+            calendar=calendar,
+            child_calendar=str(child_calendar),
+            timezone=timezone,
+        ), None
 
         if calendar.has_attachments:
-            await self.fetchers.put(
-                partial(
-                    self._fetch_attachments,
-                    attachment_type=CALENDAR_ATTACHMENT,
-                    outlook_object=calendar,
-                    timezone=timezone,
-                )
-            )
-            self.tasks += 1
+            async for doc in self._fetch_attachments(
+                attachment_type=CALENDAR_ATTACHMENT,
+                outlook_object=calendar,
+                timezone=timezone,
+            ):
+                yield doc
 
     async def ping(self):
         """Verify the connection with Outlook"""
         await self.client.ping()
         self._logger.info("Successfully connected to Outlook")
-
-    async def _consumer(self):
-        """Async generator to process entries of the queue
-
-        Yields:
-            dictionary: Documents from Outlook.
-        """
-        while self.tasks > 0:
-            _, item = await self.queue.get()
-            if item == END_SIGNAL:
-                self.tasks -= 1
-            else:
-                yield item
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch outlook objects in async manner
@@ -987,30 +927,23 @@ class OutlookDataSource(BaseDataSource):
         async for account in self.client._get_user_instance.get_user_accounts():
             timezone = account.default_timezone or DEFAULT_TIMEZONE
 
-            await self.fetchers.put(
-                partial(self._fetch_mails, account=account, timezone=timezone)
-            )
+            async for mail in self._fetch_mails(account=account, timezone=timezone):
+                yield mail
 
-            await self.fetchers.put(
-                partial(self._fetch_contacts, account=account, timezone=timezone)
-            )
+            async for contact in self._fetch_contacts(
+                account=account, timezone=timezone
+            ):
+                yield contact
 
-            await self.fetchers.put(
-                partial(self._fetch_tasks, account=account, timezone=timezone)
-            )
+            async for task in self._fetch_tasks(account=account, timezone=timezone):
+                yield task
 
-            await self.fetchers.put(
-                partial(self._fetch_calendars, account=account, timezone=timezone)
-            )
+            async for calendar in self._fetch_calendars(
+                account=account, timezone=timezone
+            ):
+                yield calendar
 
-            await self.fetchers.put(
-                partial(self._fetch_child_calendars, account=account, timezone=timezone)
-            )
-
-            # Adding 5 tasks for fetching mails, contacts, tasks, calendars and child calendars
-            self.tasks += 5
-
-        async for item in self._consumer():
-            yield item
-
-        await self.fetchers.join()
+            async for child_calendar in self._fetch_child_calendars(
+                account=account, timezone=timezone
+            ):
+                yield child_calendar
