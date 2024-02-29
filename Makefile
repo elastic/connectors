@@ -6,7 +6,6 @@ PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
 
-
 bin/python:
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
@@ -20,7 +19,9 @@ bin/elastic-ingest: bin/python
 bin/black: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/tests.txt
-	
+
+bin/pip-licenses: bin/python
+	bin/pip install pip-licenses
 
 bin/pytest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
@@ -29,6 +30,13 @@ bin/pytest: bin/python
 
 clean:
 	rm -rf bin lib include
+
+check-licenses: bin/pip-licenses
+	bin/pip-licenses --format=markdown > /tmp/deps-licenses.md
+	diff deps-licenses.md /tmp/deps-licenses.md
+
+update-licenses: bin/pip-licenses
+	bin/pip-licenses --format=markdown > deps-licenses.md
 
 lint: bin/python bin/black bin/elastic-ingest
 	bin/black --check connectors

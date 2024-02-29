@@ -13,6 +13,9 @@ steps:
     command: "make test"
     timeout_in_minutes: 5
 
+  - label: ":statue_of_liberty: Check licenses"
+    command: "make clean install check-licenses"
+
   - label: ":shipit: Smoke test"
     command: "make ftest NAME=dir DATA_SIZE=small"
     timeout_in_minutes: 45
