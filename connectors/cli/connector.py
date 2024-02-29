@@ -121,6 +121,7 @@ class Connector:
                 "api_key_id": api_key_id,
                 "configuration": configuration,
                 "index_name": index_name,
+                "name": index_name,
                 "service_type": service_type,
                 "status": "configured",  # TODO use a predefined constant
                 "is_native": is_native,
