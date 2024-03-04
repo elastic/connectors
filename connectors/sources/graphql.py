@@ -11,7 +11,9 @@ from functools import cached_property
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
-from graphql import parse
+from graphql import parse, visit
+from graphql.language.ast import VariableNode
+from graphql.language.visitor import Visitor
 
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
@@ -37,6 +39,20 @@ PING_QUERY = """
 """
 
 
+class FieldVisitor(Visitor):
+    fields_dict = {}
+    variables_dict = {}
+
+    def enter_field(self, node, *args):
+        self.fields_dict[node.name.value] = []
+        self.variables_dict[node.name.value] = []
+        if node.arguments:
+            for arg in node.arguments:
+                self.fields_dict[node.name.value].append(arg.name.value)
+                if isinstance(arg.value, VariableNode):
+                    self.variables_dict[node.name.value].append(arg.value.name.value)
+
+
 class UnauthorizedException(Exception):
     pass
 
@@ -51,6 +67,7 @@ class GraphQLClient:
         self.graphql_object_list = self.configuration["graphql_object_list"]
         self.http_method = self.configuration["http_method"]
         self.authentication_method = self.configuration["authentication_method"]
+        self.pagination_enabled = self.configuration["pagination_enabled"]
         self.variables = {}
         self.headers = {}
 
@@ -89,23 +106,64 @@ class GraphQLClient:
                 raise_for_status=True,
             )
 
-    def extract_graphql_data_items(self, data):
+    def extract_graphql_data_items(self, key, data):
         """Returns sub objects from the response based on graphql_object_list
 
         Args:
+            key (string): Key of data.
             data (dict): data to extract
 
         Yields:
             dictionary/list: Documents from the response
         """
-        # Checks only top level of the json response.
+        if key in self.graphql_object_list:
+            yield data
+        if isinstance(data, dict):
+            for key, item in data.items():
+                yield from self.extract_graphql_data_items(key=key, data=item)
+        if isinstance(data, list):
+            for doc in data:
+                yield from self.extract_graphql_data_items(key=None, data=doc)
+
+    async def paginated_call(self, graphql_query):
+        ast = parse(graphql_query)  # pyright: ignore
+        visitor = FieldVisitor()
+        visit(ast, visitor)  # pyright: ignore
+
         for graphql_object in self.graphql_object_list:
-            if graphql_object in data.keys():
-                yield data.get(graphql_object)
-            else:
-                self._logger.warning(
-                    f"{graphql_object} is not present in the response. Skipping {graphql_object} object."
+            if not (
+                (
+                    {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
+                    and "pageInfo" in visitor.fields_dict.keys()
                 )
+                or {"offset", "limit"}.issubset(
+                    set(visitor.fields_dict.get(graphql_object, []))
+                )
+            ):
+                msg = "Pagination is Enabled. Please add fields and variables related to pagination."
+                raise ConfigurableFieldValueError(msg)
+
+            if "afterCursor" not in visitor.variables_dict.get(graphql_object, []):
+                msg = "Pagination is Enabled. Please set afterCursor variable for after argument."
+                raise ConfigurableFieldValueError(msg)
+
+        while True:
+            data = await self.make_request(graphql_query)
+            for documents in self.extract_graphql_data_items(key="data", data=data):
+                if isinstance(documents, dict) and documents.get("pageInfo"):
+                    pageInfo = documents.get("pageInfo")
+                    hasNextPage = pageInfo.get("hasNextPage")
+                    endCursor = pageInfo.get("endCursor")
+
+                    self.variables["afterCursor"] = endCursor
+                    yield documents
+
+                    if not (hasNextPage and endCursor):
+                        return
+
+                else:
+                    msg = "Pagination is Enabled. Please add pageInfo field in query."
+                    raise ConfigurableFieldValueError(msg)
 
     @retryable(
         retries=RETRIES,
@@ -269,11 +327,18 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
                 "required": False,
             },
+            "pagination_enabled": {
+                "display": "toggle",
+                "label": "Enable Pagination",
+                "order": 11,
+                "type": "bool",
+                "value": False,
+            },
             "connection_timeout": {
                 "default_value": 300,
                 "display": "numeric",
                 "label": "Connection Timeout",
-                "order": 11,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -342,14 +407,27 @@ class GraphQLDataSource(BaseDataSource):
             raise
 
     async def fetch_data(self, graphql_query):
-        data = await self.graphql_client.make_request(graphql_query=graphql_query)
-        for documents in self.graphql_client.extract_graphql_data_items(data=data):
-            if isinstance(documents, dict):
-                yield documents
-            elif isinstance(documents, list):
-                for document in documents:
-                    if isinstance(document, dict):
-                        yield document
+        if self.graphql_client.pagination_enabled:
+            async for data in self.graphql_client.paginated_call(
+                graphql_query=graphql_query
+            ):
+                if isinstance(data, dict):
+                    yield data
+                elif isinstance(data, list):
+                    for document in data:  # pyright: ignore
+                        if isinstance(document, dict):
+                            yield document
+        else:
+            data = await self.graphql_client.make_request(graphql_query=graphql_query)
+            for documents in self.graphql_client.extract_graphql_data_items(
+                key="data", data=data
+            ):
+                if isinstance(documents, dict):
+                    yield documents
+                elif isinstance(documents, list):
+                    for document in documents:
+                        if isinstance(document, dict):
+                            yield document
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GraphQL response in async manner.

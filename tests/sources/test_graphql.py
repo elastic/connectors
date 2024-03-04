@@ -71,7 +71,7 @@ async def create_graphql_source(
         ),
         (
             {"empData": {"basicInfo": {"name": "xyz", "id": "abc#123"}}},
-            None,
+            {"id": "abc#123", "name": "xyz"},
         ),
     ],
 )
@@ -79,7 +79,9 @@ async def test_extract_graphql_data_items(data, expected_result):
     async with create_graphql_source() as source:
         # graphql_object_list is "basicInfo"
         source.graphql_client.graphql_object_list = ["basicInfo"]
-        for actual_response in source.graphql_client.extract_graphql_data_items(data):
+        for actual_response in source.graphql_client.extract_graphql_data_items(
+            "data", data
+        ):
             assert actual_response == expected_result
 
 
@@ -239,6 +241,59 @@ async def test_fetch_data():
         async for doc in source.fetch_data("{users {name}}}"):
             actual_response.append(doc)
     assert actual_response == expected_respones
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_with_pagination():
+    expected_respones = [
+        {
+            "name": {"firstName": "xyz"},
+            "pageInfo": {"hasNextPage": True, "endCursor": "xyz#123"},
+        },
+        {
+            "name": {"firstName": "abc"},
+            "pageInfo": {"hasNextPage": False, "endCursor": "pqr#123"},
+        },
+    ]
+    actual_response = []
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_enabled = True
+        source.graphql_client.graphql_object_list = ["users"]
+        source.graphql_client.post = AsyncMock(
+            side_effect=[
+                {
+                    "users": {
+                        "name": {"firstName": "xyz"},
+                        "pageInfo": {"hasNextPage": True, "endCursor": "xyz#123"},
+                    }
+                },
+                {
+                    "users": {
+                        "name": {"firstName": "abc"},
+                        "pageInfo": {"hasNextPage": False, "endCursor": "pqr#123"},
+                    }
+                },
+            ]
+        )
+        async for doc in source.fetch_data(
+            "query($afterCursor: String!) {users(first:5, after:$afterCursor) {name pageInfo}}"
+        ):
+            actual_response.append(doc)
+    assert actual_response == expected_respones
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_without_pageinfo():
+    async with create_graphql_source() as source:
+        source.graphql_client.pagination_enabled = True
+        source.graphql_client.graphql_object_list = ["users"]
+        source.graphql_client.post = AsyncMock(
+            side_effect=[{"users": {"name": {"firstName": "xyz"}}}]
+        )
+
+        with pytest.raises(ConfigurableFieldValueError):
+            async for _doc in source.fetch_data("{users {name pageInfo}}"):
+                pass
 
 
 @pytest.mark.asyncio
