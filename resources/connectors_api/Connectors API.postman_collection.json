@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "21004caa-09a2-418f-91c3-2b191759bc6b",
+		"_postman_id": "727062b9-850d-4c47-a02c-7142cd97d082",
 		"name": "Connectors API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "31300999"
+		"_exporter_id": "31631400"
 	},
 	"item": [
 		{
@@ -15,13 +15,13 @@
 						"method": "PUT",
 						"header": [],
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_check_in",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_check_in",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_check_in"
 							]
 						}
@@ -48,13 +48,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234"
+								"{{CONNECTOR_ID}}"
 							]
 						}
 					},
@@ -97,13 +97,13 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234"
+								"{{CONNECTOR_ID}}"
 							]
 						}
 					},
@@ -120,13 +120,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234"
+								"{{CONNECTOR_ID}}"
 							]
 						}
 					},
@@ -187,6 +187,75 @@
 								{
 									"key": "size",
 									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Connectors with IndexNames Filtering",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector?index_name=some_index",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							],
+							"query": [
+								{
+									"key": "index_name",
+									"value": "some_index"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Connectors with Service Types",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector?service_type=google_drive,sharepoint_online",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							],
+							"query": [
+								{
+									"key": "service_type",
+									"value": "google_drive,sharepoint_online"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Connectors with Names",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector?connector_name=my-connector",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							],
+							"query": [
+								{
+									"key": "connector_name",
+									"value": "my-connector"
 								}
 							]
 						}
@@ -845,13 +914,69 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_configuration",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_configuration",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
+								"_configuration"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Clear Configuration",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"configuration\": {}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_configuration",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
+								"_configuration"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Configuration Value",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"values\": {\n        \"tenant_id\": \"tenant\",\n        \"tenant_name\": \"enterprisesearch\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_configuration",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
 								"_configuration"
 							]
 						}
@@ -878,13 +1003,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_scheduling",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_scheduling",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_scheduling"
 							]
 						}
@@ -911,13 +1036,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_error",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_error",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_error"
 							]
 						}
@@ -944,13 +1069,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_pipeline",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_pipeline",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_pipeline"
 							]
 						}
@@ -977,13 +1102,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_last_sync",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_last_sync",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_last_sync"
 							]
 						}
@@ -1010,13 +1135,13 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_name",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_name",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_name"
 							]
 						}
@@ -1043,14 +1168,146 @@
 							}
 						},
 						"url": {
-							"raw": "{{ES_HOST_PORT}}/_connector/1234/_filtering",
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_filtering",
 							"host": [
 								"{{ES_HOST_PORT}}"
 							],
 							"path": [
 								"_connector",
-								"1234",
+								"{{CONNECTOR_ID}}",
 								"_filtering"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Service Type",
+			"item": [
+				{
+					"name": "Update Service Type",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"service_type\": \"sharepoint_online\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_service_type",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
+								"_service_type"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Index Name",
+			"item": [
+				{
+					"name": "Update Index Name",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"index_name\": \"search-test-index-2\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_index_name",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
+								"_index_name"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Native",
+			"item": [
+				{
+					"name": "Update Native",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"is_native\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_native",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
+								"_native"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Status",
+			"item": [
+				{
+					"name": "Update Status",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"needs_configuration\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_status",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
+								"_status"
 							]
 						}
 					},
@@ -1107,6 +1364,11 @@
 		{
 			"key": "ES_PASSWORD",
 			"value": "password",
+			"type": "string"
+		},
+		{
+			"key": "CONNECTOR_ID",
+			"value": "1234",
 			"type": "string"
 		}
 	]

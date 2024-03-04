@@ -8,6 +8,7 @@ from functools import cached_property
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
+from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
@@ -59,6 +60,8 @@ class JobExecutionService(BaseService):
         source_klass = get_source_klass(self.source_list[sync_job.service_type])
         connector_id = sync_job.connector_id
 
+        sync_job.log_debug(f"Detected pending {sync_job.job_type} sync.")
+
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
         except DocumentNotFoundError:
@@ -80,6 +83,34 @@ class JobExecutionService(BaseService):
         if not self.should_execute(connector, sync_job):
             return
 
+        if (
+            connector.native
+            and connector.features.native_connector_api_keys_enabled()
+            and not connector.api_key_secret_id
+        ):
+            sync_job.log_debug(
+                f"No secret found for [{connector_id}], generating and storing API key..."
+            )
+            es_management_client = ESManagementClient(
+                self._override_es_config(connector)
+            )
+            try:
+                storage_result = await es_management_client.generate_and_store_api_key(
+                    connector.index_name
+                )
+                sync_job.log_debug(
+                    f"API key stored as secret: {storage_result}, updating connector doc..."
+                )
+                await self.connector_index.update(connector_id, storage_result)
+                await connector.reload()
+            except Exception as e:
+                sync_job.log_error(
+                    f"Couldn't generate and store an API key for native connector {connector_id}. Error: {e}."
+                )
+                return
+            finally:
+                await es_management_client.close()
+
         sync_job_runner = SyncJobRunner(
             source_klass=source_klass,
             sync_job=sync_job,
@@ -87,6 +118,9 @@ class JobExecutionService(BaseService):
             es_config=self._override_es_config(connector),
             service_config=self.service_config,
         )
+
+        sync_job.log_debug(f"Attempting to start {sync_job.job_type} sync.")
+
         if not self.sync_job_pool.try_put(sync_job_runner.execute):
             sync_job.log_debug(
                 f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore

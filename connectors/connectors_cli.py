@@ -232,12 +232,6 @@ def create(
     update_config,
     connector_service_config,
 ):
-    if is_native:
-        index_name = f"search-{index_name}"
-        click.echo(
-            f"Prepending {click.style('search-', fg='green')} to index name because it will be a native connector. New index name is {click.style(index_name, fg='green')}."
-        )
-
     connector_configuration = {}
     if from_file:
         with open(from_file) as fd:
@@ -319,12 +313,19 @@ def create(
     )
 
     if result["api_key_skipped"]:
-        click.echo(
-            click.style(
-                "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
-                fg="yellow",
+        if is_native:
+            click.echo(
+                click.style(
+                    "API keys for native connectors are internally managed. An API key will be automatically generated for this connector during its first sync.",
+                )
             )
-        )
+        else:
+            click.echo(
+                click.style(
+                    "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
+                    fg="yellow",
+                )
+            )
 
     if result["api_key_error"]:
         click.echo(click.style(result["api_key_error"], fg="yellow"))
