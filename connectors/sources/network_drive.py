@@ -116,8 +116,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(executor=None, func=self.source.create_connection)
+        await asyncio.to_thread(self.source.create_connection)
 
         _, invalid_rules = await self.source.find_matching_paths(advanced_rules)
 
@@ -344,10 +343,8 @@ class NASDataSource(BaseDataSource):
 
     async def get_directory_details(self):
         self._logger.debug("Fetching the directory tree from remote server")
-        loop = asyncio.get_running_loop()
-        paths = await loop.run_in_executor(
-            executor=None,
-            func=partial(
+        paths = await asyncio.to_thread(
+            partial(
                 smbclient.walk,
                 top=rf"\\{self.server_ip}/{self.drive_path}",
                 port=self.port,
