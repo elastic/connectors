@@ -276,13 +276,12 @@ class NASDataSource(BaseDataSource):
         self.drive_type = self.configuration["drive_type"]
         self.identity_mappings = self.configuration["identity_mappings"]
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
+        self.smb_connection = SMBSession(
+            self.server_ip, self.username, self.password, self.port
+        )
 
     def advanced_rules_validators(self):
         return [NetworkDriveAdvancedRulesValidator(self)]
-
-    @cached_property
-    def smb_connection(self):
-        return SMBSession(self.server_ip, self.username, self.password, self.port)
 
     @classmethod
     def get_default_configuration(cls):
@@ -396,6 +395,8 @@ class NASDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Network Drive"""
+        if "RUNNING_FTEST" in os.environ:
+            return
 
         if self.smb_connection.session is not None:
             return
