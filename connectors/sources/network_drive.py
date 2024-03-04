@@ -116,7 +116,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.create_connection()
+        self.source.smb_connection.create_connection()
 
         _, invalid_rules = self.source.find_matching_paths(advanced_rules)
 
@@ -232,6 +232,26 @@ class SecurityInfo:
         return self.parse_output(members)
 
 
+class SMBSession:
+    _connection = None
+
+    def __init__(self, server_ip, username, password, port):
+        self.server_ip = server_ip
+        self.username = username
+        self.password = password
+        self.port = port
+        self.session = None
+
+    def create_connection(self):
+        """Creates an SMB session to the shared drive."""
+        self.session = smbclient.register_session(
+            server=self.server_ip,
+            username=self.username,
+            password=self.password,
+            port=self.port,
+        )
+
+
 class NASDataSource(BaseDataSource):
     """Network Drive"""
 
@@ -255,11 +275,14 @@ class NASDataSource(BaseDataSource):
         self.drive_path = self.configuration["drive_path"]
         self.drive_type = self.configuration["drive_type"]
         self.identity_mappings = self.configuration["identity_mappings"]
-        self.session = None
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
 
     def advanced_rules_validators(self):
         return [NetworkDriveAdvancedRulesValidator(self)]
+
+    @cached_property
+    def smb_connection(self):
+        return SMBSession(self.server_ip, self.username, self.password, self.port)
 
     @classmethod
     def get_default_configuration(cls):
@@ -332,15 +355,6 @@ class NASDataSource(BaseDataSource):
             },
         }
 
-    def create_connection(self):
-        """Creates an SMB session to the shared drive."""
-        self.session = smbclient.register_session(
-            server=self.server_ip,
-            username=self.username,
-            password=self.password,
-            port=self.port,
-        )
-
     @cached_property
     def get_directory_details(self):
         self._logger.debug("Fetching the directory tree from remote server")
@@ -382,15 +396,18 @@ class NASDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Network Drive"""
-        if self.session is not None:
+
+        if self.smb_connection.session is not None:
             return
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(executor=None, func=self.create_connection)
+        await loop.run_in_executor(
+            executor=None, func=self.smb_connection.create_connection
+        )
         self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
         """Close all the open smb sessions"""
-        if self.session is None:
+        if self.smb_connection.session is None:
             return
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
@@ -416,12 +433,16 @@ class NASDataSource(BaseDataSource):
         files = []
         loop = asyncio.get_running_loop()
         try:
-            files = await loop.run_in_executor(None, smbclient.scandir, path)
+            files = await loop.run_in_executor(
+                executor=None, func=partial(smbclient.scandir, path, port=self.port)
+            )
         except SMBConnectionClosed as exception:
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
             )
-            await loop.run_in_executor(executor=None, func=self.create_connection)
+            await loop.run_in_executor(
+                executor=None, func=self.smb_connection.create_connection
+            )
             raise
         except (SMBOSError, SMBException) as exception:
             self._logger.exception(
@@ -485,17 +506,11 @@ class NASDataSource(BaseDataSource):
                 f"File size {file['size']} of {file['title']} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
             )
             return
-        content = ""
+
         loop = asyncio.get_running_loop()
-        try:
-            content = await loop.run_in_executor(
-                executor=None, func=partial(self.fetch_file_content, path=file["path"])
-            )
-        except SMBConnectionClosed as exception:
-            self._logger.exception(
-                f"Connection got closed. Error {exception}. Registering new session"
-            )
-            await loop.run_in_executor(executor=None, func=self.create_connection)
+        content = await loop.run_in_executor(
+            executor=None, func=partial(self.fetch_file_content, path=file["path"])
+        )
 
         if not content:
             return
@@ -706,7 +721,10 @@ class NASDataSource(BaseDataSource):
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents
         """
-
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            executor=None, func=self.smb_connection.create_connection
+        )
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
