@@ -13,7 +13,6 @@ from functools import cached_property, partial
 import aiofiles
 import aiohttp
 import exchangelib
-import pytz
 import requests.adapters
 from aiofiles.os import remove
 from exchangelib import (
@@ -150,10 +149,10 @@ def ews_format_to_datetime(source_datetime, timezone):
     Returns:
         Datetime: Date format as user account timezone
     """
-    if isinstance(source_datetime, exchangelib.ewsdatetime.EWSDateTime):
-        return (source_datetime.astimezone(pytz.timezone(str(timezone)))).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+    if isinstance(source_datetime, exchangelib.ewsdatetime.EWSDateTime) and isinstance(
+        timezone, exchangelib.ewsdatetime.EWSTimeZone
+    ):
+        return (source_datetime.astimezone(timezone)).strftime("%Y-%m-%dT%H:%M:%SZ")
     elif isinstance(source_datetime, exchangelib.ewsdatetime.EWSDate) or isinstance(
         source_datetime, date
     ):
@@ -606,6 +605,9 @@ class OutlookClient:
 
     async def get_mails(self, account):
         for mail_type in MAIL_TYPES:
+            self._logger.debug(
+                f"Fetching {mail_type['folder']} mails for {account.primary_smtp_address}"
+            )
             if mail_type["folder"] == "archive":
                 # If 'Archive' folder is not present, skipping the iteration
                 try:
@@ -874,6 +876,7 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_contacts(self, account, timezone):
+        self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
             await self.queue.put(
                 (
@@ -887,6 +890,7 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_tasks(self, account, timezone):
+        self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
             await self.queue.put(
                 (
@@ -909,6 +913,7 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_calendars(self, account, timezone):
+        self._logger.debug(f"Fetching calendars for {account.primary_smtp_address}")
         async for calendar in self.client.get_calendars(account=account):
             await self._enqueue_calendars(
                 calendar=calendar, child_calendar=calendar, timezone=timezone
@@ -917,6 +922,9 @@ class OutlookDataSource(BaseDataSource):
         await self.queue.put(END_SIGNAL)
 
     async def _fetch_child_calendars(self, account, timezone):
+        self._logger.debug(
+            f"Fetching child calendars for {account.primary_smtp_address}"
+        )
         async for calendar, child_calendar in self.client.get_child_calendars(
             account=account
         ):

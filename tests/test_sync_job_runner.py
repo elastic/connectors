@@ -7,15 +7,20 @@ import asyncio
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from elasticsearch import ConflictError
+from elasticsearch import (
+    ConflictError,
+)
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
-from connectors.es.sink import ApiKeyNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
 from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
+    ApiKeyNotFoundError,
     SyncJobRunner,
     SyncJobStartError,
 )
@@ -129,10 +134,24 @@ def sync_orchestrator_mock():
         sync_orchestrator_mock.has_active_license_enabled = AsyncMock(
             return_value=(True, License.PLATINUM)
         )
-        sync_orchestrator_mock.update_authorization = AsyncMock()
         sync_orchestrator_klass_mock.return_value = sync_orchestrator_mock
 
         yield sync_orchestrator_mock
+
+
+@pytest.fixture(autouse=True)
+def es_management_client_mock():
+    with patch(
+        "connectors.sync_job_runner.ESManagementClient"
+    ) as es_management_client_klass_mock:
+        es_management_client_mock = Mock()
+        es_management_client_mock.get_connector_secret = AsyncMock(
+            return_value="my-secret"
+        )
+        es_management_client_mock.close = AsyncMock()
+        es_management_client_klass_mock.return_value = es_management_client_mock
+
+        yield es_management_client_mock
 
 
 def create_runner_yielding_docs(docs=None):
@@ -907,7 +926,7 @@ async def test_unsupported_job_type():
 )
 @pytest.mark.asyncio
 async def test_native_connector_sync_fails_when_api_key_secret_missing(
-    job_type, sync_cursor, sync_orchestrator_mock
+    job_type, sync_cursor, sync_orchestrator_mock, es_management_client_mock
 ):
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -916,8 +935,8 @@ async def test_native_connector_sync_fails_when_api_key_secret_missing(
         "total_document_count": TOTAL_DOCUMENT_COUNT,
     }
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    sync_orchestrator_mock.update_authorization = AsyncMock(
-        side_effect=ApiKeyNotFoundError()
+    es_management_client_mock.get_connector_secret.side_effect = ElasticNotFoundError(
+        message="not found", meta=None, body={}
     )
 
     sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor)
@@ -932,7 +951,7 @@ async def test_native_connector_sync_fails_when_api_key_secret_missing(
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
 
-    sync_job_runner.sync_orchestrator.async_bulk.assert_not_awaited()
+    assert sync_job_runner.sync_orchestrator is None
 
     sync_job_runner.connector.sync_starts.assert_awaited_with(job_type)
     sync_job_runner.connector.sync_done.assert_awaited_with(
