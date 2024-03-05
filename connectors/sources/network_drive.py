@@ -116,9 +116,9 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.create_connection()
+        await asyncio.to_thread(self.source.create_connection)
 
-        _, invalid_rules = self.source.find_matching_paths(advanced_rules)
+        _, invalid_rules = await self.source.find_matching_paths(advanced_rules)
 
         if len(invalid_rules) > 0:
             return SyncRuleValidationResult(
@@ -341,11 +341,18 @@ class NASDataSource(BaseDataSource):
             port=self.port,
         )
 
-    @cached_property
-    def get_directory_details(self):
-        return list(smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}"))
+    async def get_directory_details(self):
+        self._logger.debug("Fetching the directory tree from remote server")
+        paths = await asyncio.to_thread(
+            partial(
+                smbclient.walk,
+                top=rf"\\{self.server_ip}/{self.drive_path}",
+                port=self.port,
+            ),
+        )
+        return list(paths)
 
-    def find_matching_paths(self, advanced_rules):
+    async def find_matching_paths(self, advanced_rules):
         """
         Find matching paths based on advanced rules.
 
@@ -356,12 +363,16 @@ class NASDataSource(BaseDataSource):
             matched_paths (set): Set of paths that match the advanced rules.
             invalid_rules (list): List of advanced rules that have no matching paths.
         """
+        self._logger.debug(
+            "Fetching the matched directory paths using the list of advanced rules configured"
+        )
         invalid_rules = []
         matched_paths = set()
         for rule in advanced_rules:
             rule_valid = False
             glob_pattern = rule["pattern"].replace("\\", "/")
-            for path, _, _ in self.get_directory_details:
+            paths = await self.get_directory_details()
+            for path, _, _ in paths:
                 normalized_path = path.split("/", 1)[1].replace("\\", "/")
                 is_match = glob.globmatch(
                     normalized_path, glob_pattern, flags=glob.GLOBSTAR
@@ -404,6 +415,7 @@ class NASDataSource(BaseDataSource):
         Args:
             path (str): The path of a folder in the Network Drive
         """
+        self._logger.debug(f"Fetching the content of directory on path: {path}")
         files = []
         loop = asyncio.get_running_loop()
         try:
@@ -423,7 +435,7 @@ class NASDataSource(BaseDataSource):
             file_details = file._dir_info.fields
             yield {
                 "path": file.path,
-                "size": file_details["allocation_size"].get_value(),
+                "size": file_details["end_of_file"].get_value(),
                 "_id": file_details["file_id"].get_value(),
                 "created_at": iso_utc(file_details["creation_time"].get_value()),
                 "_timestamp": iso_utc(file_details["change_time"].get_value()),
@@ -437,6 +449,7 @@ class NASDataSource(BaseDataSource):
         Args:
             path (str): The file path of the file on the Network Drive
         """
+        self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
             with smbclient.open_file(
                 path=path, encoding="utf-8", errors="ignore", mode="rb"
@@ -467,7 +480,6 @@ class NASDataSource(BaseDataSource):
             doit
             and (os.path.splitext(file["title"])[-1]).lower()
             in TIKA_SUPPORTED_FILETYPES
-            and file["size"]
         ):
             return
 
@@ -694,7 +706,9 @@ class NASDataSource(BaseDataSource):
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
+            matched_paths, invalid_rules = await self.find_matching_paths(
+                advanced_rules
+            )
             if len(invalid_rules) > 0:
                 msg = f"Following advanced rules are invalid: {invalid_rules}"
                 raise InvalidRulesError(msg)
@@ -707,7 +721,8 @@ class NASDataSource(BaseDataSource):
                         yield file, partial(self.get_content, file)
 
         else:
-            matched_paths = (path for path, _, _ in self.get_directory_details)
+            paths = await self.get_directory_details()
+            matched_paths = (path for path, _, _ in paths)
             groups_info = {}
             if self.drive_type == WINDOWS and self._dls_enabled():
                 groups_info = await self.fetch_groups_info()

@@ -206,8 +206,8 @@ def test_connector_create(patch_click_confirm):
 @pytest.mark.parametrize(
     "native_flag, input_index_name, expected_index_name",
     (
-        ["--native", "test", "search-test"],
-        ["--native", "search-test", "search-search-test"],
+        ["--native", "test", "test"],
+        ["--native", "search-test", "search-test"],
         [None, "test", "test"],
         [None, "search-test", "search-test"],
     ),
@@ -651,9 +651,7 @@ def test_job_cancel():
 
     job = SyncJobObject(job_index, doc)
 
-    with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[job])
-    ):
+    with patch("connectors.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])):
         with patch.object(job, "_terminate") as mocked_method:
             result = runner.invoke(cli, ["job", "cancel", job_id])
 
@@ -667,7 +665,7 @@ def test_job_cancel_error():
     runner = CliRunner()
     job_id = "test_job_id"
     with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs",
+        "connectors.protocol.SyncJobIndex.get_all_docs",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["job", "cancel", job_id])

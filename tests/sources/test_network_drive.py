@@ -48,8 +48,8 @@ def mock_file(name):
     mock_stats = {}
     mock_stats["file_id"] = mock.Mock()
     mock_stats["file_id"].get_value.return_value = "1"
-    mock_stats["allocation_size"] = mock.Mock()
-    mock_stats["allocation_size"].get_value.return_value = "30"
+    mock_stats["end_of_file"] = mock.Mock()
+    mock_stats["end_of_file"].get_value.return_value = "30"
     mock_stats["creation_time"] = mock.Mock()
     mock_stats["creation_time"].get_value.return_value = datetime.datetime(
         2022, 1, 11, 12, 12, 30
@@ -78,8 +78,8 @@ def mock_folder(name):
     mock_stats = {}
     mock_stats["file_id"] = mock.Mock()
     mock_stats["file_id"].get_value.return_value = "122"
-    mock_stats["allocation_size"] = mock.Mock()
-    mock_stats["allocation_size"].get_value.return_value = "200"
+    mock_stats["end_of_file"] = mock.Mock()
+    mock_stats["end_of_file"].get_value.return_value = "200"
     mock_stats["creation_time"] = mock.Mock()
     mock_stats["creation_time"].get_value.return_value = datetime.datetime(
         2022, 2, 11, 12, 12, 30

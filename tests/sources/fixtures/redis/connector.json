@@ -13,6 +13,18 @@
         "type": "str",
         "value": "6379"
       },
+      "username": {
+        "label": "Username",
+        "order": 3,
+        "type": "str",
+        "value": ""
+      },
+      "password": {
+          "label": "Password",
+          "order": 4,
+          "type": "str",
+          "value": ""
+      },
       "database": {
         "display": "textarea",
         "label": "Comma-separated list of databases",
@@ -20,6 +32,41 @@
         "type": "list",
         "value": "*",
         "sensitive": true
+      },
+      "tls_enabled": {
+        "display": "toggle",
+        "label": "SSL/TLS Connection",
+        "order": 6,
+        "tooltip": "This option establishes a secure connection to the Redis using SSL/TLS encryption. Ensure that your Redis deployment supports SSL/TLS connections.",
+        "type": "bool",
+        "value": false
+      },
+      "mutual_tls_enabled": {
+          "depends_on": [{"field": "tls_enabled", "value": true}],
+          "display": "toggle",
+          "label": "Mutual SSL/TLS Connection",
+          "order": 7,
+          "tooltip": "This option establishes a secure connection to the Redis using mutual SSL/TLS encryption. Ensure that your Redis deployment supports mutual SSL/TLS connections.",
+          "type": "bool",
+          "value": false
+      },
+      "tls_certfile": {
+          "depends_on": [{"field": "mutual_tls_enabled", "value": true}],
+          "label": "client certificate file for SSL/TLS",
+          "order": 8,
+          "required": false,
+          "tooltip": "Specifies the client certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Redis instance.",
+          "type": "str",
+          "value": ""
+      },
+      "tls_keyfile": {
+          "depends_on": [{"field": "mutual_tls_enabled", "value": true}],
+          "label": "client private key file for SSL/TLS",
+          "order": 9,
+          "required": false,
+          "tooltip": "Specifies the client private key from the Certificate Authority. The value of the key is used to validate the connection in Redis instance",
+          "type": "str",
+          "value": ""
       }
     },
     "custom_scheduling": {},

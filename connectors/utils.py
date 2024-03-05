@@ -908,3 +908,7 @@ def func_human_readable_name(func):
         return func.__name__
     except AttributeError:
         return str(func)
+
+
+def alphanumericize_string(value):
+    return "".join(char for char in value if char.isalnum())
