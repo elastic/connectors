@@ -419,7 +419,9 @@ class NASDataSource(BaseDataSource):
         files = []
         loop = asyncio.get_running_loop()
         try:
-            files = await loop.run_in_executor(None, smbclient.scandir, path)
+            files = await loop.run_in_executor(
+                executor=None, func=partial(smbclient.scandir, path, port=self.port)
+            )
         except SMBConnectionClosed as exception:
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
@@ -452,7 +454,7 @@ class NASDataSource(BaseDataSource):
         self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb"
+                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
             ) as file:
                 file_content, chunk = BytesIO(), True
                 while chunk:
@@ -512,6 +514,7 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
+                port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL
