@@ -79,9 +79,15 @@ class Job:
 
     async def __async_cancel_jobs(self, connector_id, index_name, job_id):
         try:
-            jobs = await self.__async_list_jobs(connector_id, index_name, job_id)
+            await self.es_management_client.ensure_exists(
+                indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX],
+            )
+            jobs = self.sync_job_index.get_all_docs(
+                query=self.__job_list_query(connector_id, index_name, job_id),
+                sort=self.__job_list_sort(),
+            )
 
-            for job in jobs:
+            async for job in jobs:
                 await job._terminate(JobStatus.CANCELING)
 
             return True
