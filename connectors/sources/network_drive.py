@@ -415,7 +415,13 @@ class NASDataSource(BaseDataSource):
         loop = asyncio.get_running_loop()
         try:
             files = await loop.run_in_executor(
-                executor=None, func=partial(smbclient.scandir, path)
+                executor=None,
+                func=partial(
+                    smbclient.scandir,
+                    path,
+                    username=self.username,
+                    password=self.password,
+                ),
             )
         except SMBConnectionClosed as exception:
             self._logger.exception(
