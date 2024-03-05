@@ -912,3 +912,12 @@ def func_human_readable_name(func):
 
 def alphanumericize_string(value):
     return "".join(char for char in value if char.isalnum())
+
+
+class Singleton(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
