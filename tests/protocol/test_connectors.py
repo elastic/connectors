@@ -455,6 +455,21 @@ async def test_sync_starts(job_type, expected_doc_source_update):
 
 
 @pytest.mark.asyncio
+async def test_sync_starts_with_invalid_job_type():
+    doc_id = "1"
+    connector_doc = {"_id": doc_id}
+    index = Mock()
+
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    with pytest.raises(ValueError) as e:
+        await connector.sync_starts("something")
+
+    assert e is not None
+    index.update.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_connector_error():
     connector_doc = {"_id": "1"}
     error = "something wrong"
@@ -632,6 +647,24 @@ async def test_sync_done(job, expected_doc_source_update):
     index.update.assert_called_with(doc_id=connector.id, doc=expected_doc_source_update)
 
 
+@pytest.mark.asyncio
+async def test_sync_done_with_invalid_job_type():
+    connector_doc = {"_id": "1"}
+    index = Mock()
+    job = mock_job(
+        status=JobStatus.SUSPENDED,
+        job_type="hehe",
+        terminated=False,
+    )
+
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    with pytest.raises(ValueError) as e:
+        await connector.sync_done(job=job, cursor=SYNC_CURSOR)
+
+    assert e is not None
+    index.update.assert_not_called()
+
+
 mock_next_run = iso_utc()
 
 
@@ -675,6 +708,35 @@ async def test_connector_next_sync(
     connector = Connector(elastic_index=index, doc_source=connector_doc)
 
     assert connector.next_sync(job_type, datetime.utcnow()) == expected_next_sync
+
+
+async def test_connector_next_sync_with_invalid_type():
+    connector_doc = {
+        "_id": "1",
+        "_source": {
+            "scheduling": {
+                "access_control": {
+                    "enabled": True,
+                    "interval": "1 * * * * *",
+                },
+                "full": {
+                    "enabled": True,
+                    "interval": "1 * * * * *",
+                },
+                "incremental": {
+                    "enabled": True,
+                    "interval": "1 * * * * *",
+                },
+            },
+        },
+    }
+    index = Mock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    with pytest.raises(ValueError) as e:
+        _ = connector.next_sync("AbcdefG", datetime.utcnow())
+
+    assert e is not None
 
 
 @pytest.mark.asyncio
@@ -1396,6 +1458,25 @@ async def test_connector_update_last_sync_scheduled_at_by_job_type(
         if_seq_no=seq_no,
         if_primary_term=primary_term,
     )
+
+
+@pytest.mark.asyncio
+async def test_connector_update_last_sync_scheduled_at_by_job_type_with_invalid_job_type():
+    doc_id = "2"
+    new_ts = datetime.utcnow() + timedelta(seconds=30)
+    connector_doc = {
+        "_id": doc_id,
+        "_source": {},
+    }
+    index = Mock()
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+
+    with pytest.raises(ValueError) as e:
+        await connector.update_last_sync_scheduled_at_by_job_type("lalala", new_ts)
+
+    assert e is not None
+    index.update.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -2286,3 +2367,59 @@ async def test_get_connector_by_index():
     es_client.client.search.assert_awaited_once()
     assert connector.id == doc["_id"]
     assert connector.index_name == index_name
+
+
+@pytest.mark.parametrize(
+    "job_type, date_field_content",
+    [
+        (JobType.FULL, "last_sync_scheduled_at"),
+        (JobType.INCREMENTAL, "last_incremental_sync_scheduled_at"),
+        (JobType.ACCESS_CONTROL, "last_access_control_sync_scheduled_at"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_connector_last_sync_scheduled_at_by_job_type(
+    job_type, date_field_content
+):
+    connector_doc = {
+        "_id": "12345",
+        "_source": {
+            "last_sync_scheduled_at": iso_utc(
+                when=datetime.utcnow() + timedelta(seconds=30)
+            ),
+            "last_incremental_sync_scheduled_at": iso_utc(
+                datetime.utcnow() + timedelta(seconds=60)
+            ),
+            "last_access_control_sync_scheduled_at": iso_utc(
+                datetime.utcnow() + timedelta(seconds=90)
+            ),
+        },
+    }
+    connector = Connector(elastic_index=Mock(), doc_source=connector_doc)
+    last_scheduled_at = connector.last_sync_scheduled_at_by_job_type(job_type)
+
+    assert iso_utc(last_scheduled_at) == connector_doc["_source"][date_field_content]
+
+
+@pytest.mark.asyncio
+async def test_connector_last_sync_scheduled_at_by_job_type_with_invalid_type():
+    connector_doc = {
+        "_id": "12345",
+        "_source": {
+            "last_sync_scheduled_at": iso_utc(
+                when=datetime.utcnow() + timedelta(seconds=30)
+            ),
+            "last_incremental_sync_scheduled_at": iso_utc(
+                datetime.utcnow() + timedelta(seconds=60)
+            ),
+            "last_access_control_sync_scheduled_at": iso_utc(
+                datetime.utcnow() + timedelta(seconds=90)
+            ),
+        },
+    }
+    connector = Connector(elastic_index=Mock(), doc_source=connector_doc)
+
+    with pytest.raises(ValueError) as e:
+        _ = connector.last_sync_scheduled_at_by_job_type("something")
+
+    assert e is not None
