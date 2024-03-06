@@ -28,6 +28,9 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 
+# Regular expression to validate the Base URL
+URL_REGEX = "^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
+
 PING_QUERY = """
 {
   __schema {
@@ -67,7 +70,7 @@ class GraphQLClient:
         self.graphql_object_list = self.configuration["graphql_object_list"]
         self.http_method = self.configuration["http_method"]
         self.authentication_method = self.configuration["authentication_method"]
-        self.pagination_enabled = self.configuration["pagination_enabled"]
+        self.pagination_technique = self.configuration["pagination_technique"]
         self.variables = {}
         self.headers = {}
 
@@ -130,40 +133,41 @@ class GraphQLClient:
         visitor = FieldVisitor()
         visit(ast, visitor)  # pyright: ignore
 
-        for graphql_object in self.graphql_object_list:
-            if not (
-                (
+        if self.pagination_technique == "cursor_pagination":
+            for graphql_object in self.graphql_object_list:
+                self._logger.debug(f"Finding pageInfo Field in {graphql_object}.")
+                if not (
                     {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
                     and "pageInfo" in visitor.fields_dict.keys()
-                )
-                or {"offset", "limit"}.issubset(
-                    set(visitor.fields_dict.get(graphql_object, []))
-                )
-            ):
-                msg = "Pagination is Enabled. Please add fields and variables related to pagination."
-                raise ConfigurableFieldValueError(msg)
-
-            if "afterCursor" not in visitor.variables_dict.get(graphql_object, []):
-                msg = "Pagination is Enabled. Please set afterCursor variable for after argument."
-                raise ConfigurableFieldValueError(msg)
-
-        while True:
-            data = await self.make_request(graphql_query)
-            for documents in self.extract_graphql_data_items(key="data", data=data):
-                if isinstance(documents, dict) and documents.get("pageInfo"):
-                    pageInfo = documents.get("pageInfo")
-                    hasNextPage = pageInfo.get("hasNextPage")
-                    endCursor = pageInfo.get("endCursor")
-
-                    self.variables["afterCursor"] = endCursor
-                    yield documents
-
-                    if not (hasNextPage and endCursor):
-                        return
-
-                else:
-                    msg = "Pagination is Enabled. Please add pageInfo field in query."
+                ):
+                    msg = f"Pagination is enabled but pageInfo not found. Please add pageInfo field inside {graphql_object} and after argument in {graphql_object}."
                     raise ConfigurableFieldValueError(msg)
+
+                self._logger.debug(f"Finding afterCursor variable for {graphql_object}")
+                if "afterCursor" not in visitor.variables_dict.get(graphql_object, []):
+                    msg = f"Pagination is enabled but afterCursor variable is not set. Please set afterCursor variable for after argument in {graphql_object}."
+                    raise ConfigurableFieldValueError(msg)
+
+            while True:
+                self._logger.debug(
+                    f"Fetching document with variables: {self.variables} and query: {graphql_query}."
+                )
+                data = await self.make_request(graphql_query)
+                for documents in self.extract_graphql_data_items(key="data", data=data):
+                    if isinstance(documents, dict) and documents.get("pageInfo"):
+                        pageInfo = documents.get("pageInfo")
+                        hasNextPage = pageInfo.get("hasNextPage")
+                        endCursor = pageInfo.get("endCursor")
+
+                        self.variables["afterCursor"] = endCursor
+                        yield documents
+
+                        if not (hasNextPage and endCursor):
+                            return
+
+                    else:
+                        msg = "Pagination is enabled but pageInfo field is missing please add pageInfo field."
+                        raise ConfigurableFieldValueError(msg)
 
     @retryable(
         retries=RETRIES,
@@ -327,12 +331,17 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
                 "required": False,
             },
-            "pagination_enabled": {
-                "display": "toggle",
-                "label": "Enable Pagination",
+            "pagination_technique": {
+                "display": "dropdown",
+                "label": "Pagination technique",
+                "options": [
+                    {"label": "no pagination", "value": "no_pagination"},
+                    {"label": "Cursor-based pagination", "value": "cursor_pagination"},
+                ],
                 "order": 11,
-                "type": "bool",
-                "value": False,
+                "tooltip": "Cursor based pagination requires 'pageInfo' field along with argument 'after' for objects mentioned in 'GraphQL Objects List'. It also requires 'afterCursor' variable for 'after' argument.",
+                "type": "str",
+                "value": "none",
             },
             "connection_timeout": {
                 "default_value": 300,
@@ -360,8 +369,7 @@ class GraphQLDataSource(BaseDataSource):
             return False
 
     def validate_endpoints(self):
-        URL_regex = "^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
-        if re.match(URL_regex, self.graphql_client.url):
+        if re.match(URL_REGEX, self.graphql_client.url):
             return True
         return False
 
@@ -406,28 +414,28 @@ class GraphQLDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to GraphQL Instance.")
             raise
 
+    def yield_dict(self, documents):
+        if isinstance(documents, dict):
+            yield documents
+        elif isinstance(documents, list):
+            for document in documents:
+                if isinstance(document, dict):
+                    yield document
+
     async def fetch_data(self, graphql_query):
-        if self.graphql_client.pagination_enabled:
-            async for data in self.graphql_client.paginated_call(
-                graphql_query=graphql_query
-            ):
-                if isinstance(data, dict):
-                    yield data
-                elif isinstance(data, list):
-                    for document in data:  # pyright: ignore
-                        if isinstance(document, dict):
-                            yield document
-        else:
+        if self.graphql_client.pagination_technique == "no_pagination":
             data = await self.graphql_client.make_request(graphql_query=graphql_query)
             for documents in self.graphql_client.extract_graphql_data_items(
                 key="data", data=data
             ):
-                if isinstance(documents, dict):
-                    yield documents
-                elif isinstance(documents, list):
-                    for document in documents:
-                        if isinstance(document, dict):
-                            yield document
+                for document in self.yield_dict(documents):
+                    yield document
+        else:
+            async for data in self.graphql_client.paginated_call(
+                graphql_query=graphql_query
+            ):
+                for document in self.yield_dict(data):
+                    yield document
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GraphQL response in async manner.

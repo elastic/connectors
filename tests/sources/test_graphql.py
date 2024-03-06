@@ -234,11 +234,12 @@ async def test_fetch_data():
     expected_respones = [{"name": {"firstName": "xyz"}}]
     actual_response = []
     async with create_graphql_source() as source:
+        source.graphql_client.pagination_technique = "no_pagination"
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
             return_value={"users": [{"name": {"firstName": "xyz"}}]}
         )
-        async for doc in source.fetch_data("{users {name}}}"):
+        async for doc in source.fetch_data("{users {name}}"):
             actual_response.append(doc)
     assert actual_response == expected_respones
 
@@ -257,7 +258,7 @@ async def test_fetch_data_with_pagination():
     ]
     actual_response = []
     async with create_graphql_source() as source:
-        source.graphql_client.pagination_enabled = True
+        source.graphql_client.pagination_technique = "cursor_pagination"
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
             side_effect=[
@@ -285,7 +286,7 @@ async def test_fetch_data_with_pagination():
 @pytest.mark.asyncio
 async def test_fetch_data_without_pageinfo():
     async with create_graphql_source() as source:
-        source.graphql_client.pagination_enabled = True
+        source.graphql_client.pagination_technique = "cursor_pagination"
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
             side_effect=[{"users": {"name": {"firstName": "xyz"}}}]

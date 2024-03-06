@@ -93,6 +93,7 @@ def _default_config():
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
+            "box": "connectors.sources.box:BoxDataSource",
             "confluence": "connectors.sources.confluence:ConfluenceDataSource",
             "dir": "connectors.sources.directory:DirectoryDataSource",
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
@@ -100,7 +101,9 @@ def _default_config():
             "gmail": "connectors.sources.gmail:GMailDataSource",
             "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
             "google_drive": "connectors.sources.google_drive:GoogleDriveDataSource",
+            "graphql": "connectors.sources.graphql:GraphQLDataSource",
             "jira": "connectors.sources.jira:JiraDataSource",
+            "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "mongodb": "connectors.sources.mongo:MongoDataSource",
             "mssql": "connectors.sources.mssql:MSSQLDataSource",
             "mysql": "connectors.sources.mysql:MySqlDataSource",
@@ -115,10 +118,7 @@ def _default_config():
             "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
             "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
             "slack": "connectors.sources.slack:SlackDataSource",
-            "microsoft_teams": "connectors.sources.microsoft_teams:MicrosoftTeamsDataSource",
             "zoom": "connectors.sources.zoom:ZoomDataSource",
-            "box": "connectors.sources.box:BoxDataSource",
-            "graphql": "connectors.sources.graphql:GraphQLDataSource",
         },
     }
 
