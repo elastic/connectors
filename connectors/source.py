@@ -385,7 +385,7 @@ class BaseDataSource:
     advanced_rules_enabled = False
     dls_enabled = False
     incremental_sync_enabled = False
-    native_connector_api_keys_enabled = True
+    native_connector_api_keys_enabled = False
 
     def __init__(self, configuration):
         # Initialize to the global logger
