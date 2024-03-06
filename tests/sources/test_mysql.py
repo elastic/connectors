@@ -827,7 +827,7 @@ async def test_validate_database_accessible_when_accessible_then_no_error_raised
         cursor.execute.return_value = None
 
         await source._validate_database_accessible(cursor)
-        cursor.execute.assert_called_with(f"USE {source.database};")
+        cursor.execute.assert_called_with(f"USE `{source.database}`;")
 
 
 @pytest.mark.asyncio
