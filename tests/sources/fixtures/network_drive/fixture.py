@@ -26,10 +26,13 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 match DATA_SIZE:
     case "small":
         FILE_COUNT = 1000
+        FOLDER_COUNT = 10
     case "medium":
         FILE_COUNT = 5000
+        FOLDER_COUNT = 50
     case "large":
         FILE_COUNT = 25000
+        FOLDER_COUNT = 250
 
 
 def generate_folder():
@@ -38,7 +41,8 @@ def generate_folder():
         print("Started loading folder on network drive server....")
 
         smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
-        smbclient.mkdir(rf"\\{SERVER}/Folder1/Large-Data-Folder")
+        for i in range(FOLDER_COUNT):
+            smbclient.mkdir(rf"\\{SERVER}/Folder1/Data-Folder-{i}")
 
         print("Loaded Large-Data-Folder folder on network drive server....")
     except Exception as error:
@@ -54,12 +58,13 @@ def generate_files():
 
         print("Started loading files on network drive server....")
 
-        for number in range(FILE_COUNT):
-            with smbclient.open_file(
-                rf"\\{SERVER}/Folder1/file{number}.html",
-                mode="w",
-            ) as fd:
-                fd.write(fake_provider.get_html())
+        for number in range(FILE_COUNT//FOLDER_COUNT):
+            for i in range(FOLDER_COUNT):
+                with smbclient.open_file(
+                    rf"\\{SERVER}/Folder1/Data-Folder-{i}/file{number}.html",
+                    mode="w",
+                ) as fd:
+                    fd.write(fake_provider.get_html())
 
         print(f"Loaded {FILE_COUNT} files on network drive server....")
     except Exception as error:
@@ -82,8 +87,8 @@ async def remove():
         print("Started deleting files from network drive server....")
 
         for number in range(0, NUMBER_OF_FILES_TO_BE_DELETED):
-            smbclient.remove(rf"\\{SERVER}/Folder1/file{number}.html")
-            smbclient.remove(rf"\\{SERVER}/Folder1/.deleted/file{number}.html")
+            smbclient.remove(rf"\\{SERVER}/Folder1/Data-Folder-0/file{number}.html")
+            smbclient.remove(rf"\\{SERVER}/Folder1/.deleted/Data-Folder-0/file{number}.html")
 
         print(
             f"Deleted {NUMBER_OF_FILES_TO_BE_DELETED} files from network drive server...."
