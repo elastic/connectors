@@ -406,7 +406,7 @@ class NASDataSource(BaseDataSource):
         await loop.run_in_executor(
             executor=None, func=self.smb_connection.create_connection
         )
-        self.close()
+        await self.close()
         self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
