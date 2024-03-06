@@ -220,6 +220,11 @@ def interactive_service_type_prompt():
     default="config.yml",
     help="Path to the connector service config file. Used in combination with --update-config flag.",
 )
+@click.option(
+    "--name",
+    prompt=f"{click.style('?', fg='green')} Connector name",
+    help="Connector name",
+)
 @click.pass_obj
 def create(
     obj,
@@ -231,6 +236,7 @@ def create(
     from_file,
     update_config,
     connector_service_config,
+    name,
 ):
     connector_configuration = {}
     if from_file:
@@ -308,6 +314,7 @@ def create(
         service_type,
         configuration,
         is_native,
+        name=name,
         language=index_language,
         from_index=from_index,
     )

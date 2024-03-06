@@ -365,6 +365,7 @@ def test_connector_create_from_file():
         [
             "test-connector",
             "en",
+            "test-connector-name",
         ]
     )
 
