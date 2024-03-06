@@ -43,7 +43,6 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
-    Singleton,
     get_base64_value,
     iso_utc,
     retryable,
@@ -233,7 +232,7 @@ class SecurityInfo:
         return self.parse_output(members)
 
 
-class SMBSession(metaclass=Singleton):
+class SMBSession:
     _connection = None
 
     def __init__(self, server_ip, username, password, port):
@@ -403,12 +402,11 @@ class NASDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with Network Drive"""
 
-        if self.smb_connection.session is not None:
-            return
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             executor=None, func=self.smb_connection.create_connection
         )
+        self.close()
         self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
