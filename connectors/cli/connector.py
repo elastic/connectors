@@ -54,6 +54,7 @@ class Connector:
         service_type,
         configuration,
         is_native,
+        name,
         language=DEFAULT_LANGUAGE,
         from_index=False,
     ):
@@ -63,6 +64,7 @@ class Connector:
                 service_type,
                 configuration,
                 is_native,
+                name,
                 language,
                 from_index,
             )
@@ -74,12 +76,19 @@ class Connector:
         service_type,
         configuration,
         is_native,
+        name,
         language=DEFAULT_LANGUAGE,
         from_index=False,
     ):
         try:
             return await self.__create_connector(
-                index_name, service_type, configuration, is_native, language, from_index
+                index_name,
+                service_type,
+                configuration,
+                is_native,
+                name,
+                language,
+                from_index,
             )
         except Exception as e:
             raise e
@@ -87,7 +96,14 @@ class Connector:
             await self.es_management_client.close()
 
     async def __create_connector(
-        self, index_name, service_type, configuration, is_native, language, from_index
+        self,
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        name,
+        language,
+        from_index,
     ):
         try:
             await self.es_management_client.ensure_exists(
@@ -121,6 +137,7 @@ class Connector:
                 "api_key_id": api_key_id,
                 "configuration": configuration,
                 "index_name": index_name,
+                "name": name,
                 "service_type": service_type,
                 "status": "configured",  # TODO use a predefined constant
                 "is_native": is_native,
