@@ -4,8 +4,10 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import json
+import os
 from enum import Enum
 from functools import cached_property
+from tempfile import NamedTemporaryFile
 
 import fastjsonschema
 import redis.asyncio as redis
@@ -16,7 +18,7 @@ from connectors.filtering.validation import (
 )
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
-from connectors.utils import hash_id, iso_utc
+from connectors.utils import get_pem_format, hash_id, iso_utc
 
 PAGE_SIZE = 1000
 
@@ -41,27 +43,70 @@ class RedisClient:
         self.database = self.configuration["database"]
         self.username = self.configuration["username"]
         self.password = self.configuration["password"]
+        self.ssl_enabled = self.configuration["ssl_enabled"]
+        self.mutual_tls_enabled = self.configuration["mutual_tls_enabled"]
+        self.tls_certfile = self.configuration["tls_certfile"]
+        self.tls_keyfile = self.configuration["tls_keyfile"]
         self._redis_client = None
+        self.cert_file = ""
+        self.key_file = ""
 
     def set_logger(self, logger_):
         self._logger = logger_
 
+    def store_ssl_key(self, key, suffix):
+        if suffix == ".key":
+            pem_certificates = get_pem_format(
+                key=key, postfix="-----END RSA PRIVATE KEY-----"
+            )
+        else:
+            pem_certificates = get_pem_format(key=key)
+        with NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as cert:
+            cert.write(pem_certificates)
+            return cert.name
+
+    def remove_temp_files(self):
+        for file_path in [self.cert_file, self.key_file]:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as exception:
+                    self._logger.warning(
+                        f"Something went wrong while removing temporary certificate file: {file_path}. Exception: {exception}",
+                        exc_info=True,
+                    )
+
     @cached_property
     def _client(self):
-        self._redis_client = redis.from_url(
-            f"redis://{self.username}:{self.password}@{self.host}:{self.port}",
-            decode_responses=True,
-        )
+        if self.ssl_enabled and self.mutual_tls_enabled:
+            self.cert_file = self.store_ssl_key(key=self.tls_certfile, suffix=".crt")
+            self.key_file = self.store_ssl_key(key=self.tls_keyfile, suffix=".key")
+            query = f"ssl_certfile={self.cert_file}&ssl_keyfile={self.key_file}"
+            self._redis_client = redis.from_url(
+                f"rediss://{self.username}:{self.password}@{self.host}:{self.port}?{query}",
+                decode_responses=True,
+            )
+        elif self.ssl_enabled:
+            self._redis_client = redis.from_url(
+                f"rediss://{self.username}:{self.password}@{self.host}:{self.port}",
+                decode_responses=True,
+            )
+
+        else:
+            self._redis_client = redis.from_url(
+                f"redis://{self.username}:{self.password}@{self.host}:{self.port}",
+                decode_responses=True,
+            )
         return self._redis_client
 
     async def close(self):
         if self._redis_client:
             await self._client.aclose()  # pyright: ignore
+        self.remove_temp_files()
 
     async def validate_database(self, db):
         try:
             await self._client.execute_command("SELECT", db)
-            await self._client.ping()
             return True
         except Exception as exception:
             self._logger.warning(f"Database {db} not found. Error: {exception}")
@@ -248,6 +293,39 @@ class RedisDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "Databases are ignored when Advanced Sync Rules are used.",
                 "type": "list",
+            },
+            "ssl_enabled": {
+                "display": "toggle",
+                "label": "SSL/TLS Connection",
+                "order": 6,
+                "tooltip": "This option establishes a secure connection to Redis using SSL/TLS encryption. Ensure that your Redis deployment supports SSL/TLS connections.",
+                "type": "bool",
+                "value": False,
+            },
+            "mutual_tls_enabled": {
+                "depends_on": [{"field": "ssl_enabled", "value": True}],
+                "display": "toggle",
+                "label": "Mutual SSL/TLS Connection",
+                "order": 7,
+                "tooltip": "This option establishes a secure connection to Redis using mutual SSL/TLS encryption. Ensure that your Redis deployment supports mutual SSL/TLS connections.",
+                "type": "bool",
+                "value": False,
+            },
+            "tls_certfile": {
+                "depends_on": [{"field": "mutual_tls_enabled", "value": True}],
+                "label": "client certificate file for SSL/TLS",
+                "order": 8,
+                "required": False,
+                "tooltip": "Specifies the client certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Redis instance.",
+                "type": "str",
+            },
+            "tls_keyfile": {
+                "depends_on": [{"field": "mutual_tls_enabled", "value": True}],
+                "label": "client private key file for SSL/TLS",
+                "order": 9,
+                "required": False,
+                "tooltip": "Specifies the client private key from the Certificate Authority. The value of the key is used to validate the connection in the Redis instance.",
+                "type": "str",
             },
         }
 
