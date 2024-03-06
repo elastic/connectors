@@ -466,7 +466,6 @@ async def test_close_without_session():
     assert not hasattr(source.smb_connection.__dict__, "session")
 
 
-
 @pytest.mark.parametrize(
     "advanced_rules, expected_validation_result",
     [

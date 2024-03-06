@@ -58,7 +58,7 @@ def generate_files():
 
         print("Started loading files on network drive server....")
 
-        for number in range(FILE_COUNT//FOLDER_COUNT):
+        for number in range(FILE_COUNT // FOLDER_COUNT):
             for i in range(FOLDER_COUNT):
                 with smbclient.open_file(
                     rf"\\{SERVER}/Folder1/Data-Folder-{i}/file{number}.html",
@@ -88,7 +88,9 @@ async def remove():
 
         for number in range(0, NUMBER_OF_FILES_TO_BE_DELETED):
             smbclient.remove(rf"\\{SERVER}/Folder1/Data-Folder-0/file{number}.html")
-            smbclient.remove(rf"\\{SERVER}/Folder1/.deleted/Data-Folder-0/file{number}.html")
+            smbclient.remove(
+                rf"\\{SERVER}/Folder1/.deleted/Data-Folder-0/file{number}.html"
+            )
 
         print(
             f"Deleted {NUMBER_OF_FILES_TO_BE_DELETED} files from network drive server...."
