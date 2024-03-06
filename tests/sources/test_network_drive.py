@@ -151,6 +151,7 @@ async def test_ping_for_failed_connection(session_mock):
     session_mock.side_effect = ValueError
     async with create_source(NASDataSource) as source:
         # Execute
+        source.smb_connection.session = None
         with pytest.raises(Exception):
             await source.ping()
 
@@ -462,7 +463,8 @@ async def test_close_without_session():
     async with create_source(NASDataSource) as source:
         await source.close()
 
-    assert source.smb_connection.session is None
+    assert not hasattr(source.smb_connection.__dict__, "session")
+
 
 
 @pytest.mark.parametrize(

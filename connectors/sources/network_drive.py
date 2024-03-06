@@ -117,7 +117,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        await asyncio.to_thread(self.source.smb_connection.create_connection())
+        await asyncio.to_thread(self.source.smb_connection.create_connection)
 
         _, invalid_rules = await self.source.find_matching_paths(advanced_rules)
 
