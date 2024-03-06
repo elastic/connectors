@@ -117,9 +117,9 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.smb_connection.create_connection()
+        await asyncio.to_thread(self.source.smb_connection.create_connection())
 
-        _, invalid_rules = self.source.find_matching_paths(advanced_rules)
+        _, invalid_rules = await self.source.find_matching_paths(advanced_rules)
 
         if len(invalid_rules) > 0:
             return SyncRuleValidationResult(
@@ -356,14 +356,18 @@ class NASDataSource(BaseDataSource):
             },
         }
 
-    @cached_property
-    def get_directory_details(self):
+    async def get_directory_details(self):
         self._logger.debug("Fetching the directory tree from remote server")
-        return list(
-            smbclient.walk(top=rf"\\{self.server_ip}/{self.drive_path}", port=self.port)
+        paths = await asyncio.to_thread(
+            partial(
+                smbclient.walk,
+                top=rf"\\{self.server_ip}/{self.drive_path}",
+                port=self.port,
+            ),
         )
+        return list(paths)
 
-    def find_matching_paths(self, advanced_rules):
+    async def find_matching_paths(self, advanced_rules):
         """
         Find matching paths based on advanced rules.
 
@@ -382,7 +386,8 @@ class NASDataSource(BaseDataSource):
         for rule in advanced_rules:
             rule_valid = False
             glob_pattern = rule["pattern"].replace("\\", "/")
-            for path, _, _ in self.get_directory_details:
+            paths = await self.get_directory_details()
+            for path, _, _ in paths:
                 normalized_path = path.split("/", 1)[1].replace("\\", "/")
                 is_match = glob.globmatch(
                     normalized_path, glob_pattern, flags=glob.GLOBSTAR
@@ -478,7 +483,7 @@ class NASDataSource(BaseDataSource):
         self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb"
+                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
             ) as file:
                 file_content, chunk = BytesIO(), True
                 while chunk:
@@ -538,6 +543,7 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
+                port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL
@@ -735,7 +741,9 @@ class NASDataSource(BaseDataSource):
         )
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            matched_paths, invalid_rules = self.find_matching_paths(advanced_rules)
+            matched_paths, invalid_rules = await self.find_matching_paths(
+                advanced_rules
+            )
             if len(invalid_rules) > 0:
                 msg = f"Following advanced rules are invalid: {invalid_rules}"
                 raise InvalidRulesError(msg)
@@ -748,7 +756,8 @@ class NASDataSource(BaseDataSource):
                         yield file, partial(self.get_content, file)
 
         else:
-            matched_paths = (path for path, _, _ in self.get_directory_details)
+            paths = await self.get_directory_details()
+            matched_paths = (path for path, _, _ in paths)
             groups_info = {}
             if self.drive_type == WINDOWS and self._dls_enabled():
                 groups_info = await self.fetch_groups_info()
