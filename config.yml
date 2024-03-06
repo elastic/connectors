@@ -26,6 +26,16 @@
 ##    (Deprecated. Configure the connector client in an object in the `connectors` list)
 #service_type: null
 #
+##------------------------------------------------------------------------------
+connectors:
+-
+  connector_id: "I2ouFY4BZYQ5XxMt_A8q"
+  service_type: "google_drive"
+elasticsearch:
+  host: "http://localhost:9200"
+  api_key: ""
+##------------------------------------------------------------------------------
+#
 #
 ## ------------------------------- Elasticsearch -------------------------------
 #
