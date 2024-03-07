@@ -89,16 +89,6 @@ def prefix_account_locale(locale):
     return prefix_identity("locale", locale)
 
 
-def prefix_user(user):
-    if not user:
-        return
-    return prefix_identity("user", user)
-
-
-def prefix_group(group):
-    return prefix_identity("group", group)
-
-
 class AtlassianAccessControl:
     def __init__(self, source, client):
         self.source = source
