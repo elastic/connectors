@@ -98,6 +98,7 @@ if [[ $PERF8 == "yes" ]]; then
     set +e
     PERF8_PID=`ps aux | grep bin/perf8 | grep -v grep | awk '{print $2}'`
     if [ ! -z "$PERF8_PID" ] # if the process is already gone, move on
+    then
       echo 'Waiting for PERF8 to finish the report'
       while kill -0 "$PERF8_PID"; do
           sleep 0.5
