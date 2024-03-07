@@ -352,6 +352,7 @@ async def test_connector_properties():
     assert connector.configuration.is_empty()
     assert connector.native is False
     assert connector.index_name == "search-some-index"
+    assert connector.acl_index_name == ".search-acl-filter-search-some-index"
     assert connector.language == "en"
     assert connector.last_sync_status == JobStatus.COMPLETED
     assert connector.last_access_control_sync_status == JobStatus.PENDING
