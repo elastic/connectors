@@ -132,17 +132,6 @@ class AtlassianAccessControl:
                 else:
                     start_at += CLOUD_USER_BATCH
 
-    async def fetch_confluence_server_users(self, url):
-        start_at = 0
-        while True:
-            url_ = url.format(start_at=start_at, max_results=NON_CLOUD_USER_BATCH)
-            async for users in self.client.api_call(url=url_):
-                response = await users.json()
-                if len(response.get("users")) == 0:
-                    return
-                yield response.get("users")
-                start_at += NON_CLOUD_USER_BATCH
-
     async def fetch_user(self, url):
         async for user in self.client.api_call(url=url):
             yield await user.json()

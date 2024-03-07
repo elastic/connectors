@@ -1010,6 +1010,52 @@ async def test_get_access_control_dls_enabled():
 async def test_get_access_control_dls_enabled_for_datacenter():
     mock_users = [
         {
+            "username": "user1",
+            "displayName": "user1",
+            "userKey": "607194d6bc3c3f006f4c35d6",
+        },
+    ]
+
+    expected_user_doc = {
+        "_id": "607194d6bc3c3f006f4c35d6",
+        "identity": {
+            "account_id": "account_id:607194d6bc3c3f006f4c35d6",
+            "display_name": "name:user1",
+            "username": "name:user1",
+        },
+        "created_at": "2023-01-24T04:07:19+00:00",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "account_id:607194d6bc3c3f006f4c35d6",
+                        "name:user1",
+                        "name:user1",
+                    ]
+                },
+                "source": DLS_QUERY,
+            },
+        },
+    }
+
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.confluence_client.data_source_type = "confluence_data_center"
+
+        source.fetch_confluence_server_users = AsyncIterator([mock_users])
+
+        user_documents = []
+        async for user_doc in source.get_access_control():
+            user_documents.append(user_doc)
+
+        assert expected_user_doc in user_documents
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19")
+async def test_get_access_control_dls_enabled_for_server():
+    mock_users = [
+        {
             "fullName": "user1",
             "name": "user1",
             "key": "607194d6bc3c3f006f4c35d6",
@@ -1042,15 +1088,23 @@ async def test_get_access_control_dls_enabled_for_datacenter():
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
 
-        source.atlassian_access_control.fetch_confluence_server_users = AsyncIterator(
-            [mock_users]
-        )
+        source.fetch_confluence_server_users = AsyncIterator([mock_users])
 
         user_documents = []
         async for user_doc in source.get_access_control():
             user_documents.append(user_doc)
 
         assert expected_user_doc in user_documents
+
+
+@pytest.mark.asyncio
+async def test_fetch_confluence_server_users():
+    async with create_confluence_source() as source:
+        source.confluence_client.api_call = AsyncIterator(
+            [JSONAsyncMock({"start": 0, "users": []})]
+        )
+        async for user in source.fetch_confluence_server_users():
+            assert user is None
 
 
 @pytest.mark.asyncio

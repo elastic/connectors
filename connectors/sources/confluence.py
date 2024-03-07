@@ -12,7 +12,7 @@ from functools import partial
 from urllib.parse import urljoin
 
 import aiohttp
-from aiohttp.client_exceptions import ServerDisconnectedError
+from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
@@ -46,6 +46,7 @@ DOWNLOAD = "download"
 SEARCH = "search"
 USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
+USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
 CONTENT_QUERY = "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
@@ -59,13 +60,16 @@ URLS = {
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
     USER: "rest/api/3/users/search",
-    USERS_FOR_DATA_CENTER: "rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt={start_at}&maxResults={max_results}",
+    USERS_FOR_DATA_CENTER: "rest/api/user/list?limit={limit}&start={start}",
+    USERS_FOR_SERVER: "rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt={start}&maxResults={limit}",
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
 MAX_CONCURRENCY = 50
 QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
+SERVER_USER_BATCH = 1000
+DATACENTER_USER_BATCH = 200
 END_SIGNAL = "FINISHED_TASK"
 
 CONFLUENCE_CLOUD = "confluence_cloud"
@@ -439,13 +443,86 @@ class ConfluenceDataSource(BaseDataSource):
             access_control=access_control
         )
 
+    async def user_access_control_data_center(self, user):
+        """Generate a user access control document for confluence data enter.
+
+        This method generates a user access control document based on the provided user information.
+        The document includes the user's account ID, prefixed account ID, and prefixed account name
+        The access control list is then constructed using these values.
+
+        Args:
+            user (dict): A dictionary containing user information, such as account ID, display name and email.
+
+        Returns:
+            dict: A user access control document with the following structure:
+                {
+                    "_id": <account_id>,
+                    "identity": {
+                        "account_id": <prefixed_account_id>,
+                        "username": <prefixed_account_name>,
+                        "display_name: <prefixed_display_name>
+                    },
+                    "created_at": <iso_utc_timestamp>,
+                    ACCESS_CONTROL: [<prefixed_account_id>, <prefixed_account_name>, <prefixed_display_name>]
+                }
+        """
+        account_id = user.get("userKey")
+        account_name = user.get("username")
+        display_name = user.get("displayName")
+
+        prefixed_account_id = prefix_account_id(account_id=account_id)
+        prefixed_account_name = prefix_account_name(account_name=account_name)
+        prefixed_display_name = prefix_account_name(account_name=display_name)
+
+        access_control = [
+            prefixed_account_id,
+            prefixed_account_name,
+            prefixed_display_name,
+        ]
+
+        return {
+            "_id": account_id,
+            "identity": {
+                "account_id": prefixed_account_id,
+                "username": prefixed_account_name,
+                "display_name": prefixed_display_name,
+            },
+            "created_at": iso_utc(),
+        } | self.atlassian_access_control.access_control_query(
+            access_control=access_control
+        )
+
+    async def fetch_confluence_server_users(self):
+        start_at = 0
+        if self.confluence_client.data_source_type == CONFLUENCE_DATA_CENTER:
+            limit = DATACENTER_USER_BATCH
+            key = "results"
+            url = urljoin(
+                self.configuration["confluence_url"], URLS[USERS_FOR_DATA_CENTER]
+            )
+        else:
+            limit = SERVER_USER_BATCH
+            key = "users"
+            url = urljoin(self.configuration["confluence_url"], URLS[USERS_FOR_SERVER])
+
+        while True:
+            url_ = url.format(start=start_at, limit=limit)
+            async for users in self.confluence_client.api_call(url=url_):
+                response = await users.json()
+                if len(response.get(key)) == 0:
+                    return
+                yield response.get(key)
+                start_at += limit
+
     async def get_user_for_server(self):
-        url = urljoin(self.configuration["confluence_url"], URLS[USERS_FOR_DATA_CENTER])
-        async for users in self.atlassian_access_control.fetch_confluence_server_users(
-            url=url
-        ):
+        async for users in self.fetch_confluence_server_users():
             for user_info in users:
-                yield await self.user_access_control_confluence_server(user=user_info)
+                if self.confluence_client.data_source_type == CONFLUENCE_DATA_CENTER:
+                    yield await self.user_access_control_data_center(user=user_info)
+                else:
+                    yield await self.user_access_control_confluence_server(
+                        user=user_info
+                    )
 
     async def get_user(self):
         url = os.path.join(self.configuration["confluence_url"], URLS[USER])
@@ -637,11 +714,17 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
-        async for permissions in self.confluence_client.api_call(
-            url=os.path.join(self.confluence_client.host_url, url),
-        ):
-            permission = await permissions.json()
-            return permission
+        try:
+            async for permissions in self.confluence_client.api_call(
+                url=os.path.join(self.confluence_client.host_url, url),
+            ):
+                permission = await permissions.json()
+                return permission
+        except ClientResponseError as exception:
+            self._logger.warning(
+                f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
+            )
+            return {}
 
     async def fetch_documents(self, api_query):
         """Get pages and blog posts with the help of REST APIs
