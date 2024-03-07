@@ -123,6 +123,16 @@ EXPECTED_RESPONSE = [
         "content": "This is a dummy calendar",
     },
     {
+        "_id": "contact_1",
+        "type": "Contact",
+        "_timestamp": "2023-12-12T01:01:01Z",
+        "name": "Dummy User",
+        "email_addresses": ["dummy.user@gmail.com"],
+        "contact_numbers": [99887776655],
+        "company_name": "ABC",
+        "birthday": "2023-12-12T01:01:01Z",
+    },
+    {
         "_id": "attachment_id_1",
         "title": "sync.txt",
         "type": "Mail Attachment",
@@ -219,7 +229,7 @@ class ContactDocument:
         self.email_addresses = [contact]
         self.phone_numbers = [contact]
         self.company_name = "ABC"
-        self.birth_day = "2023-12-12T01:01:01Z"
+        self.birthday = "2023-12-12T01:01:01Z"
 
 
 class CalendarDocument:

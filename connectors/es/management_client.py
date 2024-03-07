@@ -14,11 +14,6 @@ from elasticsearch.helpers import async_scan
 from connectors.es.client import ESClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings, Settings
 from connectors.logger import logger
-from connectors.protocol import (
-    CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
-    CONNECTORS_INDEX,
-)
-from connectors.utils import alphanumericize_string
 
 
 class ESManagementClient(ESClient):
@@ -198,49 +193,3 @@ class ESManagementClient(ESClient):
             )
         )
         return secret.get("value")
-
-    async def create_connector_secret(self, secret_value):
-        secret = await self._retrier.execute_with_retry(
-            partial(
-                self.client.perform_request,
-                "POST",
-                "/_connector/_secret",
-                headers={
-                    "accept": "application/json",
-                    "content-type": "application/json",
-                },
-                body={"value": secret_value},
-            )
-        )
-        return secret.get("id")
-
-    async def generate_and_store_api_key(self, index_name):
-        """
-        Generates an API key for the chosen index and stores it in secrets storage.
-
-        This function should only be called for native connectors
-        """
-        role_descriptors = {
-            f"{alphanumericize_string(index_name)}-connector-role": {
-                "cluster": ["monitor"],
-                "index": [
-                    {
-                        "names": [
-                            index_name,
-                            f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{index_name}",
-                            f"{CONNECTORS_INDEX}*",
-                        ],
-                        "privileges": ["all"],
-                    }
-                ],
-            }
-        }
-        api_key_result = await self._retrier.execute_with_retry(
-            partial(
-                self.client.security.create_api_key,
-                name=f"{index_name}-connector",
-                role_descriptors=role_descriptors,
-            )
-        )
-        secret_id = await self.create_connector_secret(api_key_result["encoded"])
-        return {"api_key_id": api_key_result["id"], "api_key_secret_id": secret_id}
