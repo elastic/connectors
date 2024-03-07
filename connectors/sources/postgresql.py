@@ -38,6 +38,8 @@ from connectors.utils import (
     retryable,
 )
 
+FETCH_LIMIT = 1000
+
 
 class PostgreSQLQueries(Queries):
     """Class contains methods which return query"""
@@ -60,7 +62,7 @@ class PostgreSQLQueries(Queries):
 
     def table_data(self, **kwargs):
         """Query to get the table data"""
-        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
 
     def table_last_update_time(self, **kwargs):
         """Query to get the last update time of the table"""
@@ -282,7 +284,9 @@ class PostgreSQLClient:
         )
         return last_update_time
 
-    async def data_streamer(self, table=None, query=None):
+    async def data_streamer(
+        self, table=None, query=None, row_count=None, order_by_columns=None
+    ):
         """Streaming data from a table
 
         Args:
@@ -295,21 +299,50 @@ class PostgreSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
-        async for data in fetch(
-            cursor_func=partial(
-                self.get_cursor,
-                self.queries.table_data(
-                    schema=self.schema,
-                    table=table,
-                )
-                if query is None
-                else query,
-            ),
-            fetch_columns=True,
-            fetch_size=self.fetch_size,
-            retry_count=self.retry_count,
-        ):
-            yield data
+        if query is None and row_count is not None and order_by_columns is not None:
+            order_by_columns_list = ",".join(order_by_columns)
+            offset = 0
+            fetch_columns = True
+            while True:
+                async for data in fetch(
+                    cursor_func=partial(
+                        self.get_cursor,
+                        self.queries.table_data(
+                            schema=self.schema,
+                            table=table,
+                            columns=order_by_columns_list,
+                            limit=FETCH_LIMIT,
+                            offset=offset,
+                        )
+                        if query is None
+                        else query,
+                    ),
+                    fetch_columns=fetch_columns,
+                    fetch_size=self.fetch_size,
+                    retry_count=self.retry_count,
+                ):
+                    yield data
+                fetch_columns = False
+                offset += FETCH_LIMIT
+
+                if row_count <= offset:
+                    return
+        else:
+            async for data in fetch(
+                cursor_func=partial(
+                    self.get_cursor,
+                    self.queries.table_data(
+                        schema=self.schema,
+                        table=table,
+                    )
+                    if query is None
+                    else query,
+                ),
+                fetch_columns=True,
+                fetch_size=self.fetch_size,
+                retry_count=self.retry_count,
+            ):
+                yield data
 
     def _get_connect_args(self):
         """Convert string to pem format and create an SSL context
@@ -469,8 +502,11 @@ class PostgreSQLDataSource(BaseDataSource):
                 await self.postgresql_client.get_table_primary_key(table)
             )
         primary_key_columns = sorted(primary_key_columns)
-        return map_column_names(
-            column_names=primary_key_columns, schema=self.schema, tables=tables
+        return (
+            map_column_names(
+                column_names=primary_key_columns, schema=self.schema, tables=tables
+            ),
+            primary_key_columns,
         )
 
     async def fetch_documents_from_table(self, table):
@@ -511,7 +547,7 @@ class PostgreSQLDataSource(BaseDataSource):
             )
 
     async def _yield_docs_custom_query(self, tables, query):
-        primary_key_columns = await self.get_primary_key(tables=tables)
+        primary_key_columns, _ = await self.get_primary_key(tables=tables)
         if not primary_key_columns:
             self._logger.warning(
                 f"Skipping tables {', '.join(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
@@ -546,7 +582,7 @@ class PostgreSQLDataSource(BaseDataSource):
         row_count = await self.postgresql_client.get_table_row_count(table=table)
         if row_count > 0:
             # Query to get the table's primary key
-            keys = await self.get_primary_key(tables=[table])
+            keys, order_by_columns = await self.get_primary_key(tables=[table])
             if keys:
                 try:
                     last_update_time = (
@@ -560,7 +596,10 @@ class PostgreSQLDataSource(BaseDataSource):
                     )
                     last_update_time = None
                 async for row in self.yield_rows_for_query(
-                    primary_key_columns=keys, tables=[table]
+                    primary_key_columns=keys,
+                    tables=[table],
+                    row_count=row_count,
+                    order_by_columns=order_by_columns,
                 ):
                     doc_id = (
                         f"{self.database}_{self.schema}_{hash_id([table], row, keys)}"
@@ -580,9 +619,18 @@ class PostgreSQLDataSource(BaseDataSource):
         else:
             self._logger.warning(f"No rows found for {table}.")
 
-    async def yield_rows_for_query(self, primary_key_columns, tables, query=None):
+    async def yield_rows_for_query(
+        self,
+        primary_key_columns,
+        tables,
+        query=None,
+        row_count=None,
+        order_by_columns=None,
+    ):
         if query is None:
-            streamer = self.postgresql_client.data_streamer(table=tables[0])
+            streamer = self.postgresql_client.data_streamer(
+                table=tables[0], row_count=row_count, order_by_columns=order_by_columns
+            )
         else:
             streamer = self.postgresql_client.data_streamer(query=query)
         column_names = await anext(streamer)
