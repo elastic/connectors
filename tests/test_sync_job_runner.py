@@ -1073,7 +1073,9 @@ async def test_native_acl_connector_sync_fails_when_api_key_invalid(
         message=None, meta=error_meta, body={}
     )
 
-    sync_job_runner = create_runner(job_type=job_type, index_name=ACCESS_CONTROL_INDEX_NAME, sync_cursor=None)
+    sync_job_runner = create_runner(
+        job_type=job_type, index_name=ACCESS_CONTROL_INDEX_NAME, sync_cursor=None
+    )
 
     await sync_job_runner.execute()
 
