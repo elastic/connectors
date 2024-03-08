@@ -196,12 +196,7 @@ class SyncJobRunner:
         except ConnectorJobCanceledError:
             await self._sync_done(sync_status=JobStatus.CANCELED)
         except ElasticAuthorizationException as e:
-            index_name = (
-                self.connector.acl_index_name
-                if job_type == JobType.ACCESS_CONTROL
-                else self.connector.index_name
-            )
-            error_msg = f"Connector is not authorized to access index [{index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
+            error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
             self.sync_job.log_error(error_msg, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=error_msg)
         except Exception as e:

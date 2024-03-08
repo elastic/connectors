@@ -574,10 +574,6 @@ class Connector(ESDocument):
         return self.get("index_name")
 
     @property
-    def acl_index_name(self):
-        return f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{self.get('index_name')}"
-
-    @property
     def language(self):
         return self.get("language")
 
