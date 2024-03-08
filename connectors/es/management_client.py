@@ -99,6 +99,45 @@ class ESManagementClient(ESClient):
                 "Index %s already has mappings, skipping mappings creation", index
             )
 
+    async def ensure_content_index_settings(
+        self, index_name, index, language_code=None
+    ):
+        existing_settings = index.get("settings", {})
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        if "analysis" not in existing_settings and settings:
+            logger.debug(
+                f"Index {index_name} has no settings or it's empty. Adding settings..."
+            )
+
+            # Open index, update settings, close index
+            try:
+                await self._retrier.execute_with_retry(
+                    partial(self.client.indices.close, index=index_name)
+                )
+
+                await self._retrier.execute_with_retry(
+                    partial(
+                        self.client.indices.put_settings,
+                        index=index_name,
+                        body=settings,
+                    )
+                )
+
+                await self._retrier.execute_with_retry(
+                    partial(self.client.indices.open, index=index_name)
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Could not create settings for index {index_name}, encountered error {e}"
+                )
+
+            logger.debug(f"Successfully added settings for index {index_name}")
+        else:
+            logger.debug(
+                f"Index {index_name} already has settings, skipping settings creation"
+            )
+
     async def ensure_ingest_pipeline_exists(
         self, pipeline_id, version, description, processors
     ):
@@ -140,6 +179,11 @@ class ESManagementClient(ESClient):
     async def index_exists(self, index_name):
         return await self._retrier.execute_with_retry(
             partial(self.client.indices.exists, index=index_name)
+        )
+
+    async def get_index(self, index_name, ignore_unavailable=False):
+        return await self._retrier.execute_with_retry(
+            partial(self.client.indices.get, index=index_name, ignore_unavailable=ignore_unavailable)
         )
 
     async def upsert(self, _id, index_name, doc):
