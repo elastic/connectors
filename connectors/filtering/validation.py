@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from collections.abc import Iterable
 from copy import deepcopy
 from enum import Enum
 
@@ -22,15 +23,21 @@ class SyncRuleValidationResult:
 
     ADVANCED_RULES = "advanced_snippet"
 
-    def __init__(self, rule_id, is_valid, validation_message):
-        self.rule_id = rule_id
+    def __init__(self, rule_ids, is_valid, validation_message):
+        # `str` and `bytes` are also iterable
+        if not isinstance(rule_ids, Iterable) or isinstance(rule_ids, (str, bytes)):
+            rule_ids = [rule_ids]
+        else:
+            rule_ids = list(rule_ids)
+
+        self.rule_ids = rule_ids
         self.is_valid = is_valid
         self.validation_message = validation_message
 
     @classmethod
-    def valid_result(cls, rule_id):
+    def valid_result(cls, rule_ids):
         return SyncRuleValidationResult(
-            rule_id=rule_id, is_valid=True, validation_message="Valid rule"
+            rule_ids=rule_ids, is_valid=True, validation_message="Valid rule"
         )
 
     def __eq__(self, other):
@@ -39,7 +46,7 @@ class SyncRuleValidationResult:
             raise TypeError(msg)
 
         return (
-            self.rule_id == other.rule_id
+            self.rule_ids == other.rule_ids
             and self.is_valid == other.is_valid
             and self.validation_message == other.validation_message
         )
@@ -112,7 +119,7 @@ class FilteringValidationResult:
                     errors=deepcopy(self.errors)
                     + [
                         FilterValidationError(
-                            ids=[other.rule_id], messages=[other.validation_message]
+                            ids=[*other.rule_ids], messages=[other.validation_message]
                         )
                     ],
                 )
@@ -249,30 +256,24 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
             rules_dict[field_rule_value_hash] = basic_rule
 
         return [
-            SyncRuleValidationResult.valid_result(rule_id=rule.id_)
+            SyncRuleValidationResult.valid_result(rule_ids=rule.id_)
             for rule in rules_dict.values()
         ]
 
     @classmethod
     def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
-        def semantic_duplicate_msg(rule_one, rule_two):
-            return f"{format(rule_one, Format.SHORT.value)} is semantically equal to {format(rule_two, Format.SHORT.value)}."
+        # lower order rule should come first in the error message
+        rules_ordered = sorted(
+            [basic_rule, semantic_duplicate], key=lambda rule: rule.order
+        )
+
+        semantic_duplicate_msg = f"{format(rules_ordered[0], Format.SHORT.value)} is semantically equal to {format(rules_ordered[1], Format.SHORT.value)}."
 
         return [
-            # We need two error messages to highlight both rules in the UI
             SyncRuleValidationResult(
-                rule_id=basic_rule.id_,
+                rule_ids=[basic_rule.id_, semantic_duplicate.id_],
                 is_valid=False,
-                validation_message=semantic_duplicate_msg(
-                    basic_rule, semantic_duplicate
-                ),
-            ),
-            SyncRuleValidationResult(
-                rule_id=semantic_duplicate.id_,
-                is_valid=False,
-                validation_message=semantic_duplicate_msg(
-                    semantic_duplicate, basic_rule
-                ),
+                validation_message=semantic_duplicate_msg,
             ),
         ]
 
@@ -295,19 +296,19 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
         basic_rule = BasicRule.from_json(basic_rule_json)
         # default rule uses match all regex, which is intended
         if basic_rule.is_default_rule():
-            return SyncRuleValidationResult.valid_result(rule_id=basic_rule.id_)
+            return SyncRuleValidationResult.valid_result(rule_ids=basic_rule.id_)
 
         if basic_rule.rule == Rule.REGEX and any(
             match_all_regex == basic_rule.value
             for match_all_regex in BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS
         ):
             return SyncRuleValidationResult(
-                rule_id=basic_rule.id_,
+                rule_ids=basic_rule.id_,
                 is_valid=False,
                 validation_message=f"{format(basic_rule, Format.SHORT.value)} uses a match all regexps {BasicRuleNoMatchAllRegexValidator.MATCH_ALL_REGEXPS}, which are not allowed.",
             )
 
-        return SyncRuleValidationResult.valid_result(rule_id=basic_rule.id_)
+        return SyncRuleValidationResult.valid_result(rule_ids=basic_rule.id_)
 
 
 class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
@@ -346,7 +347,7 @@ class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
             rule_id = rule["id"] if "id" in rule else None
 
             return SyncRuleValidationResult(
-                rule_id=rule_id, is_valid=False, validation_message=e.message
+                rule_ids=rule_id, is_valid=False, validation_message=e.message
             )
 
 
