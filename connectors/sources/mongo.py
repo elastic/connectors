@@ -308,8 +308,8 @@ class MongoDataSource(BaseDataSource):
                 )
                 return
             except OperationFailure:
-                self._logger.warning(
-                    f"Unable to access '{configured_database_name}.{configured_collection_name}' as user '{user}'"
+                self._logger.debug(
+                    f"Unable to validate '{configured_database_name}.{configured_collection_name}' as user '{user}'"
                 )
 
             # If it's not accessible, try to make a good user-friendly error message
@@ -335,6 +335,8 @@ class MongoDataSource(BaseDataSource):
                 if configured_collection_name not in existing_collection_names:
                     msg = f"Collection '{configured_collection_name}' does not exist within database '{configured_database_name}'. Existing collections: {', '.join(existing_collection_names)}"
                     raise ConfigurableFieldValueError(msg)
+                else:
+                    self._logger.debug(f"Found {configured_database_name}.{configured_collection_name} as user {user}")
             except OperationFailure as e:
                 # This happens if the user has no access to operations to list collection/database names
                 # Managed MongoDB never gets here, but if we're running against a standalone mongo

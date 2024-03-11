@@ -41,7 +41,7 @@ class PreflightCheck:
             logger.info("Running preflight checks")
             self.running = True
             if not (await self.es_management_client.wait()):
-                logger.critical(f"{self.elastic_config['host']} seem down. Bye!")
+                logger.critical(f"{self.elastic_config['host']} seems to be unreachable. Bye!")
                 return False
 
             await self._check_local_extraction_setup()
