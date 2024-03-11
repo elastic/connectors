@@ -336,7 +336,9 @@ class MongoDataSource(BaseDataSource):
                     msg = f"Collection '{configured_collection_name}' does not exist within database '{configured_database_name}'. Existing collections: {', '.join(existing_collection_names)}"
                     raise ConfigurableFieldValueError(msg)
                 else:
-                    self._logger.debug(f"Found {configured_database_name}.{configured_collection_name} as user {user}")
+                    self._logger.debug(
+                        f"Found {configured_database_name}.{configured_collection_name} as user {user}"
+                    )
             except OperationFailure as e:
                 # This happens if the user has no access to operations to list collection/database names
                 # Managed MongoDB never gets here, but if we're running against a standalone mongo
