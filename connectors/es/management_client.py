@@ -105,28 +105,39 @@ class ESManagementClient(ESClient):
         existing_settings = index.get("settings", {})
         settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
 
-        if "analysis" not in existing_settings and settings:
+        if "analysis" not in existing_settings.get('index', {}) and settings:
             logger.debug(
                 f"Index {index_name} has no settings or it's empty. Adding settings..."
             )
 
             # Open index, update settings, close index
             try:
-                await self._retrier.execute_with_retry(
-                    partial(self.client.indices.close, index=index_name)
-                )
-
-                await self._retrier.execute_with_retry(
-                    partial(
-                        self.client.indices.put_settings,
-                        index=index_name,
-                        body=settings,
+                if self.serverless:
+                    await self._retrier.execute_with_retry(
+                        partial(
+                            self.client.perform_request,
+                            "PUT",
+                            f"/{index_name}/_settings?reopen=true",
+                            body=settings,
+                            headers = {"accept": "application/json", "content-type": "application/json"}
+                        )
                     )
-                )
+                else:
+                    await self._retrier.execute_with_retry(
+                        partial(self.client.indices.close, index=index_name)
+                    )
 
-                await self._retrier.execute_with_retry(
-                    partial(self.client.indices.open, index=index_name)
-                )
+                    await self._retrier.execute_with_retry(
+                        partial(
+                            self.client.indices.put_settings,
+                            index=index_name,
+                            body=settings,
+                        )
+                    )
+
+                    await self._retrier.execute_with_retry(
+                        partial(self.client.indices.open, index=index_name)
+                    )
             except Exception as e:
                 logger.warning(
                     f"Could not create settings for index {index_name}, encountered error {e}"
