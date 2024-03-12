@@ -304,4 +304,3 @@ class TestESManagementClient:
             body={"value": secret_value},
             headers={"accept": "application/json", "content-type": "application/json"},
         )
-
