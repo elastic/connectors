@@ -48,12 +48,14 @@ class FieldVisitor(Visitor):
 
     def enter_field(self, node, *args):
         self.fields_dict[node.name.value] = []
-        self.variables_dict[node.name.value] = []
+        self.variables_dict[node.name.value] = {}
         if node.arguments:
             for arg in node.arguments:
                 self.fields_dict[node.name.value].append(arg.name.value)
                 if isinstance(arg.value, VariableNode):
-                    self.variables_dict[node.name.value].append(arg.value.name.value)
+                    self.variables_dict[node.name.value][
+                        arg.name.value
+                    ] = arg.value.name.value
 
 
 class UnauthorizedException(Exception):
@@ -71,6 +73,7 @@ class GraphQLClient:
         self.http_method = self.configuration["http_method"]
         self.authentication_method = self.configuration["authentication_method"]
         self.pagination_technique = self.configuration["pagination_technique"]
+        self.valid_objects = []
         self.variables = {}
         self.headers = {}
 
@@ -109,65 +112,76 @@ class GraphQLClient:
                 raise_for_status=True,
             )
 
-    def extract_graphql_data_items(self, key, data):
+    def extract_graphql_data_items(self, key, data, same_level):
         """Returns sub objects from the response based on graphql_object_list
 
         Args:
             key (string): Key of data.
             data (dict): data to extract
+            same_level (bool): check if object is at same level or not
 
         Yields:
             dictionary/list: Documents from the response
         """
         if key in self.graphql_object_list:
-            yield data
-        if isinstance(data, dict):
+            self.valid_objects.append(key)
+            same_level = False
+            yield key, data
+
+        if isinstance(data, dict) and same_level:
             for key, item in data.items():
-                yield from self.extract_graphql_data_items(key=key, data=item)
-        if isinstance(data, list):
+                yield from self.extract_graphql_data_items(
+                    key=key, data=item, same_level=same_level
+                )
+        if isinstance(data, list) and same_level:
             for doc in data:
-                yield from self.extract_graphql_data_items(key=None, data=doc)
+                yield from self.extract_graphql_data_items(
+                    key=None, data=doc, same_level=same_level
+                )
+
+    def validate_query(self, graphql_query, visitor):
+        for graphql_object in self.graphql_object_list:
+            self._logger.debug(f"Finding pageInfo Field in {graphql_object}.")
+            if not (
+                {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
+                and "pageInfo" in visitor.fields_dict.keys()
+            ):
+                msg = f"Pagination is enabled but pageInfo not found. Please add pageInfo field inside {graphql_object} and after argument in {graphql_object}."
+                raise ConfigurableFieldValueError(msg)
 
     async def paginated_call(self, graphql_query):
-        ast = parse(graphql_query)  # pyright: ignore
-        visitor = FieldVisitor()
-        visit(ast, visitor)  # pyright: ignore
-
         if self.pagination_technique == "cursor_pagination":
-            for graphql_object in self.graphql_object_list:
-                self._logger.debug(f"Finding pageInfo Field in {graphql_object}.")
-                if not (
-                    {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
-                    and "pageInfo" in visitor.fields_dict.keys()
-                ):
-                    msg = f"Pagination is enabled but pageInfo not found. Please add pageInfo field inside {graphql_object} and after argument in {graphql_object}."
-                    raise ConfigurableFieldValueError(msg)
+            ast = parse(graphql_query)  # pyright: ignore
+            visitor = FieldVisitor()
+            visit(ast, visitor)  # pyright: ignore
 
-                self._logger.debug(f"Finding afterCursor variable for {graphql_object}")
-                if "afterCursor" not in visitor.variables_dict.get(graphql_object, []):
-                    msg = f"Pagination is enabled but afterCursor variable is not set. Please set afterCursor variable for after argument in {graphql_object}."
-                    raise ConfigurableFieldValueError(msg)
-
+            self.validate_query(graphql_query, visitor)
             while True:
+                hasNewPage = False
                 self._logger.debug(
                     f"Fetching document with variables: {self.variables} and query: {graphql_query}."
                 )
                 data = await self.make_request(graphql_query)
-                for documents in self.extract_graphql_data_items(key="data", data=data):
+                for key, documents in self.extract_graphql_data_items(
+                    key="data", data=data, same_level=True
+                ):
                     if isinstance(documents, dict) and documents.get("pageInfo"):
                         pageInfo = documents.get("pageInfo")
                         hasNextPage = pageInfo.get("hasNextPage")
                         endCursor = pageInfo.get("endCursor")
 
-                        self.variables["afterCursor"] = endCursor
                         yield documents
-
-                        if not (hasNextPage and endCursor):
-                            return
+                        if hasNextPage:
+                            self.variables[
+                                visitor.variables_dict[key]["after"]
+                            ] = endCursor
+                            hasNewPage = True
 
                     else:
                         msg = "Pagination is enabled but pageInfo field is missing please add pageInfo field."
                         raise ConfigurableFieldValueError(msg)
+                if not hasNewPage:
+                    return
 
     @retryable(
         retries=RETRIES,
@@ -322,7 +336,7 @@ class GraphQLDataSource(BaseDataSource):
             "graphql_object_list": {
                 "label": "GraphQL Objects List",
                 "order": 9,
-                "tooltip": "List of object names from the query that needs to be indexed.",
+                "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents.",
                 "type": "list",
             },
             "headers": {
@@ -425,8 +439,8 @@ class GraphQLDataSource(BaseDataSource):
     async def fetch_data(self, graphql_query):
         if self.graphql_client.pagination_technique == "no_pagination":
             data = await self.graphql_client.make_request(graphql_query=graphql_query)
-            for documents in self.graphql_client.extract_graphql_data_items(
-                key="data", data=data
+            for _, documents in self.graphql_client.extract_graphql_data_items(
+                key="data", data=data, same_level=True
             ):
                 for document in self.yield_dict(documents):
                     yield document
@@ -436,6 +450,13 @@ class GraphQLDataSource(BaseDataSource):
             ):
                 for document in self.yield_dict(data):
                     yield document
+        multilevel_objects = set(self.graphql_client.graphql_object_list) - set(
+            self.graphql_client.valid_objects
+        )
+        if multilevel_objects:
+            self._logger.warning(
+                f"Found multilevel objects, skipping following objects: {', '.join(multilevel_objects)}."
+            )
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GraphQL response in async manner.

@@ -58,7 +58,7 @@ async def create_graphql_source(
     [
         (
             {"basicInfo": {"name": "xyz", "id": "abc#123"}},
-            {"name": "xyz", "id": "abc#123"},
+            ("basicInfo", {"name": "xyz", "id": "abc#123"}),
         ),
         (
             {
@@ -67,11 +67,14 @@ async def create_graphql_source(
                     {"name": "pqr", "id": "pqr#456"},
                 ]
             },
-            [{"name": "xyz", "id": "abc#123"}, {"name": "pqr", "id": "pqr#456"}],
+            (
+                "basicInfo",
+                [{"name": "xyz", "id": "abc#123"}, {"name": "pqr", "id": "pqr#456"}],
+            ),
         ),
         (
             {"empData": {"basicInfo": {"name": "xyz", "id": "abc#123"}}},
-            {"id": "abc#123", "name": "xyz"},
+            ("basicInfo", {"id": "abc#123", "name": "xyz"}),
         ),
     ],
 )
@@ -80,7 +83,7 @@ async def test_extract_graphql_data_items(data, expected_result):
         # graphql_object_list is "basicInfo"
         source.graphql_client.graphql_object_list = ["basicInfo"]
         for actual_response in source.graphql_client.extract_graphql_data_items(
-            "data", data
+            "data", data, True
         ):
             assert actual_response == expected_result
 
