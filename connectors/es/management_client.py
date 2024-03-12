@@ -105,7 +105,7 @@ class ESManagementClient(ESClient):
         existing_settings = index.get("settings", {})
         settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
 
-        if "analysis" not in existing_settings.get('index', {}) and settings:
+        if "analysis" not in existing_settings.get("index", {}):
             logger.debug(
                 f"Index {index_name} has no settings or it's empty. Adding settings..."
             )
@@ -119,7 +119,10 @@ class ESManagementClient(ESClient):
                             "PUT",
                             f"/{index_name}/_settings?reopen=true",
                             body=settings,
-                            headers = {"accept": "application/json", "content-type": "application/json"}
+                            headers={
+                                "accept": "application/json",
+                                "content-type": "application/json",
+                            },
                         )
                     )
                 else:
@@ -194,7 +197,11 @@ class ESManagementClient(ESClient):
 
     async def get_index(self, index_name, ignore_unavailable=False):
         return await self._retrier.execute_with_retry(
-            partial(self.client.indices.get, index=index_name, ignore_unavailable=ignore_unavailable)
+            partial(
+                self.client.indices.get,
+                index=index_name,
+                ignore_unavailable=ignore_unavailable,
+            )
         )
 
     async def upsert(self, _id, index_name, doc):

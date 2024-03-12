@@ -6,6 +6,7 @@
 import asyncio
 import datetime
 import itertools
+import json
 from copy import deepcopy
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
@@ -14,8 +15,8 @@ import pytest
 from elasticsearch import ApiError, BadRequestError
 
 from connectors.es import Mappings
-from connectors.es.settings import Settings
 from connectors.es.management_client import ESManagementClient
+from connectors.es.settings import Settings
 from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
@@ -29,7 +30,6 @@ from connectors.es.sink import (
 )
 from connectors.protocol import JobType, Pipeline
 from tests.commons import AsyncIterator
-import json
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -68,7 +68,7 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
         f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
         status=200,
-        body="{}"
+        body="{}",
     )
 
     mock_responses.put(
@@ -102,7 +102,7 @@ async def test_prepare_content_index_create_index(
         f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
         status=200,
-        body='{}',
+        body="{}",
     )
 
     mock_responses.put(

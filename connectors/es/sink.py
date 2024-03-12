@@ -682,7 +682,9 @@ class SyncOrchestrator:
         """Creates the index, given a mapping/settings if it does not exists."""
         self._logger.debug(f"Checking index {index_name}")
 
-        result = await self.es_management_client.get_index(index_name, ignore_unavailable=True)
+        result = await self.es_management_client.get_index(
+            index_name, ignore_unavailable=True
+        )
 
         index = result.get(index_name, None)
 
@@ -704,7 +706,9 @@ class SyncOrchestrator:
         else:
             # Create a new index
             self._logger.info(f"Creating content index: {index_name}")
-            await self.es_management_client.create_content_index(index_name, language_code)
+            await self.es_management_client.create_content_index(
+                index_name, language_code
+            )
             self._logger.info(f"Content index successfully created:  {index_name}")
 
     def done(self):
