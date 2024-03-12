@@ -234,7 +234,7 @@ async def test_ping_negative():
 
 @pytest.mark.asyncio
 async def test_fetch_data():
-    expected_respones = [{"name": {"firstName": "xyz"}}]
+    expected_response = [{"name": {"firstName": "xyz"}}]
     actual_response = []
     async with create_graphql_source() as source:
         source.graphql_client.pagination_technique = "no_pagination"
@@ -244,12 +244,12 @@ async def test_fetch_data():
         )
         async for doc in source.fetch_data("{users {name}}"):
             actual_response.append(doc)
-    assert actual_response == expected_respones
+    assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
 async def test_fetch_data_with_pagination():
-    expected_respones = [
+    expected_response = [
         {
             "name": {"firstName": "xyz"},
             "pageInfo": {"hasNextPage": True, "endCursor": "xyz#123"},
@@ -283,7 +283,7 @@ async def test_fetch_data_with_pagination():
             "query($afterCursor: String!) {users(first:5, after:$afterCursor) {name pageInfo}}"
         ):
             actual_response.append(doc)
-    assert actual_response == expected_respones
+    assert actual_response == expected_response
 
 
 @pytest.mark.asyncio
@@ -303,7 +303,7 @@ async def test_fetch_data_without_pageinfo():
 @pytest.mark.asyncio
 @freeze_time("2024-01-24T04:07:19")
 async def test_get_docs():
-    expected_respones = [
+    expected_response = [
         {
             "name": "xyz",
             "_id": "c4ca4238a0b923820dcc509a6f75849b",
@@ -314,11 +314,18 @@ async def test_get_docs():
             "_id": "c81e728d9d4c2f636f067f89cc14862c",
             "_timestamp": "2024-01-24T04:07:19+00:00",
         },
+        {
+            "name": "abc",
+            "id": 123,
+            "_id": 123,
+            "_timestamp": "2024-01-24T04:07:19+00:00",
+        },
     ]
     actual_response = []
     async with create_graphql_source() as source:
-        source.fetch_data = AsyncIterator([{"name": "xyz"}, {"name": "pqr"}])
+        source.fetch_data = AsyncIterator(
+            [{"name": "xyz"}, {"name": "pqr"}, {"name": "abc", "id": 123}]
+        )
         async for doc, _ in source.get_docs():
             actual_response.append(doc)
-
-    assert actual_response == expected_respones
+    assert actual_response == expected_response

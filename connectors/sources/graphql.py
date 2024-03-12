@@ -472,7 +472,7 @@ class GraphQLDataSource(BaseDataSource):
             graphql_query=self.graphql_client.graphql_query
         ):
             doc = deepcopy(doc)
-            doc["_id"] = hash_id(str(doc_id))
+            doc["_id"] = doc.get("id") or hash_id(str(doc_id))
             doc["_timestamp"] = iso_utc()
             doc_id += 1
             yield doc, None
