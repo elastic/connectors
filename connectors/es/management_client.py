@@ -132,9 +132,9 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self):
+    async def list_indices(self, index=None):
         return await self._retrier.execute_with_retry(
-            partial(self.client.indices.stats, index="search-*")
+            partial(self.client.indices.stats, index=index)
         )
 
     async def index_exists(self, index_name):
