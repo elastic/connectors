@@ -184,7 +184,7 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_list_indices(self, es_management_client):
-        await es_management_client.list_indices()
+        await es_management_client.list_indices(index="search-*")
 
         es_management_client.client.indices.stats.assert_awaited_with(index="search-*")
 
