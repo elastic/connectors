@@ -169,7 +169,7 @@ class GraphQLClient:
                         isinstance(documents, dict)
                         and documents.get("pageInfo")
                         and {"hasNextPage", "endCursor"}.issubset(
-                            set(documents.get("pageInfo"))
+                            set(documents.get("pageInfo", {}))
                         )
                     ):
                         pageInfo = documents.get("pageInfo")
