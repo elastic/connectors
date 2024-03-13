@@ -365,6 +365,7 @@ def test_connector_create_from_file():
         [
             "test-connector",
             "en",
+            "test-connector-name",
         ]
     )
 
@@ -490,35 +491,42 @@ def test_connector_create_native_connector(patched_confirm):
     )
 
     with patch(
-        "connectors.cli.connector.Connector._Connector__create_api_key", AsyncMock()
+        "connectors.cli.connector.Connector._Connector__create_api_key",
+        AsyncMock(return_value={"id": "api-key-123", "encoded": "foo"}),
     ) as patched_create_api_key:
         with patch(
-            "connectors.protocol.connectors.ConnectorIndex.index",
-            AsyncMock(return_value={"_id": "new_connector_id"}),
-        ) as patched_create:
-            result = runner.invoke(
-                cli,
-                [
-                    "connector",
-                    "create",
-                    "--service-type",
-                    "mongodb",
-                    "--from-index",
-                    "--native",
-                ],
-                input=input_params,
-            )
+            "connectors.cli.connector.Connector._Connector__store_api_key",
+            AsyncMock(return_value="secret-123"),
+        ) as patched_store_api_key:
+            with patch(
+                "connectors.protocol.connectors.ConnectorIndex.index",
+                AsyncMock(return_value={"_id": "new_connector_id"}),
+            ) as patched_create:
+                result = runner.invoke(
+                    cli,
+                    [
+                        "connector",
+                        "create",
+                        "--service-type",
+                        "mongodb",
+                        "--from-index",
+                        "--native",
+                    ],
+                    input=input_params,
+                )
 
-            patched_create.assert_called_once()
+                patched_create.assert_called_once()
 
-            call_args = patched_create.call_args[0][0]
-            assert call_args["is_native"] is True
-            assert call_args["api_key_id"] is None
+                call_args = patched_create.call_args[0][0]
+                assert call_args["is_native"] is True
+                assert call_args["api_key_id"] == "api-key-123"
+                assert call_args["api_key_secret_id"] == "secret-123"
 
-            patched_create_api_key.assert_not_called()
-            assert result.exit_code == 0
+                patched_create_api_key.assert_called_once()
+                patched_store_api_key.assert_called_once()
+                assert result.exit_code == 0
 
-            assert "has been created" in result.output
+                assert "has been created" in result.output
 
 
 def test_index_help_page():
@@ -651,9 +659,7 @@ def test_job_cancel():
 
     job = SyncJobObject(job_index, doc)
 
-    with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[job])
-    ):
+    with patch("connectors.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])):
         with patch.object(job, "_terminate") as mocked_method:
             result = runner.invoke(cli, ["job", "cancel", job_id])
 
@@ -667,7 +673,7 @@ def test_job_cancel_error():
     runner = CliRunner()
     job_id = "test_job_id"
     with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs",
+        "connectors.protocol.SyncJobIndex.get_all_docs",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["job", "cancel", job_id])

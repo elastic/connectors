@@ -54,6 +54,7 @@ class Connector:
         service_type,
         configuration,
         is_native,
+        name,
         language=DEFAULT_LANGUAGE,
         from_index=False,
     ):
@@ -63,6 +64,7 @@ class Connector:
                 service_type,
                 configuration,
                 is_native,
+                name,
                 language,
                 from_index,
             )
@@ -74,12 +76,19 @@ class Connector:
         service_type,
         configuration,
         is_native,
+        name,
         language=DEFAULT_LANGUAGE,
         from_index=False,
     ):
         try:
             return await self.__create_connector(
-                index_name, service_type, configuration, is_native, language, from_index
+                index_name,
+                service_type,
+                configuration,
+                is_native,
+                name,
+                language,
+                from_index,
             )
         except Exception as e:
             raise e
@@ -87,7 +96,14 @@ class Connector:
             await self.es_management_client.close()
 
     async def __create_connector(
-        self, index_name, service_type, configuration, is_native, language, from_index
+        self,
+        index_name,
+        service_type,
+        configuration,
+        is_native,
+        name,
+        language,
+        from_index,
     ):
         try:
             await self.es_management_client.ensure_exists(
@@ -101,26 +117,32 @@ class Connector:
                 )
 
             api_key_id = None
+            api_key_secret_id = None
             api_key_encoded = None
             api_key_error = None
             api_key_skipped = False
 
-            # Skip creating an API key if the CLI is authenticated with an API key or if the connector is native
-            if "api_key" in self.config or is_native:
+            # Skip creating an API key if the CLI is authenticated with an API key
+            if "api_key" in self.config:
                 api_key_skipped = True
             else:
                 try:
                     api_key = await self.__create_api_key(index_name)
                     api_key_id = api_key["id"]
                     api_key_encoded = api_key["encoded"]
+                    if is_native:
+                        api_key_secret_id = await self.__store_api_key(api_key_encoded)
+
                 except Exception as e:
                     api_key_error = f"Could not create a connector-specific API key. Elasticsearch reported the following error {e}"
 
             # TODO features still required
             doc = {
                 "api_key_id": api_key_id,
+                "api_key_secret_id": api_key_secret_id,
                 "configuration": configuration,
                 "index_name": index_name,
+                "name": name,
                 "service_type": service_type,
                 "status": "configured",  # TODO use a predefined constant
                 "is_native": is_native,
@@ -156,6 +178,7 @@ class Connector:
                 "api_key_error": api_key_error,
             }
         finally:
+            await self.es_management_client.close()
             await self.connector_index.close()
 
     def default_scheduling(self):
@@ -230,11 +253,11 @@ class Connector:
                 ],
             },
         }
-        try:
-            return await self.es_management_client.client.security.create_api_key(
-                name=f"{name}-connector",
-                role_descriptors=role_descriptors,
-                metadata=metadata,
-            )
-        finally:
-            await self.es_management_client.close()
+        return await self.es_management_client.client.security.create_api_key(
+            name=f"{name}-connector",
+            role_descriptors=role_descriptors,
+            metadata=metadata,
+        )
+
+    async def __store_api_key(self, encoded_api_key):
+        return await self.es_management_client.create_connector_secret(encoded_api_key)

@@ -8,6 +8,9 @@ import time
 
 import elasticsearch
 from elasticsearch import (
+    AuthorizationException as ElasticAuthorizationException,
+)
+from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
 
@@ -110,6 +113,10 @@ class SyncJobRunner:
 
         self.running = True
 
+        job_type = self.sync_job.job_type
+
+        self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
+
         await self.sync_starts()
         sync_cursor = (
             self.connector.sync_cursor
@@ -119,6 +126,8 @@ class SyncJobRunner:
         await self.sync_job.claim(sync_cursor=sync_cursor)
         self._start_time = time.time()
 
+        self.sync_job.log_debug("Successfully claimed the sync job.")
+
         try:
             self.data_provider = self.source_klass(
                 configuration=self.sync_job.configuration
@@ -127,6 +136,9 @@ class SyncJobRunner:
             self.data_provider.set_framework_config(
                 self._data_source_framework_config()
             )
+
+            self.sync_job.log_debug("Instantiated data provider for the sync job.")
+
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
@@ -183,6 +195,10 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
             await self._sync_done(sync_status=JobStatus.CANCELED)
+        except ElasticAuthorizationException as e:
+            error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
+            self.sync_job.log_error(error_msg, exc_info=True)
+            await self._sync_done(sync_status=JobStatus.ERROR, sync_error=error_msg)
         except Exception as e:
             self.sync_job.log_error(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
@@ -437,7 +453,11 @@ class SyncJobRunner:
                 ):
                     yield doc, lazy_download, OP_INDEX
             case [JobType.INCREMENTAL, optimization] if optimization is False:
-                async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
+                async for (
+                    doc,
+                    lazy_download,
+                    operation,
+                ) in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):

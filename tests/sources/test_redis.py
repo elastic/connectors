@@ -24,7 +24,7 @@ from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
-DOCUMENT = [
+DOCUMENTS = [
     {
         "_id": "aa00c4c0f44c5cb7cad68df40e8f8877",
         "key": "0",
@@ -79,7 +79,6 @@ class RedisClientMock:
 
     async def validate_database(self, db=0):
         await self.execute_command()
-        await self.ping()
 
 
 @asynccontextmanager
@@ -105,8 +104,8 @@ async def test_ping_positive():
 @pytest.mark.asyncio
 async def test_ping_negative():
     async with create_redis_source() as source:
-        mocked_client = Mock()
-        with mock.patch("redis.from_url", return_value=mocked_client):
+        mocked_client = AsyncMock()
+        with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
             mocked_client.ping = AsyncMock(
                 side_effect=redis.exceptions.AuthenticationError
             )
@@ -115,12 +114,10 @@ async def test_ping_negative():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_database_type():
+async def test_validate_config_when_database_is_not_integer():
     async with create_redis_source() as source:
-        source.client.database = ["1", "db123", "123"]
-        mocked_client = Mock()
-        mocked_client.validate_database = AsyncMock(return_value=True)
-        with mock.patch("redis.from_url", return_value=mocked_client):
+        source.client.database = ["db123", "db456"]
+        with mock.patch("redis.asyncio.from_url", return_value=AsyncMock()):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
 
@@ -129,9 +126,8 @@ async def test_validate_config_when_database_type():
 async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
         source.client.database = ["123"]
-        mocked_client = Mock()
-        mocked_client.validate_database = AsyncMock(return_value=True)
-        with mock.patch("redis.from_url", return_value=mocked_client):
+        source.client.validate_database = AsyncMock(return_value=False)
+        with mock.patch("redis.asyncio.from_url", return_value=AsyncMock()):
             with pytest.raises(ConfigurableFieldValueError):
                 await source.validate_config()
 
@@ -143,12 +139,12 @@ async def test_get_docs():
         source.client.database = [1]
 
         with mock.patch(
-            "redis.from_url",
+            "redis.asyncio.from_url",
             return_value=AsyncMock(),
         ):
-            source.get_db_records = AsyncIterator(items=DOCUMENT)
+            source.get_db_records = AsyncIterator(items=DOCUMENTS)
             async for (doc, _) in source.get_docs():
-                assert doc in DOCUMENT
+                assert doc in DOCUMENTS
 
 
 @pytest.mark.asyncio
@@ -160,7 +156,7 @@ async def test_get_databases_for_multiple_db():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_with_astric():
+async def test_get_databases_with_asterisk():
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client._client = RedisClientMock()
@@ -169,11 +165,11 @@ async def test_get_databases_with_astric():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_negative():
+async def test_get_databases_expect_no_databases_on_auth_error():
     async with create_redis_source() as source:
         source.client.database = ["*"]
-        mocked_client = Mock()
-        with mock.patch("redis.from_url", return_value=mocked_client):
+        mocked_client = AsyncMock()
+        with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
             mocked_client.ping = AsyncMock(
                 side_effect=redis.exceptions.AuthenticationError
             )
@@ -220,7 +216,7 @@ async def test_get_db_records():
         source.client._client = RedisClientMock()
         source.client.get_paginated_key = AsyncIterator(["0"])
         async for record in source.get_db_records(db=0):
-            assert record == DOCUMENT[0]
+            assert record == DOCUMENTS[0]
 
 
 @pytest.mark.parametrize(
@@ -249,7 +245,7 @@ async def test_get_docs_with_sync_rules(filtering):
         source.client._client.get = AsyncMock(return_value="this is value")
         source.client._client.memory_usage = AsyncMock(return_value=10)
         async for (doc, _) in source.get_docs(filtering):
-            assert doc in DOCUMENT
+            assert doc in DOCUMENTS
         source.client._client.scan_iter.assert_called_once_with(
             match="0*", count=1000, _type="string"
         )
@@ -335,3 +331,47 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
             advanced_rules
         )
         assert validation_result == expected_validation_result
+
+
+@pytest.mark.asyncio
+async def test_client_when_mutual_ssl_enabled():
+    async with create_redis_source() as source:
+        source.client.database = ["*"]
+        source.client.ssl_enabled = True
+        source.client.mutual_tls_enabled = True
+        source.client.store_ssl_key = Mock(return_value="/tmp/tmp4vn0jxy7.crt")
+        with mock.patch(
+            "redis.asyncio.from_url",
+            return_value=AsyncMock(),
+        ) as from_url_mock:
+            _ = source.client._client
+            connection_string = "rediss://username:password@localhost:6379?ssl_certfile=/tmp/tmp4vn0jxy7.crt&ssl_keyfile=/tmp/tmp4vn0jxy7.crt"
+            from_url_mock.assert_called_with(connection_string, decode_responses=True)
+
+
+@pytest.mark.asyncio
+async def test_client_when_ssl_enabled():
+    async with create_redis_source() as source:
+        source.client.database = ["*"]
+        source.client.ssl_enabled = True
+        with mock.patch(
+            "redis.asyncio.from_url",
+            return_value=AsyncMock(),
+        ) as from_url_mock:
+            _ = source.client._client
+            connection_string = "rediss://username:password@localhost:6379"
+            from_url_mock.assert_called_with(connection_string, decode_responses=True)
+
+
+@pytest.mark.asyncio
+async def test_ping_when_mutual_ssl_enabled():
+    async with create_redis_source() as source:
+        source.client.database = ["*"]
+        source.client.ssl_enabled = True
+        source.client.mutual_tls_enabled = True
+        with mock.patch(
+            "redis.asyncio.from_url",
+            return_value=AsyncMock(),
+        ):
+            await source.ping()
+            source.client._redis_client.ping.assert_awaited_once()

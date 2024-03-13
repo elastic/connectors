@@ -14,10 +14,6 @@ from elasticsearch import (
 )
 
 from connectors.es.management_client import ESManagementClient
-from connectors.protocol import (
-    CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
-    CONNECTORS_INDEX,
-)
 from tests.commons import AsyncIterator
 
 
@@ -188,7 +184,7 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_list_indices(self, es_management_client):
-        await es_management_client.list_indices()
+        await es_management_client.list_indices(index="search-*")
 
         es_management_client.client.indices.stats.assert_awaited_with(index="search-*")
 
@@ -307,47 +303,4 @@ class TestESManagementClient:
             "/_connector/_secret",
             body={"value": secret_value},
             headers={"accept": "application/json", "content-type": "application/json"},
-        )
-
-    @pytest.mark.asyncio
-    async def test_generate_and_store_api_key(
-        self, es_management_client, mock_responses
-    ):
-        index_name = "index-1"
-        expected_role_descriptors = {
-            "index1-connector-role": {
-                "cluster": ["monitor"],
-                "index": [
-                    {
-                        "names": [
-                            index_name,
-                            f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{index_name}",
-                            f"{CONNECTORS_INDEX}*",
-                        ],
-                        "privileges": ["all"],
-                    }
-                ],
-            }
-        }
-        expected_response = {
-            "api_key_id": "api-key-id",
-            "api_key_secret_id": "secret-id",
-        }
-
-        es_management_client.client.security.create_api_key = AsyncMock(
-            return_value={"id": "api-key-id", "encoded": "encoded-api-key-value"}
-        )
-        es_management_client.create_connector_secret = AsyncMock(
-            return_value="secret-id"
-        )
-
-        response = await es_management_client.generate_and_store_api_key(index_name)
-        assert response == expected_response
-
-        es_management_client.client.security.create_api_key.assert_awaited_with(
-            name=f"{index_name}-connector",
-            role_descriptors=expected_role_descriptors,
-        )
-        es_management_client.create_connector_secret.assert_awaited_with(
-            "encoded-api-key-value"
         )
