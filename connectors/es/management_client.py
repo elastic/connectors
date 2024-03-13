@@ -72,7 +72,7 @@ class ESManagementClient(ESClient):
         existing_mappings = response[index].get("mappings", {})
         if len(existing_mappings) == 0:
             if mappings:
-                logger.debug(
+                logger.info(
                     "Index %s has no mappings or it's empty. Adding mappings...", index
                 )
                 try:
@@ -85,13 +85,13 @@ class ESManagementClient(ESClient):
                             properties=mappings.get("properties", {}),
                         )
                     )
-                    logger.debug("Successfully added mappings for index %s", index)
+                    logger.info("Successfully added mappings for index %s", index)
                 except Exception as e:
                     logger.warning(
                         f"Could not create mappings for index {index}, encountered error {e}"
                     )
             else:
-                logger.debug(
+                logger.info(
                     "Index %s has no mappings but no mappings are provided, skipping mappings creation"
                 )
         else:
@@ -106,7 +106,7 @@ class ESManagementClient(ESClient):
         settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
 
         if "analysis" not in existing_settings.get("index", {}):
-            logger.debug(
+            logger.info(
                 f"Index {index_name} has no settings or it's empty. Adding settings..."
             )
 
@@ -141,12 +141,12 @@ class ESManagementClient(ESClient):
                     await self._retrier.execute_with_retry(
                         partial(self.client.indices.open, index=index_name)
                     )
+
+                    logger.info(f"Successfully added settings for index {index_name}")
             except Exception as e:
                 logger.warning(
                     f"Could not create settings for index {index_name}, encountered error {e}"
                 )
-
-            logger.debug(f"Successfully added settings for index {index_name}")
         else:
             logger.debug(
                 f"Index {index_name} already has settings, skipping settings creation"
