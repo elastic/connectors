@@ -286,3 +286,21 @@ class TestESManagementClient:
         with pytest.raises(ElasticNotFoundError):
             secret = await es_management_client.get_connector_secret(secret_id)
             assert secret is None
+
+    @pytest.mark.asyncio
+    async def test_create_connector_secret(self, es_management_client, mock_responses):
+        secret_id = "secret-id"
+        secret_value = "my-secret"
+
+        es_management_client.client.perform_request = AsyncMock(
+            return_value={"id": secret_id}
+        )
+
+        returned_id = await es_management_client.create_connector_secret(secret_value)
+        assert returned_id == secret_id
+        es_management_client.client.perform_request.assert_awaited_with(
+            "POST",
+            "/_connector/_secret",
+            body={"value": secret_value},
+            headers={"accept": "application/json", "content-type": "application/json"},
+        )
