@@ -165,20 +165,26 @@ class GraphQLClient:
                 for key, documents in self.extract_graphql_data_items(
                     key="data", data=data, same_level=True
                 ):
-                    if isinstance(documents, dict) and documents.get("pageInfo"):
+                    if (
+                        isinstance(documents, dict)
+                        and documents.get("pageInfo")
+                        and {"hasNextPage", "endCursor"}.issubset(
+                            set(documents.get("pageInfo"))
+                        )
+                    ):
                         pageInfo = documents.get("pageInfo")
                         hasNextPage = pageInfo.get("hasNextPage")
                         endCursor = pageInfo.get("endCursor")
 
                         yield documents
-                        if hasNextPage:
+                        if hasNextPage and endCursor:
                             self.variables[
                                 visitor.variables_dict[key]["after"]
                             ] = endCursor
                             hasNewPage = True
 
                     else:
-                        msg = "Pagination is enabled but pageInfo field is missing please add pageInfo field."
+                        msg = "Pagination is enabled but pageInfo field is missing with hasNextPage and endCursor in the query, please add pageInfo field and add hasNextPage and endCursor inside it."
                         raise ConfigurableFieldValueError(msg)
                 if not hasNewPage:
                     return
@@ -353,7 +359,7 @@ class GraphQLDataSource(BaseDataSource):
                     {"label": "Cursor-based pagination", "value": "cursor_pagination"},
                 ],
                 "order": 11,
-                "tooltip": "Cursor based pagination requires 'pageInfo' field along with argument 'after' for objects mentioned in 'GraphQL Objects List'. It also requires 'afterCursor' variable for 'after' argument.",
+                "tooltip": "Cursor based pagination requires 'pageInfo' field along with argument 'after' for objects mentioned in 'GraphQL Objects List'. It also requires variable for 'after' argument.",
                 "type": "str",
                 "value": "none",
             },
