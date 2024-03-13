@@ -263,7 +263,7 @@ async def test_get_files(dir_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-async def test_fetch_file_when_file_is_inaccessible(file_mock):
+async def test_fetch_file_when_file_is_inaccessible(file_mock, caplog):
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
     Args:
@@ -271,13 +271,17 @@ async def test_fetch_file_when_file_is_inaccessible(file_mock):
     """
     # Setup
     async with create_source(NASDataSource) as source:
+        caplog.set_level("ERROR")
         path = "\\1.2.3.4/Users/file1.txt"
         file_mock.side_effect = SMBOSError(ntstatus=0xC0000043, filename="file1.txt")
 
         # Execute
-        async for response in source.fetch_file_content(path=path):
+        async for _response in source.fetch_file_content(path=path):
             # Assert
-            assert response is None
+            assert (
+                "Cannot read the contents of file on path:\1.2.3.4/Users/file1.txt. Error [Error 1] [NtStatus 0xc0000043] The process cannot access the file because it is being used by another process: 'file1.txt'"
+                in caplog.text
+            )
 
 
 async def create_fake_coroutine(data):
