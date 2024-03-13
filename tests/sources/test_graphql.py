@@ -54,38 +54,37 @@ async def create_graphql_source(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "data, expected_result",
+    "object_list, data, expected_result",
     [
         (
+            ["basicInfo"],
             {"basicInfo": {"name": "xyz", "id": "abc#123"}},
-            ("basicInfo", {"name": "xyz", "id": "abc#123"}),
+            [{"name": "xyz", "id": "abc#123"}],
         ),
         (
+            ["basicInfo"],
             {
                 "basicInfo": [
                     {"name": "xyz", "id": "abc#123"},
                     {"name": "pqr", "id": "pqr#456"},
                 ]
             },
-            (
-                "basicInfo",
-                [{"name": "xyz", "id": "abc#123"}, {"name": "pqr", "id": "pqr#456"}],
-            ),
+            [{"name": "xyz", "id": "abc#123"}, {"name": "pqr", "id": "pqr#456"}],
         ),
         (
+            ["empData.basicInfo"],
             {"empData": {"basicInfo": {"name": "xyz", "id": "abc#123"}}},
-            ("basicInfo", {"id": "abc#123", "name": "xyz"}),
+            [{"id": "abc#123", "name": "xyz"}],
         ),
     ],
 )
-async def test_extract_graphql_data_items(data, expected_result):
+async def test_extract_graphql_data_items(object_list, data, expected_result):
+    actual_response = []
     async with create_graphql_source() as source:
-        # graphql_object_list is "basicInfo"
-        source.graphql_client.graphql_object_list = ["basicInfo"]
-        for actual_response in source.graphql_client.extract_graphql_data_items(
-            "data", data, True
-        ):
-            assert actual_response == expected_result
+        source.graphql_client.graphql_object_list = object_list
+        for doc in source.graphql_client.extract_graphql_data_items(data):
+            actual_response.append(doc)
+        assert actual_response == expected_result
 
 
 @pytest.mark.asyncio
@@ -263,6 +262,7 @@ async def test_fetch_data_with_pagination():
     async with create_graphql_source() as source:
         source.graphql_client.pagination_technique = "cursor_pagination"
         source.graphql_client.graphql_object_list = ["users"]
+        source.graphql_client.pagination_key = "users"
         source.graphql_client.post = AsyncMock(
             side_effect=[
                 {
@@ -329,3 +329,23 @@ async def test_get_docs():
         async for doc, _ in source.get_docs():
             actual_response.append(doc)
     assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_extract_graphql_data_items_with_invalid_key():
+    async with create_graphql_source() as source:
+        source.graphql_object_list = ["user"]
+        data = {"users": {"namexyzid": "123"}}
+        with pytest.raises(ConfigurableFieldValueError):
+            for _ in source.graphql_client.extract_graphql_data_items(data):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_extract_pagination_info_with_invalid_key():
+    async with create_graphql_source() as source:
+        source.pagination_key = ["users_data.user"]
+        data = {"users_data": {"users": {"namexyzid": "123"}}}
+        with pytest.raises(ConfigurableFieldValueError):
+            for _ in source.graphql_client.extract_pagination_info(data):
+                pass
