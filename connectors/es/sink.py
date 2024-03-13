@@ -678,25 +678,38 @@ class SyncOrchestrator:
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
 
-    async def prepare_content_index(self, index, language_code=None):
-        """Creates the index, given a mapping if it does not exists."""
-        self._logger.debug(f"Checking index {index}")
+    async def prepare_content_index(self, index_name, language_code=None):
+        """Creates the index, given a mapping/settings if it does not exists."""
+        self._logger.debug(f"Checking index {index_name}")
 
-        exists = await self.es_management_client.index_exists(index)
+        result = await self.es_management_client.get_index(
+            index_name, ignore_unavailable=True
+        )
+
+        index = result.get(index_name, None)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
-        if exists:
+        if index:
             # Update the index mappings if needed
-            self._logger.debug(f"{index} exists")
+            self._logger.debug(f"{index_name} exists")
+
+            # Settings contain analizers which are being used in the index mappings
+            # Therefore settings must be applied before mappings
+            await self.es_management_client.ensure_content_index_settings(
+                index_name=index_name, index=index, language_code=language_code
+            )
+
             await self.es_management_client.ensure_content_index_mappings(
-                index, mappings
+                index_name, mappings
             )
         else:
             # Create a new index
-            self._logger.info(f"Creating content index: {index}")
-            await self.es_management_client.create_content_index(index, language_code)
-            self._logger.info(f"Content index successfully created:  {index}")
+            self._logger.info(f"Creating content index: {index_name}")
+            await self.es_management_client.create_content_index(
+                index_name, language_code
+            )
+            self._logger.info(f"Content index successfully created:  {index_name}")
 
     def done(self):
         if self._extractor_task is not None and not self._extractor_task.done():
