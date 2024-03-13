@@ -320,19 +320,12 @@ def create(
     )
 
     if result["api_key_skipped"]:
-        if is_native:
-            click.echo(
-                click.style(
-                    "API keys for native connectors are internally managed. An API key will be automatically generated for this connector during its first sync.",
-                )
+        click.echo(
+            click.style(
+                "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
+                fg="yellow",
             )
-        else:
-            click.echo(
-                click.style(
-                    "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
-                    fg="yellow",
-                )
-            )
+        )
 
     if result["api_key_error"]:
         click.echo(click.style(result["api_key_error"], fg="yellow"))
