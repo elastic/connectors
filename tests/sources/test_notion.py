@@ -20,7 +20,7 @@ from tests.sources.support import create_source
 ADVANCED_SNIPPET = "advanced_snippet"
 DATABASE = {
     "object": "database",
-    "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+    "id": "database_id",
     "created_time": "2021-07-13T16:48:00.000Z",
     "last_edited_time": "2021-07-13T16:48:00.000Z",
     "title": [
@@ -609,6 +609,7 @@ async def test_get_docs_with_advanced_rules(filtering):
 @pytest.mark.parametrize(
     "advanced_rules, expected_validation_result",
     [
+        # Valid: search query for database
         (
             {
                 "searches": [
@@ -618,17 +619,30 @@ async def test_get_docs_with_advanced_rules(filtering):
                     }
                 ]
             },
-            SyncRuleValidationResult(
-                SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=ANY,
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
+        # Valid: search query for page
         (
             {
                 "searches": [
                     {
                         "filter": {"value": "page"},
+                        "query": "Demo",
+                    }
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Invalid: provided filter value is incorrect: pages in place of page
+        (
+            {
+                "searches": [
+                    {
+                        "filter": {"value": "pages"},
                         "query": "Demo",
                     }
                 ]
@@ -639,14 +653,16 @@ async def test_get_docs_with_advanced_rules(filtering):
                 validation_message=ANY,
             ),
         ),
+        # Invalid: no query key
         (
-            {"searches": [{"filter": {}, "query": "Demo"}]},
+            {"searches": [{"filter": {"value": "database"}}]},
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
                 validation_message=ANY,
             ),
         ),
+        # Valid: database query filter
         (
             {
                 "database_query_filters": [
@@ -658,10 +674,63 @@ async def test_get_docs_with_advanced_rules(filtering):
                     }
                 ]
             },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Invalid: empty property value
+        (
+            {
+                "database_query_filters": [
+                    {
+                        "filter": {"property": "", "title": {"contain": "John"}},
+                        "database_id": "database_id",
+                    }
+                ]
+            },
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
                 validation_message=ANY,
+            ),
+        ),
+        # Valid: database query filter using or
+        (
+            {
+                "database_query_filters": [
+                    {
+                        "filter": {
+                            "or": [
+                                {
+                                    "property": "Description",
+                                    "rich_text": {"contains": "2023"},
+                                }
+                            ]
+                        },
+                        "database_id": "database_id",
+                    }
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Valid: two search query
+        (
+            {
+                "searches": [
+                    {
+                        "filter": {"value": "page"},
+                        "query": "Test Page",
+                    },
+                    {
+                        "filter": {"value": "database"},
+                        "query": "Test Database",
+                    },
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
     ],
@@ -669,11 +738,13 @@ async def test_get_docs_with_advanced_rules(filtering):
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
     async with create_source(
-        NotionDataSource, notion_secret_key="secert_key"
+        NotionDataSource, notion_secret_key="secret_key"
     ) as source:
         with patch(
             "connectors.sources.notion.async_iterate_paginated_api",
-            return_value=AsyncIterator([BLOCK]),
+            return_value=AsyncIterator([DATABASE]),
+        ), patch.object(
+            NotionDataSource, "get_entities", return_value=[DATABASE, BLOCK]
         ):
             validation_result = await NotionAdvancedRulesValidator(source).validate(
                 advanced_rules

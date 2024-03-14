@@ -178,13 +178,12 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
         "items": {
             "type": "object",
             "properties": {
-                "database_id": {"type": "string", "minProperties": 1},
+                "database_id": {"type": "string", "minLength": 1},
                 "filter": {
                     "type": "object",
-                    "properties": {"property": {"type": "string", "minProperties": 1}},
+                    "properties": {"property": {"type": "string", "minLength": 1}},
                     "additionalProperties": {
                         "type": ["object", "array"],
-                        "minProperties": 1,
                     },
                 },
             },
@@ -224,6 +223,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
 
     def __init__(self, source):
         self.source = source
+        self._logger = logger
 
     async def validate(self, advanced_rules):
         if len(advanced_rules) == 0:
@@ -231,6 +231,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
                 SyncRuleValidationResult.ADVANCED_RULES
             )
 
+        self._logger.info("Remote validation started")
         return await self._remote_validation(advanced_rules)
 
     async def _remote_validation(self, advanced_rules):
@@ -253,6 +254,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
             databases.append(document.get("id").replace("-", ""))
         for rule in advanced_rules:
             if "database_query_filters" in rule:
+                self._logger.info("Validating database query filters")
                 for database in advanced_rules.get("database_query_filters"):
                     database_id = (
                         database.get("database_id").replace("-", "")
@@ -268,6 +270,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
                         validation_message=f"Invalid database id: {', '.join(invalid_database)}",
                     )
             if "searches" in rule:
+                self._logger.info("Validating search filters")
                 for database_page in advanced_rules.get("searches"):
                     if database_page.get("filter", {}).get("value") == "page":
                         page_title.append(database_page.get("query"))
@@ -284,6 +287,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
                         is_valid=False,
                         validation_message=str(error),
                     )
+            self._logger.info("Remote validation successful")
         return SyncRuleValidationResult.valid_result(
             SyncRuleValidationResult.ADVANCED_RULES
         )
@@ -571,6 +575,9 @@ class NotionDataSource(BaseDataSource):
                     for database_page in advanced_rules.get("searches"):
                         if "filter" in database_page:
                             database_page["filter"]["property"] = "object"
+                        self._logger.info(
+                            f"Fetching databases and pages using search query: {database_page}"
+                        )
                         async for data in self.retrieve_and_process_blocks(
                             database_page
                         ):
@@ -586,6 +593,9 @@ class NotionDataSource(BaseDataSource):
                         )
                         try:
                             database_id = database_query_filter.get("database_id")
+                            self._logger.info(
+                                f"Fetching records for database with id: {database_id}"
+                            )
                             async for database in self.notion_client.query_database(
                                 database_id, filter_criteria
                             ):
