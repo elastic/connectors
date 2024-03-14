@@ -156,8 +156,9 @@ class ESClient:
                 return False
 
             logger.info(
-                f"Waiting for {self.host} (so far: {int(time.time() - start)} secs)"
+                f"Waiting for {self.host.url} (so far: {int(time.time() - start)} secs)"
             )
+            logger.debug(f"Seed node configuration: {self.client.transport.node_pool._seed_nodes}")
             if await self.ping():
                 return True
             await self._sleeps.sleep(backoff)
