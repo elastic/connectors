@@ -347,6 +347,11 @@ class RedisDataSource(BaseDataSource):
         invalid_db = []
         msg = ""
         if self.client.database != ["*"]:
+            try:
+                await self.client.ping()
+            except Exception:
+                self._logger.exception("Error while connecting to Redis.")
+                raise
             for db in self.client.database:
                 if not db.isdigit() or int(db) < 0:
                     invalid_type.append(db)
