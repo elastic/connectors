@@ -6,6 +6,7 @@
 import asyncio
 import datetime
 import itertools
+import json
 from copy import deepcopy
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
@@ -15,6 +16,7 @@ from elasticsearch import ApiError, BadRequestError
 
 from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
+from connectors.es.settings import Settings
 from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
@@ -60,11 +62,15 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}",
+
+    # not found
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        status=404,
+        status=200,
+        body="{}",
     )
+
     mock_responses.put(
         f"http://nowhere.com:9200/{index_name}",
         payload={"_id": "1"},
@@ -90,13 +96,23 @@ async def test_prepare_content_index_create_index(
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}",
+
+    # not found
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        status=404,
+        status=200,
+        body="{}",
     )
+
     mock_responses.put(
         f"http://nowhere.com:9200/{index_name}",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}/_settings",
         payload={"_id": "1"},
         headers=headers,
     )
@@ -120,35 +136,48 @@ async def test_prepare_content_index_create_index(
 
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
+    language_code = "en"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
     # prepare-index, with mappings
 
     mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+    index_name = "search-new-index"
 
-    mock_responses.head(
-        "http://nowhere.com:9200/search-new-index",
-        headers=headers,
-    )
+    response = {
+        index_name: {
+            "mappings": {},
+            "settings": {},
+        }
+    }
     mock_responses.get(
-        "http://nowhere.com:9200/search-new-index/_mapping",
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        payload={"search-new-index": {"mappings": {}}},
+        status=200,
+        body=json.dumps(response),
     )
+
     mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_mapping",
+        f"http://nowhere.com:9200/{index_name}/_mapping",
         headers=headers,
         payload=mappings,
         body='{"acknowledged": True}',
     )
 
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}/_settings",
+        headers=headers,
+        payload=settings,
+        body='{"acknowledged": True}',
+    )
+
     es = SyncOrchestrator(config)
-    index_name = "search-new-index"
     with mock.patch.object(
         es.es_management_client,
         "ensure_content_index_mappings",
     ) as put_mapping_mock:
-        await es.prepare_content_index(index_name)
+        await es.prepare_content_index(index_name, language_code)
 
         await es.close()
 
