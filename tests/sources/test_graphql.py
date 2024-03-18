@@ -236,7 +236,7 @@ async def test_fetch_data():
     expected_response = [{"name": {"firstName": "xyz"}}]
     actual_response = []
     async with create_graphql_source() as source:
-        source.graphql_client.pagination_technique = "no_pagination"
+        source.graphql_client.pagination_model = "no_pagination"
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
             return_value={"users": [{"name": {"firstName": "xyz"}}]}
@@ -260,7 +260,7 @@ async def test_fetch_data_with_pagination():
     ]
     actual_response = []
     async with create_graphql_source() as source:
-        source.graphql_client.pagination_technique = "cursor_pagination"
+        source.graphql_client.pagination_model = "cursor_pagination"
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.pagination_key = "users"
         source.graphql_client.post = AsyncMock(
@@ -289,7 +289,7 @@ async def test_fetch_data_with_pagination():
 @pytest.mark.asyncio
 async def test_fetch_data_without_pageinfo():
     async with create_graphql_source() as source:
-        source.graphql_client.pagination_technique = "cursor_pagination"
+        source.graphql_client.pagination_model = "cursor_pagination"
         source.graphql_client.graphql_object_list = ["users"]
         source.graphql_client.post = AsyncMock(
             side_effect=[{"users": {"name": {"firstName": "xyz"}}}]
@@ -349,3 +349,10 @@ async def test_extract_pagination_info_with_invalid_key():
         with pytest.raises(ConfigurableFieldValueError):
             for _ in source.graphql_client.extract_pagination_info(data):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_is_query_with_invalid_query():
+    async with create_graphql_source() as source:
+        response = source.is_query("invalid_query {user {}")
+        assert response is False

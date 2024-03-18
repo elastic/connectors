@@ -72,7 +72,7 @@ class GraphQLClient:
         self.graphql_object_list = self.configuration["graphql_object_list"]
         self.http_method = self.configuration["http_method"]
         self.authentication_method = self.configuration["authentication_method"]
-        self.pagination_technique = self.configuration["pagination_technique"]
+        self.pagination_model = self.configuration["pagination_model"]
         self.pagination_key = self.configuration["pagination_key"]
         self.valid_objects = []
         self.variables = {}
@@ -117,9 +117,7 @@ class GraphQLClient:
         """Returns sub objects from the response based on graphql_object_list
 
         Args:
-            key (string): Key of data.
             data (dict): data to extract
-            same_level (bool): check if object is at same level or not
 
         Yields:
             dictionary/list: Documents from the response
@@ -129,10 +127,16 @@ class GraphQLClient:
             key_list = keys.split(".")
 
             for key in key_list:
-                if key not in duplicate_data.keys():
-                    msg = f"{key} not found in the response. Please check the query."
+                if isinstance(duplicate_data, dict):
+                    if key not in duplicate_data.keys():
+                        msg = (
+                            f"{key} not found in the response. Please check the query."
+                        )
+                        raise ConfigurableFieldValueError(msg)
+                    duplicate_data = duplicate_data.get(key, {})
+                else:
+                    msg = "Found list while processing GraphQL Objects List. Please check the query and provide path upto dictionary."
                     raise ConfigurableFieldValueError(msg)
-                duplicate_data = duplicate_data.get(key, {})
 
             if isinstance(duplicate_data, dict):
                 if duplicate_data:
@@ -143,12 +147,16 @@ class GraphQLClient:
                     yield doc
 
     def extract_pagination_info(self, data):
-        pagination_key_list = self.pagination_key.split(".")
-        for key in pagination_key_list:
-            if key not in data.keys():
-                msg = f"Pagination key: {key} not found in the response. Please check the query."
+        pagination_key_path = self.pagination_key.split(".")
+        for key in pagination_key_path:
+            if isinstance(data, dict):
+                if key not in data.keys():
+                    msg = f"Pagination key: {key} not found in the response. Please check the query."
+                    raise ConfigurableFieldValueError(msg)
+                data = data.get(key)
+            else:
+                msg = "Found list while processing Pagination key. Please check the query and provide path upto dictionary."
                 raise ConfigurableFieldValueError(msg)
-            data = data.get(key)
 
         if (
             isinstance(data, dict)
@@ -159,14 +167,14 @@ class GraphQLClient:
             has_next_page = page_info.get("hasNextPage")
             end_cursor = page_info.get("endCursor")
 
-            return has_next_page, end_cursor, pagination_key_list[-1]
+            return has_next_page, end_cursor, pagination_key_path[-1]
         else:
             msg = "Pagination is enabled but pageInfo field is missing with hasNextPage and endCursor in the query, please add pageInfo field and add hasNextPage and endCursor inside it."
             raise ConfigurableFieldValueError(msg)
 
     def validate_query(self, graphql_query, visitor):
         graphql_object = self.pagination_key.split(".")[-1]
-        self._logger.debug(f"Finding pageInfo Field in {graphql_object}.")
+        self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
         if not (
             {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
             and "pageInfo" in visitor.fields_dict.keys()
@@ -175,7 +183,7 @@ class GraphQLClient:
             raise ConfigurableFieldValueError(msg)
 
     async def paginated_call(self, graphql_query):
-        if self.pagination_technique == "cursor_pagination":
+        if self.pagination_model == "cursor_pagination":
             ast = parse(graphql_query)  # pyright: ignore
             visitor = FieldVisitor()
             visit(ast, visitor)  # pyright: ignore
@@ -238,6 +246,9 @@ class GraphQLClient:
 
     async def post(self, graphql_query):
         """Invoke GraphQL request to fetch response.
+
+        Args:
+            graphql_query (string): GraphQL query
 
         Raises:
             UnauthorizedException: Unauthorized exception.
@@ -359,7 +370,7 @@ class GraphQLDataSource(BaseDataSource):
             "graphql_object_list": {
                 "label": "GraphQL Objects List",
                 "order": 9,
-                "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents. Use '.' to provide full path of the object from the starting. For example 'organization.users.nodes'",
+                "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents. Use '.' to provide full path of the object from the root of the response. For example 'organization.users.nodes'",
                 "type": "list",
             },
             "headers": {
@@ -368,11 +379,11 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
                 "required": False,
             },
-            "pagination_technique": {
+            "pagination_model": {
                 "display": "dropdown",
-                "label": "Pagination technique",
+                "label": "Pagination model",
                 "options": [
-                    {"label": "no pagination", "value": "no_pagination"},
+                    {"label": "No pagination", "value": "no_pagination"},
                     {"label": "Cursor-based pagination", "value": "cursor_pagination"},
                 ],
                 "order": 11,
@@ -382,11 +393,11 @@ class GraphQLDataSource(BaseDataSource):
             },
             "pagination_key": {
                 "depends_on": [
-                    {"field": "pagination_technique", "value": "cursor_pagination"}
+                    {"field": "pagination_model", "value": "cursor_pagination"}
                 ],
                 "label": "Pagination key",
                 "order": 12,
-                "tooltip": "Specifies which GraphQL object is used for pagination.",
+                "tooltip": "Specifies which GraphQL object is used for pagination. Use '.' to provide full path of the object from the root of the response. For example 'organization.users'",
                 "type": "str",
             },
             "connection_timeout": {
@@ -469,7 +480,7 @@ class GraphQLDataSource(BaseDataSource):
                     yield document
 
     async def fetch_data(self, graphql_query):
-        if self.graphql_client.pagination_technique == "no_pagination":
+        if self.graphql_client.pagination_model == "no_pagination":
             data = await self.graphql_client.make_request(graphql_query=graphql_query)
             for documents in self.graphql_client.extract_graphql_data_items(data=data):
                 for document in self.yield_dict(documents):
