@@ -170,12 +170,12 @@ class ESClient:
         try:
             await self.client.info()
         except ApiError as e:
-            logger.error(f"The server returned a {e.status_code} code")
+            logger.error(f"The Elasticsearch server returned a {e.status_code} code")
             if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
                 logger.error(e.info["error"]["reason"])
             return False
         except ElasticConnectionError as e:
-            logger.error("Could not connect to the server")
+            logger.error("Could not connect to the Elasticsearch server")
             if e.message is not None:
                 logger.error(e.message)
             return False
@@ -255,7 +255,7 @@ def with_concurrency_control(retries=3):
                     return await func(*args, **kwargs)
                 except ConflictError as e:
                     logger.debug(
-                        f"A conflict error was returned from elasticsearch: {e.message}"
+                        f"A conflict error was returned from Elasticsearch: {e.message}"
                     )
                     if retry >= retries:
                         raise e

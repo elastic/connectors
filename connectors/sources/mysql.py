@@ -51,7 +51,7 @@ class MySQLQueries(Queries):
         return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
 
     def table_data(self, table):
-        return f"SELECT * FROM {self.database}.{table}"
+        return f"SELECT * FROM `{self.database}`.`{table}`"
 
     def table_last_update_time(self, table):
         return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
@@ -450,7 +450,7 @@ class MySqlDataSource(BaseDataSource):
 
     async def _validate_database_accessible(self, cursor):
         try:
-            await cursor.execute(f"USE {self.database};")
+            await cursor.execute(f"USE `{self.database}`;")
         except aiomysql.Error as e:
             msg = f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
             raise ConfigurableFieldValueError(msg) from e
@@ -461,7 +461,7 @@ class MySqlDataSource(BaseDataSource):
 
         for table in tables_to_validate:
             try:
-                await cursor.execute(f"SELECT 1 FROM {table} LIMIT 1;")
+                await cursor.execute(f"SELECT 1 FROM `{table}` LIMIT 1;")
             except aiomysql.Error:
                 non_accessible_tables.append(table)
 

@@ -14,11 +14,6 @@ from elasticsearch.helpers import async_scan
 from connectors.es.client import ESClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings, Settings
 from connectors.logger import logger
-from connectors.protocol import (
-    CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX,
-    CONNECTORS_INDEX,
-)
-from connectors.utils import alphanumericize_string
 
 
 class ESManagementClient(ESClient):
@@ -77,7 +72,7 @@ class ESManagementClient(ESClient):
         existing_mappings = response[index].get("mappings", {})
         if len(existing_mappings) == 0:
             if mappings:
-                logger.debug(
+                logger.info(
                     "Index %s has no mappings or it's empty. Adding mappings...", index
                 )
                 try:
@@ -90,18 +85,71 @@ class ESManagementClient(ESClient):
                             properties=mappings.get("properties", {}),
                         )
                     )
-                    logger.debug("Successfully added mappings for index %s", index)
+                    logger.info("Successfully added mappings for index %s", index)
                 except Exception as e:
                     logger.warning(
                         f"Could not create mappings for index {index}, encountered error {e}"
                     )
             else:
-                logger.debug(
+                logger.info(
                     "Index %s has no mappings but no mappings are provided, skipping mappings creation"
                 )
         else:
             logger.debug(
                 "Index %s already has mappings, skipping mappings creation", index
+            )
+
+    async def ensure_content_index_settings(
+        self, index_name, index, language_code=None
+    ):
+        existing_settings = index.get("settings", {})
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        if "analysis" not in existing_settings.get("index", {}):
+            logger.info(
+                f"Index {index_name} has no settings or it's empty. Adding settings..."
+            )
+
+            # Open index, update settings, close index
+            try:
+                if self.serverless:
+                    await self._retrier.execute_with_retry(
+                        partial(
+                            self.client.perform_request,
+                            "PUT",
+                            f"/{index_name}/_settings?reopen=true",
+                            body=settings,
+                            headers={
+                                "accept": "application/json",
+                                "content-type": "application/json",
+                            },
+                        )
+                    )
+                else:
+                    await self._retrier.execute_with_retry(
+                        partial(self.client.indices.close, index=index_name)
+                    )
+
+                    await self._retrier.execute_with_retry(
+                        partial(
+                            self.client.indices.put_settings,
+                            index=index_name,
+                            body=settings,
+                        )
+                    )
+
+                    await self._retrier.execute_with_retry(
+                        partial(self.client.indices.open, index=index_name)
+                    )
+
+                    logger.info(f"Successfully added settings for index {index_name}")
+            except Exception as e:
+                logger.warning(
+                    f"Could not create settings for index {index_name}, encountered error {e}"
+                )
+        else:
+            logger.debug(
+                f"Index {index_name} already has settings, skipping settings creation"
             )
 
     async def ensure_ingest_pipeline_exists(
@@ -137,14 +185,23 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self):
+    async def list_indices(self, index=None):
         return await self._retrier.execute_with_retry(
-            partial(self.client.indices.stats, index="search-*")
+            partial(self.client.indices.stats, index=index)
         )
 
     async def index_exists(self, index_name):
         return await self._retrier.execute_with_retry(
             partial(self.client.indices.exists, index=index_name)
+        )
+
+    async def get_index(self, index_name, ignore_unavailable=False):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.indices.get,
+                index=index_name,
+                ignore_unavailable=ignore_unavailable,
+            )
         )
 
     async def upsert(self, _id, index_name, doc):
@@ -213,34 +270,3 @@ class ESManagementClient(ESClient):
             )
         )
         return secret.get("id")
-
-    async def generate_and_store_api_key(self, index_name):
-        """
-        Generates an API key for the chosen index and stores it in secrets storage.
-
-        This function should only be called for native connectors
-        """
-        role_descriptors = {
-            f"{alphanumericize_string(index_name)}-connector-role": {
-                "cluster": ["monitor"],
-                "index": [
-                    {
-                        "names": [
-                            index_name,
-                            f"{CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX}{index_name}",
-                            f"{CONNECTORS_INDEX}*",
-                        ],
-                        "privileges": ["all"],
-                    }
-                ],
-            }
-        }
-        api_key_result = await self._retrier.execute_with_retry(
-            partial(
-                self.client.security.create_api_key,
-                name=f"{index_name}-connector",
-                role_descriptors=role_descriptors,
-            )
-        )
-        secret_id = await self.create_connector_secret(api_key_result["encoded"])
-        return {"api_key_id": api_key_result["id"], "api_key_secret_id": secret_id}

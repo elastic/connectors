@@ -220,6 +220,11 @@ def interactive_service_type_prompt():
     default="config.yml",
     help="Path to the connector service config file. Used in combination with --update-config flag.",
 )
+@click.option(
+    "--name",
+    prompt=f"{click.style('?', fg='green')} Connector name",
+    help="Connector name",
+)
 @click.pass_obj
 def create(
     obj,
@@ -231,6 +236,7 @@ def create(
     from_file,
     update_config,
     connector_service_config,
+    name,
 ):
     connector_configuration = {}
     if from_file:
@@ -308,24 +314,18 @@ def create(
         service_type,
         configuration,
         is_native,
+        name=name,
         language=index_language,
         from_index=from_index,
     )
 
     if result["api_key_skipped"]:
-        if is_native:
-            click.echo(
-                click.style(
-                    "API keys for native connectors are internally managed. An API key will be automatically generated for this connector during its first sync.",
-                )
+        click.echo(
+            click.style(
+                "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
+                fg="yellow",
             )
-        else:
-            click.echo(
-                click.style(
-                    "Cannot create a connector-specific API key when authenticating to Elasticsearch with an API key. Consider using username/password to authenticate, or create a connector-specific API key through Kibana.",
-                    fg="yellow",
-                )
-            )
+        )
 
     if result["api_key_error"]:
         click.echo(click.style(result["api_key_error"], fg="yellow"))
