@@ -46,8 +46,9 @@ class ESClient:
         # for now we just use an env flag
         self.serverless = "SERVERLESS" in os.environ
         self.config = config
+        self.configured_host = config.get("host", "http://localhost:9200")
         self.host = url_to_node_config(
-            config.get("host", "http://localhost:9200"),
+            self.configured_host,
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
@@ -62,7 +63,7 @@ class ESClient:
             "request_timeout": config.get("request_timeout", 120),
             "retry_on_timeout": config.get("retry_on_timeout", True),
         }
-        logger.debug(f"Host is {self.host}")
+        logger.debug(f"Initial Elasticsearch node configuration is {self.host}")
 
         if "api_key" in config:
             logger.debug(f"Connecting with an API Key ({config['api_key'][:5]}...)")
@@ -156,7 +157,10 @@ class ESClient:
                 return False
 
             logger.info(
-                f"Waiting for {self.host} (so far: {int(time.time() - start)} secs)"
+                f"Waiting for Elasticsearch at {self.configured_host} (so far: {int(time.time() - start)} secs)"
+            )
+            logger.debug(
+                f"Seed node configuration: {self.client.transport.node_pool._seed_nodes}"
             )
             if await self.ping():
                 return True
