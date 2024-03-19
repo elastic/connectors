@@ -407,10 +407,7 @@ class NASDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with Network Drive"""
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            executor=None, func=self.smb_connection.create_connection
-        )
+        await asyncio.to_thread(self.smb_connection.create_connection)
         await self.close()
         self._logger.info("Successfully connected to the Network Drive")
 
@@ -456,9 +453,7 @@ class NASDataSource(BaseDataSource):
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
             )
-            await loop.run_in_executor(
-                executor=None, func=self.smb_connection.create_connection
-            )
+            await asyncio.to_thread(self.smb_connection.create_connection)
             raise
         except (SMBOSError, SMBException) as exception:
             self._logger.exception(
@@ -485,10 +480,7 @@ class NASDataSource(BaseDataSource):
         """
         self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                executor=None, func=self.smb_connection.create_connection
-            )
+            await asyncio.to_thread(self.smb_connection.create_connection)
             with smbclient.open_file(
                 path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
             ) as file:
@@ -736,10 +728,7 @@ class NASDataSource(BaseDataSource):
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents
         """
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            executor=None, func=self.smb_connection.create_connection
-        )
+        await asyncio.to_thread(self.smb_connection.create_connection)
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             matched_paths, invalid_rules = await self.find_matching_paths(
