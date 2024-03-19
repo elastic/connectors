@@ -5,6 +5,7 @@
 #
 """Tests the Github source class methods"""
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import aiohttp
@@ -24,12 +25,30 @@ from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
-REPOS = {
+PUBLIC_REPO = {
     "name": "demo_repo",
     "nameWithOwner": "demo_user/demo_repo",
     "url": "https://github.com/demo_user/demo_repo",
     "description": "Demo repo for poc",
     "visibility": "PUBLIC",
+    "primaryLanguage": {"name": "Python"},
+    "defaultBranchRef": {"name": "main"},
+    "isFork": False,
+    "stargazerCount": 0,
+    "watchers": {"totalCount": 1},
+    "forkCount": 0,
+    "createdAt": "2023-04-17T06:06:25Z",
+    "_id": "R_kgDOJXuc8A",
+    "_timestamp": "2023-06-20T07:09:34Z",
+    "isArchived": False,
+    "type": "Repository",
+}
+PRIVATE_REPO = {
+    "name": "demo_repo",
+    "nameWithOwner": "demo_user/demo_repo",
+    "url": "https://github.com/demo_user/demo_repo",
+    "description": "Demo repo for poc",
+    "visibility": "PRIVATE",
     "primaryLanguage": {"name": "Python"},
     "defaultBranchRef": {"name": "main"},
     "isFork": False,
@@ -1023,14 +1042,40 @@ async def test_fetch_files():
 @pytest.mark.asyncio
 async def test_get_docs():
     expected_response = [
-        REPOS,
+        PUBLIC_REPO,
         MOCK_RESPONSE_PULL,
         MOCK_RESPONSE_ISSUE,
         MOCK_RESPONSE_ATTACHMENTS[0],
     ]
     actual_response = []
     async with create_github_source() as source:
-        source._fetch_repos = Mock(return_value=AsyncIterator([REPOS]))
+        source._fetch_repos = Mock(return_value=AsyncIterator([deepcopy(PUBLIC_REPO)]))
+        source._fetch_issues = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ISSUE)])
+        )
+        source._fetch_pull_requests = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_PULL)])
+        )
+        source._fetch_files = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ATTACHMENTS)])
+        )
+        async for document, _ in source.get_docs():
+            actual_response.append(document)
+        assert expected_response == actual_response
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo():
+    expected_response = [
+        PUBLIC_REPO,
+        MOCK_RESPONSE_PULL,
+        MOCK_RESPONSE_ISSUE,
+        MOCK_RESPONSE_ATTACHMENTS[0],
+    ]
+    actual_response = []
+    async with create_github_source() as source:
+        source._dls_enabled = Mock(return_value=True)
+        source._fetch_repos = Mock(return_value=AsyncIterator([PUBLIC_REPO]))
         source._fetch_issues = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
         source._fetch_pull_requests = Mock(
             return_value=AsyncIterator([MOCK_RESPONSE_PULL])
@@ -1040,6 +1085,41 @@ async def test_get_docs():
         )
         async for document, _ in source.get_docs():
             actual_response.append(document)
+            assert "_allow_access_control" not in document
+
+        assert expected_response == actual_response
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo():
+    expected_response = [
+        PRIVATE_REPO,
+        MOCK_RESPONSE_PULL,
+        MOCK_RESPONSE_ISSUE,
+        MOCK_RESPONSE_ATTACHMENTS[0],
+    ]
+    actual_response = []
+
+    async with create_github_source() as source:
+        source.github_client.paginated_api_call = Mock(
+            side_effect=[
+                AsyncIterator([MOCK_RESPONSE_MEMBERS]),
+                AsyncIterator([MOCK_CONTRIBUTOR]),
+            ]
+        )
+        source._dls_enabled = Mock(return_value=True)
+        source._fetch_repos = Mock(return_value=AsyncIterator([PRIVATE_REPO]))
+        source._fetch_issues = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
+        source._fetch_pull_requests = Mock(
+            return_value=AsyncIterator([MOCK_RESPONSE_PULL])
+        )
+        source._fetch_files = Mock(
+            return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS])
+        )
+        async for document, _ in source.get_docs():
+            actual_response.append(document)
+            assert "_allow_access_control" in document
+
         assert expected_response == actual_response
 
 
@@ -1208,7 +1288,7 @@ async def test_advanced_rules_validation_with_invalid_repos(
                 }
             ),
             [
-                REPOS,
+                PUBLIC_REPO,
                 MOCK_RESPONSE_PULL,
                 MOCK_RESPONSE_ISSUE,
                 MOCK_RESPONSE_ATTACHMENTS[0],
@@ -1232,7 +1312,7 @@ async def test_advanced_rules_validation_with_invalid_repos(
                     }
                 }
             ),
-            [REPOS, MOCK_RESPONSE_ATTACHMENTS[0]],
+            [PUBLIC_REPO, MOCK_RESPONSE_ATTACHMENTS[0]],
         ),
         (
             # Configured only branch, without queries
@@ -1250,7 +1330,7 @@ async def test_advanced_rules_validation_with_invalid_repos(
                     }
                 }
             ),
-            [REPOS, MOCK_RESPONSE_ATTACHMENTS[0]],
+            [PUBLIC_REPO, MOCK_RESPONSE_ATTACHMENTS[0]],
         ),
     ],
 )
@@ -1258,7 +1338,7 @@ async def test_advanced_rules_validation_with_invalid_repos(
 async def test_get_docs_with_advanced_rules(filtering, expected_response):
     actual_response = []
     async with create_github_source() as source:
-        source._get_configured_repos = Mock(return_value=AsyncIterator([REPOS]))
+        source._get_configured_repos = Mock(return_value=AsyncIterator([PUBLIC_REPO]))
         source._fetch_issues = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
         source._fetch_pull_requests = Mock(
             return_value=AsyncIterator([MOCK_RESPONSE_PULL])
