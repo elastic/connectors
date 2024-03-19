@@ -123,6 +123,18 @@ async def test_validate_config_when_database_is_not_integer():
 
 
 @pytest.mark.asyncio
+async def test_validate_config_with_wrong_configuration():
+    async with create_redis_source() as source:
+        mocked_client = AsyncMock()
+        with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
+            mocked_client.ping = AsyncMock(
+                side_effect=redis.exceptions.AuthenticationError
+            )
+            with pytest.raises(Exception):
+                await source.validate_config()
+
+
+@pytest.mark.asyncio
 async def test_validate_config_when_database_is_invalid():
     async with create_redis_source() as source:
         source.client.database = ["123"]

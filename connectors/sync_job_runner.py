@@ -8,6 +8,9 @@ import time
 
 import elasticsearch
 from elasticsearch import (
+    AuthorizationException as ElasticAuthorizationException,
+)
+from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
 
@@ -192,6 +195,10 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
             await self._sync_done(sync_status=JobStatus.CANCELED)
+        except ElasticAuthorizationException as e:
+            error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
+            self.sync_job.log_error(error_msg, exc_info=True)
+            await self._sync_done(sync_status=JobStatus.ERROR, sync_error=error_msg)
         except Exception as e:
             self.sync_job.log_error(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
@@ -291,7 +298,7 @@ class SyncJobRunner:
         logger.debug("Preparing the content index")
 
         await self.sync_orchestrator.prepare_content_index(
-            index=self.sync_job.index_name, language_code=self.sync_job.language
+            index_name=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
         content_extraction_enabled = (

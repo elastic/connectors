@@ -7,9 +7,7 @@
 """
 import asyncio
 import csv
-import os
 from functools import cached_property, partial
-from io import BytesIO
 
 import fastjsonschema
 import smbclient
@@ -41,9 +39,7 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
-    TIKA_SUPPORTED_FILETYPES,
     RetryStrategy,
-    get_base64_value,
     iso_utc,
     retryable,
 )
@@ -330,6 +326,15 @@ class NASDataSource(BaseDataSource):
                 "required": False,
                 "ui_restrictions": ["advanced"],
             },
+            "use_text_extraction_service": {
+                "display": "toggle",
+                "label": "Use text extraction service",
+                "order": 9,
+                "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+                "type": "bool",
+                "ui_restrictions": ["advanced"],
+                "value": False,
+            },
         }
 
     def create_connection(self):
@@ -419,7 +424,9 @@ class NASDataSource(BaseDataSource):
         files = []
         loop = asyncio.get_running_loop()
         try:
-            files = await loop.run_in_executor(None, smbclient.scandir, path)
+            files = await loop.run_in_executor(
+                executor=None, func=partial(smbclient.scandir, path, port=self.port)
+            )
         except SMBConnectionClosed as exception:
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
@@ -443,7 +450,7 @@ class NASDataSource(BaseDataSource):
                 "title": file.name,
             }
 
-    def fetch_file_content(self, path):
+    async def fetch_file_content(self, path):
         """Fetches the file content from the given drive path
 
         Args:
@@ -452,14 +459,12 @@ class NASDataSource(BaseDataSource):
         self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb"
+                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
             ) as file:
-                file_content, chunk = BytesIO(), True
+                chunk = True
                 while chunk:
                     chunk = file.read(MAX_CHUNK_SIZE) or b""
-                    file_content.write(chunk)
-                file_content.seek(0)
-                return file_content
+                    yield chunk
         except SMBOSError as error:
             self._logger.error(
                 f"Cannot read the contents of file on path:{path}. Error {error}"
@@ -476,33 +481,29 @@ class NASDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
-        if not (
-            doit
-            and (os.path.splitext(file["title"])[-1]).lower()
-            in TIKA_SUPPORTED_FILETYPES
-        ):
+        if not (doit):
             return
 
-        if int(file["size"]) > self.framework_config.max_file_size:
+        filename = file["title"]
+        file_size = file["size"]
+        file_extension = self.get_file_extension(filename)
+        if not self.can_file_be_downloaded(file_extension, filename, file_size):
             self._logger.warning(
                 f"File size {file['size']} of {file['title']} bytes is larger than {self.framework_config.max_file_size} bytes. Discarding the file content"
             )
             return
 
-        loop = asyncio.get_running_loop()
-        content = await loop.run_in_executor(
-            executor=None, func=partial(self.fetch_file_content, path=file["path"])
-        )
-
-        if not content:
-            return
-        attachment = content.read()
-        content.close()
-        return {
+        document = {
             "_id": file["id"],
             "_timestamp": file["_timestamp"],
-            "_attachment": get_base64_value(content=attachment),
         }
+
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(self.fetch_file_content, path=file["path"]),
+        )
 
     def list_file_permission(self, file_path, file_type, mode, access):
         try:
@@ -512,6 +513,7 @@ class NASDataSource(BaseDataSource):
                 buffering=0,
                 file_type=file_type,
                 desired_access=access,
+                port=self.port,
             ) as file:
                 descriptor = self.security_info.get_descriptor(
                     file_descriptor=file.fd, info=SECURITY_INFO_DACL

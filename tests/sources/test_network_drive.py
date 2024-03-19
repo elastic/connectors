@@ -8,7 +8,6 @@
 import asyncio
 import csv
 import datetime
-from io import BytesIO
 from unittest import mock
 from unittest.mock import ANY, MagicMock
 
@@ -264,7 +263,7 @@ async def test_get_files(dir_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-async def test_fetch_file_when_file_is_inaccessible(file_mock):
+async def test_fetch_file_when_file_is_inaccessible(file_mock, caplog):
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
     Args:
@@ -272,39 +271,36 @@ async def test_fetch_file_when_file_is_inaccessible(file_mock):
     """
     # Setup
     async with create_source(NASDataSource) as source:
+        caplog.set_level("ERROR")
         path = "\\1.2.3.4/Users/file1.txt"
         file_mock.side_effect = SMBOSError(ntstatus=0xC0000043, filename="file1.txt")
 
         # Execute
-        response = source.fetch_file_content(path=path)
+        async for _response in source.fetch_file_content(path=path):
+            # Assert
+            assert (
+                "Cannot read the contents of file on path:\1.2.3.4/Users/file1.txt. Error [Error 1] [NtStatus 0xc0000043] The process cannot access the file because it is being used by another process: 'file1.txt'"
+                in caplog.text
+            )
 
-        # Assert
-        assert response is None
+
+async def create_fake_coroutine(data):
+    """create a method for returning fake coroutine value"""
+    return data
 
 
 @pytest.mark.asyncio
-@mock.patch("smbclient.open_file")
-async def test_get_content(file_mock):
-    """Test get_content method of Network Drive
-
-    Args:
-        file_mock (patch): The patch of open_file method
-    """
+async def test_get_content():
+    """Test get_content method of Network Drive"""
     # Setup
     async with create_source(NASDataSource) as source:
-        file_mock.return_value.__enter__.return_value.read.return_value = bytes(
-            "Mock....", "utf-8"
-        )
-
         mock_response = {
             "id": "1",
             "_timestamp": "2022-04-21T12:12:30",
             "title": "file1.txt",
             "path": "\\1.2.3.4/Users/folder1/file1.txt",
-            "size": "50",
+            "size": 50,
         }
-
-        mocked_content_response = BytesIO(b"Mock....")
 
         expected_output = {
             "_id": "1",
@@ -313,7 +309,9 @@ async def test_get_content(file_mock):
         }
 
         # Execute
-        source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
+        source.download_and_extract_file = mock.MagicMock(
+            return_value=create_fake_coroutine(expected_output)
+        )
         actual_response = await source.get_content(mock_response, doit=True)
 
         # Assert
@@ -321,28 +319,17 @@ async def test_get_content(file_mock):
 
 
 @pytest.mark.asyncio
-@mock.patch("smbclient.open_file")
-async def test_get_content_with_upper_extension(file_mock):
-    """Test get_content method of Network Drive
-
-    Args:
-        file_mock (patch): The patch of open_file method
-    """
+async def test_get_content_with_upper_extension():
+    """Test get_content method of Network Drive"""
     # Setup
     async with create_source(NASDataSource) as source:
-        file_mock.return_value.__enter__.return_value.read.return_value = bytes(
-            "Mock....", "utf-8"
-        )
-
         mock_response = {
             "id": "1",
             "_timestamp": "2022-04-21T12:12:30",
             "title": "file1.TXT",
             "path": "\\1.2.3.4/Users/folder1/file1.txt",
-            "size": "50",
+            "size": 50,
         }
-
-        mocked_content_response = BytesIO(b"Mock....")
 
         expected_output = {
             "_id": "1",
@@ -351,7 +338,9 @@ async def test_get_content_with_upper_extension(file_mock):
         }
 
         # Execute
-        source.fetch_file_content = mock.MagicMock(return_value=mocked_content_response)
+        source.download_and_extract_file = mock.MagicMock(
+            return_value=create_fake_coroutine(expected_output)
+        )
         actual_response = await source.get_content(mock_response, doit=True)
 
         # Assert
@@ -385,7 +374,7 @@ async def test_get_content_when_file_size_is_large():
             "id": "1",
             "_timestamp": "2022-04-21T12:12:30",
             "title": "file1.txt",
-            "size": "20000000000",
+            "size": 20000000000,
         }
 
         # Execute
@@ -404,6 +393,7 @@ async def test_get_content_when_file_type_not_supported():
             "id": "1",
             "_timestamp": "2022-04-21T12:12:30",
             "title": "file2.dmg",
+            "size": 123,
         }
 
         # Execute
@@ -449,10 +439,9 @@ async def test_fetch_file_when_file_is_accessible(file_mock):
         )
 
         # Execute
-        response = source.fetch_file_content(path=path)
-
-        # Assert
-        assert response.read() == b"Mock...."
+        async for response in source.fetch_file_content(path=path):
+            # Assert
+            assert response in [b"Mock....", b""]
 
 
 @pytest.mark.asyncio
