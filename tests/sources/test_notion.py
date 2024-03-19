@@ -1,18 +1,26 @@
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
 from httpx import Response
 from notion_client import APIResponseError
 
+from connectors.filtering.validation import SyncRuleValidationResult
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.notion import NotFound, NotionClient, NotionDataSource
+from connectors.sources.notion import (
+    NotFound,
+    NotionAdvancedRulesValidator,
+    NotionClient,
+    NotionDataSource,
+)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
+ADVANCED_SNIPPET = "advanced_snippet"
 DATABASE = {
     "object": "database",
-    "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+    "id": "database_id",
     "created_time": "2021-07-13T16:48:00.000Z",
     "last_edited_time": "2021-07-13T16:48:00.000Z",
     "title": [
@@ -548,3 +556,197 @@ async def test_fetch_children_recursively():
                     block["paragraph"]["text"][0]["plain_text"]
                     == "This is a test paragraph block."
                 )
+
+
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": {
+                        "database_query_filters": [
+                            {
+                                "filter": {
+                                    "property": "Task completed",
+                                    "title": {"equals": "true"},
+                                },
+                                "database_id": "database_id",
+                            }
+                        ],
+                        "searches": [
+                            {
+                                "filter": {"value": "database"},
+                                "query": "efghsd",
+                            }
+                        ],
+                    }
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering):
+    async with create_source(
+        NotionDataSource,
+        notion_secret_key="secert_key",
+    ) as source:
+        documents = []
+        with patch.object(
+            NotionClient, "query_database", return_value=AsyncIterator([DATABASE])
+        ), patch.object(
+            NotionDataSource,
+            "retrieve_and_process_blocks",
+            return_value=AsyncIterator([(BLOCK, None)]),
+        ):
+            expected_responses_ids = [DATABASE.get("id"), BLOCK.get("id")]
+            async for docs, _ in source.get_docs(filtering):
+                documents.append(docs.get("id"))
+            assert documents == expected_responses_ids
+
+
+@pytest.mark.parametrize(
+    "advanced_rules, expected_validation_result",
+    [
+        # Valid: search query for database
+        (
+            {
+                "searches": [
+                    {
+                        "filter": {"value": "database"},
+                        "query": "Demo",
+                    }
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Valid: search query for page
+        (
+            {
+                "searches": [
+                    {
+                        "filter": {"value": "page"},
+                        "query": "Demo",
+                    }
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Invalid: provided filter value is incorrect: pages in place of page
+        (
+            {
+                "searches": [
+                    {
+                        "filter": {"value": "pages"},
+                        "query": "Demo",
+                    }
+                ]
+            },
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        # Invalid: no query key
+        (
+            {"searches": [{"filter": {"value": "database"}}]},
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        # Valid: database query filter
+        (
+            {
+                "database_query_filters": [
+                    {
+                        "filter": {
+                            "property": "Task completed",
+                        },
+                        "database_id": "database_id",
+                    }
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Invalid: empty property value
+        (
+            {
+                "database_query_filters": [
+                    {
+                        "filter": {"property": "", "title": {"contain": "John"}},
+                        "database_id": "database_id",
+                    }
+                ]
+            },
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        # Valid: database query filter using or
+        (
+            {
+                "database_query_filters": [
+                    {
+                        "filter": {
+                            "or": [
+                                {
+                                    "property": "Description",
+                                    "rich_text": {"contains": "2023"},
+                                }
+                            ]
+                        },
+                        "database_id": "database_id",
+                    }
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Valid: two search query
+        (
+            {
+                "searches": [
+                    {
+                        "filter": {"value": "page"},
+                        "query": "Test Page",
+                    },
+                    {
+                        "filter": {"value": "database"},
+                        "query": "Test Database",
+                    },
+                ]
+            },
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+    async with create_source(
+        NotionDataSource, notion_secret_key="secret_key"
+    ) as source:
+        with patch(
+            "connectors.sources.notion.async_iterate_paginated_api",
+            return_value=AsyncIterator([DATABASE]),
+        ), patch.object(
+            NotionDataSource, "get_entities", return_value=[DATABASE, BLOCK]
+        ):
+            validation_result = await NotionAdvancedRulesValidator(source).validate(
+                advanced_rules
+            )
+        assert validation_result == expected_validation_result
