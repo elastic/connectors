@@ -11,10 +11,15 @@ from functools import cached_property, partial
 from urllib.parse import unquote
 
 import aiohttp
+import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
-from notion_client import AsyncClient
+from notion_client import APIResponseError, AsyncClient
 from notion_client.helpers import async_iterate_paginated_api
 
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
@@ -158,11 +163,134 @@ class NotionClient:
         ):
             yield block_comment
 
-    async def query_database(self, database_id):
+    async def query_database(self, database_id, body=None):
+        if body is None:
+            body = {}
         async for result in async_iterate_paginated_api(
-            self._get_client.databases.query, database_id=database_id
+            self._get_client.databases.query, database_id=database_id, **body
         ):
             yield result
+
+
+class NotionAdvancedRulesValidator(AdvancedRulesValidator):
+    DATABASE_QUERY_DEFINITION = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "database_id": {"type": "string", "minLength": 1},
+                "filter": {
+                    "type": "object",
+                    "properties": {"property": {"type": "string", "minLength": 1}},
+                    "additionalProperties": {
+                        "type": ["object", "array"],
+                    },
+                },
+            },
+            "required": ["database_id"],
+        },
+    }
+
+    SEARCH_QUERY_DEFINITION = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "filter": {
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string", "enum": ["page", "database"]},
+                    },
+                    "required": ["value"],
+                },
+            },
+            "required": ["query"],
+        },
+    }
+
+    RULES_OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "database_query_filters": DATABASE_QUERY_DEFINITION,
+            "searches": SEARCH_QUERY_DEFINITION,
+        },
+        "minProperties": 1,
+        "additionalProperties": False,
+    }
+
+    SCHEMA = fastjsonschema.compile(definition=RULES_OBJECT_SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+        self._logger = logger
+
+    async def validate(self, advanced_rules):
+        if len(advanced_rules) == 0:
+            return SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            )
+
+        self._logger.info("Remote validation started")
+        return await self._remote_validation(advanced_rules)
+
+    async def _remote_validation(self, advanced_rules):
+        try:
+            NotionAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
+            )
+        invalid_database = []
+        databases = []
+        page_title = []
+        database_title = []
+        query = {"filter": {"property": "object", "value": "database"}}
+        async for document in async_iterate_paginated_api(
+            self.source.notion_client._get_client.search, **query
+        ):
+            databases.append(document.get("id").replace("-", ""))
+        for rule in advanced_rules:
+            if "database_query_filters" in rule:
+                self._logger.info("Validating database query filters")
+                for database in advanced_rules.get("database_query_filters"):
+                    database_id = (
+                        database.get("database_id").replace("-", "")
+                        if "-" in database.get("database_id")
+                        else database.get("database_id")
+                    )
+                    if database_id not in databases:
+                        invalid_database.append(database.get("database_id"))
+                if invalid_database:
+                    return SyncRuleValidationResult(
+                        SyncRuleValidationResult.ADVANCED_RULES,
+                        is_valid=False,
+                        validation_message=f"Invalid database id: {', '.join(invalid_database)}",
+                    )
+            if "searches" in rule:
+                self._logger.info("Validating search filters")
+                for database_page in advanced_rules.get("searches"):
+                    if database_page.get("filter", {}).get("value") == "page":
+                        page_title.append(database_page.get("query"))
+                    elif database_page.get("filter", {}).get("value") == "database":
+                        database_title.append(database_page.get("query"))
+                try:
+                    if page_title:
+                        await self.source.get_entities("page", page_title)
+                    if database_title:
+                        await self.source.get_entities("database", database_title)
+                except ConfigurableFieldValueError as error:
+                    return SyncRuleValidationResult(
+                        SyncRuleValidationResult.ADVANCED_RULES,
+                        is_valid=False,
+                        validation_message=str(error),
+                    )
+            self._logger.info("Remote validation successful")
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
+        )
 
 
 class NotionDataSource(BaseDataSource):
@@ -170,6 +298,7 @@ class NotionDataSource(BaseDataSource):
 
     name = "Notion"
     service_type = "notion"
+    advanced_rules_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Notion instance.
@@ -304,6 +433,9 @@ class NotionDataSource(BaseDataSource):
             },
         }
 
+    def advanced_rules_validators(self):
+        return [NotionAdvancedRulesValidator(self)]
+
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by Notion
 
@@ -395,46 +527,30 @@ class NotionDataSource(BaseDataSource):
                     "filter": {"value": "database", "property": "object"},
                 }
 
-    async def get_docs(self, filtering=None):
-        """Executes the logic to fetch following Notion objects: Users, Pages, Databases, Files,
-           Comments, Blocks, Child Blocks in async manner.
-        Args:
-            filtering (filtering, None): Filtering Rules. Defaults to None.
-        Yields:
-            dict: Documents from Notion.
-        """
-        self._logger.info("Fetching users")
-        async for user_document in self.notion_client.fetch_users():
-            yield self._format_doc(user_document), None
-
+    async def retrieve_and_process_blocks(self, query):
         block_ids_store = []
-        for query in self.generate_query():
-            self._logger.info(f"Fetching pages and databases using query {query}")
+        async for page_database in self.notion_client.fetch_by_query(query=query):
+            block_id = page_database.get("id")
+            if self.index_comments is True:
+                block_ids_store.append(block_id)
 
-            async for page_database in self.notion_client.fetch_by_query(query=query):
-                block_id = page_database.get("id")
+            yield self._format_doc(page_database), None
+            self._logger.info(f"Fetching child blocks for block {block_id}")
+
+            async for child_block in self.notion_client.fetch_child_blocks(
+                block_id=block_id
+            ):
                 if self.index_comments is True:
-                    block_ids_store.append(block_id)
+                    block_ids_store.append(child_block.get("id"))
 
-                yield self._format_doc(page_database), None
-                self._logger.info(f"Fetching child blocks for block {block_id}")
-
-                async for child_block in self.notion_client.fetch_child_blocks(
-                    block_id=block_id
-                ):
-                    if self.index_comments is True:
-                        block_ids_store.append(child_block.get("id"))
-
-                    if child_block.get("type") != "file":
-                        yield self._format_doc(child_block), None
-                    else:
-                        file_url = (
-                            child_block.get("file", {}).get("file", {}).get("url")
-                        )
-                        child_block = self._format_doc(child_block)
-                        yield child_block, partial(
-                            self.get_content, copy(child_block), file_url
-                        )
+                if child_block.get("type") != "file":
+                    yield self._format_doc(child_block), None
+                else:
+                    file_url = child_block.get("file", {}).get("file", {}).get("url")
+                    child_block = self._format_doc(child_block)
+                    yield child_block, partial(
+                        self.get_content, copy(child_block), file_url
+                    )
 
         if self.index_comments is True:
             for block_id in block_ids_store:
@@ -443,3 +559,59 @@ class NotionDataSource(BaseDataSource):
                     block_id=block_id
                 ):
                     yield self._format_doc(comment), None
+
+    async def get_docs(self, filtering=None):
+        """Executes the logic to fetch following Notion objects: Users, Pages, Databases, Files,
+           Comments, Blocks, Child Blocks in async manner.
+        Args:
+            filtering (filtering, None): Filtering Rules. Defaults to None.
+        Yields:
+            dict: Documents from Notion.
+        """
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            for rule in advanced_rules:
+                if "searches" in rule:
+                    for database_page in advanced_rules.get("searches"):
+                        if "filter" in database_page:
+                            database_page["filter"]["property"] = "object"
+                        self._logger.info(
+                            f"Fetching databases and pages using search query: {database_page}"
+                        )
+                        async for data in self.retrieve_and_process_blocks(
+                            database_page
+                        ):
+                            yield data
+                if "database_query_filters" in rule:
+                    for database_query_filter in advanced_rules.get(
+                        "database_query_filters"
+                    ):
+                        filter_criteria = (
+                            {"filter": database_query_filter.get("filter")}
+                            if "filter" in database_query_filter
+                            else {}
+                        )
+                        try:
+                            database_id = database_query_filter.get("database_id")
+                            self._logger.info(
+                                f"Fetching records for database with id: {database_id}"
+                            )
+                            async for database in self.notion_client.query_database(
+                                database_id, filter_criteria
+                            ):
+                                yield self._format_doc(database), None
+                        except APIResponseError as e:
+                            msg = (
+                                f"Please make sure to include correct filter field, {e}"
+                            )
+                            raise ConfigurableFieldValueError(msg) from e
+
+        else:
+            self._logger.info("Fetching users")
+            async for user_document in self.notion_client.fetch_users():
+                yield self._format_doc(user_document), None
+
+            for query in self.generate_query():
+                self._logger.info(f"Fetching pages and databases using query {query}")
+                async for data in self.retrieve_and_process_blocks(query):
+                    yield data
