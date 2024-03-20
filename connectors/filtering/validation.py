@@ -198,7 +198,7 @@ class FilteringValidator:
             for validator in advanced_rules_validators:
                 filtering_validation_result += await validator.validate(advanced_rules)
 
-        self._logger.debug(
+        self._logger.info(
             f"Filtering validation result: {filtering_validation_result.state}"
         )
 
