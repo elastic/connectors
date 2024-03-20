@@ -480,9 +480,14 @@ class NASDataSource(BaseDataSource):
         """
         self._logger.debug(f"Fetching the contents of file on path: {path}")
         try:
-            await asyncio.to_thread(self.smb_connection.create_connection)
             with smbclient.open_file(
-                path=path, encoding="utf-8", errors="ignore", mode="rb", port=self.port
+                path=path,
+                encoding="utf-8",
+                errors="ignore",
+                mode="rb",
+                username=self.username,
+                password=self.password,
+                port=self.port,
             ) as file:
                 chunk = True
                 while chunk:

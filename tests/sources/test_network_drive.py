@@ -265,7 +265,6 @@ async def test_get_files(dir_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-@mock.patch.object(smbclient, "register_session")
 async def test_fetch_file_when_file_is_inaccessible(file_mock, caplog):
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
@@ -441,15 +440,11 @@ async def test_fetch_file_when_file_is_accessible(file_mock):
         file_mock.return_value.__enter__.return_value.read = mock.MagicMock(
             side_effect=side_effect_function
         )
-        expected_response = True
-        response = asyncio.Future()
-        response.set_result(expected_response)
 
         # Execute
-        with mock.patch.object(smbclient, "register_session", return_value=response):
-            async for response in source.fetch_file_content(path=path):
-                # Assert
-                assert response in [b"Mock....", b""]
+        async for response in source.fetch_file_content(path=path):
+            # Assert
+            assert response in [b"Mock....", b""]
 
 
 @pytest.mark.asyncio
