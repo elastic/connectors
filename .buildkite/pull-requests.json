@@ -8,7 +8,7 @@
       "allowed_list": ["praveen-elastic", "moxarth-elastic", "khusbu-crest", "akanshi-crest"],
       "set_commit_status": true,
       "commit_status_context": "buildkite/connectors",
-      "build_on_commit": true,
+      "build_on_commit": false,
       "build_on_comment": true,
       "trigger_comment_regex": "^(?:(?:buildkite\\W+)?(?:build|test)\\W+(?:this|it))",
       "always_trigger_comment_regex": "^(?:(?:buildkite\\W+)?(?:build|test)\\W+(?:this|it))",
@@ -18,4 +18,3 @@
     }
   ]
 }
-
