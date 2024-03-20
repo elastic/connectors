@@ -48,6 +48,8 @@ spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
       repository: "elastic/connectors"
+      provider_settings:
+        skip_pull_request_builds_for_existing_commits: false
       teams:
         everyone:
           access_level: "READ_ONLY"
