@@ -410,7 +410,11 @@ class ConcurrentTasks:
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
         self._sem.release()
-        if task.exception():
+        if task.cancelled():
+            logger.error(
+                f"Task {task.get_name()} was cancelled",
+            )
+        elif task.exception():
             logger.error(
                 f"Exception found for task {task.get_name()}: {task.exception()}",
                 exc_info=True,

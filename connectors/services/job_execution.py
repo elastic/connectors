@@ -148,6 +148,7 @@ class JobExecutionService(BaseService):
                     break
                 await self._sleeps.sleep(self.idling)
         finally:
+            await self.sync_job_pool.join()
             if self.connector_index is not None:
                 self.connector_index.stop_waiting()
                 await self.connector_index.close()
