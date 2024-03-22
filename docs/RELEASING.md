@@ -32,7 +32,7 @@ After the Elastic unified release is complete
 To release the docker image, follow these steps:
 
 1. Make sure that you're on the right branch and VERSION file is correct: `cat connectors/VERSION`. The value in this file should be your _expected_ release version - e.g. if you're releasing 8.12.2.1, then VERSION should also be 8.12.2.1.
-2. Go to https://buildkite.com/elastic/connectors-docker-build-publish and trigger a Build:
+2. Go to https://buildkite.com/elastic, find "connectors-docker-build-publish" pipeline and trigger a Build:
   - Click on "New Build"
   - Enter a descriptive message, choose commit (or leave HEAD if you build the last commit of the branch) and enter the branch (in the example with 8.12.2.1 you would put `8.12` here)
   - Press "Create Build" and wait for the build to finish
