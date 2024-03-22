@@ -60,6 +60,9 @@ OP_UPSERT = "update"
 OP_DELETE = "delete"
 CANCELATION_TIMEOUT = 5
 
+# Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
+SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
+
 
 def get_mb_size(ob):
     """Returns the size of ob in MiB"""
@@ -132,26 +135,16 @@ class Sink:
         index = doc["_index"]
 
         if operation == OP_INDEX:
-            self._log_on_doc_id_tracing_enabled(f"Created document with id '{doc_id}'")
-
             return [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
         if operation == OP_UPSERT:
-            self._log_on_doc_id_tracing_enabled(f"Updated document with id '{doc_id}'")
-
             return [
                 {operation: {"_index": index, "_id": doc_id}},
                 {"doc": doc["doc"], "doc_as_upsert": True},
             ]
         if operation == OP_DELETE:
-            self._log_on_doc_id_tracing_enabled(f"Deleted document with id '{doc_id}'")
-
             return [{operation: {"_index": index, "_id": doc_id}}]
 
         raise TypeError(operation)
-
-    def _log_on_doc_id_tracing_enabled(self, msg):
-        if self._enable_doc_id_trace_logging:
-            self._logger.debug(msg)
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
@@ -172,6 +165,10 @@ class Sink:
 
         # TODO: retry 429s for individual items here
         res = await self.client.bulk_insert(operations, self.pipeline["name"])
+
+        if self._enable_doc_id_trace_logging:
+            await self._log_bulk_operations(res)
+
         if res.get("errors"):
             for item in res["items"]:
                 for op, data in item.items():
@@ -182,6 +179,43 @@ class Sink:
         self._populate_stats(stats, res)
 
         return res
+
+    async def _log_bulk_operations(self, res):
+        for item in res.get("items", []):
+            if "index" in item:
+                action_item = "index"
+            elif "delete" in item:
+                action_item = "delete"
+            elif "create" in item:
+                action_item = "create"
+            elif "update" in item:
+                action_item = "update"
+            else:
+                # Should only happen, if the _bulk API changes
+                # Unlikely, but as this functionality could be used for audits we want to detect changes fast
+                self._logger.error(
+                    f"Unknown action item returned from _bulk API for item {item}"
+                )
+                return
+
+            doc_id = item[action_item].get("_id")
+            if doc_id is None:
+                # Should only happen, if the _bulk API changes
+                # Unlikely, but as this functionality could be used for audits we want to detect changes fast
+                self._logger.error(f"Could not retrieve '_id' for item {item}")
+                return
+
+            result = item[action_item].get("result")
+            operation_failed = result not in SUCCESSFUL_RESULTS
+
+            if operation_failed:
+                self._logger.debug(
+                    f"Failed to execute '{action_item}' on document with id '{doc_id}'. Result: {result}. Error: {item[action_item].get('error')}"
+                )
+            else:
+                self._logger.debug(
+                    f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"
+                )
 
     def _populate_stats(self, stats, res):
         for item in res["items"]:

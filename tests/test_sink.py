@@ -36,6 +36,8 @@ INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
 NO_FILTERING = ()
 DOC_ONE_ID = 1
+DOC_TWO_ID = 2
+DOC_THREE_ID = 3
 
 DOC_ONE = {"_id": DOC_ONE_ID, "_timestamp": TIMESTAMP}
 
@@ -47,10 +49,28 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
 DOC_THREE = {"_id": 3, "_timestamp": TIMESTAMP}
 
+BULK_ACTION_ERROR = "some error"
+
 SYNC_RULES_ENABLED = True
 SYNC_RULES_DISABLED = False
 CONTENT_EXTRACTION_ENABLED = True
 CONTENT_EXTRACTION_DISABLED = False
+
+
+def failed_bulk_action(doc_id, action, result, error=BULK_ACTION_ERROR):
+    return {action: {"_id": doc_id, "result": result, "error": error}}
+
+
+def successful_bulk_action(doc_id, action, result):
+    return {action: {"_id": doc_id, "result": result}}
+
+
+def successful_action_log_message(doc_id, action, result):
+    return f"Successfully executed '{action}' on document with id '{doc_id}'. Result: {result}"
+
+
+def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
+    return f"Failed to execute '{action}' on document with id '{doc_id}'. Result: {result}. Error: {error}"
 
 
 @pytest.mark.asyncio
@@ -1304,48 +1324,6 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
             es._sink.force_cancel.assert_not_called()
 
 
-def test_log_on_doc_id_tracing_enabled_if_enabled(patch_logger):
-    queue = Mock()
-    sink = Sink(
-        None,
-        queue,
-        chunk_size=0,
-        pipeline={"name": "pipeline"},
-        chunk_mem_size=0,
-        max_concurrency=0,
-        max_retries=3,
-        retry_interval=10,
-        enable_doc_id_trace_logging=True,
-    )
-
-    log_msg = "Deleted document with id 'some id'"
-
-    sink._log_on_doc_id_tracing_enabled(log_msg)
-
-    patch_logger.assert_present(log_msg)
-
-
-def test_log_on_doc_id_tracing_enabled_if_disabled(patch_logger):
-    queue = Mock()
-    sink = Sink(
-        None,
-        queue,
-        chunk_size=0,
-        pipeline={"name": "pipeline"},
-        chunk_mem_size=0,
-        max_concurrency=0,
-        max_retries=3,
-        retry_interval=10,
-        enable_doc_id_trace_logging=False,
-    )
-
-    log_msg = "Deleted document with id 'some id'"
-
-    sink._log_on_doc_id_tracing_enabled(log_msg)
-
-    patch_logger.assert_not_present(log_msg)
-
-
 @pytest.mark.asyncio
 async def test_update_authorization():
     config = {
@@ -1391,3 +1369,160 @@ async def test_update_authorization_when_api_key_not_found():
 
     with pytest.raises(ApiKeyNotFoundError):
         await sync_orchestrator.update_authorization("my-index", "my-secret-id")
+
+
+@pytest.mark.asyncio
+async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(
+    patch_logger,
+):
+    action = "create"
+    result = "created"
+    operations = []
+    client = Mock()
+    client.bulk_insert = AsyncMock(
+        return_value={"items": [successful_bulk_action(DOC_ONE_ID, action, result)]}
+    )
+    sink = Sink(
+        client=client,
+        queue=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+        enable_doc_id_trace_logging=False,
+    )
+
+    await sink._batch_bulk(operations, STATS)
+
+    patch_logger.assert_not_present(
+        successful_action_log_message(DOC_ONE_ID, action, result)
+    )
+
+
+@pytest.mark.parametrize(
+    "operation_results, expected_logs",
+    [
+        (
+            [successful_bulk_action(DOC_ONE_ID, "create", "created")],
+            [successful_action_log_message(DOC_ONE_ID, "create", "created")],
+        ),
+        (
+            [successful_bulk_action(DOC_ONE_ID, "delete", "deleted")],
+            [successful_action_log_message(DOC_ONE_ID, "delete", "deleted")],
+        ),
+        (
+            [successful_bulk_action(DOC_ONE_ID, "index", "created")],
+            [successful_action_log_message(DOC_ONE_ID, "index", "created")],
+        ),
+        (
+            [successful_bulk_action(DOC_ONE_ID, "update", "updated")],
+            [successful_action_log_message(DOC_ONE_ID, "update", "updated")],
+        ),
+        (
+            [failed_bulk_action(DOC_ONE_ID, "create", "not_found")],
+            [failed_action_log_message(DOC_ONE_ID, "create", "not_found")],
+        ),
+        (
+            [failed_bulk_action(DOC_ONE_ID, "delete", "not_found")],
+            [failed_action_log_message(DOC_ONE_ID, "delete", "not_found")],
+        ),
+        (
+            [failed_bulk_action(DOC_ONE_ID, "index", "not_found")],
+            [failed_action_log_message(DOC_ONE_ID, "index", "not_found")],
+        ),
+        (
+            [failed_bulk_action(DOC_ONE_ID, "update", "not_found")],
+            [failed_action_log_message(DOC_ONE_ID, "update", "not_found")],
+        ),
+        (
+            [
+                successful_bulk_action(DOC_ONE_ID, "create", "created"),
+                successful_bulk_action(DOC_TWO_ID, "update", "updated"),
+                failed_bulk_action(DOC_THREE_ID, "update", "not_found"),
+            ],
+            [
+                successful_action_log_message(DOC_ONE_ID, "create", "created"),
+                successful_action_log_message(DOC_TWO_ID, "update", "updated"),
+                failed_action_log_message(DOC_THREE_ID, "update", "not_found"),
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_should_log_bulk_operations_if_doc_id_tracing_is_enabled(
+    patch_logger, operation_results, expected_logs
+):
+    operations = []
+    client = Mock()
+    client.bulk_insert = AsyncMock(return_value={"items": operation_results})
+    sink = Sink(
+        client=client,
+        queue=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+        enable_doc_id_trace_logging=True,
+    )
+
+    await sink._batch_bulk(operations, STATS)
+
+    for log in expected_logs:
+        patch_logger.assert_present(log)
+
+
+@pytest.mark.asyncio
+async def test_should_log_error_when_id_is_missing(patch_logger):
+    operations = []
+    client = Mock()
+    # item missing id
+    item = {"index": {"result": "created"}}
+
+    client.bulk_insert = AsyncMock(return_value={"items": [item]})
+    sink = Sink(
+        client=client,
+        queue=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+        enable_doc_id_trace_logging=True,
+    )
+
+    await sink._batch_bulk(operations, STATS)
+
+    patch_logger.assert_present(f"Could not retrieve '_id' for item {item}")
+
+
+@pytest.mark.asyncio
+async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
+    operations = []
+    client = Mock()
+
+    # item with unknown action item
+    item = {"unknown": {"result": "created"}}
+
+    client.bulk_insert = AsyncMock(return_value={"items": [item]})
+    sink = Sink(
+        client=client,
+        queue=Mock(),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+        enable_doc_id_trace_logging=True,
+    )
+
+    await sink._batch_bulk(operations, STATS)
+
+    patch_logger.assert_present(
+        f"Unknown action item returned from _bulk API for item {item}"
+    )
