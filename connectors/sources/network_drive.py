@@ -406,7 +406,9 @@ class NASDataSource(BaseDataSource):
         for file in directory_info:
             yield self.format_document(file=file)
             if file.is_dir():
-                async for sub_file_data in self.traverse_diretory(path=file.path):
+                async for sub_file_data in self.traverse_diretory(
+                    path=file.path
+                ):  # pyright: ignore
                     yield sub_file_data
 
     async def get_directory_details(self):

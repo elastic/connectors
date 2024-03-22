@@ -223,7 +223,6 @@ async def test_traverse_diretory_retried_on_smb_timeout(dir_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-@mock.patch.object(smbclient, "register_session")
 async def test_fetch_file_when_file_is_inaccessible(file_mock, caplog):
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
