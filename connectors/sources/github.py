@@ -1031,7 +1031,7 @@ class GitHubDataSource(BaseDataSource):
                 "order": 2,
                 "type": "str",
             },
-            "authentication": {
+            "auth_method": {
                 "display": "dropdown",
                 "label": "Authentication method",
                 "options": [
@@ -1044,7 +1044,7 @@ class GitHubDataSource(BaseDataSource):
             },
             "token": {
                 "depends_on": [
-                    {"field": "authentication", "value": PERSONAL_ACCESS_TOKEN}
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN}
                 ],
                 "label": "Token",
                 "order": 4,
@@ -1052,9 +1052,6 @@ class GitHubDataSource(BaseDataSource):
                 "type": "str",
             },
             "repo_type": {
-                "depends_on": [
-                    {"field": "authentication", "value": PERSONAL_ACCESS_TOKEN}
-                ],
                 "display": "dropdown",
                 "label": "Repository Type",
                 "options": [
@@ -1068,7 +1065,7 @@ class GitHubDataSource(BaseDataSource):
             },
             "org_name": {
                 "depends_on": [
-                    {"field": "authentication", "value": PERSONAL_ACCESS_TOKEN},
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN},
                     {"field": "repo_type", "value": "organization"},
                 ],
                 "label": "Organization Name",
@@ -1076,14 +1073,14 @@ class GitHubDataSource(BaseDataSource):
                 "type": "str",
             },
             "app_id": {
-                "depends_on": [{"field": "authentication", "value": GITHUB_APP}],
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
                 "display": "numeric",
                 "label": "App ID",
                 "order": 7,
                 "type": "int",
             },
             "private_key": {
-                "depends_on": [{"field": "authentication", "value": GITHUB_APP}],
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
                 "display": "textarea",
                 "label": "App private key",
                 "order": 8,
@@ -1131,10 +1128,7 @@ class GitHubDataSource(BaseDataSource):
             },
             "use_document_level_security": {
                 "display": "toggle",
-                "depends_on": [
-                    {"field": "authentication", "value": PERSONAL_ACCESS_TOKEN},
-                    {"field": "repo_type", "value": "organization"},
-                ],
+                "depends_on": [{"field": "repo_type", "value": "organization"}],
                 "label": "Enable document level security",
                 "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
