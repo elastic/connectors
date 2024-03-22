@@ -50,6 +50,8 @@ from connectors.utils import (
 )
 
 __all__ = ["SyncOrchestrator"]
+FETCH_ERROR = "FETCH_ERROR"
+END_DOCS = "END_DOCS"
 
 OP_INDEX = "index"
 OP_UPSERT = "update"
@@ -229,7 +231,7 @@ class Sink:
 
         while True:
             doc_size, doc = await self.fetch_doc()
-            if doc in ("END_DOCS", "FETCH_ERROR"):
+            if doc in (END_DOCS, FETCH_ERROR):
                 break
             operation = doc["_op_type"]
             doc_id = doc["_id"]
@@ -371,7 +373,7 @@ class Extractor:
             # We clear the queue as we could not actually ingest anything.
             # After that we indicate that we've encountered an error
             self.queue.clear()
-            await self.put_doc("FETCH_ERROR")
+            await self.put_doc(FETCH_ERROR)
             self.fetch_error = ElasticsearchOverloadedError(e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
@@ -381,7 +383,7 @@ class Extractor:
                 return
 
             self._logger.critical("Document extractor failed", exc_info=True)
-            await self.put_doc("FETCH_ERROR")
+            await self.put_doc(FETCH_ERROR)
             self.fetch_error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
@@ -468,7 +470,7 @@ class Extractor:
             await lazy_downloads.join()
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.put_doc("END_DOCS")
+        await self.put_doc(END_DOCS)
 
     async def _load_existing_docs(self):
         start = time.time()
@@ -494,7 +496,7 @@ class Extractor:
         return existing_ids
 
     async def get_docs_incrementally(self, generator):
-        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
+        """Iterate on a generator of documents to fill a queue with bulk operations for the `Sink` to consume.
 
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
@@ -554,7 +556,7 @@ class Extractor:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        await self.put_doc("END_DOCS")
+        await self.put_doc(END_DOCS)
 
     async def get_access_control_docs(self, generator):
         """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
@@ -619,7 +621,7 @@ class Extractor:
             await asyncio.sleep(0)
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.put_doc("END_DOCS")
+        await self.put_doc(END_DOCS)
 
     async def enqueue_docs_to_delete(self, existing_ids):
         self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
