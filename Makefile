@@ -10,11 +10,11 @@ VERSION=$(shell cat connectors/VERSION)
 config:
 	- cp -n config.yml.example config.yml
 
-bin/python:
+bin/python: config
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
 
-install: config bin/python bin/elastic-ingest
+install: bin/python bin/elastic-ingest
 
 bin/elastic-ingest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
