@@ -206,12 +206,17 @@ class Sink:
                 return
 
             result = item[action_item].get("result")
-            operation_failed = result not in SUCCESSFUL_RESULTS
+            successful_result = result in SUCCESSFUL_RESULTS
 
-            if operation_failed:
-                self._logger.debug(
-                    f"Failed to execute '{action_item}' on document with id '{doc_id}'. Result: {result}. Error: {item[action_item].get('error')}"
-                )
+            if not successful_result:
+                if "error" in item[action_item]:
+                    self._logger.debug(
+                        f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
+                    )
+                else:
+                    self._logger.debug(
+                        f"Successfully executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}."
+                    )
             else:
                 self._logger.debug(
                     f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"

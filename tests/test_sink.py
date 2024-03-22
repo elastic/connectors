@@ -69,8 +69,14 @@ def successful_action_log_message(doc_id, action, result):
     return f"Successfully executed '{action}' on document with id '{doc_id}'. Result: {result}"
 
 
+def successful_operation_with_non_successful_result_log_message(doc_id, action, result):
+    return f"Successfully executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}."
+
+
 def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
-    return f"Failed to execute '{action}' on document with id '{doc_id}'. Result: {result}. Error: {error}"
+    return (
+        f"Failed to execute '{action}' on document with id '{doc_id}'. Error: {error}"
+    )
 
 
 @pytest.mark.asyncio
@@ -1419,6 +1425,14 @@ async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(
         (
             [successful_bulk_action(DOC_ONE_ID, "update", "updated")],
             [successful_action_log_message(DOC_ONE_ID, "update", "updated")],
+        ),
+        (
+            [successful_bulk_action(DOC_ONE_ID, "delete", "not_found")],
+            [
+                successful_operation_with_non_successful_result_log_message(
+                    DOC_ONE_ID, "delete", "not_found"
+                )
+            ],
         ),
         (
             [failed_bulk_action(DOC_ONE_ID, "create", "not_found")],
