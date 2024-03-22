@@ -112,7 +112,7 @@ class Sink:
         max_retries,
         retry_interval,
         logger_=None,
-        enable_doc_id_trace_logging=False,
+        enable_bulk_operations_logging=False,
     ):
         self.client = client
         self.queue = queue
@@ -128,7 +128,7 @@ class Sink:
         self.deleted_document_count = 0
         self._logger = logger_ or logger
         self._canceled = False
-        self._enable_doc_id_trace_logging = enable_doc_id_trace_logging
+        self._enable_bulk_operations_logging = enable_bulk_operations_logging
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -166,7 +166,7 @@ class Sink:
         # TODO: retry 429s for individual items here
         res = await self.client.bulk_insert(operations, self.pipeline["name"])
 
-        if self._enable_doc_id_trace_logging:
+        if self._enable_bulk_operations_logging:
             await self._log_bulk_operations(res)
 
         if res.get("errors"):
@@ -827,7 +827,7 @@ class SyncOrchestrator:
         content_extraction_enabled=True,
         options=None,
         skip_unchanged_documents=False,
-        enable_doc_id_trace_logging=False,
+        enable_bulk_operations_logging=False,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -899,6 +899,6 @@ class SyncOrchestrator:
             max_retries=max_bulk_retries,
             retry_interval=retry_interval,
             logger_=self._logger,
-            enable_doc_id_trace_logging=enable_doc_id_trace_logging,
+            enable_bulk_operations_logging=enable_bulk_operations_logging,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

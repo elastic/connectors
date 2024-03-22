@@ -68,6 +68,7 @@ def _default_config():
                 "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
                 "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
                 "concurrent_downloads": 10,
+                "enable_operations_logging": False,
             },
             "max_retries": DEFAULT_ELASTICSEARCH_MAX_RETRIES,
             "retry_interval": DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
@@ -90,7 +91,6 @@ def _default_config():
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
-            "enable_doc_id_trace_logging": False,
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",

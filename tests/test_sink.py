@@ -1397,7 +1397,7 @@ async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(
         max_concurrency=0,
         max_retries=3,
         retry_interval=10,
-        enable_doc_id_trace_logging=False,
+        enable_bulk_operations_logging=False,
     )
 
     await sink._batch_bulk(operations, STATS)
@@ -1480,7 +1480,7 @@ async def test_should_log_bulk_operations_if_doc_id_tracing_is_enabled(
         max_concurrency=0,
         max_retries=3,
         retry_interval=10,
-        enable_doc_id_trace_logging=True,
+        enable_bulk_operations_logging=True,
     )
 
     await sink._batch_bulk(operations, STATS)
@@ -1506,7 +1506,7 @@ async def test_should_log_error_when_id_is_missing(patch_logger):
         max_concurrency=0,
         max_retries=3,
         retry_interval=10,
-        enable_doc_id_trace_logging=True,
+        enable_bulk_operations_logging=True,
     )
 
     await sink._batch_bulk(operations, STATS)
@@ -1532,7 +1532,7 @@ async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
         max_concurrency=0,
         max_retries=3,
         retry_interval=10,
-        enable_doc_id_trace_logging=True,
+        enable_bulk_operations_logging=True,
     )
 
     await sink._batch_bulk(operations, STATS)
