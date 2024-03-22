@@ -389,6 +389,8 @@ class NASDataSource(BaseDataSource):
                 partial(
                     smbclient.scandir,
                     path=path,
+                    username=self.username,
+                    password=self.password,
                     port=self.port,
                 ),
             )
