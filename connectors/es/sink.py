@@ -496,7 +496,7 @@ class Extractor:
         return existing_ids
 
     async def get_docs_incrementally(self, generator):
-        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
+        """Iterate on a generator of documents to fill a queue with bulk operations for the `Sink` to consume.
 
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
