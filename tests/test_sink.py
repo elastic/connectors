@@ -70,7 +70,7 @@ def successful_action_log_message(doc_id, action, result):
 
 
 def successful_operation_with_non_successful_result_log_message(doc_id, action, result):
-    return f"Successfully executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}."
+    return f"Successfully executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}"
 
 
 def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
@@ -1511,7 +1511,7 @@ async def test_should_log_error_when_id_is_missing(patch_logger):
 
     await sink._batch_bulk(operations, STATS)
 
-    patch_logger.assert_present(f"Could not retrieve '_id' for item {item}")
+    patch_logger.assert_present(f"Could not retrieve '_id' for document {item}")
 
 
 @pytest.mark.asyncio
