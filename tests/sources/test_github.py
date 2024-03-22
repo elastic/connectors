@@ -25,6 +25,187 @@ from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
+
+
+def public_repo():
+    return {
+        "name": "demo_repo",
+        "nameWithOwner": "demo_user/demo_repo",
+        "url": "https://github.com/demo_user/demo_repo",
+        "description": "Demo repo for poc",
+        "visibility": "PUBLIC",
+        "primaryLanguage": {"name": "Python"},
+        "defaultBranchRef": {"name": "main"},
+        "isFork": False,
+        "stargazerCount": 0,
+        "watchers": {"totalCount": 1},
+        "forkCount": 0,
+        "createdAt": "2023-04-17T06:06:25Z",
+        "_id": "R_kgDOJXuc8A",
+        "_timestamp": "2023-06-20T07:09:34Z",
+        "isArchived": False,
+        "type": "Repository",
+    }
+
+
+def pull_request():
+    return {
+        "data": {
+            "repository": {
+                "pullRequests": {
+                    "nodes": [
+                        {
+                            "id": "1",
+                            "updatedAt": "2023-07-03T12:24:16Z",
+                            "number": 2,
+                            "url": "https://github.com/demo_repo/demo_repo/pull/2",
+                            "createdAt": "2023-04-19T09:06:01Z",
+                            "closedAt": "None",
+                            "title": "test pull request",
+                            "body": "test pull request",
+                            "state": "OPEN",
+                            "mergedAt": "None",
+                            "assignees": {
+                                "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                                "nodes": [{"login": "test_user"}],
+                            },
+                            "labels": {
+                                "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                                "nodes": [
+                                    {
+                                        "name": "bug",
+                                        "description": "Something isn't working",
+                                    },
+                                ],
+                            },
+                            "reviewRequests": {
+                                "pageInfo": {
+                                    "hasNextPage": True,
+                                    "endCursor": "abcd1234",
+                                },
+                                "nodes": [
+                                    {"requestedReviewer": {"login": "test_user"}}
+                                ],
+                            },
+                            "comments": {
+                                "pageInfo": {
+                                    "hasNextPage": True,
+                                    "endCursor": "Y3Vyc29yOnYyOpHOXmz8gA==",
+                                },
+                                "nodes": [
+                                    {
+                                        "author": {"login": "test_user"},
+                                        "body": "issues comments",
+                                    },
+                                ],
+                            },
+                            "reviews": {
+                                "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                                "nodes": [
+                                    {
+                                        "author": {"login": "test_user"},
+                                        "state": "COMMENTED",
+                                        "body": "add some comments",
+                                        "comments": {
+                                            "pageInfo": {
+                                                "hasNextPage": False,
+                                                "endCursor": "abcd",
+                                            },
+                                            "nodes": [{"body": "nice!!!"}],
+                                        },
+                                    },
+                                ],
+                            },
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+
+def issue():
+    return {
+        "data": {
+            "repository": {
+                "issues": {
+                    "nodes": [
+                        {
+                            "number": 1,
+                            "url": "https://github.com/demo_user/demo_repo/issues/1",
+                            "createdAt": "2023-04-18T10:12:21Z",
+                            "closedAt": None,
+                            "title": "demo issues",
+                            "body": "demo issues test",
+                            "state": "OPEN",
+                            "id": "I_kwDOJXuc8M5jtMsK",
+                            "type": "Issue",
+                            "updatedAt": "2023-04-19T08:56:23Z",
+                            "comments": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": "abcd4321",
+                                },
+                                "nodes": [
+                                    {
+                                        "author": {"login": "demo_user"},
+                                        "body": "demo comments updated!!",
+                                    }
+                                ],
+                            },
+                            "labels": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": "abcd4321",
+                                },
+                                "nodes": [
+                                    {
+                                        "name": "enhancement",
+                                        "description": "New feature or request",
+                                    }
+                                ],
+                            },
+                            "assignees": {
+                                "pageInfo": {
+                                    "hasNextPage": False,
+                                    "endCursor": "abcd4321",
+                                },
+                                "nodes": [{"login": "demo_user"}],
+                            },
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+
+def attachments():
+    return (
+        {
+            "_id": "demo_repo/source/source.md",
+            "_timestamp": "2023-04-17T12:55:01Z",
+            "name": "source.md",
+            "size": 19,
+            "type": "blob",
+        },
+        {
+            "name": "source.md",
+            "path": "source/source.md",
+            "sha": "c36b795f98fc9c188fc6gd5a4795vc6j6e0y69a37",
+            "size": 19,
+            "url": "https://api.github.com/repos/demo_user/demo_repo/contents/source/source.md?ref=main",
+            "html_url": "https://github.com/demo_user/demo_repo/blob/main/source/source.md",
+            "git_url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/c36b795f98fc9c188fc6gd5a4795vc6j6e0y69a37",
+            "download_url": "https://raw.githubusercontent.com/demo_user/demo_repo/main/source/source.md",
+            "type": "file",
+            "content": "VGVzdCBGaWxlICEhISDwn5iCCg==\n",
+            "encoding": "base64",
+            "_timestamp": "2023-04-17T12:55:01Z",
+        },
+    )
+
+
 PUBLIC_REPO = {
     "name": "demo_repo",
     "nameWithOwner": "demo_user/demo_repo",
@@ -1066,23 +1247,24 @@ async def test_get_docs():
 
 @pytest.mark.asyncio
 async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo():
+    public_repo_ = public_repo()
+    pull_request_ = pull_request()
+    issue_ = issue()
+    attachments_ = attachments()
+
     expected_response = [
-        PUBLIC_REPO,
-        MOCK_RESPONSE_PULL,
-        MOCK_RESPONSE_ISSUE,
-        MOCK_RESPONSE_ATTACHMENTS[0],
+        public_repo_,
+        pull_request_,
+        issue_,
+        attachments_[0],
     ]
     actual_response = []
     async with create_github_source() as source:
         source._dls_enabled = Mock(return_value=True)
-        source._fetch_repos = Mock(return_value=AsyncIterator([PUBLIC_REPO]))
-        source._fetch_issues = Mock(return_value=AsyncIterator([MOCK_RESPONSE_ISSUE]))
-        source._fetch_pull_requests = Mock(
-            return_value=AsyncIterator([MOCK_RESPONSE_PULL])
-        )
-        source._fetch_files = Mock(
-            return_value=AsyncIterator([MOCK_RESPONSE_ATTACHMENTS])
-        )
+        source._fetch_repos = Mock(return_value=AsyncIterator([public_repo_]))
+        source._fetch_issues = Mock(return_value=AsyncIterator([issue_]))
+        source._fetch_pull_requests = Mock(return_value=AsyncIterator([pull_request_]))
+        source._fetch_files = Mock(return_value=AsyncIterator([attachments_]))
         async for document, _ in source.get_docs():
             actual_response.append(document)
             assert "_allow_access_control" not in document
