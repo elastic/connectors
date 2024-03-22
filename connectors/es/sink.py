@@ -694,7 +694,7 @@ class SyncOrchestrator:
             # Update the index mappings if needed
             self._logger.debug(f"{index_name} exists")
 
-            # Settings contain analizers which are being used in the index mappings
+            # Settings contain analyzers which are being used in the index mappings
             # Therefore settings must be applied before mappings
             await self.es_management_client.ensure_content_index_settings(
                 index_name=index_name, index=index, language_code=language_code
