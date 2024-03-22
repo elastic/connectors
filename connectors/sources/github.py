@@ -1115,7 +1115,10 @@ class GitHubDataSource(BaseDataSource):
         ):
             return False
 
-        return self.configuration["use_document_level_security"]
+        return (
+            self.configuration["repo_type"] == "organization"
+            and self.configuration["use_document_level_security"]
+        )
 
     async def get_invalid_repos(self):
         try:

@@ -13,7 +13,7 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
-from connectors.protocol import Filter
+from connectors.protocol import Features, Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.github import (
     GitHubAdvancedRulesValidator,
@@ -492,13 +492,19 @@ MOCK_ORG_REPOS = {
 
 
 @asynccontextmanager
-async def create_github_source(use_text_extraction_service=False):
+async def create_github_source(
+    repo_type="other",
+    use_document_level_security=False,
+    use_text_extraction_service=False,
+):
     async with create_source(
         GitHubDataSource,
         data_source="github-server",
         token="changeme",
         repositories="*",
+        repo_type=repo_type,
         ssl_enabled=False,
+        use_document_level_security=use_document_level_security,
         use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
@@ -1312,3 +1318,21 @@ async def test_fetch_access_control():
         assert sorted(access_control) == sorted(
             ["user_id:#123", "username:demo-user", "email:demo@email.com"]
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repo_type, use_document_level_security, dls_enabled",
+    [
+        ("organization", False, False),
+        ("organization", True, True),
+        ("other", False, False),
+        ("other", True, False),
+    ],
+)
+async def test_dls_enabled(repo_type, use_document_level_security, dls_enabled):
+    async with create_github_source(
+        repo_type=repo_type, use_document_level_security=use_document_level_security
+    ) as source:
+        source.set_features(Features(GitHubDataSource.features()))
+        assert source._dls_enabled() == dls_enabled
