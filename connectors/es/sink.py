@@ -679,7 +679,7 @@ class SyncOrchestrator:
         return await self.es_management_client.has_active_license_enabled(license_)
 
     async def prepare_content_index(self, index_name, language_code=None):
-        """Creates the index, given a mapping/settings if it does not exists."""
+        """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
 
         result = await self.es_management_client.get_index(
