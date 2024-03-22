@@ -31,15 +31,13 @@ After the Elastic unified release is complete
 
 To release the docker image, follow these steps:
 
-1. Make sure you're on the right tagged release commit, e.g. `v8.10.2.0`
-   - If no release tag exists yet, create it with `git tag <tagid> && git push origin <tagid>`
-2. Make sure the version in [VERSION](../connectors/VERSION) is correct
-3. Run `docker login -u <username> -p <password> docker.elastic.co` with credentials that allow for release
-4. Edit the [Makefile](../Makefile) to remove `-SNAPSHOT` from the `docker-build`, `docker-run` and `docker-push` steps
-5. Run `make docker-build`
-6. Run `make docker-run` to check that the docker image runs correctly
-    - If the image runs and complains about not finding elasticsearch on port 9200, that's okay -- this is enough to confirm the image works
-7. Run `make docker-push` to complete the release
+1. Make sure that you're on the right branch and VERSION file is correct: `cat connectors/VERSION`. The value in this file should be your _expected_ release version - e.g. if you're releasing 8.12.2.1, then VERSION should also be 8.12.2.1.
+2. Go to https://buildkite.com/elastic/connectors-docker-build-publish and trigger a Build:
+  - Click on "New Build"
+  - Enter a descriptive message, choose commit (or leave HEAD if you build the last commit of the branch) and enter the branch (in the example with 8.12.2.1 you would put `8.12` here)
+  - Press "Create Build" and wait for the build to finish
+3. Tag the commit that was used for the image with `git tag <tag_id> && git push origin <tag_id>`. For the example above, tag_id would be `v8.12.2.1`
+4. Update `connectors/VERSION` file and bump the last part of the version by an increment and submit a PR with it. In the example above, the value would be `8.12.2.2`.
 
 ## In-Between releases
 
