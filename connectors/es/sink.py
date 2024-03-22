@@ -202,7 +202,7 @@ class Sink:
             if doc_id is None:
                 # Should only happen, if the _bulk API changes
                 # Unlikely, but as this functionality could be used for audits we want to detect changes fast
-                self._logger.error(f"Could not retrieve '_id' for item {item}")
+                self._logger.error(f"Could not retrieve '_id' for document {item}")
                 return
 
             result = item[action_item].get("result")
