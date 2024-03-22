@@ -9,6 +9,9 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 
+DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
+DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
+
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")

@@ -29,13 +29,15 @@ from elasticsearch import (
 )
 from elasticsearch.helpers import async_scan
 
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+)
 from connectors.es import ESClient, Mappings
 from connectors.es.settings import Settings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
-    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -792,9 +794,6 @@ class SyncOrchestrator(ESClient):
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
         max_bulk_retries = options.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES)
-        retry_interval = options.get(
-            "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
-        )
         mem_queue_refresh_timeout = options.get("queue_refresh_timeout", 60)
         mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
 
