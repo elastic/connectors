@@ -23,7 +23,7 @@ export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
-export VERSION='8.12.0-SNAPSHOT'
+export VERSION='8.13.0-SNAPSHOT'
 
 if [ "$PERF8_TRACE" == true ]; then
     echo 'Tracing is enabled, memray stats will be delivered'
@@ -96,11 +96,14 @@ $PYTHON fixture.py --name $NAME --action stop_stack
 # So we wait in the end of the script to not block second sync from happening while we also compile the report
 if [[ $PERF8 == "yes" ]]; then
     set +e
-    echo 'Waiting for PERF8 to finish the report'
     PERF8_PID=`ps aux | grep bin/perf8 | grep -v grep | awk '{print $2}'`
-    while kill -0 "$PERF8_PID"; do
-        sleep 0.5
-    done
+    if [ ! -z "$PERF8_PID" ] # if the process is already gone, move on
+    then
+      echo 'Waiting for PERF8 to finish the report'
+      while kill -0 "$PERF8_PID"; do
+          sleep 0.5
+      done
+    fi
     set -e
 
     rm -f description.txt

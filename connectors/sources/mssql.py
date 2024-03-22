@@ -35,7 +35,6 @@ from connectors.sources.generic_database import (
 from connectors.utils import (
     RetryStrategy,
     get_pem_format,
-    has_duplicates,
     iso_utc,
     retryable,
 )
@@ -568,12 +567,6 @@ class MSSQLDataSource(BaseDataSource):
         if not primary_key_columns:
             self._logger.warning(
                 f"Skipping tables {', '.join(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
-            )
-            return
-
-        if has_duplicates(primary_key_columns):
-            self._logger.warning(
-                f"Skipping custom query for tables {', '.join(tables)} as there are multiple tables with same primary key column name."
             )
             return
 

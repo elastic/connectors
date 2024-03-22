@@ -6,24 +6,23 @@
 import asyncio
 import datetime
 import itertools
+import json
 from copy import deepcopy
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
 from elasticsearch import ApiError, BadRequestError
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
-)
 
 from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
+from connectors.es.settings import Settings
 from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
     OP_UPSERT,
-    ApiKeyNotFoundError,
     AsyncBulkRunningError,
+    ElasticsearchOverloadedError,
     Extractor,
     ForceCanceledError,
     Sink,
@@ -89,11 +88,15 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}",
+
+    # not found
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        status=404,
+        status=200,
+        body="{}",
     )
+
     mock_responses.put(
         f"http://nowhere.com:9200/{index_name}",
         payload={"_id": "1"},
@@ -119,13 +122,23 @@ async def test_prepare_content_index_create_index(
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}",
+
+    # not found
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        status=404,
+        status=200,
+        body="{}",
     )
+
     mock_responses.put(
         f"http://nowhere.com:9200/{index_name}",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}/_settings",
         payload={"_id": "1"},
         headers=headers,
     )
@@ -149,35 +162,48 @@ async def test_prepare_content_index_create_index(
 
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
+    language_code = "en"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
     # prepare-index, with mappings
 
     mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+    index_name = "search-new-index"
 
-    mock_responses.head(
-        "http://nowhere.com:9200/search-new-index",
-        headers=headers,
-    )
+    response = {
+        index_name: {
+            "mappings": {},
+            "settings": {},
+        }
+    }
     mock_responses.get(
-        "http://nowhere.com:9200/search-new-index/_mapping",
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        payload={"search-new-index": {"mappings": {}}},
+        status=200,
+        body=json.dumps(response),
     )
+
     mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_mapping",
+        f"http://nowhere.com:9200/{index_name}/_mapping",
         headers=headers,
         payload=mappings,
         body='{"acknowledged": True}',
     )
 
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}/_settings",
+        headers=headers,
+        payload=settings,
+        body='{"acknowledged": True}',
+    )
+
     es = SyncOrchestrator(config)
-    index_name = "search-new-index"
     with mock.patch.object(
         es.es_management_client,
         "ensure_content_index_mappings",
     ) as put_mapping_mock:
-        await es.prepare_content_index(index_name)
+        await es.prepare_content_index(index_name, language_code)
 
         await es.close()
 
@@ -1330,51 +1356,39 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
             es._sink.force_cancel.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_update_authorization():
-    config = {
-        "host": "http://nowhere.com:9200",
-        "user": "someone",
-        "password": "something",
-    }
-    sync_orchestrator = SyncOrchestrator(config)
+async def test_extractor_run_when_mem_full_is_raised():
+    docs_from_source = [
+        {"_id": 1},
+        {"_id": 2},
+        {"_id": 3},
+    ]
+    es_client = AsyncMock()
+    es_client.yield_existing_documents_metadata = Mock(return_value=AsyncIterator([]))
 
-    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
-        return_value="secret-value"
-    )
-    sync_orchestrator.es_management_client.client.options = AsyncMock()
+    queue = await queue_mock()
+    queue.clear = Mock()
 
-    await sync_orchestrator.update_authorization("my-index", "my-secret-id")
+    def _put_side_effect(value):
+        if isinstance(value, str):
+            pass
+        else:
+            raise asyncio.QueueFull()
 
-    sync_orchestrator.es_management_client.get_connector_secret.assert_called_with(
-        "my-secret-id"
-    )
-    sync_orchestrator.es_management_client.client.options.assert_called_with(
-        api_key="secret-value"
-    )
+    queue.put = AsyncMock(side_effect=_put_side_effect)
+    # deep copying docs is needed as get_access_control_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([(doc, None, "") for doc in docs_from_source])
 
-
-@pytest.mark.asyncio
-async def test_update_authorization_when_api_key_not_found():
-    config = {
-        "host": "http://nowhere.com:9200",
-        "user": "someone",
-        "password": "something",
-    }
-    sync_orchestrator = SyncOrchestrator(config)
-
-    error_meta = Mock()
-    error_meta.status = 404
-    sync_orchestrator.es_management_client.get_connector_secret = AsyncMock(
-        side_effect=ElasticNotFoundError(
-            "resource_not_found_exception",
-            error_meta,
-            "No secret with id [my-secret-id]",
-        )
+    extractor = Extractor(
+        es_client,
+        queue,
+        INDEX,
     )
 
-    with pytest.raises(ApiKeyNotFoundError):
-        await sync_orchestrator.update_authorization("my-index", "my-secret-id")
+    await extractor.run(doc_generator, JobType.FULL)
+
+    queue.clear.assert_called_once()
+    assert isinstance(extractor.fetch_error, ElasticsearchOverloadedError)
 
 
 @pytest.mark.asyncio

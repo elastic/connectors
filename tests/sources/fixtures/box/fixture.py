@@ -60,10 +60,6 @@ class BoxAPI:
         return response
 
     def get_user(self):
-        if self.first_sync:
-            self.first_sync = False
-        else:
-            self.folder_count -= 5
         return {"username": "demo_user"}
 
     def get_folders_entries(self, offset, limit):
@@ -112,6 +108,10 @@ class BoxAPI:
                     {"by": "name", "direction": "ASC"},
                 ],
             }
+            if self.first_sync:
+                self.first_sync = False
+            else:
+                self.folder_count -= 5
             return response
         else:
             entries = self.get_files_entries(offset, limit, folder_id)

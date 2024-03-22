@@ -341,6 +341,13 @@ class MemQueue(asyncio.Queue):
 
         super().put_nowait((item_size, item))
 
+    def clear(self):
+        while not self.empty():
+            # Depending on your program, you may want to
+            # catch QueueEmpty
+            self.get_nowait()
+            self.task_done()
+
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
@@ -403,7 +410,11 @@ class ConcurrentTasks:
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
         self._sem.release()
-        if task.exception():
+        if task.cancelled():
+            logger.error(
+                f"Task {task.get_name()} was cancelled",
+            )
+        elif task.exception():
             logger.error(
                 f"Exception found for task {task.get_name()}: {task.exception()}",
                 exc_info=True,
@@ -891,3 +902,13 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
+
+
+def func_human_readable_name(func):
+    if isinstance(func, functools.partial):
+        return func.func.__name__
+
+    try:
+        return func.__name__
+    except AttributeError:
+        return str(func)

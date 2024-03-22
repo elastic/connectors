@@ -487,7 +487,7 @@ class Features:
 
     def native_connector_api_keys_enabled(self):
         return self._nested_feature_enabled(
-            ["native_connector_api_keys", "enabled"], default=False
+            ["native_connector_api_keys", "enabled"], default=True
         )
 
     def sync_rules_enabled(self):
@@ -973,7 +973,7 @@ class Connector(ESDocument):
         }
 
 
-IDLE_JOBS_THRESHOLD = 60  # 60 seconds
+IDLE_JOBS_THRESHOLD = 60 * 5  # 5 minutes
 
 
 class SyncJobIndex(ESIndex):

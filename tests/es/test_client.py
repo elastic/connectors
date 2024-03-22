@@ -212,7 +212,7 @@ class TestESClient:
         assert not await es_client.ping()
 
         await es_client.close()
-        patch_logger.assert_present("The server returned a 401 code")
+        patch_logger.assert_present("The Elasticsearch server returned a 401 code")
         patch_logger.assert_present("missing authentication credentials")
 
     @pytest.mark.asyncio

@@ -14,6 +14,7 @@ from elasticsearch import (
 )
 
 from connectors.es.management_client import ESManagementClient
+from connectors.es.settings import Settings
 from tests.commons import AsyncIterator
 
 
@@ -112,6 +113,73 @@ class TestESManagementClient:
         es_management_client.client.indices.put_mapping.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_ensure_content_index_settings_when_settings_exist(
+        self, es_management_client
+    ):
+        index_name = "something"
+        index = {"settings": {"index": {"analysis": "something"}}}
+
+        await es_management_client.ensure_content_index_settings(index_name, index)
+        es_management_client.client.indices.close.assert_not_called()
+        es_management_client.client.indices.put_settings.assert_not_called()
+        es_management_client.client.indices.open.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_settings_when_settings_do_not_exist(
+        self, es_management_client
+    ):
+        language_code = "en"
+        index_name = "something"
+        index = {}
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        await es_management_client.ensure_content_index_settings(
+            index_name, index, language_code
+        )
+
+        es_management_client.client.indices.close.assert_called()
+        es_management_client.client.indices.put_settings.assert_awaited_with(
+            index=index_name, body=settings
+        )
+        es_management_client.client.indices.open.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_settings_when_settings_do_not_exist_for_serverless(
+        self, es_management_client
+    ):
+        es_management_client.serverless = True
+        language_code = "en"
+        index_name = "something"
+        index = {}
+        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
+
+        await es_management_client.ensure_content_index_settings(
+            index_name, index, language_code
+        )
+
+        es_management_client.client.perform_request.assert_awaited_with(
+            "PUT",
+            f"/{index_name}/_settings?reopen=true",
+            headers={"accept": "application/json", "content-type": "application/json"},
+            body=settings,
+        )
+
+    @pytest.mark.asyncio
+    async def test_ensure_content_index_settings_when_settings_exist_for_serverless(
+        self, es_management_client
+    ):
+        es_management_client.serverless = True
+        language_code = "en"
+        index_name = "something"
+        index = {"settings": {"index": {"analysis": "something"}}}
+
+        await es_management_client.ensure_content_index_settings(
+            index_name, index, language_code
+        )
+
+        es_management_client.client.perform_request.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_do_not_exist(
         self, es_management_client
     ):
@@ -184,7 +252,7 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_list_indices(self, es_management_client):
-        await es_management_client.list_indices()
+        await es_management_client.list_indices(index="search-*")
 
         es_management_client.client.indices.stats.assert_awaited_with(index="search-*")
 
@@ -286,3 +354,21 @@ class TestESManagementClient:
         with pytest.raises(ElasticNotFoundError):
             secret = await es_management_client.get_connector_secret(secret_id)
             assert secret is None
+
+    @pytest.mark.asyncio
+    async def test_create_connector_secret(self, es_management_client, mock_responses):
+        secret_id = "secret-id"
+        secret_value = "my-secret"
+
+        es_management_client.client.perform_request = AsyncMock(
+            return_value={"id": secret_id}
+        )
+
+        returned_id = await es_management_client.create_connector_secret(secret_value)
+        assert returned_id == secret_id
+        es_management_client.client.perform_request.assert_awaited_with(
+            "POST",
+            "/_connector/_secret",
+            body={"value": secret_value},
+            headers={"accept": "application/json", "content-type": "application/json"},
+        )

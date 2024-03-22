@@ -220,6 +220,11 @@ def interactive_service_type_prompt():
     default="config.yml",
     help="Path to the connector service config file. Used in combination with --update-config flag.",
 )
+@click.option(
+    "--name",
+    prompt=f"{click.style('?', fg='green')} Connector name",
+    help="Connector name",
+)
 @click.pass_obj
 def create(
     obj,
@@ -231,13 +236,8 @@ def create(
     from_file,
     update_config,
     connector_service_config,
+    name,
 ):
-    if is_native:
-        index_name = f"search-{index_name}"
-        click.echo(
-            f"Prepending {click.style('search-', fg='green')} to index name because it will be a native connector. New index name is {click.style(index_name, fg='green')}."
-        )
-
     connector_configuration = {}
     if from_file:
         with open(from_file) as fd:
@@ -314,6 +314,7 @@ def create(
         service_type,
         configuration,
         is_native,
+        name=name,
         language=index_language,
         from_index=from_index,
     )
