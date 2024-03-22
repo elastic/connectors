@@ -2,7 +2,7 @@
 
 Configuration lives in `config.yml`.
 This file is created when you first run `make install`, and is "git ignored" to help prevent committing secrets.
-The default configs can all be see in the [`config.yml.example`]((../config.yml.example).), which is not intended to be modified.
+The default configs can all be seen in the [`config.yml.example`]((../config.yml.example).), which is not intended to be modified.
 
 ## Run the connector service on-prem
 
