@@ -214,7 +214,7 @@ class Sink:
                     )
                 else:
                     self._logger.debug(
-                        f"Successfully executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
+                        f"executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
                     )
             else:
                 self._logger.debug(
