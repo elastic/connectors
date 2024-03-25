@@ -33,7 +33,7 @@ Note that this method of setting the password, or using the default password, is
 This can include editing the `docker-compose.yml` file and the `set-env.sh` script to hardcode a different password amongst other ways.
 
 Alternatively, if you do not wish to use a different set of credentials, or an API key for authentication, you can run the `./copy-config.sh` script to create a
-copy of the default [config.yml](../../config.yml) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
+copy of the default [config.yml.example](../../config.yml.example) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
 
 By default, these Connector scripts will use a `SNAPSHOT` version of the Docker image.
 The version is defined in the [VERSION file](../../connectors/VERSION).

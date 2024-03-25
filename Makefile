@@ -7,7 +7,10 @@ SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
 
 
-bin/python:
+config:
+	- cp -n config.yml.example config.yml
+
+bin/python: config
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
 
