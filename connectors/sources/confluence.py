@@ -858,12 +858,13 @@ class ConfluenceDataSource(BaseDataSource):
 
                 yield document, download_url
 
-    async def download_attachment(self, url, attachment, doit=False):
+    async def download_attachment(self, url, attachment, timestamp=None, doit=False):
         """Downloads the content of the given attachment in chunks using REST API call
 
         Args:
             url (str): url endpoint to download the attachment content
             attachment (dict): Dictionary containing details of the attachment
+            timestamp (timestamp, optional): Timestamp of Confluence last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
