@@ -858,13 +858,12 @@ class ConfluenceDataSource(BaseDataSource):
 
                 yield document, download_url
 
-    async def download_attachment(self, url, attachment, timestamp=None, doit=False):
+    async def download_attachment(self, url, attachment, doit=False):
         """Downloads the content of the given attachment in chunks using REST API call
 
         Args:
             url (str): url endpoint to download the attachment content
             attachment (dict): Dictionary containing details of the attachment
-            timestamp (timestamp, optional): Timestamp of Confluence last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
@@ -955,11 +954,13 @@ class ConfluenceDataSource(BaseDataSource):
         async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
             api_query
         ):
-            # Pages/Bolgpost are open to viewing or editing by default, but you can restrict either viewing or editing to certain users or groups.
+            # Pages and blog posts are open to viewing or editing by default,
+            # but you can restrict either viewing or editing to certain users or groups.
             if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                 access_control = list(self._extract_identities(response=restrictions))
                 if len(access_control) == 0:
-                    # Every space has its own independent set of permissions, managed by the space admin(s), which determine the access settings for different users and groups.
+                    # Every space has its own independent set of permissions, managed by the space admin(s),
+                    # which determine the access settings for different users and groups.
                     access_control = list(
                         self._get_access_control_from_permission(
                             permissions=permissions, target_type=target_type
@@ -1029,9 +1030,13 @@ class ConfluenceDataSource(BaseDataSource):
 
         else:
             if self.spaces == [WILDCARD]:
+                logger.debug("Including docs from all spaces")
                 configured_spaces_query = "cql=type="
             else:
                 quoted_spaces = "','".join(self.spaces)
+                logger.debug(
+                    f"Including docs from the following spaces: {quoted_spaces}"
+                )
                 configured_spaces_query = f"cql=space in ('{quoted_spaces}') AND type="
             await self.fetchers.put(self._space_coro)
             await self.fetchers.put(
