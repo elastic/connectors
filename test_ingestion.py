@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import random
 import logging
 
-INDEX="testing-script-ingestion"
+INDEX="books-index"
 BATCH_SIZE=250
 MAX_PARALLEL_PROCESSES=25
 
@@ -169,9 +169,10 @@ class Ingester:
                 ops.append(doc)
 
             print(f"[INGESTER {self}] SENDING A BATCH")
-            resp = await self.client.bulk(operations=ops)
+            resp = await self.client.bulk(operations=ops, pipeline="elser-v2-books")
             if resp['errors']:
-                print(f"[INGESTER {self}] HAS ERRORS")
+                print(f"[INGESTER {self}] HAS ERRORS: {resp}")
+                print(resp['errors'])
                 await self.coordinator.ingestion_failed(self)
                 await asyncio.sleep(10)
             else:
@@ -239,8 +240,8 @@ async def main():
         while True:
             doc = {
                 "_id": fake.bothify(text='????-########'),
-                "text": cached_large_text,
-                "small_text": fake.paragraph(nb_sentences=1)
+                "public_author_works_authors_edition_isbns_editions_works_title": cached_large_text,
+                "public_author_works_authors_edition_isbns_editions_works_description": fake.paragraph(nb_sentences=1)
             }
             await asyncio.sleep(0)
             await ingester_pool.queue.put(doc)
