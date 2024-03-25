@@ -8,6 +8,9 @@ pyvenv.cfg
 *.egg-info
 __pycache__
 
+# real configurations
+config.yml
+
 # jetbrains files
 .idea
 *.iml
