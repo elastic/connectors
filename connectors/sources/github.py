@@ -37,6 +37,8 @@ WILDCARD = "*"
 BLOB = "blob"
 GITHUB_CLOUD = "github_cloud"
 GITHUB_SERVER = "github_server"
+PERSONAL_ACCESS_TOKEN = "personal_access_token"  # noqa: S105
+GITHUB_APP = "github_app"
 PULL_REQUEST_OBJECT = "pullRequest"
 REPOSITORY_OBJECT = "repository"
 
@@ -1014,7 +1016,7 @@ class GitHubDataSource(BaseDataSource):
         return {
             "data_source": {
                 "display": "dropdown",
-                "label": "GitHub data source",
+                "label": "Data source",
                 "options": [
                     {"label": "GitHub Cloud", "value": GITHUB_CLOUD},
                     {"label": "GitHub Server", "value": GITHUB_SERVER},
@@ -1025,13 +1027,27 @@ class GitHubDataSource(BaseDataSource):
             },
             "host": {
                 "depends_on": [{"field": "data_source", "value": GITHUB_SERVER}],
-                "label": "GitHub URL",
+                "label": "Server URL",
                 "order": 2,
                 "type": "str",
             },
-            "token": {
-                "label": "GitHub Token",
+            "auth_method": {
+                "display": "dropdown",
+                "label": "Authentication method",
+                "options": [
+                    {"label": "Personal access token", "value": PERSONAL_ACCESS_TOKEN},
+                    {"label": "GitHub App", "value": GITHUB_APP},
+                ],
                 "order": 3,
+                "type": "str",
+                "value": PERSONAL_ACCESS_TOKEN,
+            },
+            "token": {
+                "depends_on": [
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN}
+                ],
+                "label": "Token",
+                "order": 4,
                 "sensitive": True,
                 "type": "str",
             },
@@ -1042,42 +1058,60 @@ class GitHubDataSource(BaseDataSource):
                     {"label": "Organization", "value": "organization"},
                     {"label": "Other", "value": "other"},
                 ],
-                "order": 4,
+                "order": 5,
                 "tooltip": "The Document Level Security feature is not available for the Other Repository Type",
                 "type": "str",
                 "value": "other",
             },
             "org_name": {
-                "depends_on": [{"field": "repo_type", "value": "organization"}],
+                "depends_on": [
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN},
+                    {"field": "repo_type", "value": "organization"},
+                ],
                 "label": "Organization Name",
-                "order": 5,
+                "order": 6,
+                "type": "str",
+            },
+            "app_id": {
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
+                "display": "numeric",
+                "label": "App ID",
+                "order": 7,
+                "type": "int",
+            },
+            "private_key": {
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
+                "display": "textarea",
+                "label": "App private key",
+                "order": 8,
+                "sensitive": True,
                 "type": "str",
             },
             "repositories": {
                 "display": "textarea",
                 "label": "List of repositories",
-                "order": 6,
+                "order": 9,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 7,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 8,
+                "order": 11,
                 "type": "str",
             },
             "retry_count": {
                 "display_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 9,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -1086,7 +1120,7 @@ class GitHubDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 10,
+                "order": 13,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1096,7 +1130,7 @@ class GitHubDataSource(BaseDataSource):
                 "display": "toggle",
                 "depends_on": [{"field": "repo_type", "value": "organization"}],
                 "label": "Enable document level security",
-                "order": 11,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1115,7 +1149,10 @@ class GitHubDataSource(BaseDataSource):
         ):
             return False
 
-        return self.configuration["use_document_level_security"]
+        return (
+            self.configuration["repo_type"] == "organization"
+            and self.configuration["use_document_level_security"]
+        )
 
     async def get_invalid_repos(self):
         try:
@@ -1791,21 +1828,23 @@ class GitHubDataSource(BaseDataSource):
             async for repo in self._fetch_repos():
                 if self.is_previous_repo(repo["nameWithOwner"]):
                     continue
+
                 access_control = []
-                if self._dls_enabled():
-                    is_public_repo = repo.get("visibility").lower() == "public"
-                    if is_public_repo:
-                        async for user in self.github_client._fetch_all_members():
-                            access_control.append(
-                                _prefix_user_id(user_id=user.get("id"))
-                            )
-                    else:
-                        access_control = await self._fetch_access_control(
-                            repo_name=repo.get("nameWithOwner")
-                        )
-                yield self._decorate_with_access_control(
-                    document=repo, access_control=access_control
-                ), None
+                is_public_repo = repo.get("visibility").lower() == "public"
+                needs_access_control = self._dls_enabled() and not is_public_repo
+
+                if needs_access_control:
+                    access_control = await self._fetch_access_control(
+                        repo_name=repo.get("nameWithOwner")
+                    )
+
+                if needs_access_control:
+                    yield self._decorate_with_access_control(
+                        document=repo, access_control=access_control
+                    ), None
+                else:
+                    yield repo, None
+
                 repo_name = repo.get("nameWithOwner")
                 default_branch = (
                     repo.get("defaultBranchRef", {}).get("name")
@@ -1816,24 +1855,42 @@ class GitHubDataSource(BaseDataSource):
                 async for pull_request in self._fetch_pull_requests(
                     repo_name=repo_name
                 ):
-                    yield self._decorate_with_access_control(
-                        document=pull_request, access_control=access_control
-                    ), None
+                    if needs_access_control:
+                        yield self._decorate_with_access_control(
+                            document=pull_request, access_control=access_control
+                        ), None
+                    else:
+                        yield pull_request, None
 
                 async for issue in self._fetch_issues(repo_name=repo_name):
-                    yield self._decorate_with_access_control(
-                        document=issue, access_control=access_control
-                    ), None
+                    if needs_access_control:
+                        yield self._decorate_with_access_control(
+                            document=issue, access_control=access_control
+                        ), None
+                    else:
+                        yield issue, None
 
                 if default_branch:
                     async for file_document, attachment_metadata in self._fetch_files(
                         repo_name=repo_name, default_branch=default_branch
                     ):
                         if file_document["type"] == BLOB:
-                            yield self._decorate_with_access_control(
-                                document=file_document, access_control=access_control
-                            ), partial(self.get_content, attachment=attachment_metadata)
+                            if needs_access_control:
+                                yield self._decorate_with_access_control(
+                                    document=file_document,
+                                    access_control=access_control,
+                                ), partial(
+                                    self.get_content, attachment=attachment_metadata
+                                )
+                            else:
+                                yield file_document, partial(
+                                    self.get_content, attachment=attachment_metadata
+                                )
                         else:
-                            yield self._decorate_with_access_control(
-                                document=file_document, access_control=access_control
-                            ), None
+                            if needs_access_control:
+                                yield self._decorate_with_access_control(
+                                    document=file_document,
+                                    access_control=access_control,
+                                ), None
+                            else:
+                                yield file_document, None
