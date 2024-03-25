@@ -59,9 +59,9 @@ OP_DELETE = "delete"
 CANCELATION_TIMEOUT = 5
 
 
-def get_mib_size(ob):
+def get_mib_size(obj):
     """Returns the size of ob in MiB"""
-    return round(get_size(ob) / (1024 * 1024), 2)
+    return round(get_size(obj) / (1024 * 1024), 2)
 
 
 class UnsupportedJobType(Exception):
