@@ -195,14 +195,14 @@ class Sink:
                 self._logger.error(
                     f"Unknown action item returned from _bulk API for item {item}"
                 )
-                return
+                continue
 
             doc_id = item[action_item].get("_id")
             if doc_id is None:
                 # Should only happen, if the _bulk API changes
                 # Unlikely, but as this functionality could be used for audits we want to detect changes fast
                 self._logger.error(f"Could not retrieve '_id' for document {item}")
-                return
+                continue
 
             result = item[action_item].get("result")
             successful_result = result in SUCCESSFUL_RESULTS
@@ -214,7 +214,7 @@ class Sink:
                     )
                 else:
                     self._logger.debug(
-                        f"executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
+                        f"Executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
                     )
             else:
                 self._logger.debug(

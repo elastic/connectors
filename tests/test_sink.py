@@ -69,7 +69,7 @@ def successful_action_log_message(doc_id, action, result):
 
 
 def successful_operation_with_non_successful_result_log_message(doc_id, action, result):
-    return f"Successfully executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}"
+    return f"Executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}"
 
 
 def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
@@ -1510,7 +1510,11 @@ async def test_should_log_error_when_id_is_missing(patch_logger):
     # item missing id
     item = {"index": {"result": "created"}}
 
-    client.bulk_insert = AsyncMock(return_value={"items": [item]})
+    client.bulk_insert = AsyncMock(
+        return_value={
+            "items": [item, successful_bulk_action(DOC_ONE_ID, "create", "created")]
+        }
+    )
     sink = Sink(
         client=client,
         queue=Mock(),
@@ -1527,6 +1531,11 @@ async def test_should_log_error_when_id_is_missing(patch_logger):
 
     patch_logger.assert_present(f"Could not retrieve '_id' for document {item}")
 
+    # Should continue logging after a failure
+    patch_logger.assert_present(
+        successful_action_log_message(DOC_ONE_ID, "create", "created")
+    )
+
 
 @pytest.mark.asyncio
 async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
@@ -1536,7 +1545,11 @@ async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
     # item with unknown action item
     item = {"unknown": {"result": "created"}}
 
-    client.bulk_insert = AsyncMock(return_value={"items": [item]})
+    client.bulk_insert = AsyncMock(
+        return_value={
+            "items": [item, successful_bulk_action(DOC_ONE_ID, "create", "created")]
+        }
+    )
     sink = Sink(
         client=client,
         queue=Mock(),
@@ -1553,4 +1566,9 @@ async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
 
     patch_logger.assert_present(
         f"Unknown action item returned from _bulk API for item {item}"
+    )
+
+    # Should continue logging after a failure
+    patch_logger.assert_present(
+        successful_action_log_message(DOC_ONE_ID, "create", "created")
     )
