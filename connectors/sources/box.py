@@ -398,12 +398,11 @@ class BoxDataSource(BaseDataSource):
             return False
         return True
 
-    async def get_content(self, attachment, user_id=None, timestamp=None, doit=False):
+    async def get_content(self, attachment, user_id=None, doit=False):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
             attachment (dictionary): Formatted attachment document.
-            timestamp (timestamp, optional): Timestamp of attachment last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to False.
 
         Returns:
