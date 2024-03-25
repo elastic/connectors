@@ -1149,7 +1149,10 @@ class GitHubDataSource(BaseDataSource):
         ):
             return False
 
-        return self.configuration["use_document_level_security"]
+        return (
+            self.configuration["repo_type"] == "organization"
+            and self.configuration["use_document_level_security"]
+        )
 
     async def get_invalid_repos(self):
         try:
@@ -1825,21 +1828,23 @@ class GitHubDataSource(BaseDataSource):
             async for repo in self._fetch_repos():
                 if self.is_previous_repo(repo["nameWithOwner"]):
                     continue
+
                 access_control = []
-                if self._dls_enabled():
-                    is_public_repo = repo.get("visibility").lower() == "public"
-                    if is_public_repo:
-                        async for user in self.github_client._fetch_all_members():
-                            access_control.append(
-                                _prefix_user_id(user_id=user.get("id"))
-                            )
-                    else:
-                        access_control = await self._fetch_access_control(
-                            repo_name=repo.get("nameWithOwner")
-                        )
-                yield self._decorate_with_access_control(
-                    document=repo, access_control=access_control
-                ), None
+                is_public_repo = repo.get("visibility").lower() == "public"
+                needs_access_control = self._dls_enabled() and not is_public_repo
+
+                if needs_access_control:
+                    access_control = await self._fetch_access_control(
+                        repo_name=repo.get("nameWithOwner")
+                    )
+
+                if needs_access_control:
+                    yield self._decorate_with_access_control(
+                        document=repo, access_control=access_control
+                    ), None
+                else:
+                    yield repo, None
+
                 repo_name = repo.get("nameWithOwner")
                 default_branch = (
                     repo.get("defaultBranchRef", {}).get("name")
@@ -1850,24 +1855,42 @@ class GitHubDataSource(BaseDataSource):
                 async for pull_request in self._fetch_pull_requests(
                     repo_name=repo_name
                 ):
-                    yield self._decorate_with_access_control(
-                        document=pull_request, access_control=access_control
-                    ), None
+                    if needs_access_control:
+                        yield self._decorate_with_access_control(
+                            document=pull_request, access_control=access_control
+                        ), None
+                    else:
+                        yield pull_request, None
 
                 async for issue in self._fetch_issues(repo_name=repo_name):
-                    yield self._decorate_with_access_control(
-                        document=issue, access_control=access_control
-                    ), None
+                    if needs_access_control:
+                        yield self._decorate_with_access_control(
+                            document=issue, access_control=access_control
+                        ), None
+                    else:
+                        yield issue, None
 
                 if default_branch:
                     async for file_document, attachment_metadata in self._fetch_files(
                         repo_name=repo_name, default_branch=default_branch
                     ):
                         if file_document["type"] == BLOB:
-                            yield self._decorate_with_access_control(
-                                document=file_document, access_control=access_control
-                            ), partial(self.get_content, attachment=attachment_metadata)
+                            if needs_access_control:
+                                yield self._decorate_with_access_control(
+                                    document=file_document,
+                                    access_control=access_control,
+                                ), partial(
+                                    self.get_content, attachment=attachment_metadata
+                                )
+                            else:
+                                yield file_document, partial(
+                                    self.get_content, attachment=attachment_metadata
+                                )
                         else:
-                            yield self._decorate_with_access_control(
-                                document=file_document, access_control=access_control
-                            ), None
+                            if needs_access_control:
+                                yield self._decorate_with_access_control(
+                                    document=file_document,
+                                    access_control=access_control,
+                                ), None
+                            else:
+                                yield file_document, None
