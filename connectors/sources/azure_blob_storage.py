@@ -159,11 +159,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
             document[elasticsearch_field] = blob[azure_blob_storage_field]
         return document
 
-    async def get_content(self, blob, doit=None):
+    async def get_content(self, blob, timestamp=None, doit=None):
         """Get blob content via specific blob client
 
         Args:
             blob (dictionary): Modified blob document
+            timestamp (timestamp, optional): Timestamp of blob last modified. Defaults to None.
             doit (boolean, optional): Boolean value for whether to get content or not. Defaults to None.
 
         Returns:
