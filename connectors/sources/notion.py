@@ -107,7 +107,7 @@ class NotionClient:
     ):
         try:
             return await function(start_cursor=next_cursor, **kwargs)
-        except Exception as exception:
+        except APIResponseError as exception:
             if exception.code == "rate_limited" and exception.status == 429:
                 retry_after = (
                     exception.headers.get("retry-after") or DEFAULT_RETRY_SECONDS
