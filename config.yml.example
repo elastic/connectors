@@ -90,11 +90,6 @@
 #elasticsearch.retry_interval: 10
 #
 #
-##  Enable to log ids of created/indexed/deleted/updated documents during a sync.
-##    This will be logged on 'DEBUG' level. Note: this depends on the service.log_level, not elasticsearch.log_level.
-#elasticsearch.bulk.enable_operations_logging: false
-#
-#
 ## ------------------------------- Elasticsearch: Bulk ------------------------
 #
 ##  Options for the Bulk API calls behavior - all options can be
