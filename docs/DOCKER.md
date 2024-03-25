@@ -1,3 +1,5 @@
+_If looking for docker release instructions, please follow steps in https://github.com/elastic/connectors/blob/main/docs/RELEASING.md_
+
 # Run Connector Service in Docker
 
 To run the Connector Service in Docker, you need to have Docker installed locally.
