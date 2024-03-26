@@ -62,9 +62,9 @@ CANCELATION_TIMEOUT = 5
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
 
 
-def get_mb_size(ob):
+def get_mib_size(obj):
     """Returns the size of ob in MiB"""
-    return round(get_size(ob) / (1024 * 1024), 2)
+    return round(get_size(obj) / (1024 * 1024), 2)
 
 
 class UnsupportedJobType(Exception):
@@ -161,7 +161,7 @@ class Sink:
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
-                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
+                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mib_size(operations)}MiB"
             )
 
         # TODO: retry 429s for individual items here
@@ -541,7 +541,7 @@ class Extractor:
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
-                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
+                f"Size of ids in memory is {get_mib_size(existing_ids)}MiB"
             )
 
         return existing_ids
@@ -627,7 +627,7 @@ class Extractor:
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
-                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mb_size(existing_ids)}MiB"
+                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mib_size(existing_ids)}MiB"
             )
 
         count = 0
