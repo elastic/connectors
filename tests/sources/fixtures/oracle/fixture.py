@@ -21,10 +21,10 @@ RETRY_INTERVAL = 4
 RETRIES = 1
 BATCH_SIZE = 100
 
-USER = "admin"
+USER = "c##admin"
 PASSWORD = "Password_123"
 ENCODING = "UTF-8"
-DSN = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
+DSN = "localhost:1521/FREE"
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
@@ -63,15 +63,15 @@ def inject_lines(table, cursor, lines):
         print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
-def load():
+async def load():
     """Generate tables and loads table data in the oracle server."""
     """N tables of RECORD_COUNT rows each"""
     connection = oracledb.connect(
         user="system", password=PASSWORD, dsn=DSN, encoding=ENCODING
     )
     cursor = connection.cursor()
-    cursor.execute("CREATE USER admin IDENTIFIED by Password_123")
-    cursor.execute("GRANT CONNECT, RESOURCE, DBA TO admin")
+    cursor.execute(f"CREATE USER {USER} IDENTIFIED by {PASSWORD} CONTAINER=ALL")
+    cursor.execute(f"GRANT CONNECT, RESOURCE, DBA TO {USER}")
     connection.commit()
 
     connection = oracledb.connect(
@@ -86,7 +86,7 @@ def load():
     connection.commit()
 
 
-def remove():
+async def remove():
     """Removes 10 random items per table"""
     connection = oracledb.connect(
         user=USER, password=PASSWORD, dsn=DSN, encoding=ENCODING

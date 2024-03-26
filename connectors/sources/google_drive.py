@@ -172,7 +172,13 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             yield file
 
     async def list_files_from_my_drive(self, fetch_permissions=False):
-        """Get files from Google Drive. Files can have any type.
+        """Retrieves files from Google Drive, with an option to fetch permissions (DLS).
+
+        This function optimizes the retrieval process based on the 'fetch_permissions' flag.
+        If 'fetch_permissions' is True, the function filters for files the user can edit
+        ("trashed=false and 'me' in writers") as permission fetching requires write access.
+        If 'fetch_permissions' is False, it simply filters out trashed files ("trashed=false"),
+        allowing a broader file retrieval.
 
         Args:
             include_permissions (bool): flag to select permissions in the request query
@@ -181,17 +187,19 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             dict: Documents from Google Drive.
         """
 
-        files_fields = (
-            DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
-            if fetch_permissions
-            else DRIVE_ITEMS_FIELDS
-        )
+        if fetch_permissions:
+            files_fields = DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
+            # Google Drive API required write access to fetch file's permissions
+            list_query = "trashed=false and 'me' in writers"
+        else:
+            files_fields = DRIVE_ITEMS_FIELDS
+            list_query = "trashed=false"
 
         async for file in self.api_call_paged(
             resource="files",
             method="list",
             corpora="user",
-            q="trashed=false",
+            q=list_query,
             orderBy="modifiedTime desc",
             fields=f"files({files_fields}),incompleteSearch,nextPageToken",
             includeItemsFromAllDrives=False,
@@ -320,6 +328,7 @@ class GoogleDriveDataSource(BaseDataSource):
     name = "Google Drive"
     service_type = "google_drive"
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Set up the data source.

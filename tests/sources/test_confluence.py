@@ -10,13 +10,17 @@ from copy import copy
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 from aiohttp import StreamReader
 from freezegun import freeze_time
 
+from connectors.access_control import DLS_QUERY
+from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
+    CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
@@ -25,7 +29,9 @@ from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
+ADVANCED_SNIPPET = "advanced_snippet"
 HOST_URL = "http://127.0.0.1:9696"
+EXCEPTION_MESSAGE = "Something went wrong"
 CONTENT_QUERY = "limit=1&expand=children.attachment,history.lastUpdated,body.storage"
 RESPONSE_SPACE = {
     "results": [
@@ -376,6 +382,16 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
             }
         ),
         (
+            # Confluence Data Center with blank dependent fields
+            {
+                "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_username": "",
+                "data_center_password": "",
+                "account_email": "foo@bar.me",
+                "api_token": "foo",
+            }
+        ),
+        (
             # Confluence Cloud with blank dependent fields
             {
                 "data_source": CONFLUENCE_CLOUD,
@@ -414,6 +430,16 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
             }
         ),
         (
+            # Confluence Data Center with blank dependent fields
+            {
+                "data_source": CONFLUENCE_DATA_CENTER,
+                "data_center_username": "foo",
+                "data_center_password": "bar",
+                "account_email": "",
+                "api_token": "",
+            }
+        ),
+        (
             # Confluence Cloud with blank non-dependent fields
             {
                 "data_source": CONFLUENCE_CLOUD,
@@ -425,7 +451,12 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
         ),
         (
             # SSL certificate not enabled (empty ssl_ca okay)
-            {"ssl_enabled": False, "ssl_ca": ""}
+            {
+                "username": "foo",
+                "password": "bar",
+                "ssl_enabled": False,
+                "ssl_ca": "",
+            }
         ),
     ],
 )
@@ -446,6 +477,8 @@ async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_ra
 ):
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_confluence_source() as source:
+            source.configuration.get_field("username").value = "foo"
+            source.configuration.get_field("password").value = "foo"
             source.configuration.get_field("ssl_enabled").value = True
             source.configuration.get_field(
                 "ssl_ca"
@@ -541,6 +574,8 @@ class MockSSL:
         ("api_token", "confluence_cloud"),
         ("username", "confluence_server"),
         ("password", "confluence_server"),
+        ("data_center_username", "confluence_data_center"),
+        ("data_center_password", "confluence_data_center"),
     ],
 )
 @pytest.mark.asyncio
@@ -615,7 +650,7 @@ async def test_fetch_spaces():
         )
 
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-            async for response, _ in source.fetch_spaces():
+            async for response, _, _ in source.fetch_spaces():
                 assert response == EXPECTED_SPACE
 
 
@@ -628,7 +663,7 @@ async def test_fetch_documents():
 
         # Execute
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-            async for response, _, _, _ in source.fetch_documents(api_query=""):
+            async for response, _, _, _, _ in source.fetch_documents(api_query=""):
                 assert response == EXPECTED_PAGE
 
 
@@ -799,14 +834,14 @@ async def test_download_attachment_with_text_extraction_enabled_adds_body():
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_spaces",
-    return_value=AsyncIterator([[copy(EXPECTED_SPACE), []]]),
+    return_value=AsyncIterator([[copy(EXPECTED_SPACE), [], "space_key"]]),
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_documents",
     side_effect=[
-        (AsyncIterator([[copy(EXPECTED_PAGE), 1, [], {}]])),
-        (AsyncIterator([[copy(EXPECTED_BLOG), 1, [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}]])),
     ],
 )
 @mock.patch.object(
@@ -837,6 +872,7 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
 
         # Execute
         documents = []
+        source.confluence_client.data_source_type = "confluence_cloud"
         async for item, _ in source.get_docs():
             documents.append(item)
 
@@ -874,6 +910,8 @@ async def test_get_access_control_dls_enabled():
             "accountId": "607194d6bc3c3f006f4c35d6",
             "accountType": "atlassian",
             "displayName": "user1",
+            "locale": "en-US",
+            "emailAddress": "user1@dummy-domain.com",
             "active": True,
         },
         {
@@ -882,6 +920,8 @@ async def test_get_access_control_dls_enabled():
             "accountId": "607194d6bc3c3f006f4c35d7",
             "accountType": "atlassian",
             "displayName": "user2",
+            "locale": "en-US",
+            "emailAddress": "user2@dummy-domain.com",
             "active": False,
         },
         {
@@ -906,6 +946,8 @@ async def test_get_access_control_dls_enabled():
         "accountId": "607194d6bc3c3f006f4c35d6",
         "accountType": "atlassian",
         "displayName": "user1",
+        "locale": "en-US",
+        "emailAddress": "user1@dummy-domain.com",
         "active": True,
         "groups": {
             "size": 1,
@@ -932,6 +974,8 @@ async def test_get_access_control_dls_enabled():
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
             "display_name": "name:user1",
+            "locale": "locale:en-US",
+            "email_address": "email_address:user1@dummy-domain.com",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {
@@ -942,35 +986,63 @@ async def test_get_access_control_dls_enabled():
                         "group_id:607194d6bc3c3f006f4c35d8",
                         "role_key:607194d6bc3c3f006f4c35d9",
                     ]
-                }
-            },
-            "source": {
-                "bool": {
-                    "filter": {
-                        "bool": {
-                            "should": [
-                                {
-                                    "terms": {
-                                        "_allow_access_control.enum": [
-                                            "account_id:607194d6bc3c3f006f4c35d6",
-                                            "group_id:607194d6bc3c3f006f4c35d8",
-                                            "role_key:607194d6bc3c3f006f4c35d9",
-                                        ]
-                                    }
-                                },
-                            ]
-                        }
-                    }
-                }
+                },
+                "source": DLS_QUERY,
             },
         },
     }
 
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
+        source.confluence_client.data_source_type = "confluence_cloud"
 
         source.atlassian_access_control.fetch_all_users = AsyncIterator([mock_users])
         source.atlassian_access_control.fetch_user = AsyncIterator([mock_user1])
+
+        user_documents = []
+        async for user_doc in source.get_access_control():
+            user_documents.append(user_doc)
+        assert expected_user_doc in user_documents
+
+
+@pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19")
+async def test_get_access_control_dls_enabled_for_datacenter():
+    mock_users = [
+        {
+            "username": "user1",
+            "displayName": "user1",
+            "userKey": "607194d6bc3c3f006f4c35d6",
+        },
+    ]
+
+    expected_user_doc = {
+        "_id": "607194d6bc3c3f006f4c35d6",
+        "identity": {
+            "account_id": "account_id:607194d6bc3c3f006f4c35d6",
+            "display_name": "name:user1",
+            "username": "name:user1",
+        },
+        "created_at": "2023-01-24T04:07:19+00:00",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "account_id:607194d6bc3c3f006f4c35d6",
+                        "name:user1",
+                        "name:user1",
+                    ]
+                },
+                "source": DLS_QUERY,
+            },
+        },
+    }
+
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.confluence_client.data_source_type = "confluence_data_center"
+
+        source.fetch_confluence_server_users = AsyncIterator([mock_users])
 
         user_documents = []
         async for user_doc in source.get_access_control():
@@ -980,22 +1052,93 @@ async def test_get_access_control_dls_enabled():
 
 
 @pytest.mark.asyncio
+@freeze_time("2023-01-24T04:07:19")
+async def test_get_access_control_dls_enabled_for_server():
+    mock_users = [
+        {
+            "fullName": "user1",
+            "name": "user1",
+            "key": "607194d6bc3c3f006f4c35d6",
+            "email": "nedog73667@rentaen.com",
+        },
+    ]
+
+    expected_user_doc = {
+        "_id": "607194d6bc3c3f006f4c35d6",
+        "identity": {
+            "account_id": "account_id:607194d6bc3c3f006f4c35d6",
+            "display_name": "name:user1",
+            "email_address": "email_address:nedog73667@rentaen.com",
+        },
+        "created_at": "2023-01-24T04:07:19+00:00",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "account_id:607194d6bc3c3f006f4c35d6",
+                        "email_address:nedog73667@rentaen.com",
+                        "name:user1",
+                    ]
+                },
+                "source": DLS_QUERY,
+            },
+        },
+    }
+
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+
+        source.fetch_confluence_server_users = AsyncIterator([mock_users])
+
+        user_documents = []
+        async for user_doc in source.get_access_control():
+            user_documents.append(user_doc)
+
+        assert expected_user_doc in user_documents
+
+
+@pytest.mark.asyncio
+async def test_fetch_confluence_server_users():
+    async with create_confluence_source() as source:
+        source.confluence_client.api_call = AsyncIterator(
+            [JSONAsyncMock({"start": 0, "users": []})]
+        )
+        async for user in source.fetch_confluence_server_users():
+            assert user is None
+
+
+@pytest.mark.asyncio
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_spaces",
-    return_value=AsyncIterator([[copy(EXPECTED_SPACE), SPACE_PERMISSION_RESPONSE]]),
+    return_value=AsyncIterator(
+        [[copy(EXPECTED_SPACE), SPACE_PERMISSION_RESPONSE, "space_key"]]
+    ),
 )
 @mock.patch.object(
     ConfluenceDataSource,
     "fetch_documents",
     side_effect=[
-        (AsyncIterator([[copy(EXPECTED_BLOG), 1, BLOG_POST_PERMISSION_RESPONSE, {}]])),
+        (
+            AsyncIterator(
+                [
+                    [
+                        copy(EXPECTED_BLOG),
+                        1,
+                        "space_key",
+                        BLOG_POST_PERMISSION_RESPONSE,
+                        {},
+                    ]
+                ]
+            )
+        ),
         (
             AsyncIterator(
                 [
                     [
                         copy(EXPECTED_PAGE),
                         1,
+                        "space_key",
                         PAGE_PERMISSION_RESPONSE,
                         PAGE_RESTRICTION_RESPONSE,
                     ]
@@ -1040,6 +1183,7 @@ async def test_get_docs_dls_enabled(
 ):
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
+        source.confluence_client.data_source_type = "confluence_cloud"
 
         expected_responses = [
             copy(EXPECTED_SPACE) | {"_allow_access_control": ["group_id:group_id_1"]},
@@ -1065,3 +1209,122 @@ async def test_get_docs_dls_enabled(
         async for item, _ in source.get_docs():
             item.get("_allow_access_control", []).sort()
             assert item in expected_responses
+
+
+@pytest.mark.parametrize(
+    "filtering, expected_docs",
+    [
+        (
+            Filter({ADVANCED_SNIPPET: {"value": [{"query": "space = DEMO"}]}}),
+            [
+                EXPECTED_SPACE,
+                EXPECTED_ATTACHMENT,
+            ],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules(filtering, expected_docs):
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceDataSource,
+            "search_by_query",
+            side_effect=[
+                (AsyncIterator([[copy(EXPECTED_ATTACHMENT), "download-url"]])),
+                (AsyncIterator([[copy(EXPECTED_SPACE), None]])),
+            ],
+        ):
+            with patch.object(
+                ConfluenceDataSource,
+                "download_attachment",
+                return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
+            ):
+                source.get_content = mock.Mock(return_value=EXPECTED_ATTACHMENT)
+
+                async for item, _ in source.get_docs(filtering):
+                    assert item in expected_docs
+
+
+@pytest.mark.asyncio
+async def test_extract_identities_for_datacenter():
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        response = {
+            "user": {
+                "results": [
+                    {
+                        "type": "known",
+                        "username": "demo",
+                        "userKey": "8ab284ca8d53fe15018d5989eb750001",
+                        "displayName": "Demo",
+                    }
+                ],
+            },
+            "group": {
+                "results": [
+                    {
+                        "type": "group",
+                        "name": "confluence-users",
+                    }
+                ],
+            },
+        }
+        expected_response = source._extract_identities_for_datacenter(response=response)
+        assert expected_response == {"group:confluence-users", "user:demo"}
+
+
+@pytest.mark.asyncio
+async def test_fetch_server_space_permission():
+    async with create_confluence_source() as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        payload = {
+            "permissions": {
+                "VIEWSPACE": {
+                    "groups": ["confluence-users"],
+                    "users": [
+                        "admin",
+                    ],
+                }
+            },
+        }
+        source.confluence_client.api_call = AsyncIterator([JSONAsyncMock(payload)])
+        expected_response = await source.fetch_server_space_permission(space_key="key")
+        assert expected_response == {
+            "permissions": {
+                "VIEWSPACE": {"groups": ["confluence-users"], "users": ["admin"]}
+            }
+        }
+
+
+@pytest.mark.asyncio
+async def test_api_call_for_exception(patch_sleep):
+    """This function test _api_call when credentials are incorrect"""
+    async with create_confluence_source() as source:
+        source.confluence_client.retry_count = 1
+        with patch.object(
+            aiohttp, "ClientSession", side_effect=Exception(EXCEPTION_MESSAGE)
+        ):
+            with pytest.raises(Exception):
+                await anext(source.confluence_client.api_call(url="abc"))
+
+
+@pytest.mark.asyncio
+async def test_get_permission():
+    async with create_confluence_source() as source:
+        actual_permission = {"users": ["admin"], "groups": ["group"]}
+        permisssions = source.get_permission(permission=actual_permission)
+        assert permisssions == {"group:group", "user:admin"}
+
+
+@mock.patch.object(
+    ConfluenceDataSource,
+    "fetch_documents",
+    side_effect=[
+        (AsyncIterator([[copy(EXPECTED_PAGE), 1, "space_key", [], {}]])),
+        (AsyncIterator([[copy(EXPECTED_BLOG), 1, "space_key", [], {}]])),
+    ],
+)
+@pytest.mark.asyncio
+async def test_page_blog_coro(fetch_documents):
+    async with create_confluence_source() as source:
+        await source._page_blog_coro("api_query", "target")

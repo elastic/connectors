@@ -34,12 +34,14 @@ match DATA_SIZE:
 
 RECORDS_TO_DELETE = 10
 
+event_loop = asyncio.get_event_loop()
+
 
 def get_num_docs():
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-def load():
+async def load():
     """Create a read-only user for use when configuring the connector,
     then create tables and load table data."""
 
@@ -89,23 +91,18 @@ def load():
             await inject_lines(table, connect, RECORD_COUNT)
         await connect.close()
 
-    asyncio.get_event_loop().run_until_complete(create_readonly_user())
-    asyncio.get_event_loop().run_until_complete(load_rows())
+    await create_readonly_user()
+    await load_rows()
 
 
-def remove():
+async def remove():
     """Remove documents from tables"""
-
-    async def remove_rows():
-        """Removes 10 random items per table"""
-        connect = await asyncpg.connect(CONNECTION_STRING)
-        for table in range(NUM_TABLES):
-            rows = [
-                (row_id,)
-                for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
-            ]
-            sql_query = f"DELETE FROM customers_{table} WHERE id IN ($1)"
-            await connect.executemany(sql_query, rows)
-        await connect.close()
-
-    asyncio.get_event_loop().run_until_complete(remove_rows())
+    connect = await asyncpg.connect(CONNECTION_STRING)
+    for table in range(NUM_TABLES):
+        rows = [
+            (row_id,)
+            for row_id in random.sample(range(1, RECORD_COUNT), RECORDS_TO_DELETE)
+        ]
+        sql_query = f"DELETE FROM customers_{table} WHERE id IN ($1)"
+        await connect.executemany(sql_query, rows)
+    await connect.close()

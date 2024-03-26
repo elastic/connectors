@@ -37,7 +37,6 @@ ENDPOINTS = {
 }
 RETRIES = 3
 RETRY_INTERVAL = 2
-FILE_SIZE_LIMIT = 10485760
 CHUNK_SIZE = 1024
 FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # ~ 5 MB
@@ -211,6 +210,7 @@ class BoxClient:
 class BoxDataSource(BaseDataSource):
     name = "Box"
     service_type = "box"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -391,9 +391,9 @@ class BoxDataSource(BaseDataSource):
             )
             return False
 
-        if attachment_size > FILE_SIZE_LIMIT:
+        if attachment_size > self.framework_config.max_file_size:
             self._logger.warning(
-                f"File size {attachment_size} of file {attachment_name} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content"
+                f"File size {attachment_size} of file {attachment_name} is larger than {self.framework_config.max_file_size} bytes. Discarding file content"
             )
             return False
         return True

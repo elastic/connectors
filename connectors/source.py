@@ -21,6 +21,7 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from bson import Decimal128
 
+from connectors.config import DataSourceFrameworkConfig
 from connectors.content_extraction import ContentExtraction
 from connectors.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
@@ -38,7 +39,6 @@ from connectors.utils import (
 )
 
 CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
-FILE_SIZE_LIMIT = 10485760  # ~10 Megabytes
 CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
 
 DEFAULT_CONFIGURATION = {
@@ -385,6 +385,7 @@ class BaseDataSource:
     advanced_rules_enabled = False
     dls_enabled = False
     incremental_sync_enabled = False
+    native_connector_api_keys_enabled = True
 
     def __init__(self, configuration):
         # Initialize to the global logger
@@ -406,6 +407,9 @@ class BaseDataSource:
             self.extraction_service = None
             self.download_dir = None
 
+        # this will be overwritten by set_framework_config()
+        self.framework_config = DataSourceFrameworkConfig.Builder().build()
+
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
 
@@ -418,6 +422,10 @@ class BaseDataSource:
         # if there are internal class (e.g. Client class) to which the logger need to be set,
         # this method needs to be implemented
         pass
+
+    def set_framework_config(self, framework_config):
+        """Called by the framework, this exposes framework-wide configuration to be used by the DataSource"""
+        self.framework_config = framework_config
 
     @classmethod
     def get_simple_configuration(cls):
@@ -482,6 +490,9 @@ class BaseDataSource:
             },
             "incremental_sync": {
                 "enabled": cls.incremental_sync_enabled,
+            },
+            "native_connector_api_keys": {
+                "enabled": cls.native_connector_api_keys_enabled,
             },
         }
 
@@ -711,11 +722,12 @@ class BaseDataSource:
         return True
 
     def is_file_size_within_limit(self, file_size, filename):
-        if file_size > FILE_SIZE_LIMIT and not self.configuration.get(
-            "use_text_extraction_service"
+        if (
+            file_size > self.framework_config.max_file_size
+            and not self.configuration.get("use_text_extraction_service")
         ):
             self._logger.warning(
-                f"File size {file_size} of file {filename} is larger than {FILE_SIZE_LIMIT} bytes. Discarding file content."
+                f"File size {file_size} of file {filename} is larger than {self.framework_config.max_file_size} bytes. Discarding file content."
             )
             return False
 

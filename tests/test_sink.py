@@ -6,21 +6,23 @@
 import asyncio
 import datetime
 import itertools
+import json
 from copy import deepcopy
 from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call
 
 import pytest
-from elasticsearch import BadRequestError
+from elasticsearch import ApiError, BadRequestError
 
 from connectors.es import Mappings
+from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import Settings
 from connectors.es.sink import (
     OP_DELETE,
     OP_INDEX,
     OP_UPSERT,
     AsyncBulkRunningError,
-    ContentIndexNameInvalid,
+    ElasticsearchOverloadedError,
     Extractor,
     ForceCanceledError,
     Sink,
@@ -51,15 +53,6 @@ CONTENT_EXTRACTION_DISABLED = False
 
 
 @pytest.mark.asyncio
-async def test_prepare_content_index_raise_error_when_index_name_invalid():
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = SyncOrchestrator(config)
-
-    with pytest.raises(ContentIndexNameInvalid):
-        await es.prepare_content_index("lalalalalalalala woohooo")
-
-
-@pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses,
 ):
@@ -69,28 +62,27 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}?expand_wildcards=open",
+
+    # not found
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        status=404,
+        status=200,
+        body="{}",
     )
+
     mock_responses.put(
         f"http://nowhere.com:9200/{index_name}",
         payload={"_id": "1"},
         headers=headers,
+        status=400,
     )
 
     es = SyncOrchestrator(config)
 
-    with mock.patch.object(
-        es.client.indices,
-        "create",
-        side_effect=[BadRequestError(message="test", body=None, meta=None)],
-    ):
-        with pytest.raises(BadRequestError):
-            await es.prepare_content_index(index_name)
-
-        await es.close()
+    with pytest.raises(BadRequestError):
+        await es.prepare_content_index(index_name)
+    await es.close()
 
 
 @pytest.mark.asyncio
@@ -98,18 +90,29 @@ async def test_prepare_content_index_create_index(
     mock_responses,
 ):
     index_name = "search-new-index"
+    language_code = "jp"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(
         "http://nowhere.com:9200/.elastic-connectors/_refresh", headers=headers
     )
-    mock_responses.head(
-        f"http://nowhere.com:9200/{index_name}?expand_wildcards=open",
+
+    # not found
+    mock_responses.get(
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        status=404,
+        status=200,
+        body="{}",
     )
+
     mock_responses.put(
         f"http://nowhere.com:9200/{index_name}",
+        payload={"_id": "1"},
+        headers=headers,
+    )
+
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}/_settings",
         payload={"_id": "1"},
         headers=headers,
     )
@@ -119,77 +122,77 @@ async def test_prepare_content_index_create_index(
     create_index_result = asyncio.Future()
     create_index_result.set_result({"acknowledged": True})
 
-    mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
-
-    settings = Settings(analysis_icu=False).to_hash()
-
     with mock.patch.object(
-        es.client.indices, "create", return_value=create_index_result
+        es.es_management_client,
+        "create_content_index",
+        return_value=create_index_result,
     ) as create_index_mock:
-        await es.prepare_content_index(index_name)
+        await es.prepare_content_index(index_name, language_code)
 
         await es.close()
 
-        expected_params = {
-            "index": index_name,
-            "mappings": mappings,
-            "settings": settings,
-        }
-
-        create_index_mock.assert_called_with(**expected_params)
+        create_index_mock.assert_called_with(index_name, language_code)
 
 
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
+    language_code = "en"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
     # prepare-index, with mappings
 
     mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
+    index_name = "search-new-index"
 
-    mock_responses.head(
-        "http://nowhere.com:9200/search-new-index?expand_wildcards=open",
-        headers=headers,
-    )
+    response = {
+        index_name: {
+            "mappings": {},
+            "settings": {},
+        }
+    }
     mock_responses.get(
-        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
+        f"http://nowhere.com:9200/{index_name}?ignore_unavailable=true",
         headers=headers,
-        payload={"search-new-index": {"mappings": {}}},
+        status=200,
+        body=json.dumps(response),
     )
+
     mock_responses.put(
-        "http://nowhere.com:9200/search-new-index/_mapping?expand_wildcards=open",
+        f"http://nowhere.com:9200/{index_name}/_mapping",
         headers=headers,
         payload=mappings,
+        body='{"acknowledged": True}',
+    )
+
+    mock_responses.put(
+        f"http://nowhere.com:9200/{index_name}/_settings",
+        headers=headers,
+        payload=settings,
+        body='{"acknowledged": True}',
     )
 
     es = SyncOrchestrator(config)
-    put_mappings_result = asyncio.Future()
-    put_mappings_result.set_result({"acknowledged": True})
     with mock.patch.object(
-        es.client.indices,
-        "put_mapping",
-        return_value=put_mappings_result,
+        es.es_management_client,
+        "ensure_content_index_mappings",
     ) as put_mapping_mock:
-        index_name = "search-new-index"
-        await es.prepare_content_index(index_name)
+        await es.prepare_content_index(index_name, language_code)
 
         await es.close()
 
-        expected_params = {
-            "index": index_name,
-            "dynamic": mappings["dynamic"],
-            "dynamic_templates": mappings["dynamic_templates"],
-            "properties": mappings["properties"],
-            "expand_wildcards": "open",
-        }
-
-        put_mapping_mock.assert_called_with(**expected_params)
+        put_mapping_mock.assert_called_with(index_name, mappings)
 
 
 def set_responses(mock_responses, ts=None):
     if ts is None:
         ts = datetime.datetime.now().isoformat()
     headers = {"X-Elastic-Product": "Elasticsearch"}
+    mock_responses.head(
+        "http://nowhere.com:9200/search-some-index",
+        headers=headers,
+    )
+
     mock_responses.get(
         "http://nowhere.com:9200/search-some-index",
         payload={"_id": "1"},
@@ -265,21 +268,6 @@ def set_responses(mock_responses, ts=None):
         },
         headers=headers,
     )
-
-
-@pytest.mark.asyncio
-async def test_get_existing_ids(mock_responses):
-    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    set_responses(mock_responses)
-
-    es = SyncOrchestrator(config)
-    extractor = Extractor(es.client, None, "search-some-index")
-    ids = []
-    async for doc_id, _ in extractor._get_existing_ids():
-        ids.append(doc_id)
-
-    assert ids == ["1", "2"]
-    await es.close()
 
 
 @pytest.mark.asyncio
@@ -423,11 +411,16 @@ async def setup_extractor(
     sync_rules_enabled=False,
     content_extraction_enabled=False,
 ):
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
     # filtering content doesn't matter as the BasicRuleEngine behavior is mocked
     filter_mock = Mock()
     filter_mock.get_active_filter = Mock(return_value={})
     extractor = Extractor(
-        None,
+        ESManagementClient(config),
         queue,
         INDEX,
         filter_=filter_mock,
@@ -481,14 +474,18 @@ async def setup_extractor(
             total_downloads(0),
         ),
         (
-            # doc 1 is present, data source also has doc 1 with the same timestamp -> nothing happens
+            # doc 1 is present, data source also has doc 1 with the same timestamp -> doc one is updated
             [DOC_ONE],
             [(DOC_ONE, None, "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            [end_docs_operation()],
-            updated(0),
+            [
+                # update happens through overwriting
+                index_operation(DOC_ONE),
+                end_docs_operation(),
+            ],
+            updated(1),
             created(0),
             deleted(0),
             total_downloads(0),
@@ -584,17 +581,17 @@ async def setup_extractor(
             total_downloads(1),
         ),
         (
-            # doc 1 present, data source has doc 1 -> no lazy download if timestamps are the same for the docs
+            # doc 1 present, data source has doc 1 -> lazy download occurs
             [DOC_ONE],
             [(DOC_ONE, lazy_download_fake(DOC_ONE), "index")],
             NO_FILTERING,
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            [end_docs_operation()],
-            updated(0),
+            [index_operation(DOC_ONE), end_docs_operation()],
+            updated(1),
             created(0),
             deleted(0),
-            total_downloads(0),
+            total_downloads(1),
         ),
         (
             # doc 1 present, data source has doc 1 with different timestamp
@@ -663,10 +660,12 @@ async def setup_extractor(
         ),
     ],
 )
-@mock.patch("connectors.es.sink.Extractor._get_existing_ids")
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
 @pytest.mark.asyncio
 async def test_get_docs(
-    get_existing_ids,
+    yield_existing_documents_metadata,
     existing_docs,
     docs_from_source,
     doc_should_ingest,
@@ -680,7 +679,7 @@ async def test_get_docs(
 ):
     lazy_downloads = await lazy_downloads_mock()
 
-    get_existing_ids.return_value = AsyncIterator(
+    yield_existing_documents_metadata.return_value = AsyncIterator(
         [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
     )
 
@@ -957,10 +956,12 @@ async def test_get_docs_incrementally(
         ),
     ],
 )
-@mock.patch("connectors.es.sink.Extractor._get_existing_ids")
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
 @pytest.mark.asyncio
 async def test_get_access_control_docs(
-    get_existing_ids,
+    yield_existing_documents_metadata,
     existing_docs,
     docs_from_source,
     expected_queue_operations,
@@ -968,7 +969,7 @@ async def test_get_access_control_docs(
     expected_total_docs_created,
     expected_total_docs_deleted,
 ):
-    get_existing_ids.return_value = AsyncIterator(
+    yield_existing_documents_metadata.return_value = AsyncIterator(
         [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
     )
 
@@ -1080,6 +1081,7 @@ def test_bulk_populate_stats(res, expected_result):
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
     sink._populate_stats(deepcopy(STATS), res)
 
@@ -1090,7 +1092,13 @@ def test_bulk_populate_stats(res, expected_result):
 
 @pytest.mark.asyncio
 async def test_batch_bulk_with_retry():
-    client = Mock()
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
     sink = Sink(
         client=client,
         queue=None,
@@ -1099,14 +1107,21 @@ async def test_batch_bulk_with_retry():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     with mock.patch.object(asyncio, "sleep"):
         # first call raises exception, and the second call succeeds
-        client.bulk = AsyncMock(side_effect=[Exception(), {"items": []}])
+        error_meta = Mock()
+        error_meta.status = 429
+        first_call_error = ApiError(429, meta=error_meta, body="error")
+        second_call_result = {"items": []}
+        client.client.bulk = AsyncMock(
+            side_effect=[first_call_error, second_call_result]
+        )
         await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
 
-        assert client.bulk.await_count == 2
+        assert client.client.bulk.await_count == 2
 
 
 @pytest.mark.parametrize(
@@ -1124,7 +1139,7 @@ async def test_batch_bulk_with_retry():
     ],
 )
 @pytest.mark.asyncio
-async def test_elastic_server_done(
+async def test_sync_orchestrator_done(
     extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
     if extractor_task is not None:
@@ -1175,6 +1190,25 @@ async def test_force_canceled_extractor_put_doc():
 
 
 @pytest.mark.asyncio
+async def test_force_canceled_extractor_with_other_errors(patch_logger):
+    queue = Mock()
+    queue.put = AsyncMock()
+    extractor = Extractor(
+        None,
+        queue,
+        INDEX,
+    )
+    generator = AsyncMock(side_effect=Exception("a non-ForceCanceledError"))
+
+    extractor.force_cancel()
+    # no error thrown
+    await extractor.run(generator, JobType.FULL)
+    patch_logger.assert_present(
+        "Extractor did not stop within 5 seconds of cancelation, force-canceling the task."
+    )
+
+
+@pytest.mark.asyncio
 async def test_sink_fetch_doc():
     expected_doc = {"id": 123}
     queue = Mock()
@@ -1187,6 +1221,7 @@ async def test_sink_fetch_doc():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     doc = await sink.fetch_doc()
@@ -1207,12 +1242,36 @@ async def test_force_canceled_sink_fetch_doc():
         chunk_mem_size=0,
         max_concurrency=0,
         max_retries=3,
+        retry_interval=10,
     )
 
     sink.force_cancel()
     with pytest.raises(ForceCanceledError):
         await sink.fetch_doc()
         queue.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_force_canceled_sink_with_other_errors(patch_logger):
+    queue = Mock()
+    queue.get = AsyncMock(side_effect=Exception("a non-ForceCanceledError"))
+    sink = Sink(
+        None,
+        queue,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    sink.force_cancel()
+    # no error thrown
+    await sink.run()
+    patch_logger.assert_present(
+        "Sink did not stop within 5 seconds of cancelation, force-canceling the task."
+    )
 
 
 @pytest.mark.parametrize(
@@ -1269,3 +1328,38 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
         else:
             es._extractor.force_cancel.assert_not_called()
             es._sink.force_cancel.assert_not_called()
+
+
+async def test_extractor_run_when_mem_full_is_raised():
+    docs_from_source = [
+        {"_id": 1},
+        {"_id": 2},
+        {"_id": 3},
+    ]
+    es_client = AsyncMock()
+    es_client.yield_existing_documents_metadata = Mock(return_value=AsyncIterator([]))
+
+    queue = await queue_mock()
+    queue.clear = Mock()
+
+    def _put_side_effect(value):
+        if isinstance(value, str):
+            pass
+        else:
+            raise asyncio.QueueFull()
+
+    queue.put = AsyncMock(side_effect=_put_side_effect)
+    # deep copying docs is needed as get_access_control_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([(doc, None, "") for doc in docs_from_source])
+
+    extractor = Extractor(
+        es_client,
+        queue,
+        INDEX,
+    )
+
+    await extractor.run(doc_generator, JobType.FULL)
+
+    queue.clear.assert_called_once()
+    assert isinstance(extractor.fetch_error, ElasticsearchOverloadedError)

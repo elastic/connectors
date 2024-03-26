@@ -799,6 +799,11 @@ class SharepointOnlineClient:
             permissions_uri = f"/drives/{drive_id}/items/{item_id}/permissions"
             requests.append({"id": item_id, "method": "GET", "url": permissions_uri})
 
+        if not requests:
+            self._logger.debug(
+                "Skipping fetching empty batch of drive item permissions"
+            )
+            return
         try:
             batch_url = f"{GRAPH_API_URL}/$batch"
             batch_request = {"requests": requests}
@@ -940,6 +945,9 @@ class SharepointOnlineClient:
                         "Modified": site_page.get("Modified"),
                         "EditorId": site_page.get("EditorId"),
                         "odata.id": site_page.get("odata.id"),
+                        "OData__UIVersionString": site_page.get(
+                            "OData__UIVersionString"
+                        ),
                     }
         except NotFound:
             # I'm not sure if site can have no pages, but given how weird API is I put this here
@@ -1013,7 +1021,7 @@ class SharepointOnlineClient:
         actual_tenant_name = self._tenant_name_pattern.findall(url)[0]
 
         if self._tenant_name != actual_tenant_name:
-            msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}."
+            msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}. For url: {url}"
             raise InvalidSharepointTenant(msg)
 
     async def close(self):
@@ -1540,7 +1548,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item (dict): drive item with or without permissions depending on the config value of `fetch_drive_item_permissions`
         """
 
-        if not self.configuration["fetch_drive_item_permissions"]:
+        if (
+            not self._dls_enabled()
+            or not self.configuration["fetch_drive_item_permissions"]
+        ):
             for drive_item in drive_items_batch:
                 yield drive_item
 

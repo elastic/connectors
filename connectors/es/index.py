@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from functools import partial
+
 from elasticsearch import ApiError
 
 from connectors.es import ESClient
@@ -50,10 +52,14 @@ class ESIndex(ESClient):
 
     async def fetch_response_by_id(self, doc_id):
         if not self.serverless:
-            await self.client.indices.refresh(index=self.index_name)
+            await self._retrier.execute_with_retry(
+                partial(self.client.indices.refresh, index=self.index_name)
+            )
 
         try:
-            resp = await self.client.get(index=self.index_name, id=doc_id)
+            resp = await self._retrier.execute_with_retry(
+                partial(self.client.get, index=self.index_name, id=doc_id)
+            )
         except ApiError as e:
             logger.critical(f"The server returned {e.status_code}")
             logger.critical(e.body, exc_info=True)
@@ -65,22 +71,41 @@ class ESIndex(ESClient):
         return resp.body
 
     async def index(self, doc):
-        return await self.client.index(index=self.index_name, document=doc)
+        return await self._retrier.execute_with_retry(
+            partial(self.client.index, index=self.index_name, document=doc)
+        )
+
+    async def clean_index(self):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.delete_by_query,
+                index=self.index_name,
+                body={"query": {"match_all": {}}},
+                ignore_unavailable=True,
+                conflicts="proceed",
+            )
+        )
 
     async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
-        return await self.client.update(
-            index=self.index_name,
-            id=doc_id,
-            doc=doc,
-            if_seq_no=if_seq_no,
-            if_primary_term=if_primary_term,
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.update,
+                index=self.index_name,
+                id=doc_id,
+                doc=doc,
+                if_seq_no=if_seq_no,
+                if_primary_term=if_primary_term,
+            )
         )
 
     async def update_by_script(self, doc_id, script):
-        return await self.client.update(
-            index=self.index_name,
-            id=doc_id,
-            script=script,
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.update,
+                index=self.index_name,
+                id=doc_id,
+                script=script,
+            )
         )
 
     async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
@@ -95,7 +120,9 @@ class ESIndex(ESClient):
             Iterator
         """
         if not self.serverless:
-            await self.client.indices.refresh(index=self.index_name)
+            await self._retrier.execute_with_retry(
+                partial(self.client.indices.refresh, index=self.index_name)
+            )
 
         if query is None:
             query = {"match_all": {}}
@@ -105,19 +132,24 @@ class ESIndex(ESClient):
 
         while True:
             try:
-                resp = await self.client.search(
-                    index=self.index_name,
-                    query=query,
-                    sort=sort,
-                    from_=offset,
-                    size=page_size,
-                    expand_wildcards="hidden",
-                    seq_no_primary_term=True,
+                resp = await self._retrier.execute_with_retry(
+                    partial(
+                        self.client.search,
+                        index=self.index_name,
+                        query=query,
+                        sort=sort,
+                        from_=offset,
+                        size=page_size,
+                        expand_wildcards="hidden",
+                        seq_no_primary_term=True,
+                    )
                 )
             except ApiError as e:
-                logger.critical(f"The server returned {e.status_code}")
-                logger.critical(e.body, exc_info=True)
-                return
+                logger.error(
+                    f"Elasticsearch returned {e.status_code} for 'GET {self.index_name}/_search' with body:"
+                )
+                logger.error(e.body, exc_info=True)
+                raise
 
             hits = resp["hits"]["hits"]
             total = resp["hits"]["total"]["value"]

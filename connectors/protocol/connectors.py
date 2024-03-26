@@ -12,7 +12,6 @@ Main classes are :
 - SyncJob: represents a document in `.elastic-connectors-sync-jobs`
 
 """
-import re
 import socket
 from collections import UserDict
 from copy import deepcopy
@@ -62,6 +61,7 @@ __all__ = [
     "Filtering",
     "Sort",
     "SyncJob",
+    "CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX",
 ]
 
 
@@ -69,6 +69,7 @@ CONNECTORS_INDEX = ".elastic-connectors"
 JOBS_INDEX = ".elastic-connectors-sync-jobs"
 CONCRETE_CONNECTORS_INDEX = CONNECTORS_INDEX + "-v1"
 CONCRETE_JOBS_INDEX = JOBS_INDEX + "-v1"
+CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
@@ -131,6 +132,10 @@ class DataSourceError(Exception):
     pass
 
 
+class InvalidConnectorSetupError(Exception):
+    pass
+
+
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
@@ -183,6 +188,21 @@ class ConnectorIndex(ESIndex):
             self,
             doc_source,
         )
+
+    async def get_connector_by_index(self, index_name):
+        connectors = [
+            connector
+            async for connector in self.get_all_docs(
+                {"match": {"index_name": index_name}}
+            )
+        ]
+        if len(connectors) > 1:
+            msg = f"Multiple connectors exist for index {index_name}"
+            raise InvalidConnectorSetupError(msg)
+        elif len(connectors) == 0:
+            return None
+        else:
+            return connectors[0]
 
     async def all_connectors(self):
         async for connector in self.get_all_docs():
@@ -301,9 +321,17 @@ class SyncJob(ESDocument):
             JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
         )
 
-    async def fail(self, message, ingestion_stats=None, connector_metadata=None):
+    async def fail(self, error, ingestion_stats=None, connector_metadata=None):
+        if isinstance(error, str):
+            message = error
+        elif isinstance(error, Exception):
+            message = f"{error.__class__.__name__}"
+            if str(error):
+                message += f": {str(error)}"
+        else:
+            message = str(error)
         await self._terminate(
-            JobStatus.ERROR, str(message), ingestion_stats, connector_metadata
+            JobStatus.ERROR, message, ingestion_stats, connector_metadata
         )
 
     async def cancel(self, ingestion_stats=None, connector_metadata=None):
@@ -439,6 +467,8 @@ class Features:
     BASIC_RULES_OLD = "basic_rules_old"
     ADVANCED_RULES_OLD = "advanced_rules_old"
 
+    NATIVE_CONNECTOR_API_KEYS = "native_connector_api_keys"
+
     def __init__(self, features=None):
         if features is None:
             features = {}
@@ -453,6 +483,11 @@ class Features:
     def document_level_security_enabled(self):
         return self._nested_feature_enabled(
             ["document_level_security", "enabled"], default=False
+        )
+
+    def native_connector_api_keys_enabled(self):
+        return self._nested_feature_enabled(
+            ["native_connector_api_keys", "enabled"], default=True
         )
 
     def sync_rules_enabled(self):
@@ -595,6 +630,10 @@ class Connector(ESDocument):
     @property
     def sync_cursor(self):
         return self.get("sync_cursor")
+
+    @property
+    def api_key_secret_id(self):
+        return self.get("api_key_secret_id")
 
     async def heartbeat(self, interval):
         if (
@@ -784,6 +823,17 @@ class Connector(ESDocument):
         if is_main_connector and self.features.features != source_klass.features():
             doc["features"] = source_klass.features()
             self.log_debug("Populated features")
+        elif (
+            self.native
+            and self.features.features.keys() != source_klass.features().keys()
+        ):
+            missing_features = (
+                source_klass.features().keys() - self.features.features.keys()
+            )
+            doc["features"] = source_klass.features() | self.features.features
+            self.log_debug(
+                f"Added missing features [{', '.join(missing_features)}] from Native definitions"
+            )
 
         if not doc:
             return
@@ -923,7 +973,7 @@ class Connector(ESDocument):
         }
 
 
-IDLE_JOBS_THRESHOLD = 60  # 60 seconds
+IDLE_JOBS_THRESHOLD = 60 * 5  # 5 minutes
 
 
 class SyncJobIndex(ESIndex):
@@ -954,11 +1004,7 @@ class SyncJobIndex(ESIndex):
         index_name = connector.index_name
 
         if job_type == JobType.ACCESS_CONTROL:
-            index_name = re.sub(
-                r"^(?:search-)?(.*)$",
-                rf"{ACCESS_CONTROL_INDEX_PREFIX}\g<1>",
-                index_name,
-            )
+            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
 
         job_def = {
             "connector": {
@@ -979,7 +1025,9 @@ class SyncJobIndex(ESIndex):
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }
-        await self.index(job_def)
+        api_response = await self.index(job_def)
+
+        return api_response["_id"]
 
     async def pending_jobs(self, connector_ids, job_types):
         if not job_types:
@@ -1006,8 +1054,22 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query, sort=sort):
             yield job
 
-    async def orphaned_jobs(self, connector_ids):
-        query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+    async def orphaned_idle_jobs(self, connector_ids):
+        query = {
+            "bool": {
+                "must_not": {"terms": {"connector.id": connector_ids}},
+                "filter": [
+                    {
+                        "terms": {
+                            "status": [
+                                JobStatus.IN_PROGRESS.value,
+                                JobStatus.CANCELING.value,
+                            ]
+                        }
+                    }
+                ],
+            }
+        }
         async for job in self.get_all_docs(query=query):
             yield job
 
@@ -1031,7 +1093,3 @@ class SyncJobIndex(ESIndex):
 
         async for job in self.get_all_docs(query=query):
             yield job
-
-    async def delete_jobs(self, job_ids):
-        query = {"terms": {"_id": job_ids}}
-        return await self.client.delete_by_query(index=self.index_name, query=query)

@@ -11,9 +11,9 @@ These connectors are available as:
 - [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) to be self-managed on your own infrastructure
 - [**Native connectors**](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) using our fully managed service on Elastic Cloud
 
-ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
-You can get started quickly with Docker, using [these instructions](docs/DOCKER.md).
-We also have an end-to-end tutorial using the [PostgreSQL connector client](https://www.elastic.co/guide/en/enterprise-search/current/postgresql-connector-client-tutorial.html).
+ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) in the official Elastic documentation.
+
+To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
 
 ### Connector documentation
 
@@ -27,6 +27,15 @@ Here are the main pages:
 You'll also find the individual references for each connector there.
 For everything to do with _developing_ connectors, you'll find that here in this repo.
 
+#### API documentation
+
+Since 8.12.0, you can manage connectors and sync jobs programmatically using APIs.
+Refer to the [Connector API documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/connector-apis.html) in the Elasticsearch docs.
+
+#### Command-line interface
+
+Learn about our CLI tool in [`docs/CLI.md`](./docs/CLI.md).
+
 ## Connector service code
 
 In addition to the source code for individual connectors, this repo also contains the connector service code, which is used for tasks like running connectors, and managing scheduling, syncs, and cleanup.
@@ -38,6 +47,12 @@ This repo is also the home of the Elastic connector framework. This framework en
 The framework implements common functionalities out of the box, so developers can focus on the logic specific to integrating their chosen data source.
 
 The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
+
+## Running a self-managed stack
+
+This repo provides a [set of scripts](./scripts/stack) to allow a user to set up a full Elasticsearch, Kibana, and Connectors service stack using Docker.
+This is useful to get up and running with the Connectors framework with minimal effort, and provides a guided set of prompts for setup and configuration.
+For more information, instructions, and options, see the [README file](./scripts/stack/README.md) in the stack folder.
 
 ### Framework use cases
 
@@ -57,5 +72,6 @@ The framework serves two distinct, but related use cases:
 - [Elastic-internal guide](docs/INTERNAL.md)
 - [Connector Protocol](docs/CONNECTOR_PROTOCOL.md)
 - [Configuration](docs/CONFIG.md)
+- [Command line interface](docs/CLI.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
 - [Upgrading](docs/UPGRADING.md)

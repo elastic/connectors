@@ -40,6 +40,7 @@ RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 
 FETCH_SIZE = 100
+MAX_USER_FETCH_LIMIT = 1000
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
@@ -52,7 +53,8 @@ ISSUE_DATA = "issue_data"
 ATTACHMENT_CLOUD = "attachment_cloud"
 ATTACHMENT_SERVER = "attachment_server"
 USERS = "users"
-PROJECT_PERMISSIONS_BY_KEY = "project_permissions_by_key"
+USERS_FOR_DATA_CENTER = "users_for_data_center"
+PERMISSIONS_BY_KEY = "permissions_by_key"
 ISSUE_SECURITY_LEVEL = "issue_security_level"
 SECURITY_LEVEL_MEMBERS = "issue_security_members"
 PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
@@ -65,7 +67,8 @@ URLS = {
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
     USERS: "/rest/api/3/users/search",
-    PROJECT_PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?projectKey={project_key}&permissions=BROWSE_PROJECTS&maxResults={max_results}&startAt={start_at}",
+    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
+    PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?{key}&permissions=BROWSE&maxResults={max_results}&startAt={start_at}",
     PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
     ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
     SECURITY_LEVEL_MEMBERS: "/rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
@@ -73,6 +76,7 @@ URLS = {
 
 JIRA_CLOUD = "jira_cloud"
 JIRA_SERVER = "jira_server"
+JIRA_DATA_CENTER = "jira_data_center"
 
 ATLASSIAN = "atlassian"
 USER_QUERY = "expand=groups,applicationRoles"
@@ -99,7 +103,7 @@ class JiraClient:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
-        self.is_cloud = self.configuration["data_source"] == JIRA_CLOUD
+        self.data_source_type = self.configuration["data_source"]
         self.host_url = self.configuration["jira_url"]
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
@@ -123,15 +127,20 @@ class JiraClient:
         """
         if self.session:
             return self.session
-        if self.is_cloud:
+        if self.data_source_type == JIRA_CLOUD:
             login, password = (
                 self.configuration["account_email"],
                 self.configuration["api_token"],
             )
-        else:
+        elif self.data_source_type == JIRA_SERVER:
             login, password = (
                 self.configuration["username"],
                 self.configuration["password"],
+            )
+        else:
+            login, password = (
+                self.configuration["data_center_username"],
+                self.configuration["data_center_password"],
             )
 
         basic_auth = aiohttp.BasicAuth(login=login, password=password)
@@ -270,6 +279,7 @@ class JiraDataSource(BaseDataSource):
     service_type = "jira"
     advanced_rules_enabled = True
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Jira
@@ -306,6 +316,7 @@ class JiraDataSource(BaseDataSource):
                 "options": [
                     {"label": "Jira Cloud", "value": JIRA_CLOUD},
                     {"label": "Jira Server", "value": JIRA_SERVER},
+                    {"label": "Jira Data Center", "value": JIRA_DATA_CENTER},
                 ],
                 "order": 1,
                 "type": "str",
@@ -324,49 +335,62 @@ class JiraDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
+            "data_center_username": {
+                "depends_on": [{"field": "data_source", "value": JIRA_DATA_CENTER}],
+                "label": "Jira Data Center username",
+                "order": 4,
+                "type": "str",
+            },
+            "data_center_password": {
+                "depends_on": [{"field": "data_source", "value": JIRA_DATA_CENTER}],
+                "label": "Jira Data Center password",
+                "sensitive": True,
+                "order": 5,
+                "type": "str",
+            },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud service account id",
-                "order": 4,
+                "order": 6,
                 "type": "str",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Jira Cloud API token",
-                "order": 5,
+                "order": 7,
                 "sensitive": True,
                 "type": "str",
             },
             "jira_url": {
                 "label": "Jira host url",
-                "order": 6,
+                "order": 8,
                 "type": "str",
             },
             "projects": {
                 "display": "textarea",
                 "label": "Jira project keys",
-                "order": 7,
+                "order": 9,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 8,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 9,
+                "order": 11,
                 "type": "str",
             },
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries for failed requests",
-                "order": 10,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -375,7 +399,7 @@ class JiraDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 11,
+                "order": 13,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -385,17 +409,16 @@ class JiraDataSource(BaseDataSource):
             },
             "use_document_level_security": {
                 "display": "toggle",
-                "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
                 "label": "Enable document level security",
-                "order": 12,
-                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "order": 14,
+                "tooltip": "Document level security ensures identities and permissions set in Jira are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents. Only 1000 users can be fetched for Jira Data Center.",
                 "type": "bool",
                 "value": False,
             },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 13,
+                "order": 15,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -424,32 +447,45 @@ class JiraDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_information_list(self, project):
+    async def _user_information_list(self, key):
         start_at = 0
         while True:
             async for users in self.jira_client.api_call(
-                url_name=PROJECT_PERMISSIONS_BY_KEY,
-                project_key=project["key"],
+                url_name=PERMISSIONS_BY_KEY,
+                key=key,
                 start_at=start_at,
-                max_results=FETCH_SIZE,
+                max_results=MAX_USER_FETCH_LIMIT,
             ):
                 response = await users.json()
                 if len(response) == 0:
                     return
                 yield response
-                start_at += FETCH_SIZE
+                start_at += MAX_USER_FETCH_LIMIT
 
     async def _project_access_control(self, project):
         if not self._dls_enabled():
             return []
 
         access_control = set()
-        async for actors in self._user_information_list(project=project):
+        async for actors in self._user_information_list(
+            key=f"projectKey={project['key']}"
+        ):
             for actor in actors:
-                if actor["accountType"] == ATLASSIAN:
+                if (
+                    self.jira_client.data_source_type == JIRA_CLOUD
+                    and actor["accountType"] == ATLASSIAN
+                ):
                     access_control.add(
                         prefix_account_id(account_id=actor.get("accountId"))
                     )
+                    access_control.add(
+                        prefix_account_name(account_name=actor.get("displayName"))
+                    )
+                elif self.jira_client.data_source_type in [
+                    JIRA_SERVER,
+                    JIRA_DATA_CENTER,
+                ]:
+                    access_control.add(prefix_account_id(account_id=actor.get("name")))
                     access_control.add(
                         prefix_account_name(account_name=actor.get("displayName"))
                     )
@@ -506,6 +542,17 @@ class JiraDataSource(BaseDataSource):
             return []
 
         access_control = set()
+        if self.jira_client.data_source_type != JIRA_CLOUD:
+            async for actors in self._user_information_list(
+                key=f"issueKey={issue_key}"
+            ):
+                for actor in actors:
+                    access_control.add(prefix_account_id(account_id=actor.get("name")))
+                    access_control.add(
+                        prefix_account_name(account_name=actor.get("displayName"))
+                    )
+            return list(access_control)
+
         async for response in self._issue_security_level(issue_key=issue_key):
             if security := response.get("fields", {}).get("security"):
                 level_id = security.get("id")
@@ -576,7 +623,12 @@ class JiraDataSource(BaseDataSource):
             return
 
         self._logger.info("Fetching all users")
-        url = parse.urljoin(self.configuration["jira_url"], URLS[USERS])
+        users_endpoint = (
+            URLS[USERS]
+            if self.jira_client.data_source_type == JIRA_CLOUD
+            else URLS[USERS_FOR_DATA_CENTER]
+        )
+        url = parse.urljoin(self.configuration["jira_url"], users_endpoint)
         async for users in self.atlassian_access_control.fetch_all_users(url=url):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
@@ -637,7 +689,9 @@ class JiraDataSource(BaseDataSource):
             return
 
         download_url = (
-            ATTACHMENT_CLOUD if self.jira_client.is_cloud else ATTACHMENT_SERVER
+            ATTACHMENT_CLOUD
+            if self.jira_client.data_source_type == JIRA_CLOUD
+            else ATTACHMENT_SERVER
         )
 
         document = {

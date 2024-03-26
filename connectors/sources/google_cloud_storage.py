@@ -5,12 +5,11 @@
 #
 """Google Cloud Storage source module responsible to fetch documents from Google Cloud Storage.
 """
-import asyncio
 import os
 import urllib.parse
 from functools import cached_property, partial
 
-from aiogoogle import Aiogoogle
+from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 
 from connectors.logger import logger
@@ -19,7 +18,7 @@ from connectors.sources.google import (
     load_service_account_json,
     validate_service_account_json,
 )
-from connectors.utils import get_pem_format
+from connectors.utils import RetryStrategy, get_pem_format, retryable
 
 CLOUD_STORAGE_READ_ONLY_SCOPE = "https://www.googleapis.com/auth/devstorage.read_only"
 CLOUD_STORAGE_BASE_URL = "https://console.cloud.google.com/storage/browser/_details/"
@@ -42,8 +41,8 @@ BLOB_ADAPTER = {
     "version": "generation",
     "bucket_name": "bucket",
 }
-DEFAULT_RETRY_COUNT = 3
-DEFAULT_WAIT_MULTIPLIER = 2
+RETRY_COUNT = 3
+RETRY_INTERVAL = 2
 STORAGE_EMULATOR_HOST = os.environ.get("STORAGE_EMULATOR_HOST")
 RUNNING_FTEST = (
     "RUNNING_FTEST" in os.environ
@@ -63,14 +62,12 @@ REQUIRED_CREDENTIAL_KEYS = [
 class GoogleCloudStorageClient:
     """A google client to handle api calls made to Google Cloud Storage."""
 
-    def __init__(self, retry_count, json_credentials):
+    def __init__(self, json_credentials):
         """Initialize the ServiceAccountCreds class using which api calls will be made.
 
         Args:
-            retry_count (int): Maximum retries for the failed requests.
             json_credentials (dict): Service account credentials json.
         """
-        self.retry_count = retry_count
         self.service_account_credentials = ServiceAccountCreds(
             scopes=[CLOUD_STORAGE_READ_ONLY_SCOPE],
             **json_credentials,
@@ -81,6 +78,11 @@ class GoogleCloudStorageClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
+    @retryable(
+        retries=RETRY_COUNT,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
     async def api_call(
         self,
         resource,
@@ -103,7 +105,6 @@ class GoogleCloudStorageClient:
         Yields:
             Dictionary: Response returned by the resource method.
         """
-        retry_counter = 0
         while True:
             try:
                 async with Aiogoogle(
@@ -131,7 +132,6 @@ class GoogleCloudStorageClient:
                         )
                         async for page_items in first_page_with_next_attached:
                             yield page_items
-                            retry_counter = 0
                     else:
                         if sub_method:
                             method_object = getattr(method_object, sub_method)
@@ -144,14 +144,6 @@ class GoogleCloudStorageClient:
                     f"Error occurred while generating the resource/method object for an API call. Error: {error}"
                 )
                 raise
-            except Exception as exception:
-                retry_counter += 1
-                if retry_counter > self.retry_count:
-                    raise exception
-                self._logger.warning(
-                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
-                )
-                await asyncio.sleep(DEFAULT_WAIT_MULTIPLIER**retry_counter)
 
 
 class GoogleCloudStorageDataSource(BaseDataSource):
@@ -159,6 +151,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
 
     name = "Google Cloud Storage"
     service_type = "google_cloud_storage"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Set up the connection to the Google Cloud Storage Client.
@@ -180,20 +173,18 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         """
 
         return {
+            "buckets": {
+                "display": "textarea",
+                "label": "Google Cloud Storage buckets",
+                "order": 1,
+                "type": "list",
+            },
             "service_account_credentials": {
                 "display": "textarea",
                 "label": "Google Cloud service account JSON",
-                "order": 1,
-                "type": "str",
-            },
-            "retry_count": {
-                "default_value": DEFAULT_RETRY_COUNT,
-                "display": "numeric",
-                "label": "Maximum retries for failed requests",
+                "sensitive": True,
                 "order": 2,
-                "required": False,
-                "type": "int",
-                "ui_restrictions": ["advanced"],
+                "type": "str",
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -244,10 +235,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             if key in REQUIRED_CREDENTIAL_KEYS
         }
 
-        return GoogleCloudStorageClient(
-            json_credentials=required_credentials,
-            retry_count=self.configuration["retry_count"],
-        )
+        return GoogleCloudStorageClient(json_credentials=required_credentials)
 
     async def ping(self):
         """Verify the connection with Google Cloud Storage"""
@@ -270,20 +258,26 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             )
             raise
 
-    async def fetch_buckets(self):
+    async def fetch_buckets(self, buckets):
         """Fetch the buckets from the Google Cloud Storage.
+        Args:
+            buckets (List): List of buckets.
 
         Yields:
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
-        async for bucket in self._google_storage_client.api_call(
-            resource="buckets",
-            method="list",
-            full_response=True,
-            project=self._google_storage_client.user_project_id,
-            userProject=self._google_storage_client.user_project_id,
-        ):
-            yield bucket
+        if "*" in buckets:
+            async for bucket in self._google_storage_client.api_call(
+                resource="buckets",
+                method="list",
+                full_response=True,
+                project=self._google_storage_client.user_project_id,
+                userProject=self._google_storage_client.user_project_id,
+            ):
+                yield bucket
+        else:
+            for bucket in buckets:
+                yield {"items": [{"id": bucket, "name": bucket}]}
 
     async def fetch_blobs(self, buckets):
         """Fetches blobs stored in the bucket from Google Cloud Storage.
@@ -295,14 +289,23 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
-            async for blob in self._google_storage_client.api_call(
-                resource="objects",
-                method="list",
-                full_response=True,
-                bucket=bucket["id"],
-                userProject=self._google_storage_client.user_project_id,
-            ):
-                yield blob
+            try:
+                async for blob in self._google_storage_client.api_call(
+                    resource="objects",
+                    method="list",
+                    full_response=True,
+                    bucket=bucket["id"],
+                    userProject=self._google_storage_client.user_project_id,
+                ):
+                    yield blob
+            except HTTPError as exception:
+                exception_log_msg = f"Permission denied for {bucket['name']} while fetching blobs. Exception: {exception}."
+                if exception.res.status_code == 403:
+                    self._logger.warning(exception_log_msg)
+                else:
+                    self._logger.error(
+                        f"Something went wrong while fetching blobs from {bucket['name']}. Error: {exception}"
+                    )
 
     def prepare_blob_document(self, blob):
         """Apply key mappings to the blob document.
@@ -388,11 +391,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
-        async for buckets in self.fetch_buckets():
-            if not buckets.get("items"):
-                continue
+        async for bucket in self.fetch_buckets(self.configuration["buckets"]):
             async for blobs in self.fetch_blobs(
-                buckets=buckets,
+                buckets=bucket,
             ):
                 for blob_document in self.get_blob_document(blobs=blobs):
                     yield blob_document, partial(self.get_content, blob_document)

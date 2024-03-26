@@ -1,0 +1,17 @@
+---
+scenarios:
+  - index_name: search-demo-index-001
+    connector_name: spo
+    service_type: sharepoint_online
+    index_language: en
+    connector_configuration: scenarios/clients/spo_automated_testing_site.json
+    native: false
+    tests:
+      - name: Full sync job is performed without errors
+        job_type: full
+        timeout: 60
+        match: { status: 'completed'}
+      - name: Incremental sync job is performed without errors
+        job_type: incremental
+        timeout: 20
+        match: { status: 'completed'}

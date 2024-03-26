@@ -35,7 +35,6 @@ DEFAULT_QUEUE_MEM_SIZE = 5
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
-DEFAULT_BULK_MAX_RETRIES = 3
 
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
@@ -342,12 +341,33 @@ class MemQueue(asyncio.Queue):
 
         super().put_nowait((item_size, item))
 
+    def clear(self):
+        while not self.empty():
+            # Depending on your program, you may want to
+            # catch QueueEmpty
+            self.get_nowait()
+            self.task_done()
+
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
             msg = f"Queue is full: attempting to add item of size {item_size} bytes while {self.maxmemsize - self._current_memsize} free bytes left."
             raise asyncio.QueueFull(msg)
         super().put_nowait((item_size, item))
+
+
+class NonBlockingBoundedSemaphore(asyncio.BoundedSemaphore):
+    """A bounded semaphore with non-blocking acquire implementation.
+
+    This introduces a new try_acquire method, which will return if it can't acquire immediately.
+    """
+
+    def try_acquire(self):
+        if self.locked():
+            return False
+
+        self._value -= 1
+        return True
 
 
 class ConcurrentTasks:
@@ -358,29 +378,63 @@ class ConcurrentTasks:
 
     - `max_concurrency`: max concurrent tasks allowed, default: 5
     - `results_callback`: when provided, synchronous function called with the result of each task.
+
+    Examples:
+
+        # create a task pool with the default max concurrency
+        task_pool = ConcurrentTasks()
+
+        # put a task into pool
+        # it will block until the task was put successfully
+        task = await task_pool.put(coroutine)
+
+        # put a task without blocking
+        # it will try to put the task, and return None if it can't be put immediately
+        task = task_pool.try_put(coroutine)
+
+        # call join to wait for all tasks in pool to complete
+        # this is not required to execute the tasks in pool
+        # a task will be automatically scheduled to execute once it's put successfully
+        # call join() only when you need to do something after all tasks in pool complete
+        await task_pool.join()
     """
 
     def __init__(self, max_concurrency=5, results_callback=None):
-        self.max_concurrency = max_concurrency
         self.tasks = []
         self.results_callback = results_callback
-        self._task_over = asyncio.Event()
+        self._sem = NonBlockingBoundedSemaphore(max_concurrency)
 
     def __len__(self):
         return len(self.tasks)
 
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
-        self._task_over.set()
-        if task.exception():
+        self._sem.release()
+        if task.cancelled():
             logger.error(
-                f"Exception found for task {task.get_name()}: {task.exception()}"
+                f"Task {task.get_name()} was cancelled",
+            )
+        elif task.exception():
+            logger.error(
+                f"Exception found for task {task.get_name()}: {task.exception()}",
+                exc_info=True,
             )
         if result_callback is not None:
             result_callback(task.result())
         # global callback
         if self.results_callback is not None:
             self.results_callback(task.result())
+
+    def _add_task(self, coroutine, result_callback=None):
+        task = asyncio.create_task(coroutine())
+        self.tasks.append(task)
+        # _callback will be executed when the task is done,
+        # i.e. the wrapped coroutine either returned a value, raised an exception, or the Task was cancelled.
+        # Ref: https://docs.python.org/3/library/asyncio-task.html#asyncio.Task.done
+        task.add_done_callback(
+            functools.partial(self._callback, result_callback=result_callback)
+        )
+        return task
 
     async def put(self, coroutine, result_callback=None):
         """Adds a coroutine for immediate execution.
@@ -390,17 +444,21 @@ class ConcurrentTasks:
 
         If provided, `result_callback` will be called when the task is done.
         """
-        # If self.tasks has reached its max size, we wait for one task to finish
-        if len(self.tasks) >= self.max_concurrency:
-            await self._task_over.wait()
-            # rearm
-            self._task_over.clear()
-        task = asyncio.create_task(coroutine())
-        self.tasks.append(task)
-        task.add_done_callback(
-            functools.partial(self._callback, result_callback=result_callback)
-        )
-        return task
+        await self._sem.acquire()
+        return self._add_task(coroutine, result_callback=result_callback)
+
+    def try_put(self, coroutine, result_callback=None):
+        """Tries to add a coroutine for immediate execution.
+
+        If the number of running tasks reach `max_concurrency`, this
+        function return a None task immediately
+
+        If provided, `result_callback` will be called when the task is done.
+        """
+
+        if self._sem.try_acquire():
+            return self._add_task(coroutine, result_callback=result_callback)
+        return None
 
     async def join(self):
         """Wait for all tasks to finish."""
@@ -844,6 +902,16 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
+
+
+def func_human_readable_name(func):
+    if isinstance(func, functools.partial):
+        return func.func.__name__
+
+    try:
+        return func.__name__
+    except AttributeError:
+        return str(func)
 
 
 class SingletonMeta(type):

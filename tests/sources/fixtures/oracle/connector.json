@@ -27,13 +27,13 @@
                         "label": "Port",
                         "order": 2,
                         "type": "int",
-                        "value": 9090
+                        "value": 1521
                 },
                 "username": {
                         "label": "Username",
                         "order": 3,
                         "type": "str",
-                        "value": "admin"
+                        "value": "c##admin"
                 },
                 "password": {
                         "label": "Password",
@@ -46,7 +46,7 @@
                         "label": "Database",
                         "order": 5,
                         "type": "str",
-                        "value": "xe"
+                        "value": "FREE"
                 },
                 "tables": {
                         "display": "textarea",
@@ -85,23 +85,26 @@
                         ],
                         "order": 9,
                         "type": "str",
-                        "value": "TCP"
+                        "value": "TCP",
+                        "ui_restrictions": ["advanced"]
                 },
                 "oracle_home": {
                         "default_value": "",
-                        "label": "Path of Oracle Service",
+                        "label": "Path to Oracle Home",
                         "order": 10,
                         "required": false,
                         "type": "str",
-                        "value": ""
+                        "value": "",
+                        "ui_restrictions": ["advanced"]
                 },
                 "wallet_configuration_path": {
                         "default_value": "",
-                        "label": "Path of Oracle Service configuration files",
+                        "label": "Path to SSL Wallet configuration files",
                         "order": 11,
                         "required": false,
                         "type": "str",
-                        "value": ""
+                        "value": "",
+                        "ui_restrictions": ["advanced"]
                 }
         },
         "filtering": [

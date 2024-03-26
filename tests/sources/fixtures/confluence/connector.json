@@ -21,7 +21,8 @@
                         "label": "Confluence data source",
                         "options": [
                                 {"label": "Confluence Cloud", "value": "confluence_cloud"},
-                                {"label": "Confluence Server", "value": "confluence_server"}
+                                {"label": "Confluence Server", "value": "confluence_server"},
+                                {"label": "Confluence Data Center", "value": "confluence_data_center"}
                         ],
                         "order": 1,
                         "type": "str",
@@ -42,10 +43,27 @@
                         "type": "str",
                         "value": "abc@123"
                 },
+                "data_center_username": {
+                        "depends_on": [
+                                {"field": "data_source", "value": "confluence_data_center"}
+                        ],
+                        "label": "Confluence Data Center username",
+                        "order": 4,
+                        "type": "str"
+                },
+                "data_center_password": {
+                        "depends_on": [
+                                {"field": "data_source", "value": "confluence_data_center"}
+                        ],
+                        "label": "Confluence Data Center password",
+                        "sensitive": true,
+                        "order": 5,
+                        "type": "str"
+                },
                 "account_email": {
                         "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
                         "label": "Confluence Cloud account email",
-                        "order": 4,
+                        "order": 6,
                         "type": "str",
                         "value": "me@example.com"
                 },
@@ -53,20 +71,20 @@
                         "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
                         "label": "Confluence Cloud API token",
                         "sensitive": true,
-                        "order": 5,
+                        "order": 7,
                         "type": "str",
                         "value": "abc#123"
                 },
                 "confluence_url": {
                         "label": "Confluence URL",
-                        "order": 6,
+                        "order": 8,
                         "type": "str",
                         "value": "http://127.0.0.1:9696"
                 },
                 "spaces": {
                         "display": "textarea",
                         "label": "Confluence space keys",
-                        "order": 7,
+                        "order": 9,
                         "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                         "type": "list",
                         "value": "*"
@@ -74,14 +92,14 @@
                 "ssl_enabled": {
                         "display": "toggle",
                         "label": "Enable SSL",
-                        "order": 8,
+                        "order": 10,
                         "type": "bool",
                         "value": false
                 },
                 "ssl_ca": {
                         "depends_on": [{"field": "ssl_enabled", "value": true}],
                         "label": "SSL certificate",
-                        "order": 9,
+                        "order": 11,
                         "type": "str",
                         "value": ""
                 },
@@ -89,7 +107,7 @@
                         "default_value": 3,
                         "display": "numeric",
                         "label": "Retries per request",
-                        "order": 10,
+                        "order": 12,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -99,7 +117,7 @@
                         "default_value": 50,
                         "display": "numeric",
                         "label": "Maximum concurrent downloads",
-                        "order": 11,
+                        "order": 13,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -109,10 +127,9 @@
                         "value": 50
                 },
                 "use_document_level_security": {
-                        "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
                         "display": "toggle",
                         "label": "Enable document level security",
-                        "order": 12,
+                        "order": 14,
                         "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                         "type": "bool",
                         "value": false

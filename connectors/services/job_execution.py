@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from functools import cached_property
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
@@ -11,38 +12,12 @@ from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
     DataSourceError,
-    JobStatus,
-    JobType,
     SyncJobIndex,
 )
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
-
-DEFAULT_MAX_CONCURRENT_CONTENT_SYNCS = 1
-DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS = 1
-
-
-def load_max_concurrent_access_control_syncs(config):
-    return config.get(
-        "max_concurrent_access_control_syncs",
-        DEFAULT_MAX_CONCURRENT_ACCESS_CONTROL_SYNCS,
-    )
-
-
-def load_max_concurrent_content_syncs(config):
-    max_concurrent_content_syncs = config.get("max_concurrent_content_syncs")
-
-    if max_concurrent_content_syncs is not None:
-        return max_concurrent_content_syncs
-
-    logger.warning(
-        "'max_concurrent_syncs' is deprecated. Use 'max_concurrent_content_syncs' in 'config.yml'."
-    )
-
-    # keep for backwards compatibility
-    return config.get("max_concurrent_syncs", DEFAULT_MAX_CONCURRENT_CONTENT_SYNCS)
 
 
 class JobExecutionService(BaseService):
@@ -51,50 +26,31 @@ class JobExecutionService(BaseService):
     def __init__(self, config):
         super().__init__(config)
         self.idling = self.service_config["idling"]
-        self.max_concurrent_content_syncs = load_max_concurrent_content_syncs(
-            self.service_config
-        )
-        self.max_concurrent_access_control_syncs = (
-            load_max_concurrent_access_control_syncs(self.service_config)
-        )
         self.source_list = config["sources"]
-        self.content_syncs = None
-        self.access_control_syncs = None
+        self.sync_job_pool = ConcurrentTasks(max_concurrency=self.max_concurrency)
 
     def stop(self):
         super().stop()
-        if self.content_syncs is not None:
-            self.content_syncs.cancel()
-        if self.access_control_syncs is not None:
-            self.access_control_syncs.cancel()
+        self.sync_job_pool.cancel()
 
-    async def _content_sync(self, sync_job, connector, source_klass):
-        if connector.last_sync_status == JobStatus.IN_PROGRESS:
-            sync_job.log_debug("Connector is still syncing content, skip the job...")
-            return
+    @cached_property
+    def display_name(self):
+        raise NotImplementedError()
 
-        sync_job_runner = SyncJobRunner(
-            source_klass=source_klass,
-            sync_job=sync_job,
-            connector=connector,
-            es_config=self._override_es_config(connector),
-        )
-        await self.content_syncs.put(sync_job_runner.execute)
+    @cached_property
+    def max_concurrency_config(self):
+        raise NotImplementedError()
 
-    async def _access_control_sync(self, sync_job, connector, source_klass):
-        if connector.last_access_control_sync_status == JobStatus.IN_PROGRESS:
-            sync_job.log_debug(
-                "Connector is still syncing access control, skip the job..."
-            )
-            return
+    @cached_property
+    def job_types(self):
+        raise NotImplementedError()
 
-        sync_job_runner = SyncJobRunner(
-            source_klass=source_klass,
-            sync_job=sync_job,
-            connector=connector,
-            es_config=self._override_es_config(connector),
-        )
-        await self.access_control_syncs.put(sync_job_runner.execute)
+    @cached_property
+    def max_concurrency(self):
+        raise NotImplementedError()
+
+    def should_execute(self, connector, sync_job):
+        raise NotImplementedError()
 
     async def _sync(self, sync_job):
         if sync_job.service_type not in self.source_list:
@@ -102,6 +58,8 @@ class JobExecutionService(BaseService):
             raise DataSourceError(msg)
         source_klass = get_source_klass(self.source_list[sync_job.service_type])
         connector_id = sync_job.connector_id
+
+        sync_job.log_debug(f"Detected pending {sync_job.job_type} sync.")
 
         try:
             connector = await self.connector_index.fetch_by_id(connector_id)
@@ -121,20 +79,22 @@ class JobExecutionService(BaseService):
                 )
                 return
 
-        job_type = sync_job.job_type
+        if not self.should_execute(connector, sync_job):
+            return
 
-        if job_type in [JobType.FULL, JobType.INCREMENTAL]:
-            await self._content_sync(sync_job, connector, source_klass)
+        sync_job_runner = SyncJobRunner(
+            source_klass=source_klass,
+            sync_job=sync_job,
+            connector=connector,
+            es_config=self._override_es_config(connector),
+            service_config=self.service_config,
+        )
 
-        elif (
-            job_type == JobType.ACCESS_CONTROL
-            and connector.features.document_level_security_enabled()
-        ):
-            await self._access_control_sync(sync_job, connector, source_klass)
+        sync_job.log_debug(f"Attempting to start {sync_job.job_type} sync.")
 
-        else:
-            sync_job.log_error(
-                f"Unsupported job type '{job_type}'. Skipping sync job execution..."
+        if not self.sync_job_pool.try_put(sync_job_runner.execute):
+            sync_job.log_debug(
+                f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
             )
 
     async def _run(self):
@@ -144,30 +104,22 @@ class JobExecutionService(BaseService):
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
             logger.debug(
-                f"Native support for job execution for {', '.join(native_service_types)}"
+                f"Native support for {self.display_name} for {', '.join(native_service_types)}"
             )
         else:
-            logger.debug("No native service types configured for job execution")
+            logger.debug(f"No native service types configured for {self.display_name}")
 
         connector_ids = list(self.connectors.keys())
 
         logger.info(
-            f"Job Execution Service started, listening to events from {self.es_config['host']}"
+            f"{self.display_name.capitalize()} service started, listening to events from {self.es_config['host']}"
         )
 
         try:
             while self.running:
-                # creating pools of tasks for every round
-                self.content_syncs = ConcurrentTasks(
-                    max_concurrency=self.max_concurrent_content_syncs
-                )
-                self.access_control_syncs = ConcurrentTasks(
-                    max_concurrency=self.max_concurrent_access_control_syncs
-                )
-
                 try:
                     logger.debug(
-                        f"Polling every {self.idling} seconds for Job Execution"
+                        f"Polling every {self.idling} seconds for {self.display_name}"
                     )
                     supported_connector_ids = [
                         connector.id
@@ -184,28 +136,19 @@ class JobExecutionService(BaseService):
                     else:
                         async for sync_job in self.sync_job_index.pending_jobs(
                             connector_ids=supported_connector_ids,
-                            job_types=[
-                                JobType.FULL.value,
-                                JobType.INCREMENTAL.value,
-                                JobType.ACCESS_CONTROL.value,
-                            ],
+                            job_types=self.job_types,
                         ):
                             await self._sync(sync_job)
                 except Exception as e:
                     logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
-                finally:
-                    await self.content_syncs.join()
-                    await self.access_control_syncs.join()
-
-                self.content_syncs = None
-                self.access_control_syncs = None
 
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
                 await self._sleeps.sleep(self.idling)
         finally:
+            await self.sync_job_pool.join()
             if self.connector_index is not None:
                 self.connector_index.stop_waiting()
                 await self.connector_index.close()

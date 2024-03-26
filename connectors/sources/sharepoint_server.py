@@ -35,7 +35,7 @@ DOCUMENT_LIBRARY = "document_library"
 SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
 URLS = {
-    PING: "{host_url}/sites/{site_collections}/_api/web/webs",
+    PING: "{host_url}{parent_site_url}_api/web/webs",
     SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
@@ -92,7 +92,12 @@ class SharepointServerClient:
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.retry_count = self.configuration["retry_count"]
-        self.site_collections = self.configuration["site_collections"]
+
+        self.site_collections_path = []
+        for site in self.configuration["site_collections"]:
+            if site != "/":
+                site = f"/sites/{site}/"
+            self.site_collections_path.append(site)
 
         self.session = None
         if self.ssl_enabled and self.certificate:
@@ -423,7 +428,7 @@ class SharepointServerClient:
         await anext(
             self._api_call(
                 url_name=PING,
-                site_collections=self.site_collections[0],
+                parent_site_url=self.site_collections_path[0],
                 host_url=self.host_url,
             )
         )
@@ -434,6 +439,7 @@ class SharepointServerDataSource(BaseDataSource):
 
     name = "SharePoint Server"
     service_type = "sharepoint_server"
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the SharePoint
@@ -520,12 +526,11 @@ class SharepointServerDataSource(BaseDataSource):
         Raises:
             ConfigurableFieldValueError: Unavailable services error.
         """
-
-        for collection in self.sharepoint_client.site_collections:
+        for collection in self.sharepoint_client.site_collections_path:
             is_invalid = True
             async for _ in self.sharepoint_client._api_call(
                 url_name=PING,
-                site_collections=collection,
+                parent_site_url=collection,
                 host_url=self.sharepoint_client.host_url,
             ):
                 is_invalid = False
@@ -687,10 +692,10 @@ class SharepointServerDataSource(BaseDataSource):
 
         server_relative_url = []
 
-        for collection in self.sharepoint_client.site_collections:
-            server_relative_url.append(f"/sites/{collection}")
+        for collection in self.sharepoint_client.site_collections_path:
+            server_relative_url.append(collection)
             async for site_data in self.sharepoint_client.get_sites(
-                site_url=f"/sites/{collection}"
+                site_url=collection
             ):
                 server_relative_url.append(site_data["ServerRelativeUrl"])
                 yield self.format_sites(item=site_data), None

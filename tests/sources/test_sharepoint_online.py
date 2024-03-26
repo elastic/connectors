@@ -1476,6 +1476,17 @@ class TestSharepointOnlineClient:
         assert len(responses) == 0
 
     @pytest.mark.asyncio
+    async def test_drive_items_permissions_batch_empty(self, client, patch_post):
+        drive_id = 1
+        drive_item_ids = []
+
+        async for _response in client.drive_items_permissions_batch(
+            drive_id, drive_item_ids
+        ):
+            msg = "we shouldn't get here"
+            raise Exception(msg)
+
+    @pytest.mark.asyncio
     async def test_site_role_assignments(self, client, patch_scroll):
         site_role_assignments_url = (
             f"https://{self.tenant_name}.sharepoint.com/sites/test"
@@ -2627,6 +2638,27 @@ class TestSharepointOnlineDataSource:
         self,
     ):
         async with create_spo_source(fetch_drive_item_permissions=False) as source:
+            drive_id = 1
+            drive_items_batch = [{"id": "1"}, {"id": "2"}]
+
+            drive_items_without_permissions = []
+
+            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+                drive_id, drive_items_batch, "dummy_site_web_url"
+            ):
+                drive_items_without_permissions.append(drive_item_without_permissions)
+
+            assert len(drive_items_without_permissions) == len(drive_items_batch)
+            assert not any(
+                ACCESS_CONTROL in drive_item
+                for drive_item in drive_items_without_permissions
+            )
+
+    @pytest.mark.asyncio
+    async def test_drive_items_batch_with_permissions_when_dls_disabled(
+        self,
+    ):
+        async with create_spo_source(use_document_level_security=False) as source:
             drive_id = 1
             drive_items_batch = [{"id": "1"}, {"id": "2"}]
 

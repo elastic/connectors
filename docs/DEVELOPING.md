@@ -26,7 +26,7 @@
 
 ## General Configuration
 
-The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors/blob/main/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors/blob/main/docs/CONFIG.md).
+The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the `config.yml` file. For more details check out the following [documentation](https://github.com/elastic/connectors/blob/main/docs/CONFIG.md).
 
 ## Installation
 
@@ -64,7 +64,7 @@ That information is provided by Kibana and follows the [connector protocol](http
 
 When a user asks for a sync of a specific source, the service instantiates a class that it uses to reach out the source and collect data.
 
-A source class can be any Python class, and is declared into the [configuration](../config.yml) file (See [Configuration](./CONFIG.md) for detailed explanation). For example:
+A source class can be any Python class, and is declared into the `config.yml` file (See [Configuration](./CONFIG.md) for detailed explanation). For example:
 
 ```yaml
 sources:
@@ -116,8 +116,6 @@ A **Full sync** ensures full data parity (including deletion), this sync strateg
 
 An **Incremental sync** only syncs documents created, updated and deleted since the last successful content sync.
 
-**Note**: Currently, only Sharepoint Online connector supports incremental sync.
-
 ### How a full sync works
 
 Syncing a backend consists of reconciliating an Elasticsearch index with an external data source. It's a read-only mirror of the data located in the 3rd party data source.
@@ -134,7 +132,7 @@ To sync both sides, the CLI uses these steps:
 - `bulk` calls are emitted every 500 operations (this is configurable for slow networks).
 - If incremental sync is available for the connector, `self._sync_cursor` should also be updated in the connector document in the end of the sync, so that when an incremental sync starts, it knows where to start from.
 
-To implement a new source, check [CONTRIBUTE.rst](./CONTRIBUTING.md)
+See [implementing a new source](#implementing-a-new-source).
 
 ### How an incremental sync works
 
@@ -174,7 +172,19 @@ If increment sync is enabled for a connector, you need to make sure `self._sync_
 
 ## Implementing a new source
 
-Implementing a new source is done by creating a new class which responsibility is to send back documents from the targeted source.
+Implementing a new source is done by creating a new class whose responsibility is to send back documents from the targeted source.
+
+If you want to add a new connector source, the following requirements are mandatory for the initial patch:
+
+1. Add a module or a directory in [connectors/sources](../connectors/sources)
+2. Create a class that implements the required methods described in `connectors.source.BaseDataSource`
+3. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+92% coverage**. Test coverage is run as part of [unit tests](https://github.com/elastic/connectors/blob/main/docs/DEVELOPING.md#testing-the-connector). Look for your file at the end of the console output.
+4. **Declare your connector** in [config.py](../connectors/config.py) in the `sources` section of `_default_config()`
+5. **Declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
+6. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
+7. Make sure you use an **async lib** for your source. See our [async guidelines](DEVELOPING.md). If not possible, make sure you don't block the loop.
+8. When possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
+9. Your **test backend** needs to return more than **10k documents** as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly.
 
 Source classes are not required to use any base class as long as it follows the API signature defined in [BaseDataSource](../connectors/source.py).
 
@@ -601,3 +611,14 @@ This will configure the connector in Elasticsearch to run a full sync. The scrip
     ```shell
     $ System/Volumes/Data/Applications/Python\ 3.10/Install\ Certificates.command
     ```
+
+## Customize a connector
+
+> ℹ️ Please note that customized connectors are not supported by Elastic.
+
+To customize an _existing_ connector, follow these steps:
+
+1. Customize the source file for your data source from [connectors/sources](../connectors/sources)
+3. Declare your dependencies in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
+4. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
+5. Your test backend needs to return more than 10k documents as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly. 

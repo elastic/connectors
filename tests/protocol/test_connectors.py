@@ -201,6 +201,7 @@ def test_utc():
 
 mongo = {
     "api_key_id": "",
+    "api_key_secret_id": "",
     "configuration": {
         "host": {"value": "mongodb://127.0.0.1:27021", "label": "MongoDB Host"},
         "database": {"value": "sample_airbnb", "label": "MongoDB Database"},
@@ -321,6 +322,7 @@ async def test_connector_properties():
     connector_src = {
         "_id": "test",
         "_source": {
+            "api_key_secret_id": "api-key-secret-id",
             "service_type": "test",
             "index_name": "search-some-index",
             "configuration": {},
@@ -360,6 +362,7 @@ async def test_connector_properties():
     assert connector.incremental_sync_scheduling["enabled"]
     assert connector.incremental_sync_scheduling["interval"] == "* * * * *"
     assert connector.sync_cursor == SYNC_CURSOR
+    assert connector.api_key_secret_id == "api-key-secret-id"
     assert isinstance(connector.last_seen, datetime)
     assert isinstance(connector.filtering, Filtering)
     assert isinstance(connector.pipeline, Pipeline)
@@ -838,20 +841,28 @@ async def test_sync_job_done():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_fail():
+@pytest.mark.parametrize(
+    "error, expected_message",
+    [
+        ("something wrong", "something wrong"),
+        (Exception(), "Exception"),
+        (Exception("something wrong"), "Exception: something wrong"),
+        (123, "123"),
+    ],
+)
+async def test_sync_job_fail(error, expected_message):
     source = {"_id": "1"}
-    message = "something wrong"
     index = Mock()
     index.update = AsyncMock(return_value=1)
     expected_doc_source_update = {
         "last_seen": ANY,
         "completed_at": ANY,
         "status": JobStatus.ERROR.value,
-        "error": message,
+        "error": expected_message,
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
-    await sync_job.fail(message)
+    await sync_job.fail(error)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
 
@@ -2010,16 +2021,31 @@ async def test_pending_jobs(
 
 @pytest.mark.asyncio
 @patch("connectors.protocol.SyncJobIndex.get_all_docs")
-async def test_orphaned_jobs(get_all_docs, set_env):
+async def test_orphaned_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
     connector_ids = [1, 2]
-    expected_query = {"bool": {"must_not": {"terms": {"connector.id": connector_ids}}}}
+    expected_query = {
+        "bool": {
+            "must_not": {"terms": {"connector.id": connector_ids}},
+            "filter": [
+                {
+                    "terms": {
+                        "status": [
+                            JobStatus.IN_PROGRESS.value,
+                            JobStatus.CANCELING.value,
+                        ]
+                    }
+                }
+            ],
+        }
+    }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
     jobs = [
-        job async for job in sync_job_index.orphaned_jobs(connector_ids=connector_ids)
+        job
+        async for job in sync_job_index.orphaned_idle_jobs(connector_ids=connector_ids)
     ]
 
     get_all_docs.assert_called_with(query=expected_query)
@@ -2196,3 +2222,67 @@ def test_updated_configuration_fields():
 
     # value is set for new configs
     assert result["new_config"]["value"] is True
+
+
+@pytest.mark.asyncio
+async def test_native_connector_missing_features():
+    doc_id = "1"
+    seq_no = 1
+    primary_term = 2
+    connector_doc = {
+        "_id": doc_id,
+        "_seq_no": seq_no,
+        "_primary_term": primary_term,
+        "_source": {
+            "configuration": {},
+            "features": {
+                "foo": "bar"  # This is the key bit. These "native features" don't align with Banana.features()
+            },
+            "service_type": "banana",
+            "is_native": True,
+        },
+    }
+    config = {"native_service_types": "banana"}
+    sources = {"banana": "tests.protocol.test_connectors:Banana"}
+    index = Mock()
+    index.fetch_response_by_id = AsyncMock(side_effect=[connector_doc, connector_doc])
+    index.update = AsyncMock()
+    connector = Connector(elastic_index=index, doc_source=connector_doc)
+    await connector.prepare(config, sources)
+    index.update.assert_called_once_with(
+        doc_id=doc_id,
+        doc={
+            "configuration": Banana.get_simple_configuration(),
+            "status": Status.NEEDS_CONFIGURATION.value,
+            "features": Banana.features()
+            | {
+                "foo": "bar"
+            },  # This is the key assertion - the standard features get added
+        },
+        if_seq_no=seq_no,
+        if_primary_term=primary_term,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_connector_by_index():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    index_name = "search-mongo"
+    doc = {"_id": "1", "_source": {"index_name": index_name}}
+
+    es_client = ConnectorIndex(config)
+    es_client.client = Mock()
+
+    es_client.client.indices.refresh = AsyncMock()
+    es_client.client.search = AsyncMock(
+        return_value={"hits": {"total": {"value": 1}, "hits": [doc]}}
+    )
+
+    connector = await es_client.get_connector_by_index(index_name)
+    es_client.client.search.assert_awaited_once()
+    assert connector.id == doc["_id"]
+    assert connector.index_name == index_name

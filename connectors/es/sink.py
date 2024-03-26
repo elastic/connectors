@@ -24,18 +24,16 @@ import logging
 import time
 from collections import defaultdict
 
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
+from connectors.config import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
-from elasticsearch.helpers import async_scan
-
-from connectors.es import ESClient, Mappings
-from connectors.es.settings import Settings
+from connectors.es.management_client import ESManagementClient
+from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.utils import (
-    DEFAULT_BULK_MAX_RETRIES,
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,
@@ -52,11 +50,12 @@ from connectors.utils import (
 )
 
 __all__ = ["SyncOrchestrator"]
+FETCH_ERROR = "FETCH_ERROR"
+END_DOCS = "END_DOCS"
 
 OP_INDEX = "index"
 OP_UPSERT = "update"
 OP_DELETE = "delete"
-TIMESTAMP_FIELD = "_timestamp"
 CANCELATION_TIMEOUT = 5
 
 
@@ -73,6 +72,17 @@ class ForceCanceledError(Exception):
     pass
 
 
+class ContentIndexDoesNotExistError(Exception):
+    pass
+
+
+class ElasticsearchOverloadedError(Exception):
+    def __init__(self, cause=None):
+        msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
+        super().__init__(msg)
+        self.__cause__ = cause
+
+
 class Sink:
     """Send bulk operations in batches by consuming a queue.
 
@@ -81,7 +91,7 @@ class Sink:
 
     Arguments:
 
-    - `client` -- an instance of `connectors.es.ESClient`
+    - `client` -- an instance of `connectors.es.ESManagementClient`
     - `queue` -- an instance of `asyncio.Queue` to pull docs from
     - `chunk_size` -- a maximum number of operations to send per request
     - `pipeline` -- ingest pipeline settings to pass to the bulk API
@@ -98,6 +108,7 @@ class Sink:
         chunk_mem_size,
         max_concurrency,
         max_retries,
+        retry_interval,
         logger_=None,
     ):
         self.client = client
@@ -108,6 +119,7 @@ class Sink:
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
+        self.retry_interval = retry_interval
         self.indexed_document_count = 0
         self.indexed_document_volume = 0
         self.deleted_document_count = 0
@@ -132,9 +144,10 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        @retryable(retries=self.max_retires)
+        # TODO: make this retry policy work with unified retry strategy
+        @retryable(retries=self.max_retires, interval=self.retry_interval)
         async def _bulk_api_call():
-            return await self.client.bulk(
+            return await self.client.client.bulk(
                 operations=operations, pipeline=self.pipeline["name"]
             )
 
@@ -145,7 +158,9 @@ class Sink:
             self._logger.debug(
                 f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
             )
-        res = await _bulk_api_call()
+
+        # TODO: retry 429s for individual items here
+        res = await self.client.bulk_insert(operations, self.pipeline["name"])
         if res.get("errors"):
             for item in res["items"]:
                 for op, data in item.items():
@@ -189,10 +204,15 @@ class Sink:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Sink...")
             raise
-        except ForceCanceledError:
-            self._logger.error(
-                f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
-            )
+        except asyncio.QueueFull as e:
+            raise ElasticsearchOverloadedError from e
+        except Exception as e:
+            if isinstance(e, ForceCanceledError) or self._canceled:
+                self._logger.warning(
+                    f"Sink did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+                )
+                return
+            raise
 
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
@@ -211,7 +231,7 @@ class Sink:
 
         while True:
             doc_size, doc = await self.fetch_doc()
-            if doc in ("END_DOCS", "FETCH_ERROR"):
+            if doc in (END_DOCS, FETCH_ERROR):
                 break
             operation = doc["_op_type"]
             doc_id = doc["_id"]
@@ -257,7 +277,7 @@ class Extractor:
     This class runs a coroutine that puts docs in `queue`, given a document generator.
 
     Arguments:
-    - client: an instance of `connectors.es.ESClient`
+    - client: an instance of `connectors.es.ESManagementClient`
     - queue: an `asyncio.Queue` to put docs in
     - index: the target Elasticsearch index
     - filter_: an instance of `Filter` to apply on the fetched document -- default: `None`
@@ -278,6 +298,7 @@ class Extractor:
         display_every=DEFAULT_DISPLAY_EVERY,
         concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
+        skip_unchanged_documents=False,
     ):
         if filter_ is None:
             filter_ = Filter()
@@ -299,32 +320,7 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
-
-    async def _get_existing_ids(self):
-        """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
-
-
-        WARNING
-
-        This function will load all ids in memory -- on very large indices,
-        depending on the id length, it can be quite large.
-
-        300,000 ids will be around 50MiB
-        """
-        self._logger.debug(f"Scanning existing index {self.index}")
-        try:
-            await self.client.indices.get(index=self.index)
-        except ElasticNotFoundError:
-            return
-
-        async for doc in async_scan(
-            client=self.client,
-            index=self.index,
-            _source=["id", TIMESTAMP_FIELD],
-        ):
-            doc_id = doc["_source"].get("id", doc["_id"])
-            ts = doc["_source"].get(TIMESTAMP_FIELD)
-            yield doc_id, ts
+        self.skip_unchanged_documents = skip_unchanged_documents
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
@@ -361,7 +357,10 @@ class Extractor:
                 case JobType.FULL:
                     await self.get_docs(generator)
                 case JobType.INCREMENTAL:
-                    await self.get_docs_incrementally(generator)
+                    if self.skip_unchanged_documents:
+                        await self.get_docs(generator, skip_unchanged_documents=True)
+                    else:
+                        await self.get_docs_incrementally(generator)
                 case JobType.ACCESS_CONTROL:
                     await self.get_access_control_docs(generator)
                 case _:
@@ -369,13 +368,22 @@ class Extractor:
         except asyncio.CancelledError:
             self._logger.info("Task is canceled, stop Extractor...")
             raise
-        except ForceCanceledError:
-            self._logger.error(
-                f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
-            )
+        except asyncio.QueueFull as e:
+            self._logger.error("Sync was throttled by Elasticsearch")
+            # We clear the queue as we could not actually ingest anything.
+            # After that we indicate that we've encountered an error
+            self.queue.clear()
+            await self.put_doc(FETCH_ERROR)
+            self.fetch_error = ElasticsearchOverloadedError(e)
         except Exception as e:
+            if isinstance(e, ForceCanceledError) or self._canceled:
+                self._logger.warning(
+                    f"Extractor did not stop within {CANCELATION_TIMEOUT} seconds of cancelation, force-canceling the task."
+                )
+                return
+
             self._logger.critical("Document extractor failed", exc_info=True)
-            await self.put_doc("FETCH_ERROR")
+            await self.put_doc(FETCH_ERROR)
             self.fetch_error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
@@ -384,25 +392,16 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator):
+    async def get_docs(self, generator, skip_unchanged_documents=False):
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
-
-        A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
+
+        Args:
+           generator (generator): BaseDataSource child get_docs or get_docs_incrementally
+           skip_unchanged_documents (bool): if True, will skip documents that have not changed since last sync
         """
         generator = self._decorate_with_metrics_span(generator)
-
-        start = time.time()
-        self._logger.info("Collecting local document ids")
-        existing_ids = {k: v async for (k, v) in self._get_existing_ids()}
-        self._logger.debug(
-            f"Found {len(existing_ids)} docs in {self.index} (duration "
-            f"{int(time.time() - start)} seconds) "
-        )
-        if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(
-                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
-            )
+        existing_ids = await self._load_existing_docs()
 
         self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
@@ -420,21 +419,24 @@ class Extractor:
                     continue
 
                 if doc_id in existing_ids:
-                    # pop out of existing_ids
+                    # pop out of existing_ids, so they do not get deleted
                     ts = existing_ids.pop(doc_id)
 
-                    # If the doc has a timestamp, we can use it to see if it has
-                    # been modified. This reduces the bulk size a *lot*
-                    #
-                    # Some backends do not know how to do this, so it's optional.
-                    # For these, we update the docs in any case.
-                    if TIMESTAMP_FIELD in doc and ts == doc[TIMESTAMP_FIELD]:
+                    if (
+                        skip_unchanged_documents
+                        and TIMESTAMP_FIELD in doc
+                        and ts == doc[TIMESTAMP_FIELD]
+                    ):
                         # cancel the download
                         if (
                             self.content_extraction_enabled
                             and lazy_download is not None
                         ):
                             await lazy_download(doit=False)
+
+                        self._logger.debug(
+                            f"Skipping document with id '{doc_id}' because field '{TIMESTAMP_FIELD}' has not changed since last sync"
+                        )
                         continue
 
                     self.total_docs_updated += 1
@@ -468,10 +470,33 @@ class Extractor:
             await lazy_downloads.join()
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.put_doc("END_DOCS")
+        await self.put_doc(END_DOCS)
+
+    async def _load_existing_docs(self):
+        start = time.time()
+        self._logger.info("Collecting local document ids")
+
+        existing_ids = {
+            k: v
+            async for (k, v) in self.client.yield_existing_documents_metadata(
+                self.index
+            )
+        }
+
+        self._logger.debug(
+            f"Found {len(existing_ids)} docs in {self.index} (duration "
+            f"{int(time.time() - start)} seconds) "
+        )
+
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.debug(
+                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
+            )
+
+        return existing_ids
 
     async def get_docs_incrementally(self, generator):
-        """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
+        """Iterate on a generator of documents to fill a queue with bulk operations for the `Sink` to consume.
 
         A document might be discarded if its timestamp has not changed.
         Extraction happens in a separate task, when a document contains files.
@@ -531,7 +556,7 @@ class Extractor:
             # wait for all downloads to be finished
             await lazy_downloads.join()
 
-        await self.put_doc("END_DOCS")
+        await self.put_doc(END_DOCS)
 
     async def get_access_control_docs(self, generator):
         """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
@@ -543,7 +568,10 @@ class Extractor:
 
         existing_ids = {
             doc_id: last_update_timestamp
-            async for (doc_id, last_update_timestamp) in self._get_existing_ids()
+            async for (
+                doc_id,
+                last_update_timestamp,
+            ) in self.client.yield_existing_documents_metadata(self.index)
         }
 
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -593,7 +621,7 @@ class Extractor:
             await asyncio.sleep(0)
 
         await self.enqueue_docs_to_delete(existing_ids)
-        await self.put_doc("END_DOCS")
+        await self.put_doc(END_DOCS)
 
     async def enqueue_docs_to_delete(self, existing_ids):
         self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
@@ -624,7 +652,7 @@ class AsyncBulkRunningError(Exception):
     pass
 
 
-class SyncOrchestrator(ESClient):
+class SyncOrchestrator:
     """This class is the sync orchestrator.
 
     It does the following in `async_bulk`
@@ -638,69 +666,52 @@ class SyncOrchestrator(ESClient):
     def __init__(self, elastic_config, logger_=None):
         self._logger = logger_ or logger
         self._logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
-        super().__init__(elastic_config)
+        self.es_management_client = ESManagementClient(elastic_config)
         self.loop = asyncio.get_event_loop()
         self._extractor = None
         self._extractor_task = None
         self._sink = None
         self._sink_task = None
 
-    async def prepare_content_index(self, index, language_code=None):
-        """Creates the index, given a mapping if it does not exists."""
-        if not index.startswith("search-"):
-            msg = f"Index name {index} is invalid. Index name must start with 'search-'"
-            raise ContentIndexNameInvalid(msg)
+    async def close(self):
+        await self.es_management_client.close()
 
-        self._logger.debug(f"Checking index {index}")
+    async def has_active_license_enabled(self, license_):
+        # TODO: think how to make it not a proxy method to the client
+        return await self.es_management_client.has_active_license_enabled(license_)
 
-        expand_wildcards = "open"
-        exists = await self.client.indices.exists(
-            index=index, expand_wildcards=expand_wildcards
+    async def prepare_content_index(self, index_name, language_code=None):
+        """Creates the index, given a mapping/settings if it does not exist."""
+        self._logger.debug(f"Checking index {index_name}")
+
+        result = await self.es_management_client.get_index(
+            index_name, ignore_unavailable=True
         )
+
+        index = result.get(index_name, None)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
-        if exists:
+        if index:
             # Update the index mappings if needed
-            self._logger.debug(f"{index} exists")
-            await self._ensure_content_index_mappings(index, mappings, expand_wildcards)
+            self._logger.debug(f"{index_name} exists")
+
+            # Settings contain analyzers which are being used in the index mappings
+            # Therefore settings must be applied before mappings
+            await self.es_management_client.ensure_content_index_settings(
+                index_name=index_name, index=index, language_code=language_code
+            )
+
+            await self.es_management_client.ensure_content_index_mappings(
+                index_name, mappings
+            )
         else:
             # Create a new index
-            self._logger.info(f"Creating content index: {index}")
-            await self._create_content_index(
-                index=index, language_code=language_code, mappings=mappings
+            self._logger.info(f"Creating content index: {index_name}")
+            await self.es_management_client.create_content_index(
+                index_name, language_code
             )
-            self._logger.info(f"Content index successfully created:  {index}")
-
-    async def _ensure_content_index_mappings(self, index, mappings, expand_wildcards):
-        response = await self.client.indices.get_mapping(
-            index=index, expand_wildcards=expand_wildcards
-        )
-
-        existing_mappings = response[index].get("mappings", {})
-        if len(existing_mappings) == 0 and mappings:
-            self._logger.debug(
-                "Index %s has no mappings or it's empty. Adding mappings...", index
-            )
-            await self.client.indices.put_mapping(
-                index=index,
-                dynamic=mappings.get("dynamic", False),
-                dynamic_templates=mappings.get("dynamic_templates", []),
-                properties=mappings.get("properties", {}),
-                expand_wildcards=expand_wildcards,
-            )
-            self._logger.debug("Successfully added mappings for index %s", index)
-        else:
-            self._logger.debug(
-                "Index %s already has mappings, skipping mappings creation", index
-            )
-
-    async def _create_content_index(self, index, mappings, language_code=None):
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        return await self.client.indices.create(
-            index=index, mappings=mappings, settings=settings
-        )
+            self._logger.info(f"Content index successfully created:  {index_name}")
 
     def done(self):
         if self._extractor_task is not None and not self._extractor_task.done():
@@ -775,6 +786,7 @@ class SyncOrchestrator(ESClient):
         sync_rules_enabled=False,
         content_extraction_enabled=True,
         options=None,
+        skip_unchanged_documents=False,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -804,13 +816,23 @@ class SyncOrchestrator(ESClient):
         concurrent_downloads = options.get(
             "concurrent_downloads", DEFAULT_CONCURRENT_DOWNLOADS
         )
-        max_bulk_retries = options.get("max_retries", DEFAULT_BULK_MAX_RETRIES)
+        max_bulk_retries = options.get("max_retries", DEFAULT_ELASTICSEARCH_MAX_RETRIES)
+        retry_interval = options.get(
+            "retry_interval", DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
+        )
+        mem_queue_refresh_timeout = options.get("queue_refresh_timeout", 60)
+        mem_queue_refresh_interval = options.get("queue_refresh_interval", 1)
 
-        stream = MemQueue(maxsize=queue_size, maxmemsize=queue_mem_size * 1024 * 1024)
+        stream = MemQueue(
+            maxsize=queue_size,
+            maxmemsize=queue_mem_size * 1024 * 1024,
+            refresh_timeout=mem_queue_refresh_timeout,
+            refresh_interval=mem_queue_refresh_interval,
+        )
 
         # start the fetcher
         self._extractor = Extractor(
-            self.client,
+            self.es_management_client,
             stream,
             index,
             filter_=filter_,
@@ -819,6 +841,7 @@ class SyncOrchestrator(ESClient):
             display_every=display_every,
             concurrent_downloads=concurrent_downloads,
             logger_=self._logger,
+            skip_unchanged_documents=skip_unchanged_documents,
         )
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
@@ -826,13 +849,14 @@ class SyncOrchestrator(ESClient):
 
         # start the bulker
         self._sink = Sink(
-            self.client,
+            self.es_management_client,
             stream,
             chunk_size,
             pipeline,
             chunk_mem_size=chunk_mem_size,
             max_concurrency=max_concurrency,
             max_retries=max_bulk_retries,
+            retry_interval=retry_interval,
             logger_=self._logger,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

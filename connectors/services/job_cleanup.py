@@ -8,6 +8,7 @@ A task periodically clean up orphaned and idle jobs.
 """
 
 from connectors.es.index import DocumentNotFoundError
+from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
@@ -27,11 +28,12 @@ class JobCleanUpService(BaseService):
     async def _run(self):
         logger.debug("Successfully started Job cleanup task...")
         self.connector_index = ConnectorIndex(self.es_config)
+        self.es_management_client = ESManagementClient(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
 
         try:
             while self.running:
-                await self._process_orphaned_jobs()
+                await self._process_orphaned_idle_jobs()
                 await self._process_idle_jobs()
                 await self._sleeps.sleep(self.idling)
         finally:
@@ -43,41 +45,34 @@ class JobCleanUpService(BaseService):
                 await self.sync_job_index.close()
         return 0
 
-    async def _process_orphaned_jobs(self):
+    async def _process_orphaned_idle_jobs(self):
         try:
-            logger.debug("Cleaning up orphaned jobs")
-            connector_ids = []
-            existing_content_indices = set()
-            async for connector in self.connector_index.all_connectors():
-                if connector.index_name is not None:
-                    existing_content_indices.add(connector.index_name)
-                connector_ids.append(connector.id)
+            logger.debug("Cleaning up orphaned idle jobs")
+            connector_ids = [
+                connector.id
+                async for connector in self.connector_index.all_connectors()
+            ]
 
-            content_indices = set()
-            job_ids = []
-            async for job in self.sync_job_index.orphaned_jobs(
+            marked_count = total_count = 0
+            async for job in self.sync_job_index.orphaned_idle_jobs(
                 connector_ids=connector_ids
             ):
-                if (
-                    job.index_name is not None
-                    and job.index_name not in existing_content_indices
-                ):
-                    content_indices.add(job.index_name)
-                job_ids.append(job.id)
+                try:
+                    await job.fail(IDLE_JOB_ERROR)
+                    marked_count += 1
+                except Exception as e:
+                    logger.error(
+                        f"Failed to mark orphaned idle job #{job.id} as error: {e}"
+                    )
+                finally:
+                    total_count += 1
 
-            if len(job_ids) == 0:
-                logger.debug("No orphaned jobs found, skipping cleaning")
-                return
-
-            # delete content indices in case they are re-created by sync job
-            if len(content_indices) > 0:
-                await self.sync_job_index.delete_indices(indices=list(content_indices))
-            result = await self.sync_job_index.delete_jobs(job_ids=job_ids)
-            if len(result["failures"]) > 0:
-                logger.error(f"Error found when deleting jobs: {result['failures']}")
-            logger.info(
-                f"Successfully deleted {result['deleted']} out of {result['total']} orphaned jobs"
-            )
+            if total_count == 0:
+                logger.debug("No orphaned idle jobs found. Skipping...")
+            else:
+                logger.info(
+                    f"Successfully marked #{marked_count} out of #{total_count} orphaned idle jobs as error."
+                )
         except Exception as e:
             logger.critical(e, exc_info=True)
             self.raise_if_spurious(e)
@@ -99,7 +94,7 @@ class JobCleanUpService(BaseService):
                 try:
                     connector_id = job.connector_id
 
-                    await job.fail(message=IDLE_JOB_ERROR)
+                    await job.fail(IDLE_JOB_ERROR)
                     marked_count += 1
 
                     try:

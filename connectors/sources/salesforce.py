@@ -5,17 +5,31 @@
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
 import os
+import re
+from datetime import datetime
 from functools import cached_property, partial
 from itertools import groupby
 
 import aiohttp
+import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
+from connectors.filtering.validation import (
+    AdvancedRulesValidator,
+    SyncRuleValidationResult,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
+    RetryStrategy,
+    iso_utc,
     retryable,
 )
 
@@ -28,13 +42,19 @@ RETRIES = 3
 RETRY_INTERVAL = 1
 
 BASE_URL = "https://<domain>.my.salesforce.com"
-API_VERSION = "v58.0"
+API_VERSION = "v59.0"
 TOKEN_ENDPOINT = "/services/oauth2/token"  # noqa S105
 QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
+SOSL_SEARCH_ENDPOINT = f"/services/data/{API_VERSION}/search"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
 # https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
 CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
+OFFSET = 200
+
+OBJECT_READ_PERMISSION_USERS = "SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId IN (SELECT ParentId FROM ObjectPermissions WHERE PermissionsRead = true AND SObjectType = '{sobject}')"
+USERNAME_FROM_IDS = "SELECT Name, Email FROM User WHERE Id IN {user_list}"
+FILE_ACCESS = "SELECT ContentDocumentId, LinkedEntityId, LinkedEntity.Name FROM ContentDocumentLink WHERE ContentDocumentId = '{document_id}'"
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -103,7 +123,21 @@ RELEVANT_SOBJECT_FIELDS = [
     "VersionDataUrl",
     "VersionNumber",
     "Website",
+    "UserType",
 ]
+
+
+def _prefix_user(user):
+    if user:
+        return prefix_identity("user", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
+
+
+def _prefix_email(email):
+    return prefix_identity("email", email)
 
 
 class RateLimitedException(Exception):
@@ -148,7 +182,7 @@ class SalesforceClient:
         self._sleeps = CancellableSleeps()
 
         self._queryable_sobjects = None
-        self._queryable_sobject_fields = None
+        self._queryable_sobject_fields = {}
         self._sobjects_cache_by_type = None
         self._content_document_links_join = None
 
@@ -176,6 +210,112 @@ class SalesforceClient:
         self.api_token.clear()
         await self.session.close()
         del self.session
+
+    def modify_soql_query(self, query):
+        lowered_query = query.lower()
+        match_limit = re.search(r"(?i)(.*)FROM\s+(.*?)(?:LIMIT)(.*)", lowered_query)
+        match_offset = re.search(r"(?i)(.*)FROM\s+(.*?)(?:OFFSET)(.*)", lowered_query)
+
+        if "fields" in lowered_query and not match_limit:
+            query += " LIMIT 200 OFFSET 0"
+
+        elif "fields" in lowered_query and match_limit and not match_offset:
+            query += " OFFSET 0"
+
+        elif "fields" in lowered_query and match_limit and match_offset:
+            return query
+
+        return query
+
+    def _add_last_modified_date(self, query):
+        lowered_query = query.lower()
+        if (
+            not ("fields(all)" in lowered_query or "fields(standard)" in lowered_query)
+            and "lastmodifieddate" not in lowered_query
+        ):
+            query = re.sub(
+                r"(?i)SELECT (.*) FROM", r"SELECT \1, LastModifiedDate FROM", query
+            )
+
+        return query
+
+    def _add_id(self, query):
+        lowered_query = query.lower()
+        if not (
+            "fields(all)" in lowered_query or "fields(standard)" in lowered_query
+        ) and not re.search(r"\bid\b", lowered_query):
+            query = re.sub(r"(?i)SELECT (.*) FROM", r"SELECT \1, Id FROM", query)
+
+        return query
+
+    async def get_sync_rules_results(self, rule):
+        if rule["language"] == "SOQL":
+            query_with_id = self._add_id(query=rule["query"])
+            query = self._add_last_modified_date(query=query_with_id)
+
+            if "fields" not in query.lower():
+                async for records in self._yield_non_bulk_query_pages(soql_query=query):
+                    for record in records:
+                        yield record
+            # If FIELDS function is present in SOQL query, LIMIT/OFFSET is used for pagination
+            else:
+                soql_query = self.modify_soql_query(query=query)
+                async for records in self._yield_soql_query_pages_with_fields_function(
+                    soql_query=soql_query
+                ):
+                    for record in records:
+                        yield record
+
+        else:
+            async for records in self._yield_sosl_query_pages(sosl_query=rule["query"]):
+                for record in records:
+                    yield record
+
+    async def _custom_objects(self):
+        response = await self._get_json(f"{self.base_url}{DESCRIBE_ENDPOINT}")
+        custom_objects = []
+
+        for sobject in response.get("sobjects", []):
+            if sobject.get("custom") and sobject.get("name")[-3:] == "__c":
+                custom_objects.append(sobject.get("name"))
+        return custom_objects
+
+    async def get_custom_objects(self):
+        for custom_object in await self._custom_objects():
+            query = await self._custom_object_query(custom_object=custom_object)
+            async for records in self._yield_non_bulk_query_pages(query):
+                for record in records:
+                    yield record
+
+    async def get_salesforce_users(self):
+        if not await self._is_queryable("User"):
+            self._logger.warning(
+                "Object User is not queryable, so they won't be ingested."
+            )
+            return
+
+        query = await self._user_query()
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_users_with_read_access(self, sobject):
+        query = OBJECT_READ_PERMISSION_USERS.format(sobject=sobject)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_username_by_id(self, user_list):
+        query = USERNAME_FROM_IDS.format(user_list=user_list)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
+
+    async def get_file_access(self, document_id):
+        query = FILE_ACCESS.format(document_id=document_id)
+        async for records in self._yield_non_bulk_query_pages(query):
+            for record in records:
+                yield record
 
     async def get_accounts(self):
         if not await self._is_queryable("Account"):
@@ -265,15 +405,22 @@ class SalesforceClient:
         async for records in self._yield_non_bulk_query_pages(query):
             case_feeds_by_case_id = {}
             if await self._is_queryable("CaseFeed") and records:
-                case_ids = [x.get("Id") for x in records]
-                case_feeds = await self.get_case_feeds(case_ids)
+                all_case_ids = [x.get("Id") for x in records]
+                case_ids_list = [
+                    all_case_ids[i : i + 800] for i in range(0, len(all_case_ids), 800)
+                ]
+
+                all_case_feeds = []
+                for case_ids in case_ids_list:
+                    case_feeds = await self.get_case_feeds(case_ids)
+                    all_case_feeds.extend(case_feeds)
 
                 # groupby requires pre-sorting apparently
-                case_feeds.sort(key=lambda x: x.get("ParentId", ""))
+                all_case_feeds.sort(key=lambda x: x.get("ParentId", ""))
                 case_feeds_by_case_id = {
                     k: list(feeds)
                     for k, feeds in groupby(
-                        case_feeds, key=lambda x: x.get("ParentId", "")
+                        all_case_feeds, key=lambda x: x.get("ParentId", "")
                     )
                 }
 
@@ -303,22 +450,26 @@ class SalesforceClient:
 
         return self._queryable_sobjects
 
-    async def queryable_sobject_fields(self):
+    async def queryable_sobject_fields(
+        self,
+        relevant_objects,
+        relevant_sobject_fields,
+    ):
         """Cached async property"""
-        if self._queryable_sobject_fields is not None:
-            return self._queryable_sobject_fields
-
-        self._queryable_sobject_fields = {}
-
-        for sobject in RELEVANT_SOBJECTS:
+        for sobject in relevant_objects:
             endpoint = DESCRIBE_SOBJECT_ENDPOINT.replace("<sobject>", sobject)
             response = await self._get_json(f"{self.base_url}{endpoint}")
 
-            queryable_fields = [
-                f["name"].lower()
-                for f in response.get("fields", [])
-                if f["name"] in RELEVANT_SOBJECT_FIELDS
-            ]
+            if relevant_sobject_fields is None:
+                queryable_fields = [
+                    f["name"].lower() for f in response.get("fields", [])
+                ]
+            else:
+                queryable_fields = [
+                    f["name"].lower()
+                    for f in response.get("fields", [])
+                    if f["name"] in relevant_sobject_fields
+                ]
             self._queryable_sobject_fields[sobject] = queryable_fields
 
         return self._queryable_sobject_fields
@@ -381,13 +532,23 @@ class SalesforceClient:
         """User settings can cause fields to be non-queryable
         Querying these causes errors, so we try to filter those out in advance
         """
-        sobject_fields = await self.queryable_sobject_fields()
+        if sobject not in RELEVANT_SOBJECTS:
+            sobject_fields = await self.queryable_sobject_fields(
+                relevant_objects=[sobject], relevant_sobject_fields=None
+            )
+        else:
+            sobject_fields = await self.queryable_sobject_fields(
+                relevant_objects=RELEVANT_SOBJECTS,
+                relevant_sobject_fields=RELEVANT_SOBJECT_FIELDS,
+            )
         queryable_fields = sobject_fields.get(sobject, [])
+        if fields == []:
+            return queryable_fields
         return [f for f in fields if f.lower() in queryable_fields]
 
-    async def _yield_non_bulk_query_pages(self, soql_query):
+    async def _yield_non_bulk_query_pages(self, soql_query, endpoint=QUERY_ENDPOINT):
         """loops through query response pages and yields lists of records"""
-        url = f"{self.base_url}{QUERY_ENDPOINT}"
+        url = f"{self.base_url}{endpoint}"
         params = {"q": soql_query}
 
         while True:
@@ -401,6 +562,44 @@ class SalesforceClient:
 
             url = f"{self.base_url}{response.get('nextRecordsUrl')}"
             params = None
+
+    async def _yield_soql_query_pages_with_fields_function(self, soql_query):
+        """loops through SOQL query response pages and yields lists of records"""
+
+        def modify_offset(query, new_offset):
+            offset_pattern = r"OFFSET (\d+)"
+            new_query = re.sub(offset_pattern, f"OFFSET {new_offset}", query)
+
+            return new_query
+
+        url = f"{self.base_url}{QUERY_ENDPOINT}"
+        offset = OFFSET
+
+        while True:
+            response = await self._get_json(
+                url,
+                params={"q": soql_query},
+            )
+            yield response.get("records", [])
+
+            # Note: we can't set offset more than 2000 if SOQL query contains `FIELDS` function
+            if not response.get("records") or offset > 2000:
+                break
+
+            soql_query = modify_offset(soql_query, offset)
+            offset += OFFSET
+
+    async def _yield_sosl_query_pages(self, sosl_query):
+        """loops through SOSL query response pages and yields lists of records"""
+
+        url = f"{self.base_url}{SOSL_SEARCH_ENDPOINT}"
+        params = {"q": sosl_query}
+
+        response = await self._get_json(
+            url,
+            params=params,
+        )
+        yield response.get("searchRecords", [])
 
     async def _execute_non_paginated_query(self, soql_query):
         """For quick queries, ignores pagination"""
@@ -455,7 +654,7 @@ class SalesforceClient:
 
         if e.status == 401:
             self._logger.warning(
-                f"Token expired, attemping to fetch new token. Status: {e.status}, message: {e.message}"
+                f"Token expired, attempting to fetch new token. Status: {e.status}, message: {e.message}"
             )
             # The user can alter the lifetime of issued tokens, so we don't know when they expire
             # By clearing the bearer token, we force the auth headers to fetch a new token in the next request
@@ -477,6 +676,7 @@ class SalesforceClient:
                     "INVALID_FIELD",
                     "INVALID_TERM",
                     "MALFORMED_QUERY",
+                    "INVALID_TYPE",
                 ]
             ):
                 msg = f"The query was rejected by Salesforce. {exception_details}, details: {', '.join(error_codes)}, query: {', '.join([x['message'] for x in errors])}"
@@ -495,6 +695,33 @@ class SalesforceClient:
             return [{"errorCode": "unknown"}]
 
         return error_list
+
+    async def _custom_object_query(self, custom_object):
+        queryable_fields = await self._select_queryable_fields(
+            custom_object,
+            [],
+        )
+        doc_links_join = await self.content_document_links_join()
+        return (
+            SalesforceSoqlBuilder(custom_object)
+            .with_fields(queryable_fields)
+            .with_join(doc_links_join)
+            .build()
+        )
+
+    async def _user_query(self):
+        queryable_fields = await self._select_queryable_fields(
+            "User",
+            ["Name", "Email", "UserType"],
+        )
+
+        return (
+            SalesforceSoqlBuilder("User")
+            .with_id()
+            .with_default_metafields()
+            .with_fields(queryable_fields)
+            .build()
+        )
 
     async def _accounts_query(self):
         queryable_fields = await self._select_queryable_fields(
@@ -948,213 +1175,6 @@ class SalesforceDocMapper:
     def __init__(self, base_url):
         self.base_url = base_url
 
-    def map_account(self, account):
-        owner = account.get("Owner", {}) or {}
-
-        opportunities = account.get("Opportunities", {}) or {}
-        opportunity_records = opportunities.get("records", []) if opportunities else []
-        opportunity = opportunity_records[0] if len(opportunity_records) > 0 else {}
-        opportunity_url = (
-            f"{self.base_url}/{opportunity.get('Id')}" if opportunity else None
-        )
-        opportunity_status = opportunity.get("StageName", None)
-
-        return {
-            "_id": account.get("Id"),
-            "account_type": account.get("Type"),
-            "address": self._format_address(account.get("BillingAddress")),
-            "body": account.get("Description"),
-            "content_source_id": account.get("Id"),
-            "created_at": account.get("CreatedDate"),
-            "last_updated": account.get("LastModifiedDate"),
-            "open_activities": "",  # TODO
-            "open_activities_urls": "",  # TODO
-            "opportunity_name": opportunity.get("Name"),
-            "opportunity_status": opportunity_status,
-            "opportunity_url": opportunity_url,
-            "owner": owner.get("Name"),
-            "owner_email": owner.get("Email"),
-            "rating": account.get("Rating"),
-            "source": "salesforce",
-            "tags": [account.get("Type")],
-            "title": account.get("Name"),
-            "type": "account",
-            "url": f"{self.base_url}/{account.get('Id')}",
-            "website_url": account.get("Website"),
-        }
-
-    def map_opportunity(self, opportunity):
-        owner = opportunity.get("Owner", {}) or {}
-
-        return {
-            "_id": opportunity.get("Id"),
-            "body": opportunity.get("Description"),
-            "content_source_id": opportunity.get("Id"),
-            "created_at": opportunity.get("CreatedDate"),
-            "last_updated": opportunity.get("LastModifiedDate"),
-            "next_step": opportunity.get("NextStep"),
-            "owner": owner.get("Name"),
-            "owner_email": owner.get("Email"),
-            "source": "salesforce",
-            "status": opportunity.get("StageName", ""),
-            "title": opportunity.get("Name"),
-            "type": "opportunity",
-            "url": f"{self.base_url}/{opportunity.get('Id')}",
-        }
-
-    def map_contact(self, contact):
-        account = contact.get("Account", {}) or {}
-        account_id = account.get("Id")
-        account_url = f"{self.base_url}/{account_id}" if account_id else None
-
-        owner = contact.get("Owner", {}) or {}
-        owner_id = owner.get("Id")
-        owner_url = f"{self.base_url}/{owner_id}" if owner_id else None
-
-        photo_url = contact.get("PhotoUrl")
-        thumbnail = f"{self.base_url}{photo_url}" if photo_url else None
-
-        return {
-            "_id": contact.get("Id"),
-            "account": account.get("Name"),
-            "account_url": account_url,
-            "body": contact.get("Description"),
-            "created_at": contact.get("CreatedDate"),
-            "email": contact.get("Email"),
-            "job_title": contact.get("Title"),
-            "last_updated": contact.get("LastModifiedDate"),
-            "lead_source": contact.get("LeadSource"),
-            "owner": owner.get("Name"),
-            "owner_url": owner_url,
-            "phone": contact.get("Phone"),
-            "source": "salesforce",
-            "thumbnail": thumbnail,
-            "title": contact.get("Name"),
-            "type": "contact",
-            "url": f"{self.base_url}/{contact.get('Id')}",
-        }
-
-    def map_lead(self, lead):
-        owner = lead.get("Owner", {}) or {}
-        owner_id = owner.get("Id")
-        owner_url = f"{self.base_url}/{owner_id}" if owner_id else ""
-
-        converted_account = lead.get("ConvertedAccount", {}) or {}
-        converted_account_id = converted_account.get("Id")
-        converted_account_url = (
-            f"{self.base_url}/{converted_account_id}" if converted_account_id else None
-        )
-
-        converted_contact = lead.get("ConvertedContact", {}) or {}
-        converted_contact_id = converted_account.get("Id")
-        converted_contact_url = (
-            f"{self.base_url}/{converted_contact_id}" if converted_contact_id else None
-        )
-
-        converted_opportunity = lead.get("ConvertedOpportunity", {}) or {}
-        converted_opportunity_id = converted_opportunity.get("Id")
-        converted_opportunity_url = (
-            f"{self.base_url}/{converted_opportunity_id}"
-            if converted_opportunity_id
-            else None
-        )
-
-        photo_url = lead.get("PhotoUrl")
-        thumbnail = f"{self.base_url}{photo_url}" if photo_url else None
-
-        return {
-            "_id": lead.get("Id"),
-            "body": lead.get("Description"),
-            "company": lead.get("Company"),
-            "converted_account": converted_account.get("Name"),
-            "converted_account_url": converted_account_url,
-            "converted_at": lead.get("ConvertedDate"),  # TODO convert
-            "converted_contact": converted_contact.get("Name"),
-            "converted_contact_url": converted_contact_url,
-            "converted_opportunity": converted_opportunity.get("Name"),
-            "converted_opportunity_url": converted_opportunity_url,
-            "created_at": lead.get("CreatedDate"),
-            "email": lead.get("Email"),
-            "job_title": lead.get("Title"),
-            "last_updated": lead.get("LastModifiedDate"),
-            "lead_source": lead.get("LeadSource"),
-            "owner": owner.get("Name"),
-            "owner_url": owner_url,
-            "phone": lead.get("Phone"),
-            "rating": lead.get("Rating"),
-            "source": "salesforce",
-            "status": lead.get("Status"),
-            "title": lead.get("Name"),
-            "thumbnail": thumbnail,
-            "type": "lead",
-            "url": f"{self.base_url}/{lead.get('Id')}",
-        }
-
-    def map_campaign(self, campaign):
-        owner = campaign.get("Owner", {}) or {}
-
-        parent = campaign.get("Parent", {}) or {}
-        parent_id = parent.get("Id")
-        parent_url = f"{self.base_url}/{parent_id}" if parent_id else None
-
-        is_active = campaign.get("IsActive")
-        state = (
-            ("active" if is_active else "archived") if is_active is not None else None
-        )
-
-        return {
-            "_id": campaign.get("Id"),
-            "body": campaign.get("Description"),
-            "campaign_type": campaign.get("Type"),
-            "created_at": campaign.get("CreatedDate"),
-            "end_date": campaign.get("EndDate"),
-            "last_updated": campaign.get("LastModifiedDate"),
-            "owner": owner.get("Name"),
-            "owner_email": owner.get("Email"),
-            "parent": parent.get("Name"),
-            "parent_url": parent_url,
-            "source": "salesforce",
-            "start_date": campaign.get("StartDate"),
-            "status": campaign.get("Status"),
-            "state": state,
-            "title": campaign.get("Name"),
-            "type": "campaign",
-            "url": f"{self.base_url}/{campaign.get('Id')}",
-        }
-
-    def map_case(self, case):
-        owner = case.get("Owner", {}) or {}
-
-        created_by = case.get("CreatedBy", {}) or {}
-
-        (
-            participant_ids,
-            participant_emails,
-            participant_names,
-        ) = self._collect_case_participant_ids_emails_and_names(case)
-
-        return {
-            "_id": case.get("Id"),
-            "account_id": case.get("AccountId"),
-            "created_at": case.get("CreatedDate"),
-            "created_by": created_by.get("Name"),
-            "created_by_email": created_by.get("Email"),
-            "body": self._format_case_body(case),
-            "case_number": case.get("CaseNumber"),
-            "is_closed": case.get("IsClosed"),
-            "last_updated": case.get("LastModifiedDate"),
-            "owner": owner.get("Name"),
-            "owner_email": owner.get("Email"),
-            "participant_emails": participant_emails,
-            "participant_ids": participant_ids,
-            "participants": participant_names,
-            "source": "salesforce",
-            "status": case.get("Status"),
-            "title": case.get("Subject"),
-            "type": "case",
-            "url": f"{self.base_url}/{case.get('Id')}",
-        }
-
     def map_content_document(self, content_document):
         content_version = content_document.get("LatestPublishedVersion", {}) or {}
         owner = content_document.get("Owner", {}) or {}
@@ -1179,113 +1199,90 @@ class SalesforceDocMapper:
             "version_url": f"{self.base_url}/{content_version.get('Id')}",
         }
 
-    def _format_address(self, address):
-        if not address:
-            return None
-
-        address_fields = [
-            address.get("street"),
-            address.get("city"),
-            address.get("state"),
-            str(address.get("postalCode", "")),
-            address.get("country"),
-        ]
-        return ", ".join([a for a in address_fields if a])
-
-    def _format_case_body(self, case):
-        time_body_pairs = []
-        time_body_pairs.append([case.get("CreatedDate"), case.get("Description")])
-
-        case_comments = case.get("CaseComments", {}) or {}
-        for comment in case_comments.get("records", []):
-            time_body_pairs.append(
-                [comment.get("CreatedDate"), comment.get("CommentBody")]
+    def map_salesforce_objects(self, _object):
+        def _format_datetime(datetime_):
+            datetime_ = datetime_ or iso_utc()
+            return datetime.strptime(datetime_, "%Y-%m-%dT%H:%M:%S.%f%z").strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
             )
 
-        email_messages = case.get("EmailMessages", {}) or {}
-        for email in email_messages.get("records", []):
-            subject = email.get("Subject", "") or ""
-            text_body = email.get("TextBody", "") or ""
-            time_body_pairs.append(
-                [email.get("MessageDate"), f"{subject}\n{text_body}"]
+        return {
+            "_id": _object.get("Id"),
+            "_timestamp": _format_datetime(datetime_=_object.get("LastModifiedDate")),
+            "url": f"{self.base_url}/{_object.get('Id')}",
+        } | _object
+
+
+class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
+    OBJECT_SCHEMA_DEFINITION = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "minLength": 1},
+            "language": {
+                "type": "string",
+                "minLength": 1,
+                "enum": ["SOSL", "SOQL"],
+            },
+        },
+        "required": ["query", "language"],
+        "additionalProperties": False,
+    }
+
+    SCHEMA_DEFINITION = {"type": "array", "items": OBJECT_SCHEMA_DEFINITION}
+
+    SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
+
+    def __init__(self, source):
+        self.source = source
+
+    async def validate(self, advanced_rules):
+        return await self._remote_validation(advanced_rules)
+
+    @retryable(
+        retries=3,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _remote_validation(self, advanced_rules):
+        try:
+            SalesforceAdvancedRulesValidator.SCHEMA(advanced_rules)
+        except fastjsonschema.JsonSchemaValueException as e:
+            return SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=e.message,
             )
 
-        case_feeds = case.get("Feeds", []) or []
-        for feed in case_feeds:
-            title = feed.get("Title", "") or ""
-            body = feed.get("Body", "") or ""
-            time_body_pairs.append([feed.get("CreatedDate"), f"{title}\n{body}"])
-
-            feed_comments = feed.get("FeedComments", {}) or {}
-            for comment in feed_comments.get("records", []):
-                time_body_pairs.append(
-                    [comment.get("CreatedDate"), comment.get("CommentBody")]
+        invalid_queries = []
+        for rule in advanced_rules:
+            language = rule["language"]
+            query = (
+                self.source.salesforce_client.modify_soql_query(rule["query"])
+                if language == "SOQL"
+                else rule["query"]
+            )
+            try:
+                url = (
+                    f"{self.source.base_url_}{SOSL_SEARCH_ENDPOINT}"
+                    if language == "SOSL"
+                    else f"{self.source.base_url_}{QUERY_ENDPOINT}"
                 )
+                params = {"q": query}
+                await self.source.salesforce_client._get_json(
+                    url,
+                    params=params,
+                )
+            except InvalidQueryException:
+                invalid_queries.append(query)
 
-        # sort the body values by their associated timestamp
-        time_body_pairs = sorted(
-            time_body_pairs, key=lambda x: "" if x[0] is None else x[0]
-        )
-
-        # ensure string, remove Nones, and remove whitespace
-        bodies = [str(x[-1]).strip() for x in time_body_pairs if x[-1] is not None]
-
-        # finally filter out any empty strings, join and return
-        return "\n\n".join(filter(None, bodies))
-
-    def _collect_case_participant_ids_emails_and_names(self, case):
-        ids = []
-        emails = []
-        names = []
-
-        participants = [
-            case.get("Owner", {}) or {},
-            case.get("CreatedBy", {}) or {},
-        ]
-
-        case_comments = case.get("CaseComments", {}) or {}
-        participants.extend(self._collect_created_by(case_comments))
-
-        email_messages = case.get("EmailMessages", {}) or {}
-        participants.extend(self._collect_created_by(email_messages))
-
-        for email in email_messages.get("records", []):
-            names.append(email.get("FromName"))
-            emails.append(email.get("FromAddress"))
-            emails.extend(str(email.get("ToAddress", "")).split(";"))
-            emails.extend(str(email.get("CcAddress", "")).split(";"))
-            emails.extend(str(email.get("BccAddress", "")).split(";"))
-
-        feeds = case.get("Feeds", []) or []
-        for feed in feeds:
-            participants.append(feed.get("CreatedBy", {}))
-
-            feed_comments = feed.get("FeedComments", {}) or {}
-            participants.extend(self._collect_created_by(feed_comments))
-
-        for participant in participants:
-            ids.append(participant.get("Id"))
-            emails.append(participant.get("Email"))
-            names.append(participant.get("Name"))
-
-        ids = self._format_list(ids)
-        emails = self._format_list(emails)
-        names = self._format_list(names)
-
-        return ids, emails, names
-
-    def _collect_created_by(self, sobject):
-        created_by_list = []
-
-        records = sobject.get("records", [])
-        for record in records:
-            created_by_list.append(record.get("CreatedBy"))
-
-        return created_by_list
-
-    def _format_list(self, unformatted):
-        return sorted(
-            set(filter(None, [str(x).strip() for x in unformatted if x is not None]))
+        if len(invalid_queries) > 0:
+            return SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=f"Found invalid queries: '{' & '.join(invalid_queries)}'. Either object or fields might be invalid.",
+            )
+        return SyncRuleValidationResult.valid_result(
+            SyncRuleValidationResult.ADVANCED_RULES
         )
 
 
@@ -1294,6 +1291,9 @@ class SalesforceDataSource(BaseDataSource):
 
     name = "Salesforce"
     service_type = "salesforce"
+    advanced_rules_enabled = True
+    dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         super().__init__(configuration=configuration)
@@ -1303,10 +1303,12 @@ class SalesforceDataSource(BaseDataSource):
             if (RUNNING_FTEST and SALESFORCE_EMULATOR_HOST)
             else BASE_URL.replace("<domain>", configuration["domain"])
         )
+        self.base_url_ = base_url
         self.salesforce_client = SalesforceClient(
             configuration=configuration, base_url=base_url
         )
         self.doc_mapper = SalesforceDocMapper(base_url)
+        self.permissions = {}
 
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
@@ -1337,13 +1339,85 @@ class SalesforceDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 7,
+                "order": 4,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 5,
+                "tooltip": "Document level security ensures identities and permissions set in Salesforce are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if self._features is None:
+            return False
+
+        if not self._features.document_level_security_enabled():
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+        return document
+
+    async def _user_access_control_doc(self, user):
+        email = user.get("Email")
+        username = user.get("Name")
+
+        prefixed_email = _prefix_email(email)
+        prefixed_username = _prefix_user(username)
+        prefixed_user_id = _prefix_user_id(user.get("Id"))
+
+        access_control = [prefixed_email, prefixed_username, prefixed_user_id]
+        return {
+            "_id": user.get("Id"),
+            "identity": {
+                "email": prefixed_email,
+                "username": prefixed_username,
+                "user_id": prefixed_user_id,
+            },
+            "created_at": user.get("CreatedDate", iso_utc()),
+            "_timestamp": user.get("LastModifiedDate", iso_utc()),
+        } | es_access_control_query(access_control)
+
+    async def get_access_control(self):
+        """Get access control documents for Salesforce users.
+
+        This method fetches access control documents for Salesforce users when document level security (DLS)
+        is enabled. It starts by checking if DLS is enabled, and if not, it logs a warning message and skips further processing.
+        If DLS is enabled, the method fetches all users from the Salesforce API, filters out Salesforce users,
+        and fetches additional information for each user using the _fetch_user method. After gathering the user information,
+        it generates an access control document for each user using the user_access_control_doc method and yields the results.
+
+        Yields:
+            dict: An access control document for each Salesforce user.
+        """
+        if not self._dls_enabled():
+            self._logger.debug("DLS is not enabled. Skipping")
+            return
+
+        self._logger.debug("Fetching Salesforce users")
+        async for user in self.salesforce_client.get_salesforce_users():
+            if user.get("UserType") in ["CloudIntegrationUser", "AutomatedProcess"]:
+                continue
+            user_doc = await self._user_access_control_doc(user=user)
+            yield user_doc
 
     async def validate_config(self):
         await super().validate_config()
@@ -1359,37 +1433,144 @@ class SalesforceDataSource(BaseDataSource):
             self._logger.exception(f"Error while connecting to Salesforce: {e}")
             raise
 
+    def advanced_rules_validators(self):
+        return [SalesforceAdvancedRulesValidator(self)]
+
+    async def _get_advanced_sync_rules_result(self, rule):
+        async for doc in self.salesforce_client.get_sync_rules_results(rule=rule):
+            if sobject := doc.get("attributes", {}).get("type"):
+                await self._fetch_users_with_read_access(sobject=sobject)
+            yield doc
+
+    async def _fetch_users_with_read_access(self, sobject):
+        if not self._dls_enabled():
+            self._logger.debug("DLS is not enabled. Skipping")
+            return
+
+        self._logger.debug(
+            f"Fetching users who have Read access for Salesforce object: {sobject}"
+        )
+
+        if sobject in self.permissions:
+            return
+
+        user_list = set()
+        access_control = set()
+        async for assignee in self.salesforce_client.get_users_with_read_access(
+            sobject=sobject
+        ):
+            user_list.add(assignee.get("AssigneeId"))
+            access_control.add(_prefix_user_id(assignee.get("AssigneeId")))
+
+        if user_list == set():
+            return
+
+        user_sub_list = [
+            list(user_list)[i : i + 800] for i in range(0, len(user_list), 800)
+        ]
+        for _user_list in user_sub_list:
+            async for user in self.salesforce_client.get_username_by_id(
+                user_list=tuple(_user_list)
+            ):
+                access_control.add(_prefix_user(user.get("Name")))
+                access_control.add(_prefix_email(user.get("Email")))
+
+        self.permissions[sobject] = list(access_control)
+
     async def get_docs(self, filtering=None):
         # We collect all content documents and de-duplicate them before downloading and yielding
         content_docs = []
 
-        async for account in self.salesforce_client.get_accounts():
-            content_docs.extend(self._parse_content_documents(account))
-            yield self.doc_mapper.map_account(account), None
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-        async for opportunity in self.salesforce_client.get_opportunities():
-            content_docs.extend(self._parse_content_documents(opportunity))
-            yield self.doc_mapper.map_opportunity(opportunity), None
+            for rule in advanced_rules:
+                async for doc in self._get_advanced_sync_rules_result(rule=rule):
+                    content_docs.extend(self._parse_content_documents(doc))
+                    access_control = self.permissions.get(
+                        doc.get("attributes", {}).get("type"), []
+                    )
+                    yield self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(doc, access_control)
+                    ), None
 
-        async for contact in self.salesforce_client.get_contacts():
-            content_docs.extend(self._parse_content_documents(contact))
-            yield self.doc_mapper.map_contact(contact), None
+        else:
+            for sobject in [
+                "Account",
+                "Opportunity",
+                "Contact",
+                "Lead",
+                "Campaign",
+                "Case",
+            ]:
+                await self._fetch_users_with_read_access(sobject=sobject)
 
-        async for lead in self.salesforce_client.get_leads():
-            content_docs.extend(self._parse_content_documents(lead))
-            yield self.doc_mapper.map_lead(lead), None
+            for custom_object in await self.salesforce_client._custom_objects():
+                await self._fetch_users_with_read_access(sobject=custom_object)
 
-        async for campaign in self.salesforce_client.get_campaigns():
-            content_docs.extend(self._parse_content_documents(campaign))
-            yield self.doc_mapper.map_campaign(campaign), None
+            async for account in self.salesforce_client.get_accounts():
+                content_docs.extend(self._parse_content_documents(account))
+                access_control = self.permissions.get("Account", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(account, access_control)
+                ), None
 
-        async for case in self.salesforce_client.get_cases():
-            content_docs.extend(self._parse_content_documents(case))
-            yield self.doc_mapper.map_case(case), None
+            async for opportunity in self.salesforce_client.get_opportunities():
+                content_docs.extend(self._parse_content_documents(opportunity))
+                access_control = self.permissions.get("Opportunity", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(opportunity, access_control)
+                ), None
+
+            async for contact in self.salesforce_client.get_contacts():
+                content_docs.extend(self._parse_content_documents(contact))
+                access_control = self.permissions.get("Contact", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(contact, access_control)
+                ), None
+
+            async for lead in self.salesforce_client.get_leads():
+                content_docs.extend(self._parse_content_documents(lead))
+                access_control = self.permissions.get("Lead", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(lead, access_control)
+                ), None
+
+            async for campaign in self.salesforce_client.get_campaigns():
+                content_docs.extend(self._parse_content_documents(campaign))
+                access_control = self.permissions.get("Campaign", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(campaign, access_control)
+                ), None
+
+            async for case in self.salesforce_client.get_cases():
+                content_docs.extend(self._parse_content_documents(case))
+                access_control = self.permissions.get("Case", [])
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(case, access_control)
+                ), None
+
+            async for custom_object in self.salesforce_client.get_custom_objects():
+                content_docs.extend(self._parse_content_documents(custom_object))
+                access_control = self.permissions.get(
+                    custom_object.get("attributes", {}).get("type"), []
+                )
+                yield self.doc_mapper.map_salesforce_objects(
+                    self._decorate_with_access_control(custom_object, access_control)
+                ), None
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
         for content_doc in content_docs:
+            access_control = []
+            async for permission in self.salesforce_client.get_file_access(
+                document_id=content_doc["Id"]
+            ):
+                access_control.append(_prefix_user_id(permission.get("LinkedEntityId")))
+                access_control.append(
+                    _prefix_user(permission.get("LinkedEntity", {}).get("Name"))
+                )
+
             content_version_id = (
                 content_doc.get("LatestPublishedVersion", {}) or {}
             ).get("Id")
@@ -1402,7 +1583,7 @@ class SalesforceDataSource(BaseDataSource):
             doc = self.doc_mapper.map_content_document(content_doc)
             doc = await self.get_content(doc, content_version_id)
 
-            yield doc, None
+            yield self._decorate_with_access_control(doc, access_control), None
 
     async def get_content(self, doc, content_version_id):
         file_size = doc["content_size"]

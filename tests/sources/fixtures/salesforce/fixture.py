@@ -15,18 +15,18 @@ from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
 
-fake_provider = WeightedFakeProvider()
+fake_provider = WeightedFakeProvider(weights=[0.6, 0.2, 0.15, 0.05])
 fake = fake_provider.fake
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        RECORD_COUNT = 500
+        RECORD_COUNT = 2000  # Total no. of docs: ~20k. Total volume: ~4 GB
     case "medium":
-        RECORD_COUNT = 2000
+        RECORD_COUNT = 4500  # Total no. of docs: ~50k. Total volume: ~10 GB
     case "large":
-        RECORD_COUNT = 10000
+        RECORD_COUNT = 7000  # Total no. of docs: ~80k. Total volume: ~16 GB
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
         raise Exception(msg)
@@ -132,12 +132,6 @@ def generate_records(table_name):
 
 
 def generate_content_document_records():
-    # 1 in every 12 docs gets 1 attached file
-    # 1 in every 12 docs gets 2 attached files
-    d6 = random.choice(range(6))
-    if d6 > 1:
-        return []
-
     return [
         {
             "ContentDocument": {
@@ -147,7 +141,6 @@ def generate_content_document_records():
                 },
             }
         }
-        for _ in range(random.choice([1, 2]))
     ]
 
 
@@ -170,14 +163,12 @@ def token():
 def query(version):
     query = request.args.get("q")
     table_name = re.findall(r"\bFROM\s+(\w+)", query)[-1]
-    done = random.choice([True, False])
 
-    response = {"done": done, "records": generate_records(table_name)}
-
-    if not done:
-        response["nextRecordsUrl"] = f"/services/data/{version}/query/{table_name}"
-
-    return response
+    return {
+        "done": False,
+        "records": generate_records(table_name),
+        "nextRecordsUrl": f"/services/data/{version}/query/{table_name}",
+    }
 
 
 @app.route("/services/data/<_version>/query/<table_name>", methods=["GET"])
