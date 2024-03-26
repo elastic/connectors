@@ -60,9 +60,10 @@ A test case should be present as a YAML file.
 ---
 scenarios:
   - index_name: search-demo-index-001
+    connector_name: spo
     service_type: sharepoint_online
     index_language: en
-    connector_configuration: scenarios/clients/spo_sean_site.json
+    connector_configuration: scenarios/clients/spo_automated_testing_site.json
     native: false
     tests:
       - name: Full sync job is performed without errors
