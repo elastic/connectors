@@ -119,10 +119,6 @@ async def _start_service(actions, config, loop):
     - instantiates a `MultiService` instance and runs its `run` async function
     """
 
-    # initialize telemetry
-    telemetry = Telemetry(loop)
-    telemetry.start()
-
     preflight = PreflightCheck(config)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
@@ -133,9 +129,17 @@ async def _start_service(actions, config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
+    telemetry = Telemetry()
     multiservice = get_services(actions, config)
+
+    def shutdown(sig_):
+        multiservice.shutdown(sig_)
+        telemetry.shutdown(sig_)
+
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
+        loop.add_signal_handler(sig, functools.partial(shutdown, sig.name))
+
+    telemetry.start()
 
     if "PERF8" in os.environ:
         import perf8
