@@ -141,7 +141,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
         Args:
             blob (dictionary): Blob document from Azure Blob Storage
-            container_metadata (string): Blob container meta data
+            container_metadata (string): Blob container metadata
 
         Returns:
             dictionary: Modified document with the help of adapter schema
@@ -210,7 +210,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             container_list (list): List of containers
 
         Yields:
-            dictionary: Container document with name & meta data
+            dictionary: Container document with name & metadata
         """
         container_set = set(container_list)
         async with BlobServiceClient.from_connection_string(
