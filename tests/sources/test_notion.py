@@ -793,3 +793,51 @@ async def test_async_iterate_paginated_api():
             ):
                 assert "name" in result
             mock_client_instance.some_function.assert_called_once()
+
+
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_fetch_results_rate_limit_exceeded():
+    async def mock_function_with_429(**kwargs):
+        raise APIResponseError(
+            code="rate_limited",
+            message="Rate limit exceeded.",
+            response=Response(status_code=429, text="Rate limit exceeded."),
+        )
+
+    async with create_source(
+        NotionDataSource, notion_secret_key="secert_key"
+    ) as source:
+        with patch("connectors.sources.notion.DEFAULT_RETRY_SECONDS", 0.3):
+            with pytest.raises(Exception) as exc_info:
+                await source.notion_client.fetch_results(mock_function_with_429)
+
+            assert "Rate limit exceeded." in str(exc_info.value)
+
+
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_fetch_results_other_errors_not_retried():
+    async def mock_function_with_other_error(**kwargs):
+        raise APIResponseError(
+            code="object_not_found",
+            message="Object Not Found",
+            response=Response(status_code=404, text="Object Not Found"),
+        )
+
+    async with create_source(
+        NotionDataSource, notion_secret_key="secert_key"
+    ) as source:
+        with pytest.raises(APIResponseError) as exc_info:
+            await source.notion_client.fetch_results(mock_function_with_other_error)
+
+        assert exc_info.value.code == "object_not_found"
+        assert exc_info.value.status == 404
+
+
+@pytest.mark.asyncio
+async def test_original_async_iterate_paginated_api_not_called():
+    with patch(
+        "notion_client.helpers.async_iterate_paginated_api"
+    ) as mock_async_iterate_paginated_api:
+        assert not mock_async_iterate_paginated_api.called

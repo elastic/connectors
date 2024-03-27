@@ -108,12 +108,13 @@ class NotionClient:
         try:
             return await function(start_cursor=next_cursor, **kwargs)
         except APIResponseError as exception:
-            if exception.code == "rate_limited" and exception.status == 429:
+            if exception.code == "rate_limited" or exception.status == 429:
                 retry_after = (
                     exception.headers.get("retry-after") or DEFAULT_RETRY_SECONDS
                 )
+                request_info = f"Request: {function.__name__} (next_cursor: {next_cursor}, kwargs: {kwargs})"
                 self._logger.info(
-                    f"Connector will attempt to retry after {int(retry_after)} seconds."
+                    f"Connector will attempt to retry after {int(retry_after)} seconds. {request_info}"
                 )
                 await self._sleeps.sleep(int(retry_after))
                 msg = "Rate limit exceeded."
@@ -127,16 +128,13 @@ class NotionClient:
         """Return an async iterator over the results of any paginated Notion API."""
         next_cursor = kwargs.pop("start_cursor", None)
         while True:
-            try:
-                response = await self.fetch_results(function, next_cursor, **kwargs)
-                if response:
-                    for result in response.get("results"):
-                        yield result
-                    next_cursor = response.get("next_cursor")
-                    if not response["has_more"] or next_cursor is None:
-                        return
-            except Exception as error:
-                raise error
+            response = await self.fetch_results(function, next_cursor, **kwargs)
+            if response:
+                for result in response.get("results"):
+                    yield result
+                next_cursor = response.get("next_cursor")
+                if not response["has_more"] or next_cursor is None:
+                    return
 
     async def fetch_owner(self):
         """Fetch integration authorized owner"""
