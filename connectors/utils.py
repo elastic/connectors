@@ -912,3 +912,21 @@ def func_human_readable_name(func):
         return func.__name__
     except AttributeError:
         return str(func)
+
+
+class SingletonMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            instance = super().__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
+
+
+def running_ftest():
+    return "RUNNING_FTEST" in os.environ
+
+
+def running_on_buildkite():
+    return "BUILDKITE" in os.environ
