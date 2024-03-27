@@ -105,6 +105,9 @@ class SyncJobRunner:
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
         self.running = False
+        self._enable_bulk_operations_logging = self.bulk_options.get(
+            "enable_operations_logging"
+        )
 
     async def execute(self):
         if self.running:
@@ -253,6 +256,7 @@ class SyncJobRunner:
             self.sync_job.pipeline,
             job_type,
             options=bulk_options,
+            enable_bulk_operations_logging=self._enable_bulk_operations_logging,
         )
 
     def _skip_unchanged_documents_enabled(self, job_type, data_provider):
@@ -309,6 +313,7 @@ class SyncJobRunner:
             skip_unchanged_documents=self._skip_unchanged_documents_enabled(
                 job_type, self.data_provider
             ),
+            enable_bulk_operations_logging=self._enable_bulk_operations_logging,
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
