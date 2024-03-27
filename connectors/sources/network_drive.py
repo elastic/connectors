@@ -7,6 +7,7 @@
 """
 import asyncio
 import csv
+from collections import deque
 from functools import cached_property, partial
 
 import fastjsonschema
@@ -53,7 +54,7 @@ GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
 GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
 SECURITY_INFO_DACL = 0x00000004
 
-MAX_CHUNK_SIZE = 65536
+MAX_CHUNK_SIZE = 65536 * 2
 RETRIES = 3
 RETRY_INTERVAL = 2
 
@@ -383,35 +384,40 @@ class NASDataSource(BaseDataSource):
         self._logger.debug(
             "Fetching the directory tree from remote server and content of directory on path"
         )
-        directory_info = []
-        try:
-            directory_info = await asyncio.to_thread(
-                partial(
-                    smbclient.scandir,
-                    path=path,
-                    username=self.username,
-                    password=self.password,
-                    port=self.port,
-                ),
-            )
-        except SMBConnectionClosed as exception:
-            self._logger.exception(
-                f"Connection got closed. Error {exception}. Registering new session"
-            )
-            await asyncio.to_thread(self.smb_connection.create_connection)
-            raise
-        except (SMBOSError, SMBException) as exception:
-            self._logger.exception(
-                f"Error while scanning the path {path}. Error {exception}"
-            )
 
-        for file in directory_info:
-            yield self.format_document(file=file)
-            if file.is_dir():
-                async for sub_file_data in self.traverse_diretory(
-                    path=file.path
-                ):  # pyright: ignore
-                    yield sub_file_data
+        stack = deque()
+        stack.append(path)
+
+        while stack:
+            current_path = stack.pop()
+
+            directory_info = []
+            try:
+                directory_info = list(
+                    await asyncio.to_thread(
+                        partial(
+                            smbclient.scandir,
+                            path=current_path,
+                            username=self.username,
+                            password=self.password,
+                            port=self.port,
+                        ),
+                    )
+                )
+            except SMBConnectionClosed as exception:
+                self._logger.exception(
+                    f"Connection got closed. Error {exception}. Registering new session"
+                )
+                await asyncio.to_thread(self.smb_connection.create_connection)
+                raise
+            except (SMBOSError, SMBException) as exception:
+                self._logger.exception(
+                    f"Error while scanning the path {current_path}. Error {exception}"
+                )
+            for file in directory_info:
+                yield self.format_document(file=file)
+                if file.is_dir():
+                    stack.append(file.path)
 
     async def get_directory_details(self):
         self._logger.debug("Fetching the directory tree from remote server")
