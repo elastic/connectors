@@ -452,7 +452,7 @@ class JiraDataSource(BaseDataSource):
 
     async def _user_information_list(self, key):
         self._logger.info(
-            f"Fetching users who has read access to the project key: {key.split('=')[1]}"
+            f"Fetching users who have read access to the project key: {key.split('=')[1]}"
         )
         start_at = 0
         while True:
@@ -499,7 +499,7 @@ class JiraDataSource(BaseDataSource):
         return list(access_control)
 
     async def _issue_security_level(self, issue_key):
-        self._logger.debug(f"Fetching issue security level for issue: {issue_key}")
+        self._logger.debug(f"Fetching security level for issue: {issue_key}")
         async for response in self.jira_client.api_call(
             url_name=ISSUE_SECURITY_LEVEL, issue_key=issue_key
         ):
@@ -514,7 +514,7 @@ class JiraDataSource(BaseDataSource):
 
     async def _project_role_members(self, project, role_id, access_control):
         self._logger.debug(
-            f"Fetching users and groups of the project role ID: {role_id} for project key: {project['key']}"
+            f"Fetching users and groups with role ID '{role_id}' for project '{project['key']}'"
         )
         async for actor_response in self.jira_client.api_call(
             url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
@@ -554,7 +554,7 @@ class JiraDataSource(BaseDataSource):
             return []
 
         self._logger.info(
-            f"Fetching users who has read access to an issue: {issue_key} of project: {project['key']}"
+            f"Fetching users with read access to issue '{issue_key}' in project '{project['key']}'"
         )
         access_control = set()
         if self.jira_client.data_source_type != JIRA_CLOUD:
