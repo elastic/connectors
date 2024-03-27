@@ -705,9 +705,6 @@ class JiraDataSource(BaseDataSource):
             filename,
             file_size,
         ):
-            self._logger.debug(
-                f"Skipping download for {filename} as the file extension {file_extension} is not supported"
-            )
             return
 
         self._logger.info(f"Downloading content for file: {filename}")
