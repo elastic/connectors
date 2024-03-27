@@ -127,6 +127,8 @@ class JiraClient:
         """
         if self.session:
             return self.session
+
+        self._logger.debug("Creating a client session")
         if self.data_source_type == JIRA_CLOUD:
             login, password = (
                 self.configuration["account_email"],
@@ -216,6 +218,7 @@ class JiraClient:
         )
         while True:
             try:
+                self._logger.debug(f"Making a GET call for url: {url} to Jira")
                 async with self._get_session().get(  # pyright: ignore
                     url=url,
                     ssl=self.ssl_ctx,
@@ -448,6 +451,9 @@ class JiraDataSource(BaseDataSource):
         return document
 
     async def _user_information_list(self, key):
+        self._logger.info(
+            f"Fetching users who has read access to the project key: {key.split('=')[1]}"
+        )
         start_at = 0
         while True:
             async for users in self.jira_client.api_call(
@@ -466,6 +472,7 @@ class JiraDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
+        self._logger.debug(f"Fetching permissions for project key: {project['key']}")
         access_control = set()
         async for actors in self._user_information_list(
             key=f"projectKey={project['key']}"
@@ -492,18 +499,23 @@ class JiraDataSource(BaseDataSource):
         return list(access_control)
 
     async def _issue_security_level(self, issue_key):
+        self._logger.debug(f"Fetching issue security level for issue: {issue_key}")
         async for response in self.jira_client.api_call(
             url_name=ISSUE_SECURITY_LEVEL, issue_key=issue_key
         ):
             yield await response.json()
 
     async def _issue_security_level_members(self, level_id):
+        self._logger.debug(f"Fetching members for issue security level: {level_id}")
         async for response in self.jira_client.paginated_api_call(
             url_name=SECURITY_LEVEL_MEMBERS, level_id=level_id
         ):
             yield response
 
     async def _project_role_members(self, project, role_id, access_control):
+        self._logger.debug(
+            f"Fetching users and groups of the project role ID: {role_id} for project key: {project['key']}"
+        )
         async for actor_response in self.jira_client.api_call(
             url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
             project_key=project["key"],
@@ -541,6 +553,9 @@ class JiraDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
+        self._logger.info(
+            f"Fetching users who has read access to an issue: {issue_key} of project: {project['key']}"
+        )
         access_control = set()
         if self.jira_client.data_source_type != JIRA_CLOUD:
             async for actors in self._user_information_list(
@@ -622,7 +637,8 @@ class JiraDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        self._logger.info("Fetching all users")
+        self._logger.info("Fetching all users for Access Control sync")
+
         users_endpoint = (
             URLS[USERS]
             if self.jira_client.data_source_type == JIRA_CLOUD
@@ -677,6 +693,9 @@ class JiraDataSource(BaseDataSource):
         """
         file_size = int(attachment["size"])
         if not (doit and file_size > 0):
+            self._logger.debug(
+                f"Skipping download for {attachment['filename']} as the file size is 0"
+            )
             return
 
         filename = attachment["filename"]
@@ -686,8 +705,12 @@ class JiraDataSource(BaseDataSource):
             filename,
             file_size,
         ):
+            self._logger.debug(
+                f"Skipping download for {filename} as the file extension {file_extension} is not supported"
+            )
             return
 
+        self._logger.info(f"Downloading content for file: {filename}")
         download_url = (
             ATTACHMENT_CLOUD
             if self.jira_client.data_source_type == JIRA_CLOUD
@@ -730,6 +753,8 @@ class JiraDataSource(BaseDataSource):
         """
         if self.jira_client.projects == ["*"]:
             return
+
+        self._logger.info("Verifying the configured projects")
         project_keys = []
         try:
             async for response in self.jira_client.api_call(url_name=PROJECT):
@@ -784,11 +809,13 @@ class JiraDataSource(BaseDataSource):
                 when=datetime.now(pytz.timezone(timezone))  # pyright: ignore
             )
             if self.jira_client.projects == ["*"]:
+                self._logger.info("Fetching all Jira projects")
                 async for response in self.jira_client.api_call(url_name=PROJECT):
                     response = await response.json()
                     for project in response:
                         await self._put_projects(project=project, timestamp=timestamp)
             else:
+                self._logger.info("Fetching the configured Jira projects")
                 for project_key in self.jira_client.projects:
                     async for response in self.jira_client.api_call(
                         url_name=PROJECT_BY_KEY, key=project_key
@@ -872,6 +899,12 @@ class JiraDataSource(BaseDataSource):
             wildcard_query if self.jira_client.projects == ["*"] else projects_query
         )
 
+        info_msg = (
+            f"Fetching Jira issues for JQL query: {jql}"
+            if jql
+            else "Fetching all Jira issues"
+        )
+        self._logger.info(info_msg)
         async for response in self.jira_client.paginated_api_call(
             url_name=ISSUES, jql=jql
         ):
@@ -887,6 +920,7 @@ class JiraDataSource(BaseDataSource):
             attachments (list): List of attachments for an issue
             issue_key (str): Issue key for generating `_id` field
         """
+        self._logger.info(f"Fetching attachments for issue: {issue_key}")
         for attachment in attachments:
             document = {
                 "_id": f"{issue_key}-{attachment['id']}",
