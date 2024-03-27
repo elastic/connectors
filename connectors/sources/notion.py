@@ -8,13 +8,13 @@ import asyncio
 import os
 from copy import copy
 from functools import cached_property, partial
+from typing import Any, Awaitable, Callable
 from urllib.parse import unquote
 
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
 from notion_client import APIResponseError, AsyncClient
-from notion_client.helpers import async_iterate_paginated_api
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -28,7 +28,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 BASE_URL = "https://api.notion.com"
-MAX_CONCURRENT_CLIENT_SUPPORT = 3
+MAX_CONCURRENT_CLIENT_SUPPORT = 30
 
 
 if "OVERRIDE_URL" in os.environ:
@@ -96,6 +96,46 @@ class NotionClient:
             else:
                 raise
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=NotFound,
+    )
+    async def fetch_results(
+        self, function: Callable[..., Awaitable[Any]], next_cursor=None, **kwargs: Any
+    ):
+        try:
+            return await function(start_cursor=next_cursor, **kwargs)
+        except APIResponseError as exception:
+            if exception.code == "rate_limited" or exception.status == 429:
+                retry_after = (
+                    exception.headers.get("retry-after") or DEFAULT_RETRY_SECONDS
+                )
+                request_info = f"Request: {function.__name__} (next_cursor: {next_cursor}, kwargs: {kwargs})"
+                self._logger.info(
+                    f"Connector will attempt to retry after {int(retry_after)} seconds. {request_info}"
+                )
+                await self._sleeps.sleep(int(retry_after))
+                msg = "Rate limit exceeded."
+                raise Exception(msg) from exception
+            else:
+                raise
+
+    async def async_iterate_paginated_api(
+        self, function: Callable[..., Awaitable[Any]], **kwargs: Any
+    ):
+        """Return an async iterator over the results of any paginated Notion API."""
+        next_cursor = kwargs.pop("start_cursor", None)
+        while True:
+            response = await self.fetch_results(function, next_cursor, **kwargs)
+            if response:
+                for result in response.get("results"):
+                    yield result
+                next_cursor = response.get("next_cursor")
+                if not response["has_more"] or next_cursor is None:
+                    return
+
     async def fetch_owner(self):
         """Fetch integration authorized owner"""
         await self._get_client.users.me()
@@ -111,7 +151,7 @@ class NotionClient:
         """Iterate over user information retrieved from the API.
         Yields:
         dict: User document information excluding bots."""
-        async for user_document in async_iterate_paginated_api(
+        async for user_document in self.async_iterate_paginated_api(
             self._get_client.users.list
         ):
             if user_document.get("type") != "bot":
@@ -126,7 +166,7 @@ class NotionClient:
 
         async def fetch_children_recursively(block):
             if block.get("has_children") is True:
-                async for child_block in async_iterate_paginated_api(
+                async for child_block in self.async_iterate_paginated_api(
                     self._get_client.blocks.children.list, block_id=block.get("id")
                 ):
                     yield child_block
@@ -136,7 +176,7 @@ class NotionClient:
                     ):  # pyright: ignore
                         yield grandchild
 
-        async for block in async_iterate_paginated_api(
+        async for block in self.async_iterate_paginated_api(
             self._get_client.blocks.children.list, block_id=block_id
         ):
             if block.get("type") not in ["child_database", "child_page", "unsupported"]:
@@ -149,7 +189,7 @@ class NotionClient:
                     yield record
 
     async def fetch_by_query(self, query):
-        async for document in async_iterate_paginated_api(
+        async for document in self.async_iterate_paginated_api(
             self._get_client.search, **query
         ):
             yield document
@@ -158,7 +198,7 @@ class NotionClient:
                     yield database
 
     async def fetch_comments(self, block_id):
-        async for block_comment in async_iterate_paginated_api(
+        async for block_comment in self.async_iterate_paginated_api(
             self._get_client.comments.list, block_id=block_id
         ):
             yield block_comment
@@ -166,7 +206,7 @@ class NotionClient:
     async def query_database(self, database_id, body=None):
         if body is None:
             body = {}
-        async for result in async_iterate_paginated_api(
+        async for result in self.async_iterate_paginated_api(
             self._get_client.databases.query, database_id=database_id, **body
         ):
             yield result
@@ -248,7 +288,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
         page_title = []
         database_title = []
         query = {"filter": {"property": "object", "value": "database"}}
-        async for document in async_iterate_paginated_api(
+        async for document in self.source.notion_client.async_iterate_paginated_api(
             self.source.notion_client._get_client.search, **query
         ):
             databases.append(document.get("id").replace("-", ""))
@@ -287,7 +327,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
                         is_valid=False,
                         validation_message=str(error),
                     )
-            self._logger.info("Remote validation successful")
+        self._logger.info("Remote validation successful")
         return SyncRuleValidationResult.valid_result(
             SyncRuleValidationResult.ADVANCED_RULES
         )
@@ -423,7 +463,7 @@ class NotionDataSource(BaseDataSource):
                 "value": False,
             },
             "concurrent_downloads": {
-                "default_value": 20,
+                "default_value": 30,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
                 "order": 5,
