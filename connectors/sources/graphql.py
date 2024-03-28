@@ -123,27 +123,27 @@ class GraphQLClient:
             dictionary/list: Documents from the response
         """
         for keys in self.graphql_object_list:
-            duplicate_data = data
+            current_level_data = data
             key_list = keys.split(".")
 
             for key in key_list:
-                if isinstance(duplicate_data, dict):
-                    if key not in duplicate_data.keys():
+                if isinstance(current_level_data, dict):
+                    if key not in current_level_data.keys():
                         msg = (
                             f"{key} not found in the response. Please check the query."
                         )
                         raise ConfigurableFieldValueError(msg)
-                    duplicate_data = duplicate_data.get(key, {})
+                    current_level_data = current_level_data.get(key, {})
                 else:
                     msg = "Found list while processing GraphQL Objects List. Please check the query and provide path upto dictionary."
                     raise ConfigurableFieldValueError(msg)
 
-            if isinstance(duplicate_data, dict):
-                if duplicate_data:
-                    yield duplicate_data
+            if isinstance(current_level_data, dict):
+                if current_level_data:
+                    yield current_level_data
 
-            if isinstance(duplicate_data, list):
-                for doc in duplicate_data:
+            if isinstance(current_level_data, list):
+                for doc in current_level_data:
                     yield doc
 
     def extract_pagination_info(self, data):
