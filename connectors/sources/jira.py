@@ -693,9 +693,6 @@ class JiraDataSource(BaseDataSource):
         """
         file_size = int(attachment["size"])
         if not (doit and file_size > 0):
-            self._logger.debug(
-                f"Skipping download for {attachment['filename']} as the file size is 0"
-            )
             return
 
         filename = attachment["filename"]
@@ -751,7 +748,9 @@ class JiraDataSource(BaseDataSource):
         if self.jira_client.projects == ["*"]:
             return
 
-        self._logger.info(f"Verifying the configured projects: {self.jira_client.projects}")
+        self._logger.info(
+            f"Verifying the configured projects: {self.jira_client.projects}"
+        )
         project_keys = []
         try:
             async for response in self.jira_client.api_call(url_name=PROJECT):
@@ -812,7 +811,9 @@ class JiraDataSource(BaseDataSource):
                     for project in response:
                         await self._put_projects(project=project, timestamp=timestamp)
             else:
-                self._logger.info(f"Fetching user configured Jira projects: {self.jira_client.projects}")
+                self._logger.info(
+                    f"Fetching user configured Jira projects: {self.jira_client.projects}"
+                )
                 for project_key in self.jira_client.projects:
                     async for response in self.jira_client.api_call(
                         url_name=PROJECT_BY_KEY, key=project_key
