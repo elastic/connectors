@@ -169,7 +169,7 @@ class GraphQLClient:
 
             return has_next_page, end_cursor, pagination_key_path[-1]
         else:
-            msg = "Pagination is enabled but pageInfo field is missing with hasNextPage and endCursor in the query, please add pageInfo field and add hasNextPage and endCursor inside it."
+            msg = "Pagination is enabled but the query is missing 'pageInfo'. Please include 'pageInfo { hasNextPage endCursor }' in the query to support pagination."
             raise ConfigurableFieldValueError(msg)
 
     def validate_query(self, graphql_query, visitor):
@@ -179,7 +179,7 @@ class GraphQLClient:
             {"after"}.issubset(set(visitor.fields_dict.get(graphql_object, [])))
             and "pageInfo" in visitor.fields_dict.keys()
         ):
-            msg = f"Pagination is enabled but pageInfo not found. Please add pageInfo field inside {graphql_object} and after argument in {graphql_object}."
+            msg = f"Pagination is enabled but 'pageInfo' not found. Please include 'pageInfo' field inside '{graphql_object}' and 'after' argument in '{graphql_object}'."
             raise ConfigurableFieldValueError(msg)
 
     async def paginated_call(self, graphql_query):
@@ -306,13 +306,13 @@ class GraphQLDataSource(BaseDataSource):
         """
         return {
             "http_endpoint": {
-                "label": "HTTP URL & Endpoint",
+                "label": "GraphQL HTTP endpoint",
                 "order": 1,
                 "type": "str",
             },
             "http_method": {
                 "display": "dropdown",
-                "label": "GET/POST",
+                "label": "HTTP method for GraphQL requests",
                 "options": [
                     {"label": "GET", "value": "get"},
                     {"label": "POST", "value": "post"},
@@ -437,7 +437,7 @@ class GraphQLDataSource(BaseDataSource):
         await super().validate_config()
 
         if not self.validate_endpoints():
-            msg = "HTTP URL & Endpoint are not structured."
+            msg = "GraphQL HTTP endpoint is not a valid URL."
             raise ConfigurableFieldValueError(msg)
 
         if not self.is_query(graphql_query=self.graphql_client.graphql_query):
