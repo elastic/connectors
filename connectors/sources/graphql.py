@@ -28,6 +28,13 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 
+BASIC = "basic"
+BEARER = "bearer"
+CURSOR_PAGINATION = "cursor_pagination"
+GET = "get"
+NO_PAGINATION = "no_pagination"
+POST = "post"
+
 # Regular expression to validate the Base URL
 URL_REGEX = "^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
 
@@ -84,7 +91,7 @@ class GraphQLClient:
     @cached_property
     def session(self):
         timeout = aiohttp.ClientTimeout(total=self.configuration["connection_timeout"])
-        if self.authentication_method == "bearer":
+        if self.authentication_method == BEARER:
             self.headers.update(
                 {
                     "Authorization": f"Bearer {self.configuration['token']}",
@@ -95,7 +102,7 @@ class GraphQLClient:
                 timeout=timeout,
                 raise_for_status=True,
             )
-        elif self.authentication_method == "basic":
+        elif self.authentication_method == BASIC:
             basic_auth = aiohttp.BasicAuth(
                 login=self.configuration["username"],
                 password=self.configuration["password"],
@@ -183,7 +190,7 @@ class GraphQLClient:
             raise ConfigurableFieldValueError(msg)
 
     async def paginated_call(self, graphql_query):
-        if self.pagination_model == "cursor_pagination":
+        if self.pagination_model == CURSOR_PAGINATION:
             ast = parse(graphql_query)  # pyright: ignore
             visitor = FieldVisitor()
             visit(ast, visitor)  # pyright: ignore
@@ -191,7 +198,7 @@ class GraphQLClient:
             self.validate_query(graphql_query, visitor)
             while True:
                 self._logger.debug(
-                    f"Fetching document with variables: {self.variables} and query: {graphql_query}."
+                    f"Fetching document with variables: {self.variables}."
                 )
 
                 has_new_page = False
@@ -221,7 +228,7 @@ class GraphQLClient:
     )
     async def make_request(self, graphql_query):
         try:
-            if self.http_method == "get":
+            if self.http_method == GET:
                 return await self.get(graphql_query=graphql_query)
             else:
                 return await self.post(graphql_query=graphql_query)
@@ -314,40 +321,40 @@ class GraphQLDataSource(BaseDataSource):
                 "display": "dropdown",
                 "label": "GET/POST",
                 "options": [
-                    {"label": "GET", "value": "get"},
-                    {"label": "POST", "value": "post"},
+                    {"label": "GET", "value": GET},
+                    {"label": "POST", "value": POST},
                 ],
                 "order": 2,
                 "type": "str",
-                "value": "POST",
+                "value": POST,
             },
             "authentication_method": {
                 "display": "dropdown",
                 "label": "Authentication Method",
                 "options": [
                     {"label": "No Auth", "value": "none"},
-                    {"label": "Basic Auth", "value": "basic"},
-                    {"label": "Bearer Token", "value": "bearer"},
+                    {"label": "Basic Auth", "value": BASIC},
+                    {"label": "Bearer Token", "value": BEARER},
                 ],
                 "order": 3,
                 "type": "str",
                 "value": "none",
             },
             "username": {
-                "depends_on": [{"field": "authentication_method", "value": "basic"}],
+                "depends_on": [{"field": "authentication_method", "value": BASIC}],
                 "label": "Username",
                 "order": 4,
                 "type": "str",
             },
             "password": {
-                "depends_on": [{"field": "authentication_method", "value": "basic"}],
+                "depends_on": [{"field": "authentication_method", "value": BASIC}],
                 "label": "Password",
                 "order": 5,
                 "sensitive": True,
                 "type": "str",
             },
             "token": {
-                "depends_on": [{"field": "authentication_method", "value": "bearer"}],
+                "depends_on": [{"field": "authentication_method", "value": BEARER}],
                 "label": "Bearer Token",
                 "order": 6,
                 "sensitive": True,
@@ -360,7 +367,7 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
             },
             "graphql_variables": {
-                "depends_on": [{"field": "http_method", "value": "post"}],
+                "depends_on": [{"field": "http_method", "value": POST}],
                 "display": "textarea",
                 "label": "Graphql Variables",
                 "order": 8,
@@ -383,17 +390,17 @@ class GraphQLDataSource(BaseDataSource):
                 "display": "dropdown",
                 "label": "Pagination model",
                 "options": [
-                    {"label": "No pagination", "value": "no_pagination"},
-                    {"label": "Cursor-based pagination", "value": "cursor_pagination"},
+                    {"label": "No pagination", "value": NO_PAGINATION},
+                    {"label": "Cursor-based pagination", "value": CURSOR_PAGINATION},
                 ],
                 "order": 11,
                 "tooltip": "Cursor based pagination requires 'pageInfo' field along with argument 'after' for objects mentioned in 'GraphQL Objects List'. It also requires variable for 'after' argument.",
                 "type": "str",
-                "value": "none",
+                "value": NO_PAGINATION,
             },
             "pagination_key": {
                 "depends_on": [
-                    {"field": "pagination_model", "value": "cursor_pagination"}
+                    {"field": "pagination_model", "value": CURSOR_PAGINATION}
                 ],
                 "label": "Pagination key",
                 "order": 12,
@@ -441,7 +448,7 @@ class GraphQLDataSource(BaseDataSource):
             raise ConfigurableFieldValueError(msg)
 
         if not self.is_query(graphql_query=self.graphql_client.graphql_query):
-            msg = "Configured Query is not supported by the connector."
+            msg = "The configured query is either invalid or a mutation which is not supported by the connector."
             raise ConfigurableFieldValueError(msg)
 
         headers = self.graphql_client.configuration["headers"]
@@ -480,7 +487,7 @@ class GraphQLDataSource(BaseDataSource):
                     yield document
 
     async def fetch_data(self, graphql_query):
-        if self.graphql_client.pagination_model == "no_pagination":
+        if self.graphql_client.pagination_model == NO_PAGINATION:
             data = await self.graphql_client.make_request(graphql_query=graphql_query)
             for documents in self.graphql_client.extract_graphql_data_items(data=data):
                 for document in self.yield_dict(documents):
