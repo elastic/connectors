@@ -704,7 +704,7 @@ class JiraDataSource(BaseDataSource):
         ):
             return
 
-        self._logger.info(f"Downloading content for file: {filename}")
+        self._logger.debug(f"Downloading content for file: {filename}")
         download_url = (
             ATTACHMENT_CLOUD
             if self.jira_client.data_source_type == JIRA_CLOUD
