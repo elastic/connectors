@@ -750,3 +750,22 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
                 advanced_rules
             )
         assert validation_result == expected_validation_result
+
+
+@pytest.mark.asyncio
+async def test_fetch_child_blocks_with_not_found_object(caplog):
+    block_id = "block_id"
+    caplog.set_level("WARNING")
+    with patch(
+        "connectors.sources.notion.async_iterate_paginated_api",
+        side_effect=APIResponseError(
+            code="object_not_found",
+            message="Object Not Found",
+            response=Response(status_code=404, text="Object Not Found"),
+        ),
+    ):
+        async with create_source(
+            NotionDataSource, notion_secret_key="secret_key"
+        ) as source:
+            async for _ in source.notion_client.fetch_child_blocks(block_id):
+                assert "Object not found" in caplog.text

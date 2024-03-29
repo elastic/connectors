@@ -156,7 +156,7 @@ class NotionClient:
             if error.code == "object_not_found":
                 self._logger.warning(f"Object not found: {error}")
             else:
-                self._logger.info(f"API response error: {error}")
+                self._logger.exception(f"API response error: {error}")
                 raise
 
     async def fetch_by_query(self, query):
