@@ -216,9 +216,9 @@ class JiraClient:
         url = url_kwargs.get("url") or parse.urljoin(
             self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
         )
+        self._logger.debug(f"Making a GET call for url: {url} to Jira")
         while True:
             try:
-                self._logger.debug(f"Making a GET call for url: {url} to Jira")
                 async with self._get_session().get(  # pyright: ignore
                     url=url,
                     ssl=self.ssl_ctx,
@@ -452,7 +452,7 @@ class JiraDataSource(BaseDataSource):
 
     async def _user_information_list(self, key):
         self._logger.info(
-            f"Fetching users who have read access to the project key: {key.split('=')[1]}"
+            f"Fetching users who have read access to the project/issue key: {key.split('=')[1]}"
         )
         start_at = 0
         while True:
@@ -966,6 +966,10 @@ class JiraDataSource(BaseDataSource):
         """
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
+
+            self._logger.info(
+                f"Fetching jira content using advanced sync rules: {advanced_rules}"
+            )
 
             for rule in advanced_rules:
                 await self.fetchers.put(
