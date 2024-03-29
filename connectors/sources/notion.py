@@ -136,17 +136,28 @@ class NotionClient:
                     ):  # pyright: ignore
                         yield grandchild
 
-        async for block in async_iterate_paginated_api(
-            self._get_client.blocks.children.list, block_id=block_id
-        ):
-            if block.get("type") not in ["child_database", "child_page", "unsupported"]:
-                yield block
-                if block.get("has_children") is True:
-                    async for child in fetch_children_recursively(block):
-                        yield child
-            if block.get("type") == "child_database":
-                async for record in self.query_database(block.get("id")):
-                    yield record
+        try:
+            async for block in async_iterate_paginated_api(
+                self._get_client.blocks.children.list, block_id=block_id
+            ):
+                if block.get("type") not in [
+                    "child_database",
+                    "child_page",
+                    "unsupported",
+                ]:
+                    yield block
+                    if block.get("has_children") is True:
+                        async for child in fetch_children_recursively(block):
+                            yield child
+                if block.get("type") == "child_database":
+                    async for record in self.query_database(block.get("id")):
+                        yield record
+        except APIResponseError as error:
+            if error.code == "object_not_found":
+                self._logger.warning(f"Object not found: {error}")
+            else:
+                self._logger.info(f"API response error: {error}")
+                raise
 
     async def fetch_by_query(self, query):
         async for document in async_iterate_paginated_api(
