@@ -1,3 +1,4 @@
+[![Build status](https://badge.buildkite.com/a1319036cb613e63515320f44b187cd233771715c811d3dc7a.svg)](https://buildkite.com/elastic/connectors)
 # Elastic connectors
 
 <img width="250" alt="search-icon" src="https://github.com/elastic/connectors/assets/32779855/2f594d89-7369-4c49-994a-1d67eefce436">
