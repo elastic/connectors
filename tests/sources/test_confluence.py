@@ -704,6 +704,23 @@ async def test_search_by_query():
 
 
 @pytest.mark.asyncio
+async def test_search_by_query_for_datacenter():
+    async with create_confluence_source() as source:
+        async_response = AsyncMock()
+        source.confluence_client.data_source_type = "confluence_data_center"
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
+        )
+        documents = []
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for response, _ in source.search_by_query(
+                query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
+            ):
+                documents.append(response)
+        assert documents == EXPECTED_SEARCH_RESULT
+
+
+@pytest.mark.asyncio
 async def test_download_attachment():
     # Setup
     async with create_confluence_source() as source:

@@ -46,6 +46,7 @@ DOWNLOAD = "download"
 SEARCH = "search"
 USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
+SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
@@ -59,6 +60,7 @@ URLS = {
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
+    SEARCH_FOR_DATA_CENTER: "rest/api/search?cql={query}&start={start}",
     USER: "rest/api/3/users/search",
     USERS_FOR_DATA_CENTER: "rest/api/user/list?limit={limit}&start={start}",
     USERS_FOR_SERVER: "rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt={start}&maxResults={limit}",
@@ -204,6 +206,34 @@ class ConfluenceClient:
                         self.host_url,
                         links.get("next")[1:],
                     )
+            except Exception as exception:
+                self._logger.warning(
+                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
+                )
+                break
+
+    async def paginated_api_call_for_datacenter_syncrule(self, url_name, **url_kwargs):
+        """Make a paginated API call for datacenter using the passed url_name.
+        Args:
+            url_name (str): URL Name to identify the API endpoint to hit
+        Yields:
+            response: JSON response.
+        """
+        while True:
+            url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
+            json_response = {}
+            try:
+                async for response in self.api_call(
+                    url=url,
+                ):
+                    json_response = await response.json()
+                    yield json_response
+
+                    start = url_kwargs.get("start", 0)
+                    start += 100
+                    url_kwargs["start"] = start
+                if len(json_response.get("results", [])) < 100:
+                    break
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
@@ -809,10 +839,20 @@ class ConfluenceDataSource(BaseDataSource):
                 }, attachment["_links"]["download"]
 
     async def search_by_query(self, query):
-        async for response in self.confluence_client.paginated_api_call(
-            url_name=SEARCH,
-            query=f"{query}&{SEARCH_QUERY}",
-        ):
+        if self.confluence_client.data_source_type == CONFLUENCE_DATA_CENTER:
+            search_documents = (
+                self.confluence_client.paginated_api_call_for_datacenter_syncrule(
+                    url_name=SEARCH_FOR_DATA_CENTER,
+                    query=f"{query}&{SEARCH_QUERY}",
+                    start=0,
+                )
+            )
+        else:
+            search_documents = self.confluence_client.paginated_api_call(
+                url_name=SEARCH,
+                query=f"{query}&{SEARCH_QUERY}",
+            )
+        async for response in search_documents:
             results = response.get("results", [])
             for entity in results:
                 # entity can be space or content
