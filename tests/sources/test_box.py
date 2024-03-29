@@ -12,7 +12,7 @@ from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.source import ConfigurableFieldValueError
-from connectors.sources.box import BoxDataSource, NotFound, TokenError
+from connectors.sources.box import FINISHED, BoxDataSource, NotFound, TokenError
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -149,15 +149,15 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
-def get_json_mock(MOCK_RESPONSE, status):
+def get_json_mock(mock_response, status):
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(
-        return_value=JSONAsyncMock(json=MOCK_RESPONSE, status=status)
+        return_value=JSONAsyncMock(json=mock_response, status=status)
     )
     return async_mock
 
 
-def side_effect_function(url, headers, params):
+def client_get_mock_func(url, headers, params):
     if params is not None:
         if params.get("offset") == 0 and "/2.0/folders/220376481442/items" in url:
             return JSONAsyncMock(json=FOLDER_ITEMS, status=200)
@@ -170,7 +170,7 @@ def side_effect_function(url, headers, params):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["client_id", "client_secret", "refresh_token"])
-async def test_validate_config_missing_fields_then_raise(field):
+async def test_validate_config_raise_on_missing_fields(field):
     async with create_source(BoxDataSource) as source:
         source.configuration.set_field(name=field, value="")
 
@@ -207,7 +207,7 @@ async def test_set_access_token(box_account):
 
 
 @pytest.mark.asyncio
-async def test_set_access_token_when_tokenerror():
+async def test_set_access_token_raise_token_error_on_exception():
     async with create_source(BoxDataSource) as source:
         with patch("aiohttp.ClientSession.post", side_effect=Exception):
             with pytest.raises(TokenError):
@@ -225,7 +225,7 @@ async def test_set_access_token_when_tokenerror():
         (429, Exception),
     ],
 )
-async def test_get_clientresponseerror(
+async def test_client_get_raise_exception_on_response_error(
     mock_time_to_sleep_between_retries, status_code, exception
 ):
     async with create_source(BoxDataSource) as source:
@@ -262,7 +262,9 @@ async def test_ping_with_successful_connection():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries")
-async def test_ping_with_unsuccessful_connection(mock_time_to_sleep_between_retries):
+async def test_ping_raises_on_unsuccessful_connection(
+    mock_time_to_sleep_between_retries,
+):
     async with create_source(BoxDataSource) as source:
         mock_time_to_sleep_between_retries.return_value = 0
         source.client.token.get = AsyncMock(side_effect=Exception())
@@ -299,8 +301,8 @@ async def test_get_content(attachment, doit, expected_content):
 
 
 @pytest.mark.asyncio
-async def test_get_consumer():
-    MOCK_FOLDER_DOC = {
+async def test_consumer_processes_queue_items():
+    mock_folder = {
         "type": "folder",
         "etag": "0",
         "name": "My Box Notes",
@@ -309,7 +311,7 @@ async def test_get_consumer():
         "_timestamp": "2023-08-18T00:59:46-07:00",
     }
 
-    MOCK_FILE_DOC = {
+    mock_file = {
         "type": "file",
         "etag": "0",
         "name": "dummy.pdf",
@@ -319,16 +321,16 @@ async def test_get_consumer():
     }
     async with create_source(BoxDataSource) as source:
         source.tasks = 2
-        await source.queue.put((MOCK_FILE_DOC, None))
-        await source.queue.put(("FINISHED"))
-        await source.queue.put((MOCK_FOLDER_DOC, None))
-        await source.queue.put(("FINISHED"))
+        await source.queue.put((mock_file, None))
+        await source.queue.put(FINISHED)
+        await source.queue.put((mock_folder, None))
+        await source.queue.put(FINISHED)
 
         items = []
         async for item, _ in source._consumer():
             items.append(item)
 
-        assert items == [MOCK_FILE_DOC, MOCK_FOLDER_DOC]
+        assert items == [mock_file, mock_folder]
 
 
 @pytest.mark.asyncio
@@ -355,7 +357,7 @@ async def test_fetch():
     ]
     async with create_source(BoxDataSource) as source:
         source.client.token.get = AsyncMock()
-        source.client._http_session.get = AsyncMock(side_effect=side_effect_function)
+        source.client._http_session.get = AsyncMock(side_effect=client_get_mock_func)
         await source._fetch("0")
         while not source.queue.empty():
             _, doc = await source.queue.get()
@@ -368,7 +370,9 @@ async def test_fetch():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries")
-async def test_fetch_negative(mock_time_to_sleep_between_retries):
+async def test_fetch_returns_none_on_client_exception(
+    mock_time_to_sleep_between_retries,
+):
     async with create_source(BoxDataSource) as source:
         mock_time_to_sleep_between_retries.return_value = Mock()
         source.client.token.get = AsyncMock(side_effect=Exception())
@@ -401,7 +405,7 @@ async def test_get_docs():
         source._fetch = AsyncMock()
         await source.queue.put((expected_response[0], None))
         await source.queue.put((expected_response[1], None))
-        await source.queue.put(("FINISHED"))
+        await source.queue.put(FINISHED)
 
         async for doc, _ in source.get_docs():
             actual_response.append(doc)
