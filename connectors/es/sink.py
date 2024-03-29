@@ -58,10 +58,13 @@ OP_UPSERT = "update"
 OP_DELETE = "delete"
 CANCELATION_TIMEOUT = 5
 
+# Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
+SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
 
-def get_mb_size(ob):
+
+def get_mib_size(obj):
     """Returns the size of ob in MiB"""
-    return round(get_size(ob) / (1024 * 1024), 2)
+    return round(get_size(obj) / (1024 * 1024), 2)
 
 
 class UnsupportedJobType(Exception):
@@ -110,6 +113,7 @@ class Sink:
         max_retries,
         retry_interval,
         logger_=None,
+        enable_bulk_operations_logging=False,
     ):
         self.client = client
         self.queue = queue
@@ -125,6 +129,7 @@ class Sink:
         self.deleted_document_count = 0
         self._logger = logger_ or logger
         self._canceled = False
+        self._enable_bulk_operations_logging = enable_bulk_operations_logging
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -156,11 +161,15 @@ class Sink:
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
-                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mb_size(operations)}MiB"
+                f"Task {task_num} - Sending a batch of {len(operations)} ops -- {get_mib_size(operations)}MiB"
             )
 
         # TODO: retry 429s for individual items here
         res = await self.client.bulk_insert(operations, self.pipeline["name"])
+
+        if self._enable_bulk_operations_logging:
+            await self._log_bulk_operations(res)
+
         if res.get("errors"):
             for item in res["items"]:
                 for op, data in item.items():
@@ -171,6 +180,48 @@ class Sink:
         self._populate_stats(stats, res)
 
         return res
+
+    async def _log_bulk_operations(self, res):
+        for item in res.get("items", []):
+            if "index" in item:
+                action_item = "index"
+            elif "delete" in item:
+                action_item = "delete"
+            elif "create" in item:
+                action_item = "create"
+            elif "update" in item:
+                action_item = "update"
+            else:
+                # Should only happen, if the _bulk API changes
+                # Unlikely, but as this functionality could be used for audits we want to detect changes fast
+                self._logger.error(
+                    f"Unknown action item returned from _bulk API for item {item}"
+                )
+                continue
+
+            doc_id = item[action_item].get("_id")
+            if doc_id is None:
+                # Should only happen, if the _bulk API changes
+                # Unlikely, but as this functionality could be used for audits we want to detect changes fast
+                self._logger.error(f"Could not retrieve '_id' for document {item}")
+                continue
+
+            result = item[action_item].get("result")
+            successful_result = result in SUCCESSFUL_RESULTS
+
+            if not successful_result:
+                if "error" in item[action_item]:
+                    self._logger.debug(
+                        f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
+                    )
+                else:
+                    self._logger.debug(
+                        f"Executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
+                    )
+            else:
+                self._logger.debug(
+                    f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"
+                )
 
     def _populate_stats(self, stats, res):
         for item in res["items"]:
@@ -490,7 +541,7 @@ class Extractor:
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
-                f"Size of ids in memory is {get_mb_size(existing_ids)}MiB"
+                f"Size of ids in memory is {get_mib_size(existing_ids)}MiB"
             )
 
         return existing_ids
@@ -576,7 +627,7 @@ class Extractor:
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
-                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mb_size(existing_ids)}MiB"
+                f"Size of {len(existing_ids)} access control document ids  in memory is {get_mib_size(existing_ids)}MiB"
             )
 
         count = 0
@@ -787,6 +838,7 @@ class SyncOrchestrator:
         content_extraction_enabled=True,
         options=None,
         skip_unchanged_documents=False,
+        enable_bulk_operations_logging=False,
     ):
         """Performs a batch of `_bulk` calls, given a generator of documents
 
@@ -858,5 +910,6 @@ class SyncOrchestrator:
             max_retries=max_bulk_retries,
             retry_interval=retry_interval,
             logger_=self._logger,
+            enable_bulk_operations_logging=enable_bulk_operations_logging,
         )
         self._sink_task = asyncio.create_task(self._sink.run())

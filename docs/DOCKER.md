@@ -37,7 +37,7 @@ cd ~ && mkdir connectors-config
 You can download the file manually, or simply run the command below. Make sure to update the `--output` argument value if your directory name is different, or you want to use a different config file name.
 
 ```sh
-curl https://raw.githubusercontent.com/elastic/connectors/main/config.yml --output ~/connectors-config/config.yml
+curl https://raw.githubusercontent.com/elastic/connectors/main/config.yml.example --output ~/connectors-config/config.yml
 ```
 
 ## 4. Update the configuration file for your [self-managed connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)

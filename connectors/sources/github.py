@@ -37,6 +37,8 @@ WILDCARD = "*"
 BLOB = "blob"
 GITHUB_CLOUD = "github_cloud"
 GITHUB_SERVER = "github_server"
+PERSONAL_ACCESS_TOKEN = "personal_access_token"  # noqa: S105
+GITHUB_APP = "github_app"
 PULL_REQUEST_OBJECT = "pullRequest"
 REPOSITORY_OBJECT = "repository"
 
@@ -1014,7 +1016,7 @@ class GitHubDataSource(BaseDataSource):
         return {
             "data_source": {
                 "display": "dropdown",
-                "label": "GitHub data source",
+                "label": "Data source",
                 "options": [
                     {"label": "GitHub Cloud", "value": GITHUB_CLOUD},
                     {"label": "GitHub Server", "value": GITHUB_SERVER},
@@ -1025,13 +1027,27 @@ class GitHubDataSource(BaseDataSource):
             },
             "host": {
                 "depends_on": [{"field": "data_source", "value": GITHUB_SERVER}],
-                "label": "GitHub URL",
+                "label": "Server URL",
                 "order": 2,
                 "type": "str",
             },
-            "token": {
-                "label": "GitHub Token",
+            "auth_method": {
+                "display": "dropdown",
+                "label": "Authentication method",
+                "options": [
+                    {"label": "Personal access token", "value": PERSONAL_ACCESS_TOKEN},
+                    {"label": "GitHub App", "value": GITHUB_APP},
+                ],
                 "order": 3,
+                "type": "str",
+                "value": PERSONAL_ACCESS_TOKEN,
+            },
+            "token": {
+                "depends_on": [
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN}
+                ],
+                "label": "Token",
+                "order": 4,
                 "sensitive": True,
                 "type": "str",
             },
@@ -1042,42 +1058,60 @@ class GitHubDataSource(BaseDataSource):
                     {"label": "Organization", "value": "organization"},
                     {"label": "Other", "value": "other"},
                 ],
-                "order": 4,
+                "order": 5,
                 "tooltip": "The Document Level Security feature is not available for the Other Repository Type",
                 "type": "str",
                 "value": "other",
             },
             "org_name": {
-                "depends_on": [{"field": "repo_type", "value": "organization"}],
+                "depends_on": [
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN},
+                    {"field": "repo_type", "value": "organization"},
+                ],
                 "label": "Organization Name",
-                "order": 5,
+                "order": 6,
+                "type": "str",
+            },
+            "app_id": {
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
+                "display": "numeric",
+                "label": "App ID",
+                "order": 7,
+                "type": "int",
+            },
+            "private_key": {
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
+                "display": "textarea",
+                "label": "App private key",
+                "order": 8,
+                "sensitive": True,
                 "type": "str",
             },
             "repositories": {
                 "display": "textarea",
                 "label": "List of repositories",
-                "order": 6,
+                "order": 9,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 7,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 8,
+                "order": 11,
                 "type": "str",
             },
             "retry_count": {
                 "display_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 9,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -1086,7 +1120,7 @@ class GitHubDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 10,
+                "order": 13,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1096,7 +1130,7 @@ class GitHubDataSource(BaseDataSource):
                 "display": "toggle",
                 "depends_on": [{"field": "repo_type", "value": "organization"}],
                 "label": "Enable document level security",
-                "order": 11,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1115,7 +1149,10 @@ class GitHubDataSource(BaseDataSource):
         ):
             return False
 
-        return self.configuration["use_document_level_security"]
+        return (
+            self.configuration["repo_type"] == "organization"
+            and self.configuration["use_document_level_security"]
+        )
 
     async def get_invalid_repos(self):
         try:
