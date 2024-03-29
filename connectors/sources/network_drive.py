@@ -8,6 +8,7 @@
 import asyncio
 import csv
 import os
+from collections import deque
 from functools import cached_property, partial
 from io import BytesIO
 
@@ -57,7 +58,7 @@ GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
 GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
 SECURITY_INFO_DACL = 0x00000004
 
-MAX_CHUNK_SIZE = 65536
+MAX_CHUNK_SIZE = 65536 * 2
 RETRIES = 3
 RETRY_INTERVAL = 2
 
@@ -340,6 +341,64 @@ class NASDataSource(BaseDataSource):
             password=self.password,
             port=self.port,
         )
+
+    def format_document(self, file):
+        file_details = file._dir_info.fields
+        document = {
+            "path": file.path,
+            "size": file_details["end_of_file"].get_value(),
+            "_id": file_details["file_id"].get_value(),
+            "created_at": iso_utc(file_details["creation_time"].get_value()),
+            "_timestamp": iso_utc(file_details["change_time"].get_value()),
+            "type": "file" if file.is_file() else "folder",
+            "title": file.name,
+        }
+        return document
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[SMBOSError, SMBException],
+    )
+    async def traverse_diretory(self, path):
+        self._logger.debug(
+            "Fetching the directory tree from remote server and content of directory on path"
+        )
+
+        stack = deque()
+        stack.append(path)
+
+        while stack:
+            current_path = stack.pop()
+
+            directory_info = []
+            try:
+                directory_info = list(
+                    await asyncio.to_thread(
+                        partial(
+                            smbclient.scandir,
+                            path=current_path,
+                            username=self.username,
+                            password=self.password,
+                            port=self.port,
+                        ),
+                    )
+                )
+            except SMBConnectionClosed as exception:
+                self._logger.exception(
+                    f"Connection got closed. Error {exception}. Registering new session"
+                )
+                await asyncio.to_thread(self.smb_connection.create_connection)
+                raise
+            except (SMBOSError, SMBException) as exception:
+                self._logger.exception(
+                    f"Error while scanning the path {current_path}. Error {exception}"
+                )
+            for file in directory_info:
+                yield self.format_document(file=file)
+                if file.is_dir():
+                    stack.append(file.path)
 
     async def get_directory_details(self):
         self._logger.debug("Fetching the directory tree from remote server")
@@ -717,26 +776,21 @@ class NASDataSource(BaseDataSource):
                 raise InvalidRulesError(msg)
 
             for path in matched_paths:
-                async for file in self.get_files(path=path):
-                    if file["type"] == "folder":
-                        yield file, None
-                    else:
-                        yield file, partial(self.get_content, file)
+                async for document in self.traverse_diretory(path=path):
+                    yield document, partial(self.get_content, document) if document[
+                        "type"
+                    ] == "file" else None
 
         else:
-            paths = await self.get_directory_details()
-            matched_paths = (path for path, _, _ in paths)
             groups_info = {}
             if self.drive_type == WINDOWS and self._dls_enabled():
                 groups_info = await self.fetch_groups_info()
 
-            for path in matched_paths:
-                async for file in self.get_files(path=path):
-                    if file["type"] == "folder":
-                        yield await self._decorate_with_access_control(
-                            file, file.get("path"), file.get("type"), groups_info
-                        ), None
-                    else:
-                        yield await self._decorate_with_access_control(
-                            file, file.get("path"), file.get("type"), groups_info
-                        ), partial(self.get_content, file)
+            async for document in self.traverse_diretory(
+                path=rf"\\{self.server_ip}/{self.drive_path}"
+            ):
+                yield await self._decorate_with_access_control(
+                    document, document["path"], document["type"], groups_info
+                ), partial(self.get_content, document) if document[
+                    "type"
+                ] == "file" else None
