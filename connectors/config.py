@@ -107,6 +107,7 @@ def _default_config():
             "mysql": "connectors.sources.mysql:MySqlDataSource",
             "network_drive": "connectors.sources.network_drive:NASDataSource",
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
+            "opentext_documentum": "connectors.sources.opentext_documentum:OpentextDocumentumDataSource",
             "oracle": "connectors.sources.oracle:OracleDataSource",
             "outlook": "connectors.sources.outlook:OutlookDataSource",
             "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",
