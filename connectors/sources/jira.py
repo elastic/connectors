@@ -216,7 +216,7 @@ class JiraClient:
         url = url_kwargs.get("url") or parse.urljoin(
             self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
         )
-        self._logger.debug(f"Making a GET call for url: {url} to Jira")
+        self._logger.debug(f"Making a GET call for url: {url}")
         while True:
             try:
                 async with self._get_session().get(  # pyright: ignore
@@ -451,9 +451,6 @@ class JiraDataSource(BaseDataSource):
         return document
 
     async def _user_information_list(self, key):
-        self._logger.info(
-            f"Fetching users who have read access to the project/issue key: {key.split('=')[1]}"
-        )
         start_at = 0
         while True:
             async for users in self.jira_client.api_call(
@@ -472,7 +469,9 @@ class JiraDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
-        self._logger.debug(f"Fetching permissions for project key: {project['key']}")
+        self._logger.info(
+            f"Fetching users with read access to '{project['key']}' project"
+        )
         access_control = set()
         async for actors in self._user_information_list(
             key=f"projectKey={project['key']}"
@@ -553,7 +552,7 @@ class JiraDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
-        self._logger.info(
+        self._logger.debug(
             f"Fetching users with read access to issue '{issue_key}' in project '{project['key']}'"
         )
         access_control = set()
@@ -918,7 +917,7 @@ class JiraDataSource(BaseDataSource):
             attachments (list): List of attachments for an issue
             issue_key (str): Issue key for generating `_id` field
         """
-        self._logger.info(f"Fetching attachments for issue: {issue_key}")
+        self._logger.debug(f"Fetching attachments for issue: {issue_key}")
         for attachment in attachments:
             document = {
                 "_id": f"{issue_key}-{attachment['id']}",
