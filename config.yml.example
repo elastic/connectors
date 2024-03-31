@@ -11,9 +11,9 @@
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
 ##    connectors:
-##      - connector_id: changeme # the ID of the connector.
-##        service_type: changeme # The service type of the connector.
-##        api_key: changeme # The Elasticsearch API key used to write data into the content index.
+##      - connector_id: "A8UplY4Bkfbc9q1WZW7m".
+##        service_type: "mysql".
+##        api_key:"Qk1VcmxZNEJrZmJjOXExV2FHN1k6TVYyQVE4bzZSTHlhVDVDdU5EYUtUZw=="
 #connectors: []
 #
 #
@@ -35,7 +35,7 @@
 #
 ## The API key for Elasticsearch connection.
 ##    Using `api_key` is recommended instead of `username`/`password`.
-#elasticsearch.api_key: null
+#elasticsearch.api_key:"Qk1VcmxZNEJrZmJjOXExV2FHN1k6TVYyQVE4bzZSTHlhVDVDdU5EYUtUZw==".
 #
 #
 ##  The username for the Elasticsearch connection.
