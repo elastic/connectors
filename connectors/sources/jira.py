@@ -243,6 +243,9 @@ class JiraClient:
         """
         start_at = 0
 
+        self._logger.info(
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> startAt: 0, maxResults: {FETCH_SIZE} and jql query: {jql}"
+        )
         while True:
             try:
                 url = None
