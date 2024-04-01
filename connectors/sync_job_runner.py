@@ -342,7 +342,9 @@ class SyncJobRunner:
         )
         persisted_stats = {
             "indexed_document_count": ingestion_stats.get("indexed_document_count", 0),
-            "indexed_document_volume": ingestion_stats.get("indexed_document_volume", 0),
+            "indexed_document_volume": ingestion_stats.get(
+                "indexed_document_volume", 0
+            ),
             "deleted_document_count": ingestion_stats.get("deleted_document_count", 0),
         }
 
