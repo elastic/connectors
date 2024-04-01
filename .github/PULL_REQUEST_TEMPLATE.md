@@ -14,7 +14,7 @@ and other team members can understand the reasoning behind the pull request.-->
 items that may help during the review.-->
 
 #### Pre-Review Checklist
-- [ ] this PR does NOT contain changes to `config.yml.example` that commit credentials
+- [ ] this PR does NOT contain credentials of any kind, such as API keys or username/passwords (double check `config.yml.example`)
 - [ ] this PR has a meaningful title
 - [ ] this PR links to all relevant github issues that it fixes or partially addresses
 - [ ] if there is no GH issue, please create it. Each PR should have a link to an issue
