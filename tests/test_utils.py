@@ -44,6 +44,7 @@ from connectors.utils import (
     html_to_text,
     is_expired,
     iterable_batches_generator,
+    nested_get_from_dict,
     next_run,
     retryable,
     shorten_str,
@@ -1055,3 +1056,20 @@ async def test_time_to_sleep_between_retries_invalid_strategy():
         time_to_sleep_between_retries("lalala", 1, 1)
 
     assert e is not None
+
+
+@pytest.mark.parametrize(
+    "dictionary, default, expected",
+    [
+        (None, None, None),
+        ({}, None, None),
+        ({}, "default", "default"),
+        ({"foo": {}}, None, None),
+        ({"foo": {"bar": {}}}, None, None),
+        ({"foo": {"bar": {"baz": "result"}}}, None, "result"),
+    ],
+)
+def test_nested_get_from_dict(dictionary, default, expected):
+    keys = ["foo", "bar", "baz"]
+
+    assert nested_get_from_dict(dictionary, keys, default=default) == expected

@@ -29,6 +29,7 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
+    nested_get_from_dict,
     retryable,
     ssl_context,
 )
@@ -776,25 +777,6 @@ class GitHubClient:
         except Exception:
             raise
 
-    def get_data_by_keys(self, response, keys, endKey):
-        """Retrieve data from a nested dictionary using a list of keys and an end key.
-
-        Args:
-            response (dict): The nested dictionary from which data will be extracted.
-            keys (list): A list of strings representing the keys to navigate the nested dictionary.
-            endKey (str): The final key to retrieve the desired data from the nested dictionary.
-
-        Returns:
-            The value corresponding to the `endKey` in the nested dictionary, if all the keys
-            in the `keys` list are found in the dictionary. If any key is missing, None is returned.
-        """
-        current_level = response.get("data", {})
-        for key in keys:
-            current_level = current_level.get(key)
-            if current_level is None:
-                break
-        return current_level.get(endKey)
-
     async def paginated_api_call(self, variables, query, keys):
         """Make a paginated API call for fetching GitHub objects.
 
@@ -811,8 +793,8 @@ class GitHubClient:
             response = await self.post(query_data=query_data)
             yield response
 
-            page_info = self.get_data_by_keys(
-                response=response, keys=keys, endKey="pageInfo"
+            page_info = nested_get_from_dict(
+                response, ["data"] + keys + ["pageInfo"], default={}
             )
             if not page_info.get("hasNextPage"):
                 break
@@ -1499,7 +1481,7 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_pull_requests(
         self,
         repo_name,
-        response_key=(REPOSITORY_OBJECT, "pullRequests"),
+        response_key,
         filter_query=None,
     ):
         self._logger.info(
@@ -1523,8 +1505,8 @@ class GitHubDataSource(BaseDataSource):
                 query=query,
                 keys=response_key,
             ):
-                for pull_request in self.github_client.get_data_by_keys(
-                    response=response, keys=response_key, endKey="nodes"
+                for pull_request in nested_get_from_dict(
+                    response, ["data"] + response_key + ["nodes"], default=[]
                 ):
                     async for pull_request_doc in self._extract_pull_request(
                         pull_request=pull_request, owner=owner, repo=repo
@@ -1539,8 +1521,8 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _extract_issues(self, response, owner, repo, response_key):
-        for issue in self.github_client.get_data_by_keys(
-            response=response, keys=response_key, endKey="nodes"
+        for issue in nested_get_from_dict(
+            response, ["data"] + response_key + ["nodes"], default=[]
         ):
             issue.update(self._prepare_issue_doc(issue=issue))
             for field in ["comments", "labels", "assignees"]:
@@ -1557,7 +1539,7 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_issues(
         self,
         repo_name,
-        response_key=(REPOSITORY_OBJECT, "issues"),
+        response_key,
         filter_query=None,
     ):
         self._logger.info(
@@ -1789,7 +1771,7 @@ class GitHubDataSource(BaseDataSource):
                     if query_status:
                         async for pull_request in self._fetch_pull_requests(
                             repo_name=repo_name,
-                            response_key=("search",),
+                            response_key=["search"],
                             filter_query=pull_request_query,
                         ):
                             yield pull_request, None
@@ -1807,7 +1789,7 @@ class GitHubDataSource(BaseDataSource):
                     if query_status:
                         async for issue in self._fetch_issues(
                             repo_name=repo_name,
-                            response_key=("search",),
+                            response_key=["search"],
                             filter_query=issue_query,
                         ):
                             yield issue, None
@@ -1853,7 +1835,8 @@ class GitHubDataSource(BaseDataSource):
                 )
 
                 async for pull_request in self._fetch_pull_requests(
-                    repo_name=repo_name
+                    repo_name=repo_name,
+                    response_key=[REPOSITORY_OBJECT, "pullRequests"],
                 ):
                     if needs_access_control:
                         yield self._decorate_with_access_control(
@@ -1862,7 +1845,9 @@ class GitHubDataSource(BaseDataSource):
                     else:
                         yield pull_request, None
 
-                async for issue in self._fetch_issues(repo_name=repo_name):
+                async for issue in self._fetch_issues(
+                    repo_name=repo_name, response_key=[REPOSITORY_OBJECT, "issues"]
+                ):
                     if needs_access_control:
                         yield self._decorate_with_access_control(
                             document=issue, access_control=access_control
