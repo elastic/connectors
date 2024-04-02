@@ -245,3 +245,10 @@
 ##    An example is:
 ##    sources:
 ##      mongodb: connectors.sources.mongo:MongoDataSource
+
+
+connectors:
+  -
+    connector_id: "YTxxmo4B-bQ2HZoEcuSm"
+    service_type: "slack"
+    api_key: WYp4em1vNEItYlEySFpvRXhPUTE6aWxUUGRKbnlRUEdQZk51OGlVNnhlQQ== # this is fake, we're testing push protection
