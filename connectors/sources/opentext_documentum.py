@@ -125,7 +125,7 @@ class OpentextDocumentumClient:
                     )
             else:
                 self._logger.warning(
-                    f"Rate Limited but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    f"Rate Limited but Retry-After header wasn't found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
                 )
             self._logger.debug(f"Rate Limit reached: retry in {retry_seconds} seconds")
 
@@ -147,7 +147,7 @@ class OpentextDocumentumClient:
         skipped_exceptions=NotFound,
     )
     async def api_call(self, url_name=None, **url_kwargs):
-        """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.
+        """Make a GET call for the Opentext Documentum API using the passed url_name with retry for the failed API calls.
 
         Args:
             url_name (str): URL Name to identify the API endpoint to hit
@@ -366,23 +366,23 @@ class OpentextDocumentumDataSource(BaseDataSource):
                 [repository.get("title") for repository in repositories]
             )
         if unavailable_repos := set(self.repositories) - set(available_repos):
-            msg = f"Repositories '{', '.join(unavailable_repos)}' are not available. Available spaces are: '{', '.join(available_repos)}'"
+            msg = f"Repositories '{', '.join(unavailable_repos)}' are not available. Available repositories are: '{', '.join(available_repos)}'"
             raise ConfigurableFieldValueError(msg)
 
     async def ping(self):
         """Verify the connection with Opentext Documentum"""
         try:
             await anext(self.opentext_client.api_call(url_name=PING))
-            self._logger.info("Successfully connected to the Opentext Documentum")
+            self._logger.info("Successfully connected to Opentext Documentum")
         except Exception:
-            self._logger.exception("Error while connecting to the Opentext Documentum")
+            self._logger.exception("Error while connecting to Opentext Documentum")
             raise
 
     async def fetch_repositories(self):
         """Reference for JSON representation of API response: https://www.dbi-services.com/blog/documentum-rest-api/"""
-        if self.repositories == ["*"]:
+        if self.repositories == [WILDCARD]:
             self._logger.info(
-                "Fetching all repositories as the configuration field `repositories` is set to '*'"
+                f"Fetching all repositories as the configuration field `repositories` is set to '{WILDCARD}'"
             )
             async for page in self.opentext_client.paginated_api_call(
                 url_name=REPOSITORIES,
