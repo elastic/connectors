@@ -179,7 +179,7 @@ class GraphQLClient:
             msg = "Pagination is enabled but the query is missing 'pageInfo'. Please include 'pageInfo { hasNextPage endCursor }' in the query to support pagination."
             raise ConfigurableFieldValueError(msg)
 
-    def validate_query(self, graphql_query, visitor):
+    def validate_paginated_query(self, graphql_query, visitor):
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
         if not (
@@ -195,7 +195,7 @@ class GraphQLClient:
             visitor = FieldVisitor()
             visit(ast, visitor)  # pyright: ignore
 
-            self.validate_query(graphql_query, visitor)
+            self.validate_paginated_query(graphql_query, visitor)
             while True:
                 self._logger.debug(
                     f"Fetching document with variables: {self.variables}."
@@ -394,7 +394,7 @@ class GraphQLDataSource(BaseDataSource):
                     {"label": "Cursor-based pagination", "value": CURSOR_PAGINATION},
                 ],
                 "order": 11,
-                "tooltip": "Cursor based pagination requires 'pageInfo' field along with argument 'after' for objects mentioned in 'GraphQL Objects List'. It also requires variable for 'after' argument.",
+                "tooltip": "For cursor-based pagination, add 'pageInfo' and an 'after' argument variable in your query at the desired node (Pagination key). Use 'after' query argument with a variable to iterate through pages. Detailed examples and setup instructions are available in the docs.",
                 "type": "str",
                 "value": NO_PAGINATION,
             },
