@@ -11,6 +11,7 @@ import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
+from graphql import parse
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.graphql import GraphQLDataSource, UnauthorizedException
@@ -352,7 +353,42 @@ async def test_extract_pagination_info_with_invalid_key():
 
 
 @pytest.mark.asyncio
+async def test_is_query_with_mutation_query():
+    async with create_graphql_source() as source:
+        ast = parse("mutation Login($email: String!){login(email: $email) { token }}")
+        response = source.is_query(ast)
+        assert response is False
+
+
+@pytest.mark.asyncio
 async def test_is_query_with_invalid_query():
     async with create_graphql_source() as source:
-        response = source.is_query("invalid_query {user {}")
-        assert response is False
+        source.graphql_client.graphql_query = "invalid_query {user {}}"
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_with_invalid_objects():
+    async with create_graphql_source() as source:
+        source.graphql_client.graphql_query = (
+            "query {organization {repository { issues {name}}}}"
+        )
+        source.graphql_client.graphql_object_list = [
+            "organization.repository.pullRequest"
+        ]
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_with_invalid_pagination_key():
+    async with create_graphql_source() as source:
+        source.graphql_client.graphql_query = (
+            "query {organization {repository { issues {name}}}}"
+        )
+        source.graphql_client.graphql_object_list = ["organization.repository.issues"]
+        source.graphql_client.pagination_model = "cursor_pagination"
+        source.graphql_client.pagination_key = "organization.repository.pullRequest"
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()

@@ -418,23 +418,37 @@ class GraphQLDataSource(BaseDataSource):
             },
         }
 
-    def is_query(self, graphql_query):
-        try:
-            ast = parse(graphql_query)  # pyright: ignore
-            for definition in ast.definitions:  # pyright: ignore
-                if (
-                    hasattr(definition, "operation")
-                    and definition.operation.value != "query"
-                ):
-                    return False
-            return True
-        except Exception as e:
-            self._logger.error(f"Failed to parse GraphQL query. Error: {e}")
-            return False
+    def is_query(self, ast):
+        for definition in ast.definitions:  # pyright: ignore
+            if (
+                hasattr(definition, "operation")
+                and definition.operation.value != "query"
+            ):
+                return False
+        return True
 
     def validate_endpoints(self):
         if re.match(URL_REGEX, self.graphql_client.url):
             return True
+        return False
+
+    def check_field_existence(self, ast, field_path):
+        def traverse(selections, path):
+            for selection in selections:
+                if selection.name.value == path[0]:
+                    if len(path) == 1:
+                        return True
+                    if selection.selection_set:
+                        return traverse(
+                            selections=selection.selection_set.selections, path=path[1:]
+                        )
+            return False
+
+        field_path = field_path.split(".")
+        for definition in ast.definitions:
+            if definition.operation.value == "query":
+                return traverse(definition.selection_set.selections, field_path)
+
         return False
 
     async def validate_config(self):
@@ -447,7 +461,13 @@ class GraphQLDataSource(BaseDataSource):
             msg = "GraphQL HTTP endpoint is not a valid URL."
             raise ConfigurableFieldValueError(msg)
 
-        if not self.is_query(graphql_query=self.graphql_client.graphql_query):
+        try:
+            ast = parse(self.graphql_client.graphql_query)  # pyright: ignore
+        except Exception as exception:
+            msg = f"Failed to parse GraphQL query. Error: {exception}"
+            raise ConfigurableFieldValueError(msg) from exception
+
+        if not self.is_query(ast=ast):
             msg = "The configured query is either invalid or a mutation which is not supported by the connector."
             raise ConfigurableFieldValueError(msg)
 
@@ -466,6 +486,20 @@ class GraphQLDataSource(BaseDataSource):
             except Exception as exception:
                 msg = f"Error while processing configured GraphQL variables. Exception: {exception}"
                 raise ConfigurableFieldValueError(msg) from exception
+
+        for graphql_object in self.graphql_client.graphql_object_list:
+            if not self.check_field_existence(ast=ast, field_path=graphql_object):
+                msg = f"{graphql_object} is not present in the query."
+                raise ConfigurableFieldValueError(msg)
+
+        if self.graphql_client.pagination_model == CURSOR_PAGINATION:
+            if not self.check_field_existence(
+                ast=ast, field_path=self.graphql_client.pagination_key
+            ):
+                msg = (
+                    f"{self.graphql_client.pagination_key} is not present in the query."
+                )
+                raise ConfigurableFieldValueError(msg)
 
     async def close(self):
         await self.graphql_client.close()
