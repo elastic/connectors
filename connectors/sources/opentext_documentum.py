@@ -132,10 +132,10 @@ class OpentextDocumentumClient:
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
         elif exception.status == 404:
-            self._logger.error(f"Getting Not Found Error for url: {url}")
+            self._logger.exception(f"Getting Not Found Error for url: {url}")
             raise NotFound
         elif exception.status == 500:
-            self._logger.error("Internal Server Error occurred")
+            self._logger.exception("Internal Server Error occurred")
             raise InternalServerError
         else:
             raise
@@ -172,6 +172,7 @@ class OpentextDocumentumClient:
                     yield response
                     break
             except ServerConnectionError:
+                self._logger.exception(f"Getting ServerConnectionError for url: {url}")
                 await self.close_session()
                 raise
             except ClientResponseError as exception:
@@ -311,8 +312,11 @@ class OpentextDocumentumDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
+        if not doit:
+            return
+        
         file_size = int(attachment["size"])
-        if not (doit and file_size > 0):
+        if file_size <= 0:
             return
 
         filename = attachment["title"]
@@ -352,7 +356,7 @@ class OpentextDocumentumDataSource(BaseDataSource):
             Exception: Configured keys can't be empty
         """
         await super().validate_config()
-        # await self._remote_validation()
+        await self._remote_validation()
 
     async def _remote_validation(self):
         if self.repositories == [WILDCARD]:
