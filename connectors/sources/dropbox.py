@@ -316,6 +316,8 @@ class DropboxClient:
                 headers = self._get_request_headers(
                     file_type=file_type, url_name=url_name, kwargs=kwargs
                 )
+
+                self._logger.debug(f"Calling Dropbox Endpoint: {url}")
                 async with self._get_session.post(
                     url=url, headers=headers, data=data
                 ) as response:
@@ -864,8 +866,14 @@ class DropboxDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with _id, _timestamp and attachment content
         """
+        if not doit:
+            self._logger.info("Skipping attachment downloading")
+            return
+
         file_size = int(attachment["size"])
-        if not (doit and file_size > 0):
+
+        if file_size <= 0:
+            self._logger.info(f"Skipping file as file size is {file_size}")
             return
 
         filename = attachment["name"]
@@ -880,7 +888,7 @@ class DropboxDataSource(BaseDataSource):
         download_func = self.download_func(is_shared, attachment, filename, folder_id)
         if not download_func:
             self._logger.warning(
-                f"Skipping the file: {filename} since it is not in the downloadable format."
+                f"Skipping file '{filename}' since it is not downloadable."
             )
             return
 
@@ -1183,10 +1191,12 @@ class DropboxDataSource(BaseDataSource):
                 async for document, attachment in self.advanced_sync(rule=rule):
                     yield self.document_tuple(document=document, attachment=attachment)
         else:
+            self._logger.info("Fetching files and folders")
             async for document, attachment in self._fetch_files_folders(
                 path=self.dropbox_client.path
             ):
                 yield self.document_tuple(document=document, attachment=attachment)
 
+            self._logger.info("Fetching shared files")
             async for document, attachment in self._fetch_shared_files():
                 yield self.document_tuple(document=document, attachment=attachment)
