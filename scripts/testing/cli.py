@@ -482,6 +482,8 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
         connector_command = [
             "connector",
             "create",
+            "--name",
+            scenario["connector_name"],
             "--index-name",
             scenario["index_name"],
             "--service-type",

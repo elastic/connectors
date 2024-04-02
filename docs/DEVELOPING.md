@@ -26,7 +26,7 @@
 
 ## General Configuration
 
-The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the [config.yml](https://github.com/elastic/connectors/blob/main/config.yml) file. For more details check out the following [documentation](https://github.com/elastic/connectors/blob/main/docs/CONFIG.md).
+The details of Elastic instance and other relevant fields such as `service` and `source` needs to be provided in the `config.yml` file. For more details check out the following [documentation](https://github.com/elastic/connectors/blob/main/docs/CONFIG.md).
 
 ## Installation
 
@@ -64,7 +64,7 @@ That information is provided by Kibana and follows the [connector protocol](http
 
 When a user asks for a sync of a specific source, the service instantiates a class that it uses to reach out the source and collect data.
 
-A source class can be any Python class, and is declared into the [configuration](../config.yml) file (See [Configuration](./CONFIG.md) for detailed explanation). For example:
+A source class can be any Python class, and is declared into the `config.yml` file (See [Configuration](./CONFIG.md) for detailed explanation). For example:
 
 ```yaml
 sources:
