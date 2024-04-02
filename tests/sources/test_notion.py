@@ -364,7 +364,7 @@ async def test_get_file_metadata(file_name):
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_retrieve_and_process_blocks():
     expected_responses_ids = [
         USER.get("id"),
         BLOCK.get("id"),
@@ -408,8 +408,9 @@ async def test_fetch_users():
         NotionDataSource,
         notion_secret_key="test_fetch_users_key",
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             return_value=AsyncIterator([USER]),
         ):
             async for user in source.notion_client.fetch_users():
@@ -422,8 +423,9 @@ async def test_fetch_child_blocks():
         NotionDataSource,
         notion_secret_key="test_fetch_child_blocks_key",
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             return_value=AsyncIterator([CHILD_BLOCK]),
         ):
             async for block in source.notion_client.fetch_child_blocks("some_block_id"):
@@ -441,8 +443,9 @@ async def test_fetch_comments():
         NotionDataSource,
         notion_secret_key="test_fetch_comments_key",
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             return_value=AsyncIterator([COMMENT]),
         ):
             async for comment in source.notion_client.fetch_comments("some_page_id"):
@@ -458,8 +461,9 @@ async def test_fetch_by_query():
         NotionDataSource,
         notion_secret_key="test_fetch_by_query_key",
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             return_value=AsyncIterator([BLOCK]),
         ):
             async for page in source.notion_client.fetch_by_query(
@@ -478,8 +482,9 @@ async def test_query_database():
         NotionDataSource,
         notion_secret_key="test_query_database_key",
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             return_value=AsyncIterator([DATABASE]),
         ):
             async for database in source.notion_client.query_database(
@@ -542,8 +547,9 @@ async def test_fetch_children_recursively():
         NotionDataSource,
         notion_secret_key="test_fetch_children_recursively_key",
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             side_effect=[
                 AsyncIterator([CHILD_BLOCK_WITH_CHILDREN]),
                 AsyncIterator([CHILD_BLOCK]),
@@ -569,7 +575,7 @@ async def test_fetch_children_recursively():
                             {
                                 "filter": {
                                     "property": "Task completed",
-                                    "title": {"equals": "true"},
+                                    "title": {"contain": "John"},
                                 },
                                 "database_id": "database_id",
                             }
@@ -667,15 +673,28 @@ async def test_get_docs_with_advanced_rules(filtering):
             {
                 "database_query_filters": [
                     {
-                        "filter": {
-                            "property": "Task completed",
-                        },
+                        "filter": {"property": "Name", "title": {"contain": "John"}},
                         "database_id": "database_id",
                     }
                 ]
             },
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        # Invalid: database_id
+        (
+            {
+                "database_query_filters": [
+                    {
+                        "database_id": "invalid_database_id",
+                    }
+                ]
+            },
+            SyncRuleValidationResult(
+                rule_id=SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
             ),
         ),
         # Invalid: empty property value
@@ -740,8 +759,9 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     async with create_source(
         NotionDataSource, notion_secret_key="secret_key"
     ) as source:
-        with patch(
-            "connectors.sources.notion.async_iterate_paginated_api",
+        with patch.object(
+            NotionClient,
+            "async_iterate_paginated_api",
             return_value=AsyncIterator([DATABASE]),
         ), patch.object(
             NotionDataSource, "get_entities", return_value=[DATABASE, BLOCK]
@@ -749,4 +769,98 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
             validation_result = await NotionAdvancedRulesValidator(source).validate(
                 advanced_rules
             )
-        assert validation_result == expected_validation_result
+            assert validation_result == expected_validation_result
+
+
+@pytest.mark.asyncio
+async def test_async_iterate_paginated_api():
+    async def mock_function(**kwargs):
+        return {
+            "results": [{"name": "John"}, {"name": "Alice"}],
+            "next_cursor": None,
+            "has_more": False,
+        }
+
+    with patch("notion_client.AsyncClient") as mock_client:
+        mock_client_instance = mock_client.return_value
+        mock_client_instance.__aenter__.return_value = mock_client_instance
+        mock_client_instance.some_function = AsyncMock(side_effect=mock_function)
+        async with create_source(
+            NotionDataSource, notion_secret_key="secert_key"
+        ) as source:
+            async for result in source.notion_client.async_iterate_paginated_api(
+                mock_client_instance.some_function
+            ):
+                assert "name" in result
+            mock_client_instance.some_function.assert_called_once()
+
+
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_fetch_results_rate_limit_exceeded():
+    async def mock_function_with_429(**kwargs):
+        mock_function_with_429.call_count += 1
+
+        # Initial call and first retry would raise rate-limited error
+        if mock_function_with_429.call_count <= 2:
+            raise APIResponseError(
+                code="rate_limited",
+                message="Rate limit exceeded.",
+                response=Response(status_code=429, text="Rate limit exceeded."),
+            )
+        else:
+            return {"success": True}
+
+    async with create_source(
+        NotionDataSource, notion_secret_key="secret_key"
+    ) as source:
+        with patch("connectors.sources.notion.DEFAULT_RETRY_SECONDS", 0.3):
+            mock_function_with_429.call_count = 0
+            result = await source.notion_client.fetch_results(mock_function_with_429)
+
+            # assert it responds successfully on 2nd retry and does not raise error
+            assert result == {"success": True}
+
+            # assert it did not go for 3rd retry
+            assert mock_function_with_429.call_count == 3  # initial call + 2 retries
+
+
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_fetch_results_other_errors_not_retried():
+    async def mock_function_with_other_error(**kwargs):
+        raise APIResponseError(
+            code="object_not_found",
+            message="Object Not Found",
+            response=Response(status_code=404, text="Object Not Found"),
+        )
+
+    async with create_source(
+        NotionDataSource, notion_secret_key="secret_key"
+    ) as source:
+        with patch.object(
+            source.notion_client,
+            "fetch_results",
+            wraps=source.notion_client.fetch_results,
+        ) as mock_fetch_results:
+            with pytest.raises(APIResponseError) as exc_info:
+                await source.notion_client.fetch_results(mock_function_with_other_error)
+
+            assert exc_info.value.code == "object_not_found"
+            assert exc_info.value.status == 404
+
+            # assert that fetch_results is called exactly once and not retried for status code 404
+            mock_fetch_results.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_original_async_iterate_paginated_api_not_called():
+    with patch.object(NotionClient, "async_iterate_paginated_api"):
+        with patch(
+            "notion_client.helpers.async_iterate_paginated_api"
+        ) as mock_async_iterate_paginated_api:
+            async with create_source(
+                NotionDataSource, notion_secret_key="secret_key"
+            ) as source:
+                async for _ in source.notion_client.query_database("database_id"):
+                    assert not mock_async_iterate_paginated_api.called
