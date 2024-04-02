@@ -36,6 +36,7 @@ from connectors.utils import (
 )
 
 RETRY_INTERVAL = 2
+LIMIT = 100
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
@@ -230,9 +231,9 @@ class ConfluenceClient:
                     yield json_response
 
                     start = url_kwargs.get("start", 0)
-                    start += 100
+                    start += LIMIT
                     url_kwargs["start"] = start
-                if len(json_response.get("results", [])) < 100:
+                if len(json_response.get("results", [])) < LIMIT:
                     break
             except Exception as exception:
                 self._logger.warning(
