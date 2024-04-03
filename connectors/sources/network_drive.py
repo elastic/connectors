@@ -389,7 +389,7 @@ class NASDataSource(BaseDataSource):
                 self._logger.exception(
                     f"Connection got closed. Error {exception}. Registering new session"
                 )
-                await asyncio.to_thread(self.smb_connection.create_connection)
+                await asyncio.to_thread(self.create_connection)
                 raise
             except (SMBOSError, SMBException) as exception:
                 self._logger.exception(
