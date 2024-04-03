@@ -317,7 +317,9 @@ class DropboxClient:
                     file_type=file_type, url_name=url_name, kwargs=kwargs
                 )
 
-                self._logger.debug(f"Calling Dropbox Endpoint: {url} with headers: {headers}")
+                self._logger.debug(
+                    f"Calling Dropbox Endpoint: {url} with headers: {headers}"
+                )
                 async with self._get_session.post(
                     url=url, headers=headers, data=data
                 ) as response:
@@ -867,13 +869,17 @@ class DropboxDataSource(BaseDataSource):
             dictionary: Content document with _id, _timestamp and attachment content
         """
         if not doit:
-            self._logger.debug(f"Skipping attachment downloading for {attachment['name']}")
+            self._logger.debug(
+                f"Skipping attachment downloading for {attachment['name']}"
+            )
             return
 
         file_size = int(attachment["size"])
 
         if file_size <= 0:
-            self._logger.warning(f"Skipping file '{attachment["name"]}' as file size is {file_size}")
+            self._logger.warning(
+                f"Skipping file '{attachment['name']}' as file size is {file_size}"
+            )
             return
 
         filename = attachment["name"]
