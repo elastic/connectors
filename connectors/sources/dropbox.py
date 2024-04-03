@@ -317,7 +317,7 @@ class DropboxClient:
                     file_type=file_type, url_name=url_name, kwargs=kwargs
                 )
 
-                self._logger.debug(f"Calling Dropbox Endpoint: {url}")
+                self._logger.debug(f"Calling Dropbox Endpoint: {url} with headers: {headers}")
                 async with self._get_session.post(
                     url=url, headers=headers, data=data
                 ) as response:
