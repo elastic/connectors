@@ -1161,6 +1161,7 @@ class DropboxDataSource(BaseDataSource):
         account_id, member_id = await self.get_account_details()
         self.dropbox_client.member_id = member_id
         async for folder_id in self.get_team_folder_id():
+            self._logger.info(f"Iterating through folder with id '{folder_id}'")
             async for mapped_document in self.add_document_to_list(
                 func=self._fetch_files_folders,
                 account_id=account_id,
