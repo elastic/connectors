@@ -695,6 +695,8 @@ MOCK_ORG_REPOS = {
 @asynccontextmanager
 async def create_github_source(
     repo_type="other",
+    org_name="",
+    repos="*",
     use_document_level_security=False,
     use_text_extraction_service=False,
 ):
@@ -702,8 +704,9 @@ async def create_github_source(
         GitHubDataSource,
         data_source="github-server",
         token="changeme",
-        repositories="*",
+        repositories=repos,
         repo_type=repo_type,
+        org_name=org_name,
         ssl_enabled=False,
         use_document_level_security=use_document_level_security,
         use_text_extraction_service=use_text_extraction_service,
@@ -755,7 +758,7 @@ async def test_get_user_repos():
         source.github_client.paginated_api_call = Mock(
             return_value=AsyncIterator(MOCK_RESPONSE_REPO)
         )
-        async for repo in source.github_client.get_user_repos():
+        async for repo in source.github_client.get_user_repos("demo_user"):
             actual_response.append(repo)
         assert actual_response == [
             {"name": "demo_repo", "nameWithOwner": "demo_user/demo_repo"},
@@ -823,8 +826,9 @@ async def test_validate_config_with_extra_scopes_token(patch_logger):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_validate_config_with_inaccessible_repositories_then_raise():
-    async with create_github_source() as source:
-        source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
+    async with create_github_source(
+        repos="repo1, owner1/repo1, repo2, owner2/repo2"
+    ) as source:
         source.github_client.post = AsyncMock(
             return_value=({"dummy": "dummy"}, {"X-OAuth-Scopes": "repo"})
         )
@@ -938,8 +942,9 @@ async def test_paginated_api_call():
 @pytest.mark.asyncio
 async def test_get_invalid_repos():
     expected_response = ["owner1/repo2", "owner2/repo2"]
-    async with create_github_source() as source:
-        source.github_client.repos = ["repo1", "owner1/repo2", "repo2", "owner2/repo2"]
+    async with create_github_source(
+        repos="repo1, owner1/repo2, repo2, owner2/repo2"
+    ) as source:
         source.github_client.post = AsyncMock(
             side_effect=[
                 {"data": {"viewer": {"login": "owner1"}}},
@@ -974,16 +979,10 @@ async def test_get_invalid_repos():
 @pytest.mark.asyncio
 async def test_get_invalid_repos_organization():
     expected_response = ["owner1/repo2", "org1/repo3"]
-    async with create_github_source() as source:
-        source.github_client.repo_type = "organization"
-        source.github_client.org_name = "org1"
-        source.github_client.repos = ["repo1", "owner1/repo2", "repo3"]
-        source.github_client.post = AsyncMock(
-            side_effect=[
-                {"data": {"viewer": {"login": "owner1"}}},
-                MOCK_ORG_REPOS,
-            ]
-        )
+    async with create_github_source(
+        repo_type="organization", org_name="org1", repos="repo1, owner1/repo2, repo3"
+    ) as source:
+        source.github_client.post = AsyncMock(return_value=MOCK_ORG_REPOS)
 
         invalid_repos = await source.get_invalid_repos()
         assert sorted(expected_response) == sorted(invalid_repos)
@@ -1055,7 +1054,6 @@ async def test_get_content_with_differernt_size(size, expected_content):
 @pytest.mark.asyncio
 async def test_fetch_repos():
     async with create_github_source() as source:
-        source.github_client.repos = ["*"]
         source.github_client.post = AsyncMock(
             return_value={"data": {"viewer": {"login": "owner1"}}}
         )
@@ -1081,9 +1079,9 @@ async def test_fetch_repos():
 
 @pytest.mark.asyncio
 async def test_fetch_repos_organization():
-    async with create_github_source() as source:
-        source.github_client.repos = ["*"]
-        source.github_client.repo_type = "organization"
+    async with create_github_source(
+        repo_type="organization", org_name="org1"
+    ) as source:
         source.github_client.post = AsyncMock(
             return_value={"data": {"viewer": {"login": "owner1"}}}
         )
@@ -1105,8 +1103,7 @@ async def test_fetch_repos_organization():
 
 @pytest.mark.asyncio
 async def test_fetch_repos_when_user_repos_is_available():
-    async with create_github_source() as source:
-        source.github_client.repos = ["demo_user/demo_repo", "", "demo_repo"]
+    async with create_github_source(repos="demo_user/demo_repo, , demo_repo") as source:
         source.github_client.post = AsyncMock(
             side_effect=[
                 {"data": {"viewer": {"login": "owner1"}}},
