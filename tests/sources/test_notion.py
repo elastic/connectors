@@ -864,3 +864,25 @@ async def test_original_async_iterate_paginated_api_not_called():
             ) as source:
                 async for _ in source.notion_client.query_database("database_id"):
                     assert not mock_async_iterate_paginated_api.called
+
+
+@pytest.mark.asyncio
+async def test_fetch_child_blocks_for_external_object_instance_page(caplog):
+    block_id = "block_id"
+    caplog.set_level("WARNING")
+    with patch(
+        "connectors.sources.notion.NotionClient.async_iterate_paginated_api",
+        side_effect=APIResponseError(
+            code="validation_error",
+            message="external_object_instance_page is not supported via the API",
+            response=Response(status_code=400, text="Validation error"),
+        ),
+    ):
+        async with create_source(
+            NotionDataSource, notion_secret_key="secret_key"
+        ) as source:
+            async for _ in source.notion_client.fetch_child_blocks(block_id):
+                assert (
+                    "external_object_instance_page is not supported via the API"
+                    in caplog.text
+                )
