@@ -381,9 +381,24 @@ class SyncJobRunner:
             f"deleted: {ingestion_stats.get('doc_deleted', 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
+        self.log_counters(ingestion_stats)
+
+    def log_counters(self, counters):
+        """
+        Logs out a dump of everything in "counters"
+
+        This serves a dual-purpose:
+        1. Providing human-readable counts on separate lines, which can be helpful for
+            visualizing how a counter changes over multiple runs (like in Discover)
+        2. Providing a machine-readable hash of all counters, that can be easily copy-pasted
+           into a REPL or script for analysis.
+        See more of the discussion: https://github.com/elastic/connectors/pull/2323
+        :param counters: a dictionary of counter_name -> counter_value like: {"added": 2, "deleted": 1}
+        """
         self.sync_job.log_info("--- Counters ---")
-        for k, v in sorted(ingestion_stats.items()):
+        for k, v in sorted(counters.items()):
             self.sync_job.log_info(f"'{k}' : {v}")
+        self.sync_job.log_info(f"full counters dictionary: {counters}")
         self.sync_job.log_info("----------------")
 
     @with_concurrency_control()
