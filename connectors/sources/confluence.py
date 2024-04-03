@@ -77,6 +77,9 @@ CONFLUENCE_SERVER = "confluence_server"
 CONFLUENCE_DATA_CENTER = "confluence_data_center"
 WILDCARD = "*"
 
+class InvalidConfluenceDataSourceTypeError(ValueError):
+    pass
+
 
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
@@ -110,6 +113,8 @@ class ConfluenceClient:
         """
         if self.session:
             return self.session
+
+        self._logger.debug(f"Creating a '{self.data_source_type}' client session")
         if self.data_source_type == CONFLUENCE_CLOUD:
             auth = (
                 self.configuration["account_email"],
@@ -120,11 +125,18 @@ class ConfluenceClient:
                 self.configuration["username"],
                 self.configuration["password"],
             )
-        else:
+        elif self.data_source_type == CONFLUENCE_DATA_CENTER:
             auth = (
                 self.configuration["data_center_username"],
                 self.configuration["data_center_password"],
             )
+        else:
+            msg = (
+                f"Unknown data source type '{self.data_source_type}' for Confluence connector"
+            )
+            self._logger.error(msg)
+
+            raise InvalidJiraDataSourceTypeError(msg)
 
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -159,6 +171,7 @@ class ConfluenceClient:
         Yields:
             response: Client response
         """
+        self._logger.debug(f"Making a GET call for url: {url}")
         retry_counter = 0
         while True:
             try:
@@ -561,7 +574,7 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        self._logger.info("Fetching all users")
+        self._logger.info("Fetching all users for Access Control sync")
         if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
             users = self.get_user()
         else:
@@ -714,6 +727,9 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
+        self._logger.debug(
+            f"Fetching permissions for '{space_key}' space"
+        )
         try:
             async for permissions in self.confluence_client.api_call(
                 url=os.path.join(self.confluence_client.host_url, url),
@@ -786,6 +802,9 @@ class ConfluenceDataSource(BaseDataSource):
             Dictionary: Confluence attachment on the given page or blog post
             String: Download link to get the content of the attachment
         """
+        self._logger.info(
+            f"Fetching attachments for '{parent_name}' from '{parent_space}' space"
+        )
         async for response in self.confluence_client.paginated_api_call(
             url_name=ATTACHMENT,
             api_query=ATTACHMENT_QUERY,
@@ -879,6 +898,7 @@ class ConfluenceDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
+        self._logger.debug(f"Downloading content for file: {filename}")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
         return await self.download_and_extract_file(
             document,
@@ -923,6 +943,7 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
+        self._logger.info("Fetching spaces and its permissions")
         async for space, permissions, key in self.fetch_spaces():
             if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                 access_control = list(
@@ -952,6 +973,7 @@ class ConfluenceDataSource(BaseDataSource):
             api_query (str): API Query Parameters for fetching page/blogpost
             target_type (str): Type of object to filter permission
         """
+        self._logger.info(f"Fetching {target_type} and its permissions")
         async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
             api_query
         ):
