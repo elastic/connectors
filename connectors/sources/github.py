@@ -655,13 +655,11 @@ class GitHubClient:
     async def _get_retry_after(self, resource_type):
         current_time = time.time()
         response = await self._get_client.getitem("/rate_limit")
-        reset = (
-            response.get("resources", {})
-            .get(resource_type, {})
-            .get("reset", current_time)
+        reset = nested_get_from_dict(
+            response, ["resources", resource_type, "reset"], default=current_time
         )
         # Adding a 5 second delay to account for server delays
-        return (reset - current_time) + 5
+        return (reset - current_time) + 5  # pyright: ignore
 
     async def _put_to_sleep(self, resource_type):
         retry_after = await self._get_retry_after(resource_type=resource_type)
@@ -813,11 +811,8 @@ class GitHubClient:
             query=GithubQuery.ORG_REPOS_QUERY.value,
             keys=["organization", "repositories"],
         ):
-            for repo in (
-                response.get("data", {})  # pyright: ignore
-                .get("organization", {})
-                .get("repositories", {})
-                .get("nodes")
+            for repo in nested_get_from_dict(  # pyright: ignore
+                response, ["data", "organization", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
@@ -831,11 +826,8 @@ class GitHubClient:
             query=GithubQuery.REPOS_QUERY.value,
             keys=["user", "repositories"],
         ):
-            for repo in (
-                response.get("data", {})  # pyright: ignore
-                .get("user", {})
-                .get("repositories", {})
-                .get("nodes")
+            for repo in nested_get_from_dict(  # pyright: ignore
+                response, ["data", "user", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
@@ -859,11 +851,10 @@ class GitHubClient:
             query=GithubQuery.ORG_MEMBERS_QUERY.value,
             keys=["organization", "membersWithRole"],
         ):
-            for repo in (
-                response.get("data", {})  # pyright: ignore
-                .get("organization", {})
-                .get("membersWithRole", {})
-                .get("edges")
+            for repo in nested_get_from_dict(  # pyright: ignore
+                response,
+                ["data", "organization", "membersWithRole", "edges"],
+                default=[],
             ):
                 yield repo.get("node")
 
@@ -873,9 +864,7 @@ class GitHubClient:
             "variables": None,
         }
         response = await self.post(query_data=query_data)
-        return (
-            response.get("data", {}).get("viewer", {}).get("login")  # pyright: ignore
-        )
+        return nested_get_from_dict(response, ["data", "viewer", "login"])
 
     async def ping(self):
         query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
@@ -1351,8 +1340,8 @@ class GitHubDataSource(BaseDataSource):
                     "variables": {"owner": owner, "repositoryName": repo},
                 }
                 response = await self.github_client.post(query_data=query_data)
-                repo_object = response.get("data", {}).get(  # pyright: ignore
-                    REPOSITORY_OBJECT
+                repo_object = nested_get_from_dict(
+                    response, ["data", REPOSITORY_OBJECT]
                 )
             repo_object = repo_object.copy()
             repo_object.update(
@@ -1401,9 +1390,9 @@ class GitHubDataSource(BaseDataSource):
         async for response in self.github_client.paginated_api_call(
             variables=variables, query=query, keys=keys
         ):
-            yield response.get("data", {}).get(  # pyright: ignore
-                REPOSITORY_OBJECT, {}
-            ).get(object_type, {}).get(field_type, {}).get("nodes")
+            yield nested_get_from_dict(
+                response, ["data", REPOSITORY_OBJECT, object_type, field_type, "nodes"]
+            )
 
     async def _fetch_remaining_fields(
         self, type_obj, object_type, owner, repo, field_type
@@ -1452,7 +1441,7 @@ class GitHubDataSource(BaseDataSource):
                 keys=[REPOSITORY_OBJECT, object_type, field_type],
             ):
                 if field_type == "reviews":
-                    for review in response:
+                    for review in response:  # pyright: ignore
                         type_obj["reviews_comments"].append(
                             self._prepare_review_doc(review=review)
                         )
@@ -1726,11 +1715,8 @@ class GitHubDataSource(BaseDataSource):
             query=GithubQuery.COLLABORATORS_QUERY.value,
             keys=["repository", "collaborators"],
         ):
-            for user in (
-                response.get("data", {})  # pyright: ignore
-                .get("repository", {})
-                .get("collaborators", {})
-                .get("edges", [])
+            for user in nested_get_from_dict(  # pyright: ignore
+                response, ["data", "repository", "collaborators", "edges"], default=[]
             ):
                 user_id = user.get("node", {}).get("id")
                 user_name = user.get("node", {}).get("login")
