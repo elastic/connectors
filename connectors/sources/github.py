@@ -798,7 +798,7 @@ class GitHubClient:
             )
             if not page_info.get("hasNextPage"):
                 break
-            variables["cursor"] = page_info["endCursor"]
+            variables["cursor"] = page_info["endCursor"]  # pyright: ignore
 
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
@@ -1505,7 +1505,7 @@ class GitHubDataSource(BaseDataSource):
                 query=query,
                 keys=response_key,
             ):
-                for pull_request in nested_get_from_dict(
+                for pull_request in nested_get_from_dict(  # pyright: ignore
                     response, ["data"] + response_key + ["nodes"], default=[]
                 ):
                     async for pull_request_doc in self._extract_pull_request(
@@ -1521,7 +1521,7 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _extract_issues(self, response, owner, repo, response_key):
-        for issue in nested_get_from_dict(
+        for issue in nested_get_from_dict(  # pyright: ignore
             response, ["data"] + response_key + ["nodes"], default=[]
         ):
             issue.update(self._prepare_issue_doc(issue=issue))
