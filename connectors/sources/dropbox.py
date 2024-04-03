@@ -867,7 +867,7 @@ class DropboxDataSource(BaseDataSource):
             dictionary: Content document with _id, _timestamp and attachment content
         """
         if not doit:
-            self._logger.info("Skipping attachment downloading")
+            self._logger.debug(f"Skipping attachment downloading for {attachment['name']}")
             return
 
         file_size = int(attachment["size"])
