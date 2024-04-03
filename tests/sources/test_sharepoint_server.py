@@ -1225,3 +1225,47 @@ async def test_get_list_items_with_extension_only():
         ):
             expected_response.append(item)
         assert expected_response == target_response
+
+@pytest.mark.asyncio
+async def test_get_docs_incremental_drive_items():
+    """Test get docs method for drive items"""
+
+    item_content_response = [
+        {
+            "RootFolder": {
+                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+            },
+            "Created": "2023-03-19T05:02:52Z",
+            "BaseType": 1,
+            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+            "ParentWebUrl": "/sites/enterprise/ctest/_api",
+            "Title": "HelloWorld",
+        }
+    ]
+    drive_content_response = {
+        "File": {
+            "Length": "3356",
+            "Name": "Home.aspx",
+            "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
+            "TimeCreated": "2022-05-02T07:20:33Z",
+            "TimeLastModified": "2022-05-02T07:20:34Z",
+            "Title": "Home.aspx",
+        },
+        "Folder": {"__deferred": {}},
+        "Modified": "2022-05-02T07:20:35Z",
+        "GUID": "111111122222222-c77f-4ed3-84ef-8a4dd87c80d0",
+        "Length": "3356",
+        "item_type": "File",
+    }
+    actual_response = []
+    async with create_sps_source() as source:
+        source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
+        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+        source.sharepoint_client.get_drive_items = AsyncIterator(
+            [(drive_content_response, None)]
+        )
+
+        async for document, _, _ in source.get_docs_incrementally(sync_cursor={"CURSOR_SYNC_TIMESTAMP": "2022-01-20T09:04:03Z"}):
+            actual_response.append(document)
+        assert len(actual_response) == 2

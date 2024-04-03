@@ -12,12 +12,15 @@ from urllib.parse import quote
 import aiohttp
 from aiohttp.client_exceptions import ServerDisconnectedError
 
+from connectors.es.sink import OP_INDEX
+
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource, ConfigurableFieldValueError, CURSOR_SYNC_TIMESTAMP
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ssl_context,
+    iso_zulu
 )
 
 RETRY_INTERVAL = 2
@@ -92,6 +95,8 @@ class SharepointServerClient:
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.retry_count = self.configuration["retry_count"]
+        self.check_timestamp = False
+        self.incremental_cursor = None
 
         self.site_collections_path = []
         for site in self.configuration["site_collections"]:
@@ -360,7 +365,8 @@ class SharepointServerClient:
                         is_list_item_has_attachment=True,
                     )
                     result["url"] = url
-                    yield result, file_relative_url
+                    if not self.check_timestamp or result.get('Modified') >= self.incremental_cursor:
+                        yield result, file_relative_url
                     continue
 
                 for attachment_file in result.get("AttachmentFiles"):
@@ -386,7 +392,8 @@ class SharepointServerClient:
                         relative_url=file_relative_url,
                     )
 
-                    yield result, file_relative_url
+                    if not self.check_timestamp or result.get('Modified') >= self.incremental_cursor:
+                        yield result, file_relative_url
 
     async def get_drive_items(self, list_id, site_url, server_relative_url, **kwargs):
         """This method fetches items from all the drives in a collection.
@@ -421,7 +428,8 @@ class SharepointServerClient:
                     result["Length"] = result[item_type]["Length"]
                 result["item_type"] = item_type
 
-                yield result, file_relative_url
+                if not self.check_timestamp or result.get('Modified') >= self.incremental_cursor:
+                    yield result, file_relative_url
 
     async def ping(self):
         """Executes the ping call in async manner"""
@@ -561,6 +569,14 @@ class SharepointServerDataSource(BaseDataSource):
             )
             raise
 
+    def init_sync_cursor(self):
+        if not self._sync_cursor:
+            self._sync_cursor = {
+                CURSOR_SYNC_TIMESTAMP: iso_zulu(),
+            }
+
+        return self._sync_cursor
+
     def map_document_with_schema(
         self,
         document,
@@ -691,6 +707,7 @@ class SharepointServerDataSource(BaseDataSource):
         """
 
         server_relative_url = []
+        self.init_sync_cursor()
 
         for collection in self.sharepoint_client.site_collections_path:
             server_relative_url.append(collection)
@@ -746,6 +763,81 @@ class SharepointServerDataSource(BaseDataSource):
                                     file_relative_url,
                                     site_url,
                                 )
+
+    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+        """Executes the logic to fetch SharePoint objects in an async manner.
+
+        Yields:
+            dictionary: dictionary containing meta-data of the SharePoint objects.
+        """
+
+        server_relative_url = []
+
+        self._sync_cursor = sync_cursor
+        self.sharepoint_client.check_timestamp = True
+        self.sharepoint_client.incremental_cursor = self.last_sync_time()
+
+        if not self._sync_cursor:
+            msg = "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
+            raise (msg)
+
+        for collection in self.sharepoint_client.site_collections_path:
+            server_relative_url.append(collection)
+            async for site_data in self.sharepoint_client.get_sites(
+                site_url=collection
+            ):
+                server_relative_url.append(site_data["ServerRelativeUrl"])
+                if site_data.get('LastItemModifiedDate') >= self.last_sync_time():
+                    yield self.format_sites(item=site_data), None, OP_INDEX
+
+        for site_url in server_relative_url:
+            async for list_data in self.sharepoint_client.get_lists(site_url=site_url):
+                for result in list_data:
+                    is_site_page = False
+                    selected_field = ""
+                    # if BaseType value is 1 then it's document library else it's a list
+                    if result.get("BaseType") == 1:
+                        if result.get("Title") == "Site Pages":
+                            is_site_page = True
+                            selected_field = SELECTED_FIELDS
+                        if result.get('LastItemModifiedDate') >= self.last_sync_time():
+                            yield self.format_lists(item=result, document_type=DOCUMENT_LIBRARY), None, OP_INDEX
+                        server_url = None
+                        func = self.sharepoint_client.get_drive_items
+                        format_document = self.format_drive_item
+                    else:
+                        if result.get('LastItemModifiedDate') >= self.last_sync_time():
+                            yield self.format_lists(item=result, document_type=LISTS), None, OP_INDEX
+                        server_url = result["RootFolder"]["ServerRelativeUrl"]
+                        func = self.sharepoint_client.get_list_items
+                        format_document = self.format_list_item
+
+                    async for item, file_relative_url in func(
+                        list_id=result.get("Id"),
+                        site_url=result.get("ParentWebUrl"),
+                        server_relative_url=server_url,
+                        selected_field=selected_field,
+                    ):
+                        document = format_document(item=item)
+
+                        if file_relative_url is None:
+                            yield document, None, OP_INDEX
+                        else:
+                            if is_site_page:
+                                yield document, partial(
+                                    self.get_site_pages_content,
+                                    document,
+                                    item,
+                                ), OP_INDEX
+                            else:
+                                yield document, partial(
+                                    self.get_content,
+                                    document,
+                                    file_relative_url,
+                                    site_url,
+                                ), OP_INDEX
+
+        self.update_sync_timestamp_cursor(iso_zulu())
 
     async def get_content(
         self, document, file_relative_url, site_url, timestamp=None, doit=False
