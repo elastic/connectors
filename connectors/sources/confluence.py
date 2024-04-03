@@ -726,7 +726,7 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
-        self._logger.debug(f"Fetching permissions for '{space_key}' space")
+        self._logger.info(f"Fetching permissions for '{space_key}' space")
         try:
             async for permissions in self.confluence_client.api_call(
                 url=os.path.join(self.confluence_client.host_url, url),

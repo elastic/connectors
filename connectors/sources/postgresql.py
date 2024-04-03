@@ -219,9 +219,12 @@ class PostgreSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
-            self._logger.info(
-                "Fetching all tables as the configuration field 'tables' is set to '*' or advanced sync rule is enabled."
+            msg = (
+                "Fetching all tables as the configuration field 'tables' is set to '*'"
+                if is_wildcard(tables)
+                else "Fetching all tables as the advanced sync rules are enabled."
             )
+            self._logger.info(msg)
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -546,7 +549,7 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
-        self._logger.debug(
+        self._logger.info(
             f"Fetching records for '{tables}' tables using the custom query: {query}"
         )
         try:
