@@ -836,7 +836,7 @@ class JiraDataSource(BaseDataSource):
                     ):
                         project = await response.json()
                         await self._put_projects(project=project, timestamp=timestamp)
-            await self.queue.put(FINISHED)  # pyright: ignore
+            await self.queue.put(FINISHED)
         except Exception as exception:
             self._logger.warning(
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
