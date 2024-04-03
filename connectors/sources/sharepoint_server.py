@@ -365,7 +365,7 @@ class SharepointServerClient:
                         is_list_item_has_attachment=True,
                     )
                     result["url"] = url
-                    if not self.check_timestamp or result.get('Modified') >= self.incremental_cursor:
+                    if not self.check_timestamp or result.get("Modified") >= self.incremental_cursor:
                         yield result, file_relative_url
                     continue
 
@@ -392,7 +392,7 @@ class SharepointServerClient:
                         relative_url=file_relative_url,
                     )
 
-                    if not self.check_timestamp or result.get('Modified') >= self.incremental_cursor:
+                    if not self.check_timestamp or result.get("Modified") >= self.incremental_cursor:
                         yield result, file_relative_url
 
     async def get_drive_items(self, list_id, site_url, server_relative_url, **kwargs):
@@ -428,7 +428,7 @@ class SharepointServerClient:
                     result["Length"] = result[item_type]["Length"]
                 result["item_type"] = item_type
 
-                if not self.check_timestamp or result.get('Modified') >= self.incremental_cursor:
+                if not self.check_timestamp or result.get("Modified") >= self.incremental_cursor:
                     yield result, file_relative_url
 
     async def ping(self):
@@ -787,7 +787,7 @@ class SharepointServerDataSource(BaseDataSource):
                 site_url=collection
             ):
                 server_relative_url.append(site_data["ServerRelativeUrl"])
-                if site_data.get('LastItemModifiedDate') >= self.last_sync_time():
+                if site_data.get("Created") >= self.last_sync_time():
                     yield self.format_sites(item=site_data), None, OP_INDEX
 
         for site_url in server_relative_url:
@@ -800,13 +800,13 @@ class SharepointServerDataSource(BaseDataSource):
                         if result.get("Title") == "Site Pages":
                             is_site_page = True
                             selected_field = SELECTED_FIELDS
-                        if result.get('LastItemModifiedDate') >= self.last_sync_time():
+                        if result.get("Created") >= self.last_sync_time():
                             yield self.format_lists(item=result, document_type=DOCUMENT_LIBRARY), None, OP_INDEX
                         server_url = None
                         func = self.sharepoint_client.get_drive_items
                         format_document = self.format_drive_item
                     else:
-                        if result.get('LastItemModifiedDate') >= self.last_sync_time():
+                        if result.get("Created") >= self.last_sync_time():
                             yield self.format_lists(item=result, document_type=LISTS), None, OP_INDEX
                         server_url = result["RootFolder"]["ServerRelativeUrl"]
                         func = self.sharepoint_client.get_list_items
