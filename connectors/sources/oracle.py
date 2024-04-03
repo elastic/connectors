@@ -210,9 +210,7 @@ class OracleClient:
                 retry_count=self.retry_count,
             )
         ]
-        self._logger.debug(
-            f"Found primary keys for '{table}' table"
-        )
+        self._logger.debug(f"Found primary keys for '{table}' table")
         return primary_keys
 
     async def get_table_last_update_time(self, table):

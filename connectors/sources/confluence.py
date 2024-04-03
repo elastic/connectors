@@ -77,6 +77,7 @@ CONFLUENCE_SERVER = "confluence_server"
 CONFLUENCE_DATA_CENTER = "confluence_data_center"
 WILDCARD = "*"
 
+
 class InvalidConfluenceDataSourceTypeError(ValueError):
     pass
 
@@ -131,12 +132,10 @@ class ConfluenceClient:
                 self.configuration["data_center_password"],
             )
         else:
-            msg = (
-                f"Unknown data source type '{self.data_source_type}' for Confluence connector"
-            )
+            msg = f"Unknown data source type '{self.data_source_type}' for Confluence connector"
             self._logger.error(msg)
 
-            raise InvalidJiraDataSourceTypeError(msg)
+            raise InvalidConfluenceDataSourceTypeError(msg)
 
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -727,9 +726,7 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
-        self._logger.debug(
-            f"Fetching permissions for '{space_key}' space"
-        )
+        self._logger.debug(f"Fetching permissions for '{space_key}' space")
         try:
             async for permissions in self.confluence_client.api_call(
                 url=os.path.join(self.confluence_client.host_url, url),
@@ -803,7 +800,7 @@ class ConfluenceDataSource(BaseDataSource):
             String: Download link to get the content of the attachment
         """
         self._logger.info(
-            f"Fetching attachments for '{parent_name}' from '{parent_space}' space"
+            f"Fetching attachments for '{parent_name}' {parent_type} from '{parent_space}' space"
         )
         async for response in self.confluence_client.paginated_api_call(
             url_name=ATTACHMENT,
