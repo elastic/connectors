@@ -47,6 +47,7 @@ async def create_graphql_source(
         authentication_method="none",
         graphql_query=graphql_query,
         graphql_object_list=["users", "name"],
+        graphql_field_id="id",
         headers=headers,
         graphql_variables=graphql_variables,
     ) as source:
@@ -307,29 +308,50 @@ async def test_get_docs():
     expected_response = [
         {
             "name": "xyz",
-            "_id": "c4ca4238a0b923820dcc509a6f75849b",
+            "id": "id1",
+            "_id": "id1",
             "_timestamp": "2024-01-24T04:07:19+00:00",
         },
         {
             "name": "pqr",
-            "_id": "c81e728d9d4c2f636f067f89cc14862c",
+            "id": "id2",
+            "_id": "id2",
             "_timestamp": "2024-01-24T04:07:19+00:00",
         },
         {
             "name": "abc",
-            "id": 123,
-            "_id": 123,
+            "id": "id3",
+            "_id": "id3",
             "_timestamp": "2024-01-24T04:07:19+00:00",
         },
     ]
     actual_response = []
     async with create_graphql_source() as source:
+        source.graphql_client.graphql_field_id = "id"
         source.fetch_data = AsyncIterator(
-            [{"name": "xyz"}, {"name": "pqr"}, {"name": "abc", "id": 123}]
+            [
+                {"name": "xyz", "id": "id1"},
+                {"name": "pqr", "id": "id2"},
+                {"name": "abc", "id": "id3"},
+            ]
         )
         async for doc, _ in source.get_docs():
             actual_response.append(doc)
     assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+@freeze_time("2024-01-24T04:07:19")
+async def test_get_docs_with_dict_id():
+    async with create_graphql_source() as source:
+        source.fetch_data = AsyncIterator(
+            [
+                {"name": "xyz", "id": {"sys_id": 1}},
+            ]
+        )
+        with pytest.raises(ConfigurableFieldValueError):
+            async for _, _ in source.get_docs():
+                pass
 
 
 @pytest.mark.asyncio
@@ -385,10 +407,21 @@ async def test_validate_config_with_invalid_objects():
 async def test_validate_config_with_invalid_pagination_key():
     async with create_graphql_source() as source:
         source.graphql_client.graphql_query = (
-            "query {organization {repository { issues {name}}}}"
+            "query {organization {repository { issues {id name}}}}"
         )
         source.graphql_client.graphql_object_list = ["organization.repository.issues"]
         source.graphql_client.pagination_model = "cursor_pagination"
         source.graphql_client.pagination_key = "organization.repository.pullRequest"
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+
+@pytest.mark.asyncio
+async def test_validate_config_with_missing_config_field():
+    async with create_graphql_source() as source:
+        source.graphql_client.graphql_query = (
+            "query {organization {repository { issues {name}}}}"
+        )
+        source.graphql_client.graphql_object_list = ["organization.repository.issues"]
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
