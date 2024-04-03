@@ -873,7 +873,7 @@ class DropboxDataSource(BaseDataSource):
         file_size = int(attachment["size"])
 
         if file_size <= 0:
-            self._logger.warn(f"Skipping file '{attachment["name"]}' as file size is {file_size}")
+            self._logger.warning(f"Skipping file '{attachment["name"]}' as file size is {file_size}")
             return
 
         filename = attachment["name"]
