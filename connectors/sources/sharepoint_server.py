@@ -787,7 +787,7 @@ class SharepointServerDataSource(BaseDataSource):
                 site_url=collection
             ):
                 server_relative_url.append(site_data["ServerRelativeUrl"])
-                if site_data.get("Created") >= self.last_sync_time():
+                if site_data.get("LastItemModifiedDate") >= self.last_sync_time():
                     yield self.format_sites(item=site_data), None, OP_INDEX
 
         for site_url in server_relative_url:
@@ -800,13 +800,13 @@ class SharepointServerDataSource(BaseDataSource):
                         if result.get("Title") == "Site Pages":
                             is_site_page = True
                             selected_field = SELECTED_FIELDS
-                        if result.get("Created") >= self.last_sync_time():
+                        if result.get("RootFolder").get("TimeLastModified") >= self.last_sync_time():
                             yield self.format_lists(item=result, document_type=DOCUMENT_LIBRARY), None, OP_INDEX
                         server_url = None
                         func = self.sharepoint_client.get_drive_items
                         format_document = self.format_drive_item
                     else:
-                        if result.get("Created") >= self.last_sync_time():
+                        if result.get("RootFolder").get("TimeLastModified") >= self.last_sync_time():
                             yield self.format_lists(item=result, document_type=LISTS), None, OP_INDEX
                         server_url = result["RootFolder"]["ServerRelativeUrl"]
                         func = self.sharepoint_client.get_list_items
