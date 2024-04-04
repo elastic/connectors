@@ -5,7 +5,6 @@
 #
 """SharePoint source module responsible to fetch documents from SharePoint Server.
 """
-import asyncio
 import os
 from functools import partial
 from urllib.parse import quote
