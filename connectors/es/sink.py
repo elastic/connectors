@@ -64,11 +64,11 @@ OP_DELETE = "delete"
 CANCELATION_TIMEOUT = 5
 
 # counter keys
-DOCS_CREATED = "docs_created"
-ATTACHMENT_EXTRACTED = "attachment_extracted"
-DOCS_UPDATED = "docs_updated"
-DOCS_DELETED = "doc_deleted"
+ATTACHMENTS_EXTRACTED = "attachments_extracted"
 BULK_OPERATIONS = "bulk_operations"
+DOCS_CREATED = "docs_created"
+DOCS_UPDATED = "docs_updated"
+DOCS_DELETED = "docs_deleted"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
@@ -386,7 +386,7 @@ class Extractor:
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
         if data is not None:
-            self.counters.increment(ATTACHMENT_EXTRACTED)
+            self.counters.increment(ATTACHMENTS_EXTRACTED)
             data.pop("_id", None)
             data.pop(TIMESTAMP_FIELD, None)
             doc.update(data)
