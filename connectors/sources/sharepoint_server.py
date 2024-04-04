@@ -5,15 +5,16 @@
 #
 """SharePoint source module responsible to fetch documents from SharePoint Server.
 """
+import asyncio
 import os
 from functools import partial
 from urllib.parse import quote
 
-import aiohttp
-from aiohttp.client_exceptions import ServerDisconnectedError
+import httpx
+from httpx_ntlm import HttpNtlmAuth
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import BaseDataSource, ConfigurableFieldValueError, CHUNK_SIZE
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -35,13 +36,13 @@ DOCUMENT_LIBRARY = "document_library"
 SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
 URLS = {
-    PING: "{host_url}{parent_site_url}_api/web/webs",
-    SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
-    LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
-    ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
-    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
-    LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
-    ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
+    PING: "{site_collections}/_api/web/webs",
+    SITES: "{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
+    LISTS: "{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(NoCrawl eq false)",
+    ATTACHMENT: "{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
+    DRIVE_ITEM: "{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
+    LIST_ITEM: "{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
+    ATTACHMENT_DATA: "{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
 }
 SCHEMA = {
     SITES: {
@@ -92,12 +93,7 @@ class SharepointServerClient:
         self.certificate = self.configuration["ssl_ca"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.retry_count = self.configuration["retry_count"]
-
-        self.site_collections_path = []
-        for site in self.configuration["site_collections"]:
-            if site != "/":
-                site = f"/sites/{site}/"
-            self.site_collections_path.append(site)
+        self.site_collections = self.configuration["site_collections"]
 
         self.session = None
         if self.ssl_enabled and self.certificate:
@@ -114,23 +110,23 @@ class SharepointServerClient:
         Returns:
             ClientSession: Base client session.
         """
-        if self.session:
+        if self.session and self.session.is_closed == False:
             return self.session
-        self._logger.info("Generating aiohttp Client Session...")
+        self._logger.info("Generating httpx Client Session...")
         request_headers = {
             "accept": "application/json",
             "content-type": "application/json",
         }
-        timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
+        timeout = httpx.Timeout(timeout=None)  # pyright: ignore
 
-        self.session = aiohttp.ClientSession(
-            auth=aiohttp.BasicAuth(
-                login=self.configuration["username"],
+        self.session = httpx.AsyncClient(
+            auth=HttpNtlmAuth(
+                username=self.configuration["username"],
                 password=self.configuration["password"],
             ),  # pyright: ignore
+            verify=self.ssl_ctx,
             headers=request_headers,
-            timeout=timeout,
-            raise_for_status=True,
+            timeout=timeout
         )
         return self.session
 
@@ -161,7 +157,7 @@ class SharepointServerClient:
         self._sleeps.cancel()
         if self.session is None:
             return
-        await self.session.close()  # pyright: ignore
+        await self.session.aclose()  # pyright: ignore
         self.session = None
 
     async def _api_call(self, url_name, url="", **url_kwargs):
@@ -186,20 +182,20 @@ class SharepointServerClient:
 
         while True:
             try:
-                async with self._get_session().get(  # pyright: ignore
+                self._get_session();
+                result = await self.session.get(  # pyright: ignore
                     url=url,
-                    ssl=self.ssl_ctx,  # pyright: ignore
-                    headers=headers,
-                ) as result:
-                    if url_name == ATTACHMENT:
-                        yield result
-                    else:
-                        yield await result.json()
-                    break
+                    headers=headers
+                )                
+                if url_name == ATTACHMENT:
+                    yield result
+                else:
+                    yield result.json()
+                break
             except Exception as exception:
                 if isinstance(
                     exception,
-                    ServerDisconnectedError,
+                    httpx.ConnectError,
                 ):
                     await self.close_session()
                 if retry > self.retry_count:
@@ -288,7 +284,7 @@ class SharepointServerClient:
         ):
             for data in sites_data:
                 async for sub_site in self.get_sites(  # pyright: ignore
-                    site_url=data["ServerRelativeUrl"]
+                    site_url=data["Url"]
                 ):
                     yield sub_site
                 yield data
@@ -428,7 +424,7 @@ class SharepointServerClient:
         await anext(
             self._api_call(
                 url_name=PING,
-                parent_site_url=self.site_collections_path[0],
+                site_collections=self.site_collections[0],
                 host_url=self.host_url,
             )
         )
@@ -483,6 +479,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "label": "Comma-separated list of SharePoint site collections to index",
                 "order": 4,
                 "type": "list",
+                "required": False
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -526,11 +523,12 @@ class SharepointServerDataSource(BaseDataSource):
         Raises:
             ConfigurableFieldValueError: Unavailable services error.
         """
-        for collection in self.sharepoint_client.site_collections_path:
+
+        for collection in self.sharepoint_client.site_collections:
             is_invalid = True
             async for _ in self.sharepoint_client._api_call(
                 url_name=PING,
-                parent_site_url=collection,
+                site_collections=collection,
                 host_url=self.sharepoint_client.host_url,
             ):
                 is_invalid = False
@@ -689,15 +687,14 @@ class SharepointServerDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the SharePoint objects.
         """
-
         server_relative_url = []
 
-        for collection in self.sharepoint_client.site_collections_path:
-            server_relative_url.append(collection)
+        for collection in self.sharepoint_client.site_collections:
+            server_relative_url.append(f"{collection}")
             async for site_data in self.sharepoint_client.get_sites(
-                site_url=collection
+                site_url=f"{collection}"
             ):
-                server_relative_url.append(site_data["ServerRelativeUrl"])
+                server_relative_url.append(site_data["Url"])
                 yield self.format_sites(item=site_data), None
 
         for site_url in server_relative_url:
@@ -724,7 +721,7 @@ class SharepointServerDataSource(BaseDataSource):
 
                     async for item, file_relative_url in func(
                         list_id=result.get("Id"),
-                        site_url=result.get("ParentWebUrl"),
+                        site_url=site_url,
                         server_relative_url=server_url,
                         selected_field=selected_field,
                     ):
@@ -782,7 +779,7 @@ class SharepointServerDataSource(BaseDataSource):
             filename,
             file_extension,
             partial(
-                self.generic_chunked_download_func,
+                self.chunked_download_func,
                 partial(
                     self.sharepoint_client._api_call,
                     url_name=ATTACHMENT,
@@ -844,3 +841,13 @@ class SharepointServerDataSource(BaseDataSource):
         it instead contains a key with bytes in its response.
         """
         yield bytes(response_data, "utf-8")
+
+    async def chunked_download_func(self, download_func):
+        """
+        This provides a wrapper for chunked download funcs that
+        use `response.content.iterchunked`.
+        This should not be used for downloads that use other methods.
+        """
+        async for response in download_func():
+            async for data in response.aiter_bytes(CHUNK_SIZE):
+                yield data
