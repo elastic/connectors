@@ -246,6 +246,7 @@ class OneDriveClient:
         Returns:
             ClientSession: Base client session
         """
+        self._logger.debug("Creating a client session")
         connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
         return aiohttp.ClientSession(
@@ -270,6 +271,7 @@ class OneDriveClient:
         skipped_exceptions=NotFound,
     )
     async def get(self, url, header=None):
+        self._logger.debug(f"Making a GET call to url: {url}")
         access_token = await self.token.get()
         headers = {"authorization": f"Bearer {access_token}"}
         if header:
@@ -278,6 +280,7 @@ class OneDriveClient:
             async with self.session.get(url=url, headers=headers) as response:
                 yield response
         except ServerConnectionError:
+            self._logger.exception(f"Getting ServerConnectionError for url: {url}")
             await self.close_session()
             raise
         except ClientResponseError as e:
@@ -290,6 +293,7 @@ class OneDriveClient:
         skipped_exceptions=NotFound,
     )
     async def post(self, url, payload=None):
+        self._logger.debug(f"Making a POST call to url: {url} with payload: {payload}")
         access_token = await self.token.get()
         headers = {
             "authorization": f"Bearer {access_token}",
@@ -348,6 +352,9 @@ class OneDriveClient:
         params["$top"] = fetch_size
         params = "&".join(f"{key}={val}" for key, val in params.items())
 
+        self._logger.info(
+            f"Started pagination for url: {url} with parameters: {params}"
+        )
         url = f"{url}?{params}"
         while True:
             try:
@@ -379,7 +386,7 @@ class OneDriveClient:
         if include_groups:
             params["$expand"] = "transitiveMemberOf($select=id)"
 
-        # This condtion is executed during content sync where connector fetches only licensed accounts as unlicensed users won't have any files.
+        # This condition is executed during content sync where connector fetches only licensed accounts as unlicensed users won't have any files.
         else:
             params["$filter"] += " and assignedLicenses/$count ne 0&$count=true"
             header = {"ConsistencyLevel": "eventual"}
@@ -562,6 +569,7 @@ class OneDriveDataSource(BaseDataSource):
             "_id": file["_id"],
             "_timestamp": file["_timestamp"],
         }
+        self._logger.debug(f"Downloading file content from url: {download_url}")
         return await self.download_and_extract_file(
             document,
             filename,
@@ -606,6 +614,7 @@ class OneDriveDataSource(BaseDataSource):
         return document
 
     async def _user_access_control_doc(self, user):
+        self._logger.info("Fetching users for access control sync")
         email = user.get("mail")
         username = user.get("userPrincipalName")
 
@@ -648,6 +657,9 @@ class OneDriveDataSource(BaseDataSource):
         if not self._dls_enabled():
             return []
 
+        self._logger.debug(
+            f"Fetching entity permissions for user_id: {user_id} and file_id: {file_id}"
+        )
         permissions = []
         async for permission in self.client.list_file_permission(
             user_id=user_id, file_id=file_id
@@ -723,7 +735,7 @@ class OneDriveDataSource(BaseDataSource):
         else:
             return entity, None
 
-    async def _bounbed_concurrent_tasks(
+    async def _bounded_concurrent_tasks(
         self, items, max_concurrency, calling_func, **kwargs
     ):
         async def process_item(item, semaphore):
@@ -754,6 +766,9 @@ class OneDriveDataSource(BaseDataSource):
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
+            self._logger.info(
+                f"Retrieving documents from OneDrive using advanced sync rules: {advanced_rules}"
+            )
 
             user_mail_id_map = {}
             async for user in self.client.list_users():
@@ -782,7 +797,7 @@ class OneDriveDataSource(BaseDataSource):
                 files = response.get("body", {}).get("value", [])
                 if entities := [file for file in files if file.get("name") != "root"]:
                     if self._dls_enabled():
-                        entities = await self._bounbed_concurrent_tasks(
+                        entities = await self._bounded_concurrent_tasks(
                             entities,
                             self.concurrent_downloads,
                             self._decorate_with_access_control,

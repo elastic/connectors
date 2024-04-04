@@ -267,6 +267,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
         if "*" in buckets:
+            self._logger.info(
+                "Fetching all buckets as the configuration field 'buckets' is set to '*'"
+            )
             async for bucket in self._google_storage_client.api_call(
                 resource="buckets",
                 method="list",
@@ -276,6 +279,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             ):
                 yield bucket
         else:
+            self._logger.info(f"Fetching user configured buckets: {buckets}")
             for bucket in buckets:
                 yield {"items": [{"id": bucket, "name": bucket}]}
 
@@ -289,6 +293,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
+            self._logger.info(f"Fetching blobs for '{bucket['id']}' bucket")
             try:
                 async for blob in self._google_storage_client.api_call(
                     resource="objects",
@@ -348,8 +353,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
+        if not doit:
+            self._logger.debug(f"Skipping attachment downloading for {blob['name']}")
+            return
+
         file_size = int(blob["size"])
-        if not (doit and file_size):
+        if file_size <= 0:
+            self._logger.warning(
+                f"Skipping file '{blob['name']}' as file size is {file_size}"
+            )
             return
 
         filename = blob["name"]
@@ -357,6 +369,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
+        self._logger.debug(f"Downloading content for file: {filename}")
         document = {
             "_id": blob["id"],
             "_timestamp": blob["_timestamp"],
