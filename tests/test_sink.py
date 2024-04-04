@@ -18,6 +18,10 @@ from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import Settings
 from connectors.es.sink import (
+    ATTACHMENT_EXTRACTED,
+    DOC_CREATED,
+    DOC_DELETED,
+    DOC_UPDATED,
     OP_DELETE,
     OP_INDEX,
     OP_UPSERT,
@@ -731,10 +735,10 @@ async def test_get_docs(
 
         await extractor.run(doc_generator, JobType.FULL)
 
-        assert extractor.total_docs_updated == expected_total_docs_updated
-        assert extractor.total_docs_created == expected_total_docs_created
-        assert extractor.total_docs_deleted == expected_total_docs_deleted
-        assert extractor.total_downloads == expected_total_downloads
+        assert extractor.counters.get(DOC_UPDATED) == expected_total_docs_updated
+        assert extractor.counters.get(DOC_CREATED) == expected_total_docs_created
+        assert extractor.counters.get(DOC_DELETED) == expected_total_docs_deleted
+        assert extractor.counters.get(ATTACHMENT_EXTRACTED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -908,10 +912,10 @@ async def test_get_docs_incrementally(
 
         await extractor.run(doc_generator, JobType.INCREMENTAL)
 
-        assert extractor.total_docs_updated == expected_total_docs_updated
-        assert extractor.total_docs_created == expected_total_docs_created
-        assert extractor.total_docs_deleted == expected_total_docs_deleted
-        assert extractor.total_downloads == expected_total_downloads
+        assert extractor.counters.get(DOC_UPDATED) == expected_total_docs_updated
+        assert extractor.counters.get(DOC_CREATED) == expected_total_docs_created
+        assert extractor.counters.get(DOC_DELETED) == expected_total_docs_deleted
+        assert extractor.counters.get(ATTACHMENT_EXTRACTED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -1013,9 +1017,9 @@ async def test_get_access_control_docs(
 
     await extractor.run(doc_generator, JobType.ACCESS_CONTROL)
 
-    assert extractor.total_docs_updated == expected_total_docs_updated
-    assert extractor.total_docs_created == expected_total_docs_created
-    assert extractor.total_docs_deleted == expected_total_docs_deleted
+    assert extractor.counters.get(DOC_UPDATED) == expected_total_docs_updated
+    assert extractor.counters.get(DOC_CREATED) == expected_total_docs_created
+    assert extractor.counters.get(DOC_DELETED) == expected_total_docs_deleted
 
     assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -1116,9 +1120,18 @@ def test_bulk_populate_stats(res, expected_result):
     )
     sink._populate_stats(deepcopy(STATS), res)
 
-    assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == expected_result[INDEXED_DOCUMENT_COUNT]
-    assert sink.counters.get(INDEXED_DOUCMENT_VOLUME) == expected_result[INDEXED_DOUCMENT_VOLUME]
-    assert sink.counters.get(DELETED_DOCUMENT_COUNT) == expected_result[DELETED_DOCUMENT_COUNT]
+    assert (
+        sink.counters.get(INDEXED_DOCUMENT_COUNT)
+        == expected_result[INDEXED_DOCUMENT_COUNT]
+    )
+    assert (
+        sink.counters.get(INDEXED_DOUCMENT_VOLUME)
+        == expected_result[INDEXED_DOUCMENT_VOLUME]
+    )
+    assert (
+        sink.counters.get(DELETED_DOCUMENT_COUNT)
+        == expected_result[DELETED_DOCUMENT_COUNT]
+    )
 
 
 @pytest.mark.asyncio

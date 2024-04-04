@@ -64,6 +64,12 @@ OP_UPSERT = "update"
 OP_DELETE = "delete"
 CANCELATION_TIMEOUT = 5
 
+# counter keys
+DOC_CREATED = "doc_created"
+ATTACHMENT_EXTRACTED = "attachment_extracted"
+DOC_UPDATED = "doc_updated"
+DOC_DELETED = "doc_deleted"
+
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
 
@@ -364,10 +370,7 @@ class Extractor:
         self.queue = queue
         self.index = index
         self.loop = asyncio.get_event_loop()
-        self.total_downloads = 0
-        self.total_docs_updated = 0
-        self.total_docs_created = 0
-        self.total_docs_deleted = 0
+        self.counters = Counters()
         self.fetch_error = None
         self.filter_ = filter_
         self.basic_rule_engine = (
@@ -384,7 +387,7 @@ class Extractor:
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
         if data is not None:
-            self.total_downloads += 1
+            self.counters.increment(ATTACHMENT_EXTRACTED)
             data.pop("_id", None)
             data.pop(TIMESTAMP_FIELD, None)
             doc.update(data)
@@ -497,9 +500,10 @@ class Extractor:
                         )
                         continue
 
-                    self.total_docs_updated += 1
+                    self.counters.increment(DOC_UPDATED)
+
                 else:
-                    self.total_docs_created += 1
+                    self.counters.increment(DOC_CREATED)
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
@@ -577,11 +581,11 @@ class Extractor:
                     continue
 
                 if operation == OP_INDEX:
-                    self.total_docs_created += 1
+                    self.counters.increment(DOC_CREATED)
                 elif operation == OP_UPSERT:
-                    self.total_docs_updated += 1
+                    self.counters.increment(DOC_UPDATED)
                 elif operation == OP_DELETE:
-                    self.total_docs_deleted += 1
+                    self.counters.increment(DOC_DELETED)
                 else:
                     self._logger.error(
                         f"unsupported operation {operation} for doc {doc_id}"
@@ -657,11 +661,11 @@ class Extractor:
                 if doc_not_updated:
                     continue
 
-                self.total_docs_updated += 1
+                self.counters.increment(DOC_UPDATED)
 
                 operation = OP_UPSERT
             else:
-                self.total_docs_created += 1
+                self.counters.increment(DOC_CREATED)
 
                 if TIMESTAMP_FIELD not in doc:
                     doc[TIMESTAMP_FIELD] = iso_utc()
@@ -691,14 +695,16 @@ class Extractor:
                     "_id": doc_id,
                 }
             )
-            self.total_docs_deleted += 1
+            self.counters.increment(DOC_DELETED)
 
-    def _log_progress(self):
+    def _log_progress(
+        self,
+    ):  # TODO, this is different counters than what we log at the end
         self._logger.info(
             "Sync progress -- "
-            f"created: {self.total_docs_created} | "
-            f"updated: {self.total_docs_updated} | "
-            f"deleted: {self.total_docs_deleted}"
+            f"created: {self.counters.get(DOC_CREATED)} | "
+            f"updated: {self.counters.get(DOC_UPDATED)} | "
+            f"deleted: {self.counters.get(DOC_DELETED)}"
         )
 
 
@@ -809,30 +815,15 @@ class SyncOrchestrator:
     def ingestion_stats(self):
         stats = {}
         if self._extractor is not None:
-            stats.update(
-                {
-                    "doc_created": self._extractor.total_docs_created,
-                    "attachment_extracted": self._extractor.total_downloads,
-                    "doc_updated": self._extractor.total_docs_updated,
-                    "doc_deleted": self._extractor.total_docs_deleted,
-                }
-            )
+            stats.update(self._extractor.counters.to_dict())
         if self._sink is not None:
             stats.update(
-                {
-                    "bulk_operations": dict(self._sink.ops),
-                    INDEXED_DOCUMENT_COUNT: self._sink.counters.get(
-                        INDEXED_DOCUMENT_COUNT
-                    ),
-                    # return indexed_document_volume in number of MiB
-                    INDEXED_DOUCMENT_VOLUME: round(
-                        self._sink.counters.get(INDEXED_DOUCMENT_VOLUME) / (1024 * 1024)
-                    ),
-                    DELETED_DOCUMENT_COUNT: self._sink.counters.get(
-                        DELETED_DOCUMENT_COUNT
-                    ),
-                }
-            )
+                {"bulk_operations": dict(self._sink.ops)}
+            )  # TODO, unify in counters
+            stats.update(self._sink.counters.to_dict())
+            stats[INDEXED_DOUCMENT_VOLUME] = round(
+                stats[INDEXED_DOUCMENT_VOLUME] / (1024 * 1024)
+            )  # return indexed_document_volume in number of MiB
         return stats
 
     def fetch_error(self):
