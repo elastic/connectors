@@ -22,6 +22,11 @@ from connectors.es.management_client import ESManagementClient
 from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOUCMENT_VOLUME,
+)
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
@@ -340,12 +345,10 @@ class SyncJobRunner:
             if self.sync_orchestrator is None
             else self.sync_orchestrator.ingestion_stats()
         )
-        persisted_stats = {
-            "indexed_document_count": ingestion_stats.get("indexed_document_count", 0),
-            "indexed_document_volume": ingestion_stats.get(
-                "indexed_document_volume", 0
-            ),
-            "deleted_document_count": ingestion_stats.get("deleted_document_count", 0),
+        ingestion_stats = {
+            INDEXED_DOCUMENT_COUNT: ingestion_stats.get(INDEXED_DOCUMENT_COUNT, 0),
+            INDEXED_DOUCMENT_VOLUME: ingestion_stats.get(INDEXED_DOUCMENT_VOLUME, 0),
+            DELETED_DOCUMENT_COUNT: ingestion_stats.get(DELETED_DOCUMENT_COUNT, 0),
         }
 
         if await self.reload_sync_job():
@@ -508,9 +511,9 @@ class SyncJobRunner:
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
-                "indexed_document_count": result.get("indexed_document_count", 0),
-                "indexed_document_volume": result.get("indexed_document_volume", 0),
-                "deleted_document_count": result.get("deleted_document_count", 0),
+                INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
+                INDEXED_DOUCMENT_VOLUME: result.get(INDEXED_DOUCMENT_VOLUME, 0),
+                DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
 

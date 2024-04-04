@@ -75,11 +75,15 @@ CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
 
+INDEXED_DOCUMENT_COUNT = "indexed_document_count"
+INDEXED_DOUCMENT_VOLUME = "indexed_document_volume"
+DELETED_DOCUMENT_COUNT = "deleted_document_count"
+TOTAL_DOCUMENT_COUNT = "total_document_count"
 ALLOWED_INGESTION_STATS_KEYS = (
-    "indexed_document_count",
-    "indexed_document_volume",
-    "deleted_document_count",
-    "total_document_count",
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOUCMENT_VOLUME,
+    DELETED_DOCUMENT_COUNT,
+    TOTAL_DOCUMENT_COUNT,
 )
 
 
@@ -266,19 +270,19 @@ class SyncJob(ESDocument):
 
     @property
     def indexed_document_count(self):
-        return self.get("indexed_document_count", default=0)
+        return self.get(INDEXED_DOCUMENT_COUNT, default=0)
 
     @property
     def indexed_document_volume(self):
-        return self.get("indexed_document_volume", default=0)
+        return self.get(INDEXED_DOUCMENT_VOLUME, default=0)
 
     @property
     def deleted_document_count(self):
-        return self.get("deleted_document_count", default=0)
+        return self.get(DELETED_DOCUMENT_COUNT, default=0)
 
     @property
     def total_document_count(self):
-        return self.get("total_document_count", default=0)
+        return self.get(TOTAL_DOCUMENT_COUNT, default=0)
 
     @property
     def job_type(self):
@@ -1005,9 +1009,9 @@ class SyncJobIndex(ESIndex):
             "trigger_method": trigger_method.value,
             "job_type": job_type.value,
             "status": JobStatus.PENDING.value,
-            "indexed_document_count": 0,
-            "indexed_document_volume": 0,
-            "deleted_document_count": 0,
+            INDEXED_DOCUMENT_COUNT: 0,
+            INDEXED_DOUCMENT_VOLUME: 0,
+            DELETED_DOCUMENT_COUNT: 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }

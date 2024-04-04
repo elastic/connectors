@@ -33,6 +33,11 @@ from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOUCMENT_VOLUME,
+)
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
@@ -42,6 +47,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
+    Counters,
     MemQueue,
     aenumerate,
     get_size,
@@ -124,12 +130,10 @@ class Sink:
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
         self.retry_interval = retry_interval
-        self.indexed_document_count = 0
-        self.indexed_document_volume = 0
-        self.deleted_document_count = 0
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
+        self.counters = Counters()
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -230,14 +234,17 @@ class Sink:
                 if "result" not in data:
                     del stats[op][data["_id"]]
 
-        self.indexed_document_count += len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
-        self.indexed_document_volume += sum(stats[OP_INDEX].values()) + sum(
-            stats[OP_UPSERT].values()
+        self.counters.increment(
+            INDEXED_DOCUMENT_COUNT, len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
         )
-        self.deleted_document_count += len(stats[OP_DELETE])
+        self.counters.increment(
+            INDEXED_DOUCMENT_VOLUME,
+            sum(stats[OP_INDEX].values()) + sum(stats[OP_UPSERT].values()),
+        )
+        self.counters.increment(DELETED_DOCUMENT_COUNT, len(stats[OP_DELETE]))
 
         self._logger.debug(
-            f"Sink stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
+            f"Sink stats - no. of docs indexed: {self.counters.get(INDEXED_DOCUMENT_COUNT)}, volume of docs indexed: {round(self.counters.get(INDEXED_DOUCMENT_VOLUME))} bytes, no. of docs deleted: {self.counters.get(DELETED_DOCUMENT_COUNT)}"
         )
 
     def force_cancel(self):
@@ -814,12 +821,16 @@ class SyncOrchestrator:
             stats.update(
                 {
                     "bulk_operations": dict(self._sink.ops),
-                    "indexed_document_count": self._sink.indexed_document_count,
-                    # return indexed_document_volume in number of MiB
-                    "indexed_document_volume": round(
-                        self._sink.indexed_document_volume / (1024 * 1024)
+                    INDEXED_DOCUMENT_COUNT: self._sink.counters.get(
+                        INDEXED_DOCUMENT_COUNT
                     ),
-                    "deleted_document_count": self._sink.deleted_document_count,
+                    # return indexed_document_volume in number of MiB
+                    INDEXED_DOUCMENT_VOLUME: round(
+                        self._sink.counters.get(INDEXED_DOUCMENT_VOLUME) / (1024 * 1024)
+                    ),
+                    DELETED_DOCUMENT_COUNT: self._sink.counters.get(
+                        DELETED_DOCUMENT_COUNT
+                    ),
                 }
             )
         return stats

@@ -29,6 +29,11 @@ from connectors.es.sink import (
     SyncOrchestrator,
 )
 from connectors.protocol import JobType, Pipeline
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOUCMENT_VOLUME,
+)
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -1111,9 +1116,9 @@ def test_bulk_populate_stats(res, expected_result):
     )
     sink._populate_stats(deepcopy(STATS), res)
 
-    assert sink.indexed_document_count == expected_result["indexed_document_count"]
-    assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
-    assert sink.deleted_document_count == expected_result["deleted_document_count"]
+    assert sink.counters.get(INDEXED_DOCUMENT_COUNT) == expected_result[INDEXED_DOCUMENT_COUNT]
+    assert sink.counters.get(INDEXED_DOUCMENT_VOLUME) == expected_result[INDEXED_DOUCMENT_VOLUME]
+    assert sink.counters.get(DELETED_DOCUMENT_COUNT) == expected_result[DELETED_DOCUMENT_COUNT]
 
 
 @pytest.mark.asyncio
