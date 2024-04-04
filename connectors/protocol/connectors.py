@@ -76,12 +76,12 @@ JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
 
 INDEXED_DOCUMENT_COUNT = "indexed_document_count"
-INDEXED_DOUCMENT_VOLUME = "indexed_document_volume"
+INDEXED_DOCUMENT_VOLUME = "indexed_document_volume"
 DELETED_DOCUMENT_COUNT = "deleted_document_count"
 TOTAL_DOCUMENT_COUNT = "total_document_count"
 ALLOWED_INGESTION_STATS_KEYS = (
     INDEXED_DOCUMENT_COUNT,
-    INDEXED_DOUCMENT_VOLUME,
+    INDEXED_DOCUMENT_VOLUME,
     DELETED_DOCUMENT_COUNT,
     TOTAL_DOCUMENT_COUNT,
 )
@@ -274,7 +274,7 @@ class SyncJob(ESDocument):
 
     @property
     def indexed_document_volume(self):
-        return self.get(INDEXED_DOUCMENT_VOLUME, default=0)
+        return self.get(INDEXED_DOCUMENT_VOLUME, default=0)
 
     @property
     def deleted_document_count(self):
@@ -1010,7 +1010,7 @@ class SyncJobIndex(ESIndex):
             "job_type": job_type.value,
             "status": JobStatus.PENDING.value,
             INDEXED_DOCUMENT_COUNT: 0,
-            INDEXED_DOUCMENT_VOLUME: 0,
+            INDEXED_DOCUMENT_VOLUME: 0,
             DELETED_DOCUMENT_COUNT: 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),

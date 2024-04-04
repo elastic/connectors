@@ -19,9 +19,10 @@ from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import Settings
 from connectors.es.sink import (
     ATTACHMENT_EXTRACTED,
-    DOC_CREATED,
-    DOC_DELETED,
-    DOC_UPDATED,
+    BULK_OPERATIONS,
+    DOCS_CREATED,
+    DOCS_DELETED,
+    DOCS_UPDATED,
     OP_DELETE,
     OP_INDEX,
     OP_UPSERT,
@@ -36,7 +37,7 @@ from connectors.protocol import JobType, Pipeline
 from connectors.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
-    INDEXED_DOUCMENT_VOLUME,
+    INDEXED_DOCUMENT_VOLUME,
 )
 from tests.commons import AsyncIterator
 
@@ -335,15 +336,15 @@ async def test_async_bulk(mock_responses):
     ingestion_stats = es.ingestion_stats()
 
     assert ingestion_stats == {
-        "doc_created": 1,
-        "attachment_extracted": 1,
-        "doc_updated": 1,
-        "doc_deleted": 1,
-        "bulk_operations.index": 2,
-        "bulk_operations.delete": 1,
-        "indexed_document_count": 2,
-        "indexed_document_volume": ANY,
-        "deleted_document_count": 1,
+        DOCS_CREATED: 1,
+        ATTACHMENT_EXTRACTED: 1,
+        DOCS_UPDATED: 1,
+        DOCS_DELETED: 1,
+        f"{BULK_OPERATIONS}.{OP_INDEX}": 2,
+        f"{BULK_OPERATIONS}.{OP_DELETE}": 1,
+        INDEXED_DOCUMENT_COUNT: 2,
+        INDEXED_DOCUMENT_VOLUME: ANY,
+        DELETED_DOCUMENT_COUNT: 1,
     }
 
     # 2nd sync
@@ -736,9 +737,9 @@ async def test_get_docs(
 
         await extractor.run(doc_generator, JobType.FULL)
 
-        assert extractor.counters.get(DOC_UPDATED) == expected_total_docs_updated
-        assert extractor.counters.get(DOC_CREATED) == expected_total_docs_created
-        assert extractor.counters.get(DOC_DELETED) == expected_total_docs_deleted
+        assert extractor.counters.get(DOCS_UPDATED) == expected_total_docs_updated
+        assert extractor.counters.get(DOCS_CREATED) == expected_total_docs_created
+        assert extractor.counters.get(DOCS_DELETED) == expected_total_docs_deleted
         assert extractor.counters.get(ATTACHMENT_EXTRACTED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
@@ -913,9 +914,9 @@ async def test_get_docs_incrementally(
 
         await extractor.run(doc_generator, JobType.INCREMENTAL)
 
-        assert extractor.counters.get(DOC_UPDATED) == expected_total_docs_updated
-        assert extractor.counters.get(DOC_CREATED) == expected_total_docs_created
-        assert extractor.counters.get(DOC_DELETED) == expected_total_docs_deleted
+        assert extractor.counters.get(DOCS_UPDATED) == expected_total_docs_updated
+        assert extractor.counters.get(DOCS_CREATED) == expected_total_docs_created
+        assert extractor.counters.get(DOCS_DELETED) == expected_total_docs_deleted
         assert extractor.counters.get(ATTACHMENT_EXTRACTED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
@@ -1018,9 +1019,9 @@ async def test_get_access_control_docs(
 
     await extractor.run(doc_generator, JobType.ACCESS_CONTROL)
 
-    assert extractor.counters.get(DOC_UPDATED) == expected_total_docs_updated
-    assert extractor.counters.get(DOC_CREATED) == expected_total_docs_created
-    assert extractor.counters.get(DOC_DELETED) == expected_total_docs_deleted
+    assert extractor.counters.get(DOCS_UPDATED) == expected_total_docs_updated
+    assert extractor.counters.get(DOCS_CREATED) == expected_total_docs_created
+    assert extractor.counters.get(DOCS_DELETED) == expected_total_docs_deleted
 
     assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -1126,8 +1127,8 @@ def test_bulk_populate_stats(res, expected_result):
         == expected_result[INDEXED_DOCUMENT_COUNT]
     )
     assert (
-        sink.counters.get(INDEXED_DOUCMENT_VOLUME)
-        == expected_result[INDEXED_DOUCMENT_VOLUME]
+        sink.counters.get(INDEXED_DOCUMENT_VOLUME)
+        == expected_result[INDEXED_DOCUMENT_VOLUME]
     )
     assert (
         sink.counters.get(DELETED_DOCUMENT_COUNT)

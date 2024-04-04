@@ -35,7 +35,7 @@ from connectors.protocol import Filter, JobType
 from connectors.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
-    INDEXED_DOUCMENT_VOLUME,
+    INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
@@ -64,10 +64,10 @@ OP_DELETE = "delete"
 CANCELATION_TIMEOUT = 5
 
 # counter keys
-DOC_CREATED = "doc_created"
+DOCS_CREATED = "docs_created"
 ATTACHMENT_EXTRACTED = "attachment_extracted"
-DOC_UPDATED = "doc_updated"
-DOC_DELETED = "doc_deleted"
+DOCS_UPDATED = "docs_updated"
+DOCS_DELETED = "doc_deleted"
 BULK_OPERATIONS = "bulk_operations"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
@@ -243,13 +243,13 @@ class Sink:
             INDEXED_DOCUMENT_COUNT, len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
         )
         self.counters.increment(
-            INDEXED_DOUCMENT_VOLUME,
+            INDEXED_DOCUMENT_VOLUME,
             sum(stats[OP_INDEX].values()) + sum(stats[OP_UPSERT].values()),
         )
         self.counters.increment(DELETED_DOCUMENT_COUNT, len(stats[OP_DELETE]))
 
         self._logger.debug(
-            f"Sink stats - no. of docs indexed: {self.counters.get(INDEXED_DOCUMENT_COUNT)}, volume of docs indexed: {round(self.counters.get(INDEXED_DOUCMENT_VOLUME))} bytes, no. of docs deleted: {self.counters.get(DELETED_DOCUMENT_COUNT)}"
+            f"Sink stats - no. of docs indexed: {self.counters.get(INDEXED_DOCUMENT_COUNT)}, volume of docs indexed: {round(self.counters.get(INDEXED_DOCUMENT_VOLUME))} bytes, no. of docs deleted: {self.counters.get(DELETED_DOCUMENT_COUNT)}"
         )
 
     def force_cancel(self):
@@ -499,10 +499,10 @@ class Extractor:
                         )
                         continue
 
-                    self.counters.increment(DOC_UPDATED)
+                    self.counters.increment(DOCS_UPDATED)
 
                 else:
-                    self.counters.increment(DOC_CREATED)
+                    self.counters.increment(DOCS_CREATED)
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
@@ -580,11 +580,11 @@ class Extractor:
                     continue
 
                 if operation == OP_INDEX:
-                    self.counters.increment(DOC_CREATED)
+                    self.counters.increment(DOCS_CREATED)
                 elif operation == OP_UPSERT:
-                    self.counters.increment(DOC_UPDATED)
+                    self.counters.increment(DOCS_UPDATED)
                 elif operation == OP_DELETE:
-                    self.counters.increment(DOC_DELETED)
+                    self.counters.increment(DOCS_DELETED)
                 else:
                     self._logger.error(
                         f"unsupported operation {operation} for doc {doc_id}"
@@ -660,11 +660,11 @@ class Extractor:
                 if doc_not_updated:
                     continue
 
-                self.counters.increment(DOC_UPDATED)
+                self.counters.increment(DOCS_UPDATED)
 
                 operation = OP_UPSERT
             else:
-                self.counters.increment(DOC_CREATED)
+                self.counters.increment(DOCS_CREATED)
 
                 if TIMESTAMP_FIELD not in doc:
                     doc[TIMESTAMP_FIELD] = iso_utc()
@@ -694,16 +694,16 @@ class Extractor:
                     "_id": doc_id,
                 }
             )
-            self.counters.increment(DOC_DELETED)
+            self.counters.increment(DOCS_DELETED)
 
     def _log_progress(
         self,
     ):  # TODO, this is different counters than what we log at the end
         self._logger.info(
             "Sync progress -- "
-            f"created: {self.counters.get(DOC_CREATED)} | "
-            f"updated: {self.counters.get(DOC_UPDATED)} | "
-            f"deleted: {self.counters.get(DOC_DELETED)}"
+            f"created: {self.counters.get(DOCS_CREATED)} | "
+            f"updated: {self.counters.get(DOCS_UPDATED)} | "
+            f"deleted: {self.counters.get(DOCS_DELETED)}"
         )
 
 
@@ -817,8 +817,8 @@ class SyncOrchestrator:
             stats.update(self._extractor.counters.to_dict())
         if self._sink is not None:
             stats.update(self._sink.counters.to_dict())
-            stats[INDEXED_DOUCMENT_VOLUME] = round(
-                stats[INDEXED_DOUCMENT_VOLUME] / (1024 * 1024)
+            stats[INDEXED_DOCUMENT_VOLUME] = round(
+                stats[INDEXED_DOCUMENT_VOLUME] / (1024 * 1024)
             )  # return indexed_document_volume in number of MiB
         return stats
 

@@ -19,13 +19,20 @@ from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
 from connectors.es.management_client import ESManagementClient
-from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
+from connectors.es.sink import (
+    DOCS_CREATED,
+    DOCS_DELETED,
+    DOCS_UPDATED,
+    OP_INDEX,
+    SyncOrchestrator,
+    UnsupportedJobType,
+)
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
 from connectors.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
-    INDEXED_DOUCMENT_VOLUME,
+    INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
@@ -347,7 +354,7 @@ class SyncJobRunner:
         )
         ingestion_stats = {
             INDEXED_DOCUMENT_COUNT: ingestion_stats.get(INDEXED_DOCUMENT_COUNT, 0),
-            INDEXED_DOUCMENT_VOLUME: ingestion_stats.get(INDEXED_DOUCMENT_VOLUME, 0),
+            INDEXED_DOCUMENT_VOLUME: ingestion_stats.get(INDEXED_DOCUMENT_VOLUME, 0),
             DELETED_DOCUMENT_COUNT: ingestion_stats.get(DELETED_DOCUMENT_COUNT, 0),
         }
 
@@ -379,9 +386,9 @@ class SyncJobRunner:
 
         self.sync_job.log_info(
             f"Sync ended with status {sync_status.value} -- "
-            f"created: {ingestion_stats.get('doc_created', 0)} | "
-            f"updated: {ingestion_stats.get('doc_updated', 0)} | "
-            f"deleted: {ingestion_stats.get('doc_deleted', 0)} "
+            f"created: {ingestion_stats.get(DOCS_CREATED, 0)} | "
+            f"updated: {ingestion_stats.get(DOCS_UPDATED, 0)} | "
+            f"deleted: {ingestion_stats.get(DOCS_DELETED, 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
         self.log_counters(ingestion_stats)
@@ -512,7 +519,7 @@ class SyncJobRunner:
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
                 INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
-                INDEXED_DOUCMENT_VOLUME: result.get(INDEXED_DOUCMENT_VOLUME, 0),
+                INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
                 DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
