@@ -939,7 +939,9 @@ class Counters:
     def __init__(self):
         self._storage = {}
 
-    def increment(self, key, value=1):
+    def increment(self, key, value=1, namespace=None):
+        if namespace:
+            key = f"{namespace}.{key}"
         self._storage[key] = self._storage.get(key, 0) + value
 
     def get(self, key) -> int:

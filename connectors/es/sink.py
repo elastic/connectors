@@ -22,7 +22,6 @@ import copy
 import functools
 import logging
 import time
-from collections import defaultdict
 
 from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
@@ -69,6 +68,7 @@ DOC_CREATED = "doc_created"
 ATTACHMENT_EXTRACTED = "attachment_extracted"
 DOC_UPDATED = "doc_updated"
 DOC_DELETED = "doc_deleted"
+BULK_OPERATIONS = "bulk_operations"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
@@ -129,7 +129,6 @@ class Sink:
     ):
         self.client = client
         self.queue = queue
-        self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline = pipeline
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
@@ -312,7 +311,7 @@ class Sink:
                     }
                     overhead_size = get_size(overhead)
                 stats[operation][doc_id] = max(doc_size - overhead_size, 0)
-            self.ops[operation] += 1
+            self.counters.increment(operation, namespace=BULK_OPERATIONS)
             batch.extend(self._bulk_op(doc, operation))
 
             bulk_size += doc_size
@@ -817,9 +816,6 @@ class SyncOrchestrator:
         if self._extractor is not None:
             stats.update(self._extractor.counters.to_dict())
         if self._sink is not None:
-            stats.update(
-                {"bulk_operations": dict(self._sink.ops)}
-            )  # TODO, unify in counters
             stats.update(self._sink.counters.to_dict())
             stats[INDEXED_DOUCMENT_VOLUME] = round(
                 stats[INDEXED_DOUCMENT_VOLUME] / (1024 * 1024)
