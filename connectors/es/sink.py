@@ -66,9 +66,11 @@ CANCELATION_TIMEOUT = 5
 # counter keys
 ATTACHMENTS_EXTRACTED = "attachments_extracted"
 BULK_OPERATIONS = "bulk_operations"
-DOCS_CREATED = "docs_created"
-DOCS_UPDATED = "docs_updated"
-DOCS_DELETED = "docs_deleted"
+CREATES_QUEUED = "doc_creates_queued"
+UPDATES_QUEUED = "doc_updates_queued"
+DELETES_QUEUED = "doc_deletes_queued"
+DOCS_EXTRACTED = "docs_extracted"
+DOCS_FILTERED = "docs_filtered"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
@@ -467,6 +469,7 @@ class Extractor:
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
+                self.counters.increment(DOCS_EXTRACTED)
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
                     self._log_progress()
@@ -476,6 +479,7 @@ class Extractor:
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
                 ):
+                    self.counters.increment((DOCS_FILTERED))
                     continue
 
                 if doc_id in existing_ids:
@@ -499,10 +503,10 @@ class Extractor:
                         )
                         continue
 
-                    self.counters.increment(DOCS_UPDATED)
+                    self.counters.increment(UPDATES_QUEUED)
 
                 else:
-                    self.counters.increment(DOCS_CREATED)
+                    self.counters.increment(CREATES_QUEUED)
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
@@ -580,11 +584,11 @@ class Extractor:
                     continue
 
                 if operation == OP_INDEX:
-                    self.counters.increment(DOCS_CREATED)
+                    self.counters.increment(CREATES_QUEUED)
                 elif operation == OP_UPSERT:
-                    self.counters.increment(DOCS_UPDATED)
+                    self.counters.increment(UPDATES_QUEUED)
                 elif operation == OP_DELETE:
-                    self.counters.increment(DOCS_DELETED)
+                    self.counters.increment(DELETES_QUEUED)
                 else:
                     self._logger.error(
                         f"unsupported operation {operation} for doc {doc_id}"
@@ -660,11 +664,11 @@ class Extractor:
                 if doc_not_updated:
                     continue
 
-                self.counters.increment(DOCS_UPDATED)
+                self.counters.increment(UPDATES_QUEUED)
 
                 operation = OP_UPSERT
             else:
-                self.counters.increment(DOCS_CREATED)
+                self.counters.increment(CREATES_QUEUED)
 
                 if TIMESTAMP_FIELD not in doc:
                     doc[TIMESTAMP_FIELD] = iso_utc()
@@ -694,16 +698,16 @@ class Extractor:
                     "_id": doc_id,
                 }
             )
-            self.counters.increment(DOCS_DELETED)
+            self.counters.increment(DELETES_QUEUED)
 
     def _log_progress(
         self,
     ):  # TODO, this is different counters than what we log at the end
         self._logger.info(
             "Sync progress -- "
-            f"created: {self.counters.get(DOCS_CREATED)} | "
-            f"updated: {self.counters.get(DOCS_UPDATED)} | "
-            f"deleted: {self.counters.get(DOCS_DELETED)}"
+            f"created: {self.counters.get(CREATES_QUEUED)} | "
+            f"updated: {self.counters.get(UPDATES_QUEUED)} | "
+            f"deleted: {self.counters.get(DELETES_QUEUED)}"
         )
 
 

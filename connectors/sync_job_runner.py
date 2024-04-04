@@ -20,9 +20,9 @@ from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
 from connectors.es.management_client import ESManagementClient
 from connectors.es.sink import (
-    DOCS_CREATED,
-    DOCS_DELETED,
-    DOCS_UPDATED,
+    CREATES_QUEUED,
+    DELETES_QUEUED,
+    UPDATES_QUEUED,
     OP_INDEX,
     SyncOrchestrator,
     UnsupportedJobType,
@@ -386,9 +386,9 @@ class SyncJobRunner:
 
         self.sync_job.log_info(
             f"Sync ended with status {sync_status.value} -- "
-            f"created: {ingestion_stats.get(DOCS_CREATED, 0)} | "
-            f"updated: {ingestion_stats.get(DOCS_UPDATED, 0)} | "
-            f"deleted: {ingestion_stats.get(DOCS_DELETED, 0)} "
+            f"created: {ingestion_stats.get(CREATES_QUEUED, 0)} | "
+            f"updated: {ingestion_stats.get(UPDATES_QUEUED, 0)} | "
+            f"deleted: {ingestion_stats.get(DELETES_QUEUED, 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
         self.log_counters(ingestion_stats)
