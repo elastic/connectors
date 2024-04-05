@@ -211,7 +211,6 @@ class Sink:
         result = {}
         for entry in operations:
             if len(entry.keys()) == 1:  # only looking at "operation" entries
-                self._logger.debug(f"entry is: {entry}")  # TODO: Remove
                 for op, doc in entry.items():
                     if (
                         isinstance(doc, dict)
@@ -753,7 +752,7 @@ class Extractor:
 
     def _log_progress(
         self,
-    ):  # TODO, this is different counters than what we log at the end
+    ):
         self._logger.info(
             "Sync progress -- "
             f"created: {self.counters.get(CREATES_QUEUED)} | "
@@ -872,7 +871,6 @@ class SyncOrchestrator:
             stats.update(self._extractor.counters.to_dict())
         if self._sink is not None:
             stats.update(self._sink.counters.to_dict())
-            self._logger.debug(f"Stats are: {stats}")  # TODO: remove
             stats[INDEXED_DOCUMENT_VOLUME] = round(
                 self._sink.counters.get(INDEXED_DOCUMENT_VOLUME) / (1024 * 1024)
             )  # return indexed_document_volume in number of MiB
