@@ -22,8 +22,8 @@ from connectors.es.management_client import ESManagementClient
 from connectors.es.sink import (
     CREATES_QUEUED,
     DELETES_QUEUED,
-    UPDATES_QUEUED,
     OP_INDEX,
+    UPDATES_QUEUED,
     SyncOrchestrator,
     UnsupportedJobType,
 )

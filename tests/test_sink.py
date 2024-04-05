@@ -20,12 +20,15 @@ from connectors.es.settings import Settings
 from connectors.es.sink import (
     ATTACHMENTS_EXTRACTED,
     BULK_OPERATIONS,
+    BULK_RESPONSES,
     CREATES_QUEUED,
     DELETES_QUEUED,
-    UPDATES_QUEUED,
+    DOCS_EXTRACTED,
     OP_DELETE,
     OP_INDEX,
-    OP_UPSERT,
+    OP_UPDATE,
+    RESULT_SUCCESS,
+    UPDATES_QUEUED,
     AsyncBulkRunningError,
     ElasticsearchOverloadedError,
     Extractor,
@@ -345,6 +348,11 @@ async def test_async_bulk(mock_responses):
         INDEXED_DOCUMENT_COUNT: 2,
         INDEXED_DOCUMENT_VOLUME: ANY,
         DELETED_DOCUMENT_COUNT: 1,
+        f"{BULK_RESPONSES}.{OP_DELETE}": 1,
+        f"{BULK_RESPONSES}.{OP_INDEX}": 1,
+        f"{BULK_RESPONSES}.{OP_UPDATE}": 1,
+        DOCS_EXTRACTED: 2,
+        RESULT_SUCCESS: 3,
     }
 
     # 2nd sync
@@ -1165,7 +1173,7 @@ async def test_batch_bulk_with_retry():
         client.client.bulk = AsyncMock(
             side_effect=[first_call_error, second_call_result]
         )
-        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
 
         assert client.client.bulk.await_count == 2
 
