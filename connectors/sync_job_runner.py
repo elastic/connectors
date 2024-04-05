@@ -352,7 +352,7 @@ class SyncJobRunner:
             if self.sync_orchestrator is None
             else self.sync_orchestrator.ingestion_stats()
         )
-        ingestion_stats = {
+        persisted_stats = {
             INDEXED_DOCUMENT_COUNT: ingestion_stats.get(INDEXED_DOCUMENT_COUNT, 0),
             INDEXED_DOCUMENT_VOLUME: ingestion_stats.get(INDEXED_DOCUMENT_VOLUME, 0),
             DELETED_DOCUMENT_COUNT: ingestion_stats.get(DELETED_DOCUMENT_COUNT, 0),
