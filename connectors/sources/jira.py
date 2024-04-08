@@ -213,9 +213,8 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        url = url_kwargs.get("url") or parse.urljoin(
-            self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
-        )
+        url = url_kwargs.get("url") or self.host_url.rstrip('/')+'/'+URLS[url_name].format(**url_kwargs).lstrip('/')
+
         self._logger.debug(f"Making a GET call for url: {url}")
         while True:
             try:
