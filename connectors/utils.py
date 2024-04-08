@@ -920,3 +920,19 @@ def func_human_readable_name(func):
         return func.__name__
     except AttributeError:
         return str(func)
+
+
+def nested_get_from_dict(dictionary, keys, default=None):
+    def nested_get(dictionary_, keys_, default_=None):
+        if dictionary_ is None:
+            return default_
+
+        if not keys_:
+            return dictionary_
+
+        if not isinstance(dictionary_, dict):
+            return default_
+
+        return nested_get(dictionary_.get(keys_[0]), keys_[1:], default_)
+
+    return nested_get(dictionary, keys, default)
