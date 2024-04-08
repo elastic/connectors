@@ -606,7 +606,7 @@ This will configure the connector in Elasticsearch to run a full sync. The scrip
 ## Runtime dependencies
 
 - MacOS or Linux server. The connector has been tested with CentOS 7, MacOS Monterey v12.0.1.
-- Python version 3.10 or later.
+- Python version 3.10.
 - To fix SSL certificate verification failed error, users have to run this to connect with Amazon S3:
     ```shell
     $ System/Volumes/Data/Applications/Python\ 3.10/Install\ Certificates.command
