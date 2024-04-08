@@ -96,14 +96,9 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 SyncRuleValidationResult.ADVANCED_RULES
             )
 
-        return await self._remote_validation(advanced_rules)
+        return await self.validate_pattern(advanced_rules)
 
-    @retryable(
-        retries=RETRIES,
-        interval=RETRY_INTERVAL,
-        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-    )
-    async def _remote_validation(self, advanced_rules):
+    async def validate_pattern(self, advanced_rules):
         try:
             NetworkDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -112,16 +107,19 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
                 is_valid=False,
                 validation_message=e.message,
             )
+        start_with_slash = set()
 
-        await asyncio.to_thread(self.source.smb_connection.create_connection)
+        for rule in advanced_rules:
+            pattern = rule["pattern"]
+            if pattern.startswith("/"):
+                start_with_slash.add(pattern)
 
-        _, invalid_rules = await self.source.find_matching_paths(advanced_rules)
-
-        if len(invalid_rules) > 0:
+        if start_with_slash:
+            message = f"SMB Path should not start with '/' in the beginning. Incorrect path: {start_with_slash}"
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Following patterns do not match any path'{', '.join(invalid_rules)}'",
+                validation_message=message,
             )
 
         return SyncRuleValidationResult.valid_result(
@@ -419,49 +417,90 @@ class NASDataSource(BaseDataSource):
                 if file.is_dir():
                     stack.append(file.path)
 
-    async def get_directory_details(self):
-        self._logger.debug("Fetching the directory tree from remote server")
-        paths = await asyncio.to_thread(
-            partial(
-                smbclient.walk,
-                top=rf"\\{self.server_ip}/{self.drive_path}",
-                port=self.port,
-            ),
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=[SMBOSError, SMBException],
+    )
+    async def traverse_directory_for_syncrule(self, path, glob_pattern):
+        self._logger.debug(
+            "Fetching the directory tree from remote server and content of directory on path"
         )
-        return list(paths)
+        stack = deque()
+        stack.append(path)
 
-    async def find_matching_paths(self, advanced_rules):
+        while stack:
+            directory_info = []
+            current_path = stack.pop()
+            try:
+                directory_info = await asyncio.to_thread(
+                    partial(
+                        smbclient.scandir,
+                        path=current_path,
+                        port=self.port,
+                    ),
+                )
+            except SMBConnectionClosed as exception:
+                self._logger.exception(
+                    f"Connection got closed. Error {exception}. Registering new session"
+                )
+                await asyncio.to_thread(self.smb_connection.create_connection)
+                raise
+            except (SMBOSError, SMBException) as exception:
+                self._logger.exception(
+                    f"Error while scanning the path {current_path}. Error {exception}"
+                )
+                continue
+
+            for file in directory_info:
+                if file.is_dir():
+                    stack.append(file.path)
+                file_path = file.path.split("/", 1)[1].replace("\\", "/")
+                is_file_match = glob.globmatch(
+                    file_path, glob_pattern, flags=glob.GLOBSTAR
+                )
+                if is_file_match:
+                    yield self.format_document(file=file)
+
+    async def fetch_filtered_directory(self, advanced_rules):
         """
-        Find matching paths based on advanced rules.
+        Fetch file and folder based on advanced rules.
 
         Args:
             advanced_rules (list): List of advanced rules configured
 
         Returns:
-            matched_paths (set): Set of paths that match the advanced rules.
-            invalid_rules (list): List of advanced rules that have no matching paths.
+            format_document: Formatted document based on advance rules
         """
         self._logger.debug(
-            "Fetching the matched directory paths using the list of advanced rules configured"
+            "Fetching the matched directory/files using the list of advanced rules configured"
         )
-        invalid_rules = []
-        matched_paths = set()
+        unmatched_rules = set()
         for rule in advanced_rules:
-            rule_valid = False
+            rule_matched = False
             glob_pattern = rule["pattern"].replace("\\", "/")
-            paths = await self.get_directory_details()
-            for path, _, _ in paths:
-                normalized_path = path.split("/", 1)[1].replace("\\", "/")
-                is_match = glob.globmatch(
-                    normalized_path, glob_pattern, flags=glob.GLOBSTAR
-                )
+            async for document in self.traverse_directory_for_syncrule(
+                path=rf"\\{self.server_ip}/{self.drive_path}",
+                glob_pattern=glob_pattern,
+            ):
+                yield document
+                rule_matched = True
 
-                if is_match:
-                    rule_valid = True
-                    matched_paths.add(path)
-            if not rule_valid:
-                invalid_rules.append(rule["pattern"])
-        return matched_paths, invalid_rules
+            if not rule_matched:
+                unmatched_rules.add(rule["pattern"])
+
+        if len(unmatched_rules) > 0:
+            self._logger.warning(
+                f"Following advanced rules do not match with any path present in network drive: {unmatched_rules}"
+            )
+
+    async def validate_config(self):
+        await super().validate_config()
+        path = self.configuration["drive_path"]
+        if path.startswith("/") or path.startswith("\\"):
+            message = f"SMB Path:{path} should not start with '/' in the beginning."
+            raise ConfigurableFieldValueError(message)
 
     async def ping(self):
         """Verify the connection with Network Drive"""
@@ -746,18 +785,10 @@ class NASDataSource(BaseDataSource):
         await asyncio.to_thread(self.smb_connection.create_connection)
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
-            matched_paths, invalid_rules = await self.find_matching_paths(
-                advanced_rules
-            )
-            if len(invalid_rules) > 0:
-                msg = f"Following advanced rules are invalid: {invalid_rules}"
-                raise InvalidRulesError(msg)
-
-            for path in matched_paths:
-                async for document in self.traverse_diretory(path=path):
-                    yield document, partial(self.get_content, document) if document[
-                        "type"
-                    ] == "file" else None
+            async for document in self.fetch_filtered_directory(advanced_rules):
+                yield document, partial(self.get_content, document) if document[
+                    "type"
+                ] == "file" else None
 
         else:
             groups_info = {}
