@@ -201,6 +201,8 @@ class SyncJobRunner:
             while not self.sync_orchestrator.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
+                if self.sync_orchestrator.fetch_error() is not None:
+                    break
             fetch_error = self.sync_orchestrator.fetch_error()
             sync_status = (
                 JobStatus.COMPLETED if fetch_error is None else JobStatus.ERROR

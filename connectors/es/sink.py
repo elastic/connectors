@@ -147,6 +147,7 @@ class Sink:
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
         self.retry_interval = retry_interval
+        self.sink_error = None
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
@@ -170,6 +171,8 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
+
+        raise Exception("I think this will reproduce")
         # TODO: make this retry policy work with unified retry strategy
         @retryable(retries=self.max_retires, interval=self.retry_interval)
         async def _bulk_api_call():
@@ -379,7 +382,8 @@ class Sink:
                         self._batch_bulk,
                         copy.copy(batch),
                         copy.copy(stats),
-                    )
+                    ),
+                    result_callback=functools.partial(self.batch_bulk_callback)
                 )
                 batch.clear()
                 stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
@@ -387,9 +391,14 @@ class Sink:
 
             await asyncio.sleep(0)
 
-        await self.bulk_tasks.join()
+        await self.bulk_tasks.join(raise_on_error=True)
         if len(batch) > 0:
-            await self._batch_bulk(batch, stats)
+           last_batch = await self._batch_bulk(batch, stats)
+
+    def batch_bulk_callback(self, task):
+        if task.exception():
+            self._logger.error(f"Had an error while processing a bulk batch of Elasticsearch docs: {task.get_name()}: {task.exception()}", exc_info=True)
+            self.sink_error = task.exception()
 
 
 class Extractor:
@@ -795,6 +804,7 @@ class SyncOrchestrator:
         self._extractor_task = None
         self._sink = None
         self._sink_task = None
+        self._sink_error = None
 
     async def close(self):
         await self.es_management_client.close()
@@ -883,7 +893,7 @@ class SyncOrchestrator:
         return stats
 
     def fetch_error(self):
-        return None if self._extractor is None else self._extractor.fetch_error
+        return None if self._extractor is None else self._extractor.fetch_error or self._sink_error or self._sink.sink_error
 
     async def async_bulk(
         self,
@@ -971,3 +981,9 @@ class SyncOrchestrator:
             enable_bulk_operations_logging=enable_bulk_operations_logging,
         )
         self._sink_task = asyncio.create_task(self._sink.run())
+        self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
+
+    def sink_task_callback(self, task):
+        if task.exception():
+            self._logger.error(f"Had an error in the Elasticsearch Sink: {task.get_name()}: {task.exception()}", exc_info=True)
+            self._sink_error = task.exception()

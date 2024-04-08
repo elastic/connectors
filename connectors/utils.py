@@ -466,9 +466,9 @@ class ConcurrentTasks:
             return self._add_task(coroutine, result_callback=result_callback)
         return None
 
-    async def join(self):
+    async def join(self, raise_on_error=False):
         """Wait for all tasks to finish."""
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
 
     def cancel(self):
         """Cancels all tasks"""
