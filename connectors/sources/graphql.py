@@ -75,12 +75,11 @@ class GraphQLClient:
         self._logger = logger
         self.graphql_query = self.configuration["graphql_query"]
         self.url = self.configuration["http_endpoint"]
-        self.graphql_object_list = self.configuration["graphql_object_list"]
-        self.graphql_field_id = self.configuration["graphql_field_id"]
         self.http_method = self.configuration["http_method"]
         self.authentication_method = self.configuration["authentication_method"]
         self.pagination_model = self.configuration["pagination_model"]
         self.pagination_key = self.configuration["pagination_key"]
+        self.graphql_object_list = {}
         self.valid_objects = []
         self.variables = {}
         self.headers = {}
@@ -129,7 +128,7 @@ class GraphQLClient:
         Yields:
             dictionary/list: Documents from the response
         """
-        for keys in self.graphql_object_list:
+        for keys, field_id in self.graphql_object_list.items():
             current_level_data = data
             key_list = keys.split(".")
 
@@ -147,10 +146,12 @@ class GraphQLClient:
 
             if isinstance(current_level_data, dict):
                 if current_level_data:
+                    current_level_data["_id"] = current_level_data.get(field_id)
                     yield current_level_data
 
             if isinstance(current_level_data, list):
                 for doc in current_level_data:
+                    doc["_id"] = doc.get(field_id)
                     yield doc
 
     def extract_pagination_info(self, data):
@@ -377,18 +378,12 @@ class GraphQLDataSource(BaseDataSource):
             "graphql_object_list": {
                 "label": "GraphQL Objects List",
                 "order": 9,
-                "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents. Use '.' to provide full path of the object from the root of the response. For example 'organization.users.nodes'",
-                "type": "list",
-            },
-            "graphql_field_id": {
-                "label": "GraphQL field name for ID",
-                "order": 10,
-                "tooltip": "Specifies a string field within the document, with the requirement that each document must have a distinct value for this field.",
+                "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents. Use a JSON with key as the GraphQL object name and value as string field within the document, with the requirement that each document must have a distinct value for this field. Use '.' to provide full path of the object from the root of the response. For example {'organization.users.nodes': 'id'}",
                 "type": "str",
             },
             "headers": {
                 "label": "Headers",
-                "order": 11,
+                "order": 10,
                 "type": "str",
                 "required": False,
             },
@@ -399,7 +394,7 @@ class GraphQLDataSource(BaseDataSource):
                     {"label": "No pagination", "value": NO_PAGINATION},
                     {"label": "Cursor-based pagination", "value": CURSOR_PAGINATION},
                 ],
-                "order": 12,
+                "order": 11,
                 "tooltip": "For cursor-based pagination, add 'pageInfo' and an 'after' argument variable in your query at the desired node (Pagination key). Use 'after' query argument with a variable to iterate through pages. Detailed examples and setup instructions are available in the docs.",
                 "type": "str",
                 "value": NO_PAGINATION,
@@ -409,7 +404,7 @@ class GraphQLDataSource(BaseDataSource):
                     {"field": "pagination_model", "value": CURSOR_PAGINATION}
                 ],
                 "label": "Pagination key",
-                "order": 13,
+                "order": 12,
                 "tooltip": "Specifies which GraphQL object is used for pagination. Use '.' to provide full path of the object from the root of the response. For example 'organization.users'",
                 "type": "str",
             },
@@ -417,7 +412,7 @@ class GraphQLDataSource(BaseDataSource):
                 "default_value": 300,
                 "display": "numeric",
                 "label": "Connection Timeout",
-                "order": 14,
+                "order": 13,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -438,17 +433,16 @@ class GraphQLDataSource(BaseDataSource):
             return True
         return False
 
-    def check_field_existence(self, ast, field_path, check_id):
+    def check_field_existence(
+        self, ast, field_path, graphql_field_id=None, check_id=False
+    ):
         def traverse(selections, path):
             for selection in selections:
                 if selection.name.value == path[0]:
                     if len(path) == 1:
                         if check_id and selection.selection_set:
                             for selection_node in selection.selection_set.selections:
-                                if (
-                                    selection_node.name.value
-                                    == self.graphql_client.graphql_field_id
-                                ):
+                                if selection_node.name.value == graphql_field_id:
                                     return True, True
                         return True, False
                     if selection.selection_set:
@@ -486,6 +480,8 @@ class GraphQLDataSource(BaseDataSource):
 
         headers = self.graphql_client.configuration["headers"]
         graphql_variables = self.graphql_client.configuration["graphql_variables"]
+        graphql_object_list = self.graphql_client.configuration["graphql_object_list"]
+
         if headers:
             try:
                 self.graphql_client.headers = json.loads(headers)
@@ -500,20 +496,35 @@ class GraphQLDataSource(BaseDataSource):
                 msg = f"Error while processing configured GraphQL variables. Exception: {exception}"
                 raise ConfigurableFieldValueError(msg) from exception
 
-        for graphql_object in self.graphql_client.graphql_object_list:
+        if graphql_object_list:
+            try:
+                self.graphql_client.graphql_object_list = json.loads(
+                    graphql_object_list
+                )
+            except Exception as exception:
+                msg = f"Error while processing configured GraphQL objects and IDs. Exception: {exception}"
+                raise ConfigurableFieldValueError(msg) from exception
+
+        for (
+            graphql_object,
+            graphql_field_id,
+        ) in self.graphql_client.graphql_object_list.items():
             object_present, id_present = self.check_field_existence(
-                ast=ast, field_path=graphql_object, check_id=True
+                ast=ast,
+                field_path=graphql_object,
+                graphql_field_id=graphql_field_id,
+                check_id=True,
             )
             if not object_present:
                 msg = f"{graphql_object} is not present in the query."
                 raise ConfigurableFieldValueError(msg)
             if not id_present:
-                msg = f"{self.graphql_client.graphql_field_id} is not present in the query."
+                msg = f"{graphql_field_id} is not present in the query."
                 raise ConfigurableFieldValueError(msg)
 
         if self.graphql_client.pagination_model == CURSOR_PAGINATION:
             object_present, _ = self.check_field_existence(
-                ast=ast, field_path=self.graphql_client.pagination_key, check_id=False
+                ast=ast, field_path=self.graphql_client.pagination_key
             )
             if not object_present:
                 msg = (
@@ -566,15 +577,14 @@ class GraphQLDataSource(BaseDataSource):
             graphql_query=self.graphql_client.graphql_query
         ):
             doc = deepcopy(doc)
-            if doc_id := doc.get(self.graphql_client.graphql_field_id):
+            if doc_id := doc.get("_id"):
                 if isinstance(doc_id, str):
-                    doc["_id"] = doc_id
                     doc["_timestamp"] = iso_utc()
                     yield doc, None
                 else:
-                    msg = f"{self.graphql_client.graphql_field_id} is not a string."
+                    msg = f"{doc_id} is not a string."
                     raise ConfigurableFieldValueError(msg)
             else:
                 self._logger.warning(
-                    f"Skipping {doc}, Because {self.graphql_client.graphql_field_id} is not present."
+                    f"Skipping {doc}, Because connector does not find configured unique field."
                 )
