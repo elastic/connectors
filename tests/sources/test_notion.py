@@ -887,6 +887,7 @@ async def test_fetch_child_blocks_for_external_object_instance_page(caplog):
                     in caplog.text
                 )
 
+
 @pytest.mark.asyncio
 async def test_is_connected_property_block():
     mocked_connected_property_block = {
