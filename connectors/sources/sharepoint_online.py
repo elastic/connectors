@@ -535,6 +535,16 @@ class SharepointOnlineClient:
             raise_for_status=True,
         )
 
+        self._rest_http_session = aiohttp.ClientSession(  # TODO: lazy create this
+            connector=tcp_connector,
+            headers={
+                "accept": "application/json;odata=verbose",
+                "odata-version": "",
+                "content-type": "application/json",
+            },
+            timeout=aiohttp.ClientTimeout(total=None),
+            raise_for_status=True,
+        )
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
         self._tenant_name_pattern = re.compile(
@@ -545,7 +555,7 @@ class SharepointOnlineClient:
             self._http_session, tenant_id, tenant_name, client_id, client_secret
         )
         self.rest_api_token = SharepointRestAPIToken(
-            self._http_session, tenant_id, tenant_name, client_id, client_secret
+            self._rest_http_session, tenant_id, tenant_name, client_id, client_secret
         )
 
         self._logger = logger
@@ -1026,6 +1036,7 @@ class SharepointOnlineClient:
 
     async def close(self):
         await self._http_session.close()
+        await self._rest_http_session.close()
         self._graph_api_client.close()
         self._rest_api_client.close()
 
