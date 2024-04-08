@@ -17,6 +17,7 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Features, Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.github import (
+    REPOSITORY_OBJECT,
     GitHubAdvancedRulesValidator,
     GitHubDataSource,
     UnauthorizedException,
@@ -1149,7 +1150,10 @@ async def test_fetch_issues():
                 AsyncIterator([MOCK_RESPONSE_ISSUE]),
             ],
         ):
-            async for issue in source._fetch_issues("demo_user/demo_repo"):
+            async for issue in source._fetch_issues(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "issues"],
+            ):
                 assert issue == EXPECTED_ISSUE
 
 
@@ -1158,7 +1162,10 @@ async def test_fetch_issues_with_unauthorized_exception():
     async with create_github_source() as source:
         source.github_client.post = Mock(side_effect=UnauthorizedException())
         with pytest.raises(UnauthorizedException):
-            async for _ in source._fetch_issues("demo_user/demo_repo"):
+            async for _ in source._fetch_issues(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "issues"],
+            ):
                 pass
 
 
@@ -1177,7 +1184,10 @@ async def test_fetch_pull_requests():
                 AsyncIterator([MOCK_REVIEWS_RESPONSE]),
             ],
         ):
-            async for pull in source._fetch_pull_requests("demo_user/demo_repo"):
+            async for pull in source._fetch_pull_requests(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "pullRequests"],
+            ):
                 assert pull == EXPECTED_PULL_RESPONSE
 
 
@@ -1186,7 +1196,10 @@ async def test_fetch_pull_requests_with_unauthorized_exception():
     async with create_github_source() as source:
         source.github_client.post = Mock(side_effect=UnauthorizedException())
         with pytest.raises(UnauthorizedException):
-            async for _ in source._fetch_pull_requests("demo_user/demo_repo"):
+            async for _ in source._fetch_pull_requests(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "pullRequests"],
+            ):
                 pass
 
 
