@@ -28,6 +28,8 @@ from connectors.source import get_source_klass, get_source_klasses
 
 __all__ = ["main"]
 
+from connectors.utils import sleeps_for_retryable
+
 
 def _parser():
     """Parses command-line arguments using ArgumentParser and returns it"""
@@ -126,17 +128,22 @@ async def _start_service(actions, config, loop):
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
 
-    multiservice = get_services(actions, config)
+    multi_service = get_services(actions, config)
+
+    def _shutdown(signal_name):
+        sleeps_for_retryable.cancel(signal_name)
+        multi_service.shutdown(signal_name)
+
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, functools.partial(multiservice.shutdown, sig.name))
+        loop.add_signal_handler(sig, functools.partial(_shutdown, sig.name))
 
     if "PERF8" in os.environ:
         import perf8
 
         async with perf8.measure():
-            return await multiservice.run()
+            return await multi_service.run()
     else:
-        return await multiservice.run()
+        return await multi_service.run()
 
 
 def get_event_loop(uvloop=False):
