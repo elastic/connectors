@@ -577,6 +577,21 @@ class NotionDataSource(BaseDataSource):
                     "filter": {"value": "database", "property": "object"},
                 }
 
+    def is_connected_property_block(self, page_database):
+        properties = page_database.get("properties")
+        if properties is None:
+            return False
+        for field in properties.keys():
+            if field.startswith("Related to") and (
+                "(Figma File)" in field
+                or "(Google Drive File)" in field
+                or "(GitHub Pull Requests)" in field
+                or "(Zendesk Ticket)" in field
+            ):
+                return True
+
+        return False
+
     async def retrieve_and_process_blocks(self, query):
         block_ids_store = []
         async for page_database in self.notion_client.fetch_by_query(query=query):
@@ -586,6 +601,9 @@ class NotionDataSource(BaseDataSource):
 
             yield self._format_doc(page_database), None
             self._logger.info(f"Fetching child blocks for block {block_id}")
+
+            if self.is_connected_property_block(page_database):
+                continue
 
             async for child_block in self.notion_client.fetch_child_blocks(
                 block_id=block_id

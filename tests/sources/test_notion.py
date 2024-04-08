@@ -886,3 +886,42 @@ async def test_fetch_child_blocks_for_external_object_instance_page(caplog):
                     "external_object_instance_page is not supported via the API"
                     in caplog.text
                 )
+
+@pytest.mark.asyncio
+async def test_is_connected_property_block():
+    mocked_connected_property_block = {
+        "object": "page",
+        "id": "12345678-1234-1234-1234-123456789012",
+        "last_edited_time": "2024-04-04T18:08:00.000Z",
+        "parent": {
+            "type": "database_id",
+            "database_id": "72ba2d00-eed1-4652-ae23-43e3d1df2e8c",
+        },
+        "properties": {
+            "Name": {
+                "id": "%20title",
+                "type": "title",
+                "title": [
+                    {
+                        "type": "text",
+                        "text": {
+                            "content": "to_contact.mp4",
+                        },
+                        "plain_text": "to_contact.mp4",
+                    }
+                ],
+            },
+            "Related to Google drive connected app (Google Drive File)": {
+                "id": "T%3CF%40",
+                "type": "relation",
+                "relation": [{"id": "63702908-1327-4e56-8ca9-992b2f78d782"}],
+            },
+        },
+        "url": "https://www.notion.so/to_contact-mp4-12345678123412341234123456789012",
+    }
+    async with create_source(
+        NotionDataSource, notion_secret_key="secret_key"
+    ) as source:
+        assert (
+            source.is_connected_property_block(mocked_connected_property_block) is True
+        )
