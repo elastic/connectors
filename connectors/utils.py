@@ -383,7 +383,7 @@ class ConcurrentTasks:
     concurrency value.
 
     - `max_concurrency`: max concurrent tasks allowed, default: 5
-    - `results_callback`: when provided, synchronous function called with the result of each task.
+    - `results_callback`: when provided, synchronous function called with each task.
 
     Examples:
 
@@ -426,10 +426,10 @@ class ConcurrentTasks:
                 exc_info=True,
             )
         if result_callback is not None:
-            result_callback(task.result())
+            result_callback(task)
         # global callback
         if self.results_callback is not None:
-            self.results_callback(task.result())
+            self.results_callback(task)
 
     def _add_task(self, coroutine, result_callback=None):
         task = asyncio.create_task(coroutine())

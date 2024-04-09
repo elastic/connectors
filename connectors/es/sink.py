@@ -171,8 +171,9 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
+        msg = "I think this will reproduce"
+        raise Exception(msg)
 
-        raise Exception("I think this will reproduce")
         # TODO: make this retry policy work with unified retry strategy
         @retryable(retries=self.max_retires, interval=self.retry_interval)
         async def _bulk_api_call():
@@ -383,7 +384,7 @@ class Sink:
                         copy.copy(batch),
                         copy.copy(stats),
                     ),
-                    result_callback=functools.partial(self.batch_bulk_callback)
+                    result_callback=functools.partial(self.batch_bulk_callback),
                 )
                 batch.clear()
                 stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
@@ -393,11 +394,14 @@ class Sink:
 
         await self.bulk_tasks.join(raise_on_error=True)
         if len(batch) > 0:
-           last_batch = await self._batch_bulk(batch, stats)
+            await self._batch_bulk(batch, stats)
 
     def batch_bulk_callback(self, task):
         if task.exception():
-            self._logger.error(f"Had an error while processing a bulk batch of Elasticsearch docs: {task.get_name()}: {task.exception()}", exc_info=True)
+            self._logger.error(
+                f"Had an error while processing a bulk batch of Elasticsearch docs: {task.get_name()}: {task.exception()}",
+                exc_info=True,
+            )
             self.sink_error = task.exception()
 
 
@@ -437,7 +441,7 @@ class Extractor:
         self.index = index
         self.loop = asyncio.get_event_loop()
         self.counters = Counters()
-        self.fetch_error = None
+        self.extractor_error = None
         self.filter_ = filter_
         self.basic_rule_engine = (
             BasicRuleEngine(parse(filter_.basic_rules)) if sync_rules_enabled else None
@@ -501,7 +505,7 @@ class Extractor:
             # After that we indicate that we've encountered an error
             self.queue.clear()
             await self.put_doc(FETCH_ERROR)
-            self.fetch_error = ElasticsearchOverloadedError(e)
+            self.extractor_error = ElasticsearchOverloadedError(e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
@@ -511,7 +515,7 @@ class Extractor:
 
             self._logger.critical("Document extractor failed", exc_info=True)
             await self.put_doc(FETCH_ERROR)
-            self.fetch_error = e
+            self.extractor_error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
     async def _decorate_with_metrics_span(self, generator):
@@ -802,6 +806,7 @@ class SyncOrchestrator:
         self.loop = asyncio.get_event_loop()
         self._extractor = None
         self._extractor_task = None
+        self._extractor_error = None
         self._sink = None
         self._sink_task = None
         self._sink_error = None
@@ -892,8 +897,15 @@ class SyncOrchestrator:
             )  # return indexed_document_volume in number of MiB
         return stats
 
-    def fetch_error(self):
-        return None if self._extractor is None else self._extractor.fetch_error or self._sink_error or self._sink.sink_error
+    def get_error(self):
+        return (
+            None
+            if self._extractor is None
+            else self._extractor.extractor_error
+            or self._extractor_error
+            or self._sink.sink_error
+            or self._sink_error
+        )
 
     async def async_bulk(
         self,
@@ -966,6 +978,9 @@ class SyncOrchestrator:
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
         )
+        self._extractor_task.add_done_callback(
+            functools.partial(self.extractor_task_callback)
+        )
 
         # start the bulker
         self._sink = Sink(
@@ -985,5 +1000,16 @@ class SyncOrchestrator:
 
     def sink_task_callback(self, task):
         if task.exception():
-            self._logger.error(f"Had an error in the Elasticsearch Sink: {task.get_name()}: {task.exception()}", exc_info=True)
+            self._logger.error(
+                f"Encountered an error in the sync's Sink: {task.get_name()}: {task.exception()}",
+                exc_info=True,
+            )
             self._sink_error = task.exception()
+
+    def extractor_task_callback(self, task):
+        if task.exception():
+            self._logger.error(
+                f"Encountered an error in the sync's Extractor: {task.get_name()}: {task.exception()}",
+                exc_info=True,
+            )
+            self._extractor_error = task.exception()
