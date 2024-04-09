@@ -44,10 +44,10 @@ def test_version():
     assert result.output.strip() == __version__
 
 
-@pytest.mark.parametrize("command", ["-h", "--help", None])
-def test_help_page(command):
+@pytest.mark.parametrize("commands", [["-h"], ["--help"], [None]])
+def test_help_page(commands):
     runner = CliRunner()
-    result = runner.invoke(cli, [command])
+    result = runner.invoke(cli, commands)
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
