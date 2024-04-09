@@ -66,7 +66,7 @@ OP_UNKNOWN = "operation_unknown"
 CANCELATION_TIMEOUT = 5
 
 # counter keys
-ATTACHMENTS_EXTRACTED = "attachments_extracted"
+BIN_DOCS_DOWNLOADED = "binary_docs_downloaded"
 BULK_OPERATIONS = "bulk_operations"
 BULK_RESPONSES = "bulk_item_responses"
 CREATES_QUEUED = "doc_creates_queued"
@@ -438,7 +438,7 @@ class Extractor:
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
         if data is not None:
-            self.counters.increment(ATTACHMENTS_EXTRACTED)
+            self.counters.increment(BIN_DOCS_DOWNLOADED)
             data.pop("_id", None)
             data.pop(TIMESTAMP_FIELD, None)
             doc.update(data)

@@ -18,7 +18,7 @@ from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import Settings
 from connectors.es.sink import (
-    ATTACHMENTS_EXTRACTED,
+    BIN_DOCS_DOWNLOADED,
     BULK_OPERATIONS,
     BULK_RESPONSES,
     CREATES_QUEUED,
@@ -340,7 +340,7 @@ async def test_async_bulk(mock_responses):
 
     assert ingestion_stats == {
         CREATES_QUEUED: 1,
-        ATTACHMENTS_EXTRACTED: 1,
+        BIN_DOCS_DOWNLOADED: 1,
         UPDATES_QUEUED: 1,
         DELETES_QUEUED: 1,
         f"{BULK_OPERATIONS}.{OP_INDEX}": 2,
@@ -748,7 +748,7 @@ async def test_get_docs(
         assert extractor.counters.get(UPDATES_QUEUED) == expected_total_docs_updated
         assert extractor.counters.get(CREATES_QUEUED) == expected_total_docs_created
         assert extractor.counters.get(DELETES_QUEUED) == expected_total_docs_deleted
-        assert extractor.counters.get(ATTACHMENTS_EXTRACTED) == expected_total_downloads
+        assert extractor.counters.get(BIN_DOCS_DOWNLOADED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -925,7 +925,7 @@ async def test_get_docs_incrementally(
         assert extractor.counters.get(UPDATES_QUEUED) == expected_total_docs_updated
         assert extractor.counters.get(CREATES_QUEUED) == expected_total_docs_created
         assert extractor.counters.get(DELETES_QUEUED) == expected_total_docs_deleted
-        assert extractor.counters.get(ATTACHMENTS_EXTRACTED) == expected_total_downloads
+        assert extractor.counters.get(BIN_DOCS_DOWNLOADED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
