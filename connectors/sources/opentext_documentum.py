@@ -159,7 +159,7 @@ class OpentextDocumentumClient:
         """
         url = url_kwargs.get("url") or parse.urljoin(
             self.host_url, URLS[url_name].format(**url_kwargs)
-        )
+        )  # pyright: ignore
         self._logger.debug(f"Making a GET call for url: {url}")
         while True:
             try:
