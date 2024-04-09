@@ -262,7 +262,9 @@ class ConfluenceClient:
                 url_name=SEARCH,
                 query=f"{query}&{SEARCH_QUERY}",
             )
-        yield search_documents
+        async for response in search_documents:
+            for entity in response.get("results", []):
+                yield entity
 
     async def fetch_spaces(self):
         async for response in self.paginated_api_call(
@@ -270,8 +272,8 @@ class ConfluenceClient:
             api_query=SPACE_QUERY,
         ):
             for space in response.get("results", []):
-                spaces = self.configuration["spaces"]
-                if (spaces == [WILDCARD]) or (space["key"] in spaces):
+                spaces = self.configuration.get("spaces", "")
+                if (spaces == [WILDCARD]) or (space.get("key", "") in spaces):
                     yield space
 
     async def fetch_server_space_permission(self, url):
@@ -295,7 +297,11 @@ class ConfluenceClient:
             attachment_count = 0
             for document in response.get("results", []):
                 if document.get("children").get("attachment"):
-                    attachment_count = document["children"]["attachment"]["size"]
+                    attachment_count = (
+                        document.get("children", {})
+                        .get("attachment", {})
+                        .get("size", 0)
+                    )
                 yield document, attachment_count
 
     async def fetch_attachments(self, content_id):
@@ -758,7 +764,7 @@ class ConfluenceDataSource(BaseDataSource):
             url_name=SPACE, api_query=SPACE_QUERY
         ):
             spaces = response.get("results", [])
-            space_keys.extend([space["key"] for space in spaces])
+            space_keys.extend([space.get("key", "") for space in spaces])
         if unavailable_spaces := set(self.spaces) - set(space_keys):
             msg = f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
             raise ConfigurableFieldValueError(msg)
@@ -792,8 +798,7 @@ class ConfluenceDataSource(BaseDataSource):
         self._logger.debug(
             f"Fetching permissions for space '{space_key} from Confluence server'"
         )
-        permission = await self.confluence_client.fetch_server_space_permission(url=url)
-        return permission
+        return await self.confluence_client.fetch_server_space_permission(url=url)
 
     async def fetch_documents(self, api_query):
         """Get pages and blog posts with the help of REST APIs
@@ -811,15 +816,18 @@ class ConfluenceDataSource(BaseDataSource):
             api_query=api_query,
         ):
             document_url = os.path.join(
-                self.confluence_client.host_url, document["_links"]["webui"][1:]
+                self.confluence_client.host_url,
+                document.get("_links", {}).get("webui", "")[1:],
             )
             yield {
-                "_id": document["id"],
-                "type": document["type"],
-                "_timestamp": document["history"]["lastUpdated"]["when"],
-                "title": document["title"],
-                "space": document["space"]["name"],
-                "body": document["body"]["storage"]["value"],
+                "_id": document.get("id"),
+                "type": document.get("type", ""),
+                "_timestamp": document.get("history", {})
+                .get("lastUpdated", {})
+                .get("when", iso_utc()),
+                "title": document.get("title", ""),
+                "space": document.get("space", {}).get("name", ""),
+                "body": document.get("body", {}).get("storage", {}).get("value", ""),
                 "url": document_url,
             }, attachment_count, document.get("space", {}).get("key"), document.get(
                 "space", {}
@@ -856,73 +864,61 @@ class ConfluenceDataSource(BaseDataSource):
         ):
             attachment_url = os.path.join(
                 self.confluence_client.host_url,
-                attachment["_links"]["webui"][1:],
+                attachment.get("_links", {}).get("webui", "")[1:],
             )
             yield {
-                "type": attachment["type"],
-                "title": attachment["title"],
-                "_id": attachment["id"],
+                "type": attachment.get("type"),
+                "title": attachment.get("title"),
+                "_id": attachment.get("id"),
                 "space": parent_space,
                 parent_type: parent_name,
-                "_timestamp": attachment["version"]["when"],
-                "size": attachment["extensions"]["fileSize"],
+                "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
+                "size": attachment.get("extensions", {}).get("fileSize", 0),
                 "url": attachment_url,
-            }, attachment["_links"]["download"]
+            }, attachment.get("_links", {}).get("download")
 
     async def search_by_query(self, query):
-        async for search_documents in self.confluence_client.search_by_query(
-            query=query
-        ):
-            async for response in search_documents:
-                for entity in response.get("results", []):
-                    # entity can be space or content
-                    entity_details = entity.get(SPACE) or entity.get(CONTENT)
+        async for entity in self.confluence_client.search_by_query(query=query):
+            # entity can be space or content
+            entity_details = entity.get(SPACE) or entity.get(CONTENT)
 
-                    if (
-                        entity_details["type"] == "attachment"
-                        and entity_details["container"].get("title") is None
-                    ):
-                        continue
+            if (
+                entity_details.get("type", "") == "attachment"
+                and entity_details.get("container", {}).get("title") is None
+            ):
+                continue
 
-                    document = {
-                        "_id": entity_details.get("id"),
-                        "title": entity.get("title"),
-                        "_timestamp": entity.get("lastModified"),
-                        "body": entity.get("excerpt"),
-                        "type": entity.get("entityType"),
-                        "url": os.path.join(
-                            self.confluence_client.host_url, entity.get("url")[1:]
-                        ),
+            document = {
+                "_id": entity_details.get("id"),
+                "title": entity.get("title"),
+                "_timestamp": entity.get("lastModified"),
+                "body": entity.get("excerpt"),
+                "type": entity.get("entityType"),
+                "url": os.path.join(
+                    self.confluence_client.host_url, entity.get("url")[1:]
+                ),
+            }
+            download_url = None
+            if document.get("type", "") == "content":
+                document.update(
+                    {
+                        "type": entity_details.get("type"),
+                        "space": entity_details.get("space", {}).get("name"),
                     }
-                    download_url = None
-                    if document["type"] == "content":
-                        document.update(
-                            {
-                                "type": entity_details.get("type"),
-                                "space": entity_details.get("space", {}).get("name"),
-                            }
-                        )
+                )
 
-                        if document["type"] == "attachment":
-                            container_type = entity_details.get("container", {}).get(
-                                "type"
-                            )
-                            container_title = entity_details.get("container", {}).get(
-                                "title"
-                            )
-                            file_size = entity_details.get("extensions", {}).get(
-                                "fileSize"
-                            )
-                            document.update(
-                                {"size": file_size, container_type: container_title}
-                            )
-                            # Removing body as attachment will be downloaded lazily
-                            document.pop("body")
-                            download_url = entity_details.get("_links", {}).get(
-                                "download"
-                            )
+                if document.get("type", "") == "attachment":
+                    container_type = entity_details.get("container", {}).get("type")
+                    container_title = entity_details.get("container", {}).get("title")
+                    file_size = entity_details.get("extensions", {}).get("fileSize")
+                    document.update(
+                        {"size": file_size, container_type: container_title}
+                    )
+                    # Removing body as attachment will be downloaded lazily
+                    document.pop("body")
+                    download_url = entity_details.get("_links", {}).get("download")
 
-                    yield document, download_url
+            yield document, download_url
 
     async def download_attachment(self, url, attachment, timestamp=None, doit=False):
         """Downloads the content of the given attachment in chunks using REST API call
@@ -968,10 +964,10 @@ class ConfluenceDataSource(BaseDataSource):
             access_control (list): List of identities which have access to document
         """
         async for attachment, download_link in self.fetch_attachments(
-            content_id=document["_id"],
-            parent_name=document["title"],
-            parent_space=document["space"],
-            parent_type=document["type"],
+            content_id=document.get("_id"),
+            parent_name=document.get("title"),
+            parent_space=document.get("space"),
+            parent_type=document.get("type"),
         ):
             attachment = self._decorate_with_access_control(
                 document=attachment, access_control=access_control
@@ -990,12 +986,13 @@ class ConfluenceDataSource(BaseDataSource):
 
     def format_space(self, space):
         space_url = os.path.join(
-            self.confluence_client.host_url, space["_links"]["webui"][1:]
+            self.confluence_client.host_url,
+            space.get("_links", {}).get("webui", "")[1:],
         )
         return {
-            "_id": space["id"],
+            "_id": space.get("id"),
             "type": "Space",
-            "title": space["name"],
+            "title": space.get("name"),
             "_timestamp": iso_utc(),
             "url": space_url,
         }

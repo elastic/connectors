@@ -277,7 +277,7 @@ class JiraClient:
                 )
                 break
 
-    async def get_issues(self, jql):
+    async def get_issues_for_jql(self, jql):
         info_msg = (
             f"Fetching Jira issues for JQL query: {jql}"
             if jql
@@ -288,7 +288,7 @@ class JiraClient:
             for issue in response.get("issues", []):
                 yield issue
 
-    async def put_issue(self, key):
+    async def get_issues_for_issue_key(self, key):
         try:
             async for response in self.api_call(url_name=ISSUE_DATA, id=key):
                 issue = await response.json()
@@ -337,7 +337,7 @@ class JiraClient:
         )
         async for actor_response in self.api_call(
             url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
-            project_key=project["key"],
+            project_key=project.get("key"),
             role_id=role_id,
         ):
             actors = await actor_response.json()
@@ -374,7 +374,7 @@ class JiraClient:
     async def get_timezone(self):
         async for response in self.api_call(url_name=PING):
             timezone = await response.json()
-            return timezone["timeZone"]
+            return timezone.get("timeZone")
 
     async def verify_projects(self):
         if self.projects == ["*"]:
@@ -385,7 +385,7 @@ class JiraClient:
         try:
             async for response in self.api_call(url_name=PROJECT):
                 response = await response.json()
-                project_keys = [project["key"] for project in response]
+                project_keys = [project.get("key") for project in response]
             if unavailable_projects := set(self.projects) - set(project_keys):
                 msg = f"Configured unavailable projects: {', '.join(unavailable_projects)}"
                 raise Exception(msg)
@@ -586,7 +586,7 @@ class JiraDataSource(BaseDataSource):
             for actor in actors:
                 if (
                     self.jira_client.data_source_type == JIRA_CLOUD
-                    and actor["accountType"] == ATLASSIAN
+                    and actor.get("accountType", "") == ATLASSIAN
                 ):
                     access_control.add(
                         prefix_account_id(account_id=actor.get("accountId"))
@@ -605,7 +605,7 @@ class JiraDataSource(BaseDataSource):
         return list(access_control)
 
     async def _cache_project_access_control(self, project):
-        project_key = project["key"]
+        project_key = project.get("key")
         if project_key in self.project_permission_cache.keys():
             project_access_controls = self.project_permission_cache.get(project_key)
         else:
@@ -854,16 +854,18 @@ class JiraDataSource(BaseDataSource):
         Args:
             issue (str): Issue key to fetch an issue
         """
-        async for issue_metadata in self.jira_client.put_issue(key=issue["key"]):
+        async for issue_metadata in self.jira_client.get_issues_for_issue_key(
+            key=issue.get("key")
+        ):
             response_fields = issue_metadata.get("fields")
             document = {
-                "_id": f"{response_fields['project']['name']}-{issue_metadata['key']}",
-                "_timestamp": response_fields["updated"],
-                "Type": response_fields["issuetype"]["name"],
+                "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
+                "_timestamp": response_fields.get("updated"),
+                "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
             }
             if restrictions := [
-                restriction["restrictionValue"]
+                restriction.get("restrictionValue")
                 for restriction in response_fields.get("issuerestriction", {})
                 .get("issuerestrictions", {})
                 .get("projectrole", [])
@@ -872,7 +874,7 @@ class JiraDataSource(BaseDataSource):
                 for role_id in restrictions:
                     access_control = await anext(
                         self.jira_client.project_role_members(
-                            project=response_fields["project"],
+                            project=response_fields.get("project"),
                             role_id=role_id,
                             access_control=set(),
                         )
@@ -880,7 +882,8 @@ class JiraDataSource(BaseDataSource):
                     issue_access_control.extend(list(access_control))
             else:
                 issue_access_control = await self._issue_access_control(
-                    issue_key=issue_metadata["key"], project=response_fields["project"]
+                    issue_key=issue_metadata.get("key"),
+                    project=response_fields.get("project"),
                 )
             document_with_access_control = self._decorate_with_access_control(
                 document=document, access_control=issue_access_control
@@ -888,11 +891,11 @@ class JiraDataSource(BaseDataSource):
             await self.queue.put(
                 (document_with_access_control, None)
             )  # pyright: ignore
-            attachments = issue_metadata["fields"]["attachment"]
+            attachments = issue_metadata.get("fields", {}).get("attachment")
             if len(attachments) > 0:
                 await self._put_attachment(
                     attachments=attachments,
-                    issue_key=issue_metadata["key"],
+                    issue_key=issue_metadata.get("key"),
                     access_control=issue_access_control,
                 )
         await self.queue.put("FINISHED")  # pyright: ignore
@@ -910,7 +913,7 @@ class JiraDataSource(BaseDataSource):
         jql = custom_query or (
             wildcard_query if self.jira_client.projects == ["*"] else projects_query
         )
-        async for issue in self.jira_client.get_issues(jql=jql):
+        async for issue in self.jira_client.get_issues_for_jql(jql=jql):
             await self.fetchers.put(partial(self._put_issue, issue))
             self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore

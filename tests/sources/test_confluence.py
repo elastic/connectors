@@ -678,7 +678,7 @@ async def test_fetch_spaces():
 
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response in source.confluence_client.fetch_spaces():
-                assert response["id"] == EXPECTED_SPACE["_id"]
+                assert response == RESPONSE_SPACE["results"][0]
 
 
 @pytest.mark.asyncio
@@ -1153,14 +1153,6 @@ async def test_fetch_confluence_server_users():
         )
         async for user in source.confluence_client.fetch_confluence_server_users():
             assert user is None
-
-
-async def create_fake_coroutine(item):
-    """create a method for returning fake coroutine value for
-    Args:
-        item: Value for converting into coroutine
-    """
-    return item
 
 
 @pytest.mark.asyncio
