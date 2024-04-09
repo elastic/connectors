@@ -50,7 +50,7 @@ def test_main_and_kill(mock_responses):
 
 
 @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
-@patch("connectors.service_cli.PreflightCheck")
+@patch("connectors.cli.PreflightCheck")
 def test_shutdown_called_on_shutdown_signal(
     patch_preflight_check, sig, patch_logger, mock_responses, set_env
 ):
