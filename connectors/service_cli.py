@@ -153,9 +153,9 @@ def get_event_loop(uvloop=False):
             import uvloop
 
             asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-        except Exception:
+        except Exception as e:
             logger.warning(
-                "Unable to enable uvloop: {e}. Running with default event loop"
+                f"Unable to enable uvloop: {e}. Running with default event loop"
             )
             pass
     try:
