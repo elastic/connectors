@@ -45,7 +45,10 @@ def load_config(ctx, config):
 
 
 # Main group
-@click.group(invoke_without_command=True)
+@click.group(
+    invoke_without_command=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 @click.version_option(__version__, "-v", "--version", message="%(version)s")
 @click.option("-c", "--config", type=click.File("rb"))
 @click.pass_context
