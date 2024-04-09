@@ -34,7 +34,7 @@ Example:
 
 ## Available commands
 ### Getting help
-Connectors CLI provides a `--help` argument that can be used with any command to get more information.
+Connectors CLI provides a `--help`/`-h` argument that can be used with any command to get more information.
 
 For example:
 ```bash
