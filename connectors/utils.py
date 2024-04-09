@@ -153,7 +153,12 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self):
+    def cancel(self, sig=None):
+        if sig:
+            logger.debug(f"Caught {sig}. Cancelling sleeps...")
+        else:
+            logger.debug("Cancelling sleeps...")
+
         for task in self._sleeps:
             task.cancel()
 
@@ -481,6 +486,9 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
+sleeps_for_retryable = CancellableSleeps()
+
+
 def retryable(
     retries=3,
     interval=1.0,
@@ -527,7 +535,7 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -551,7 +559,7 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
