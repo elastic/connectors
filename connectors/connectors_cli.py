@@ -40,7 +40,7 @@ def load_config(ctx, config):
     elif ctx.invoked_subcommand == "login":
         pass
     else:
-        msg = f"{CONFIG_FILE_PATH} is not found"
+        msg = f"{CONFIG_FILE_PATH} was not found."
         raise FileNotFoundError(msg)
 
 
@@ -56,7 +56,13 @@ def cli(ctx, config):
         return
 
     ctx.ensure_object(dict)
-    ctx.obj["config"] = load_config(ctx, config)
+    try:
+        ctx.obj["config"] = load_config(ctx, config)
+    except FileNotFoundError as e:
+        click.echo(
+            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+        )
+        ctx.exit(1)
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
