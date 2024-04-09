@@ -44,7 +44,7 @@ def test_version():
     assert result.output.strip() == __version__
 
 
-@pytest.mark.parametrize("commands", [["-h"], ["--help"], [None]])
+@pytest.mark.parametrize("commands", [["-h"], ["--help"], []])
 def test_help_page(commands):
     runner = CliRunner()
     result = runner.invoke(cli, commands)
