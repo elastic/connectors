@@ -794,7 +794,7 @@ class GitHubClient:
         )
         scopes = headers.get("X-OAuth-Scopes")
         if not scopes or not scopes.strip():
-            return {}
+            return set()
         return {scope.strip() for scope in scopes.split(",")}
 
     async def get_org_repos(self):

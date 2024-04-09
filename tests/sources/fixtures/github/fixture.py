@@ -53,6 +53,7 @@ class GitHubAPI:
             self.get_commits
         )
         self.app.route("/api/graphql", methods=["POST"])(self.mock_graphql_response)
+        self.app.route("/api", methods=["HEAD"])(self.get_scopes)
         self.files = {}
 
     def encode_cursor(self, value):
@@ -235,8 +236,6 @@ class GitHubAPI:
         query = query.replace(" ", "").replace("\r", "").replace("\n", "")
         if "viewer{login}" in query:
             mock_data = make_response({"data": {"viewer": {"login": "demo_repo"}}})
-            mock_data.status_code = 200
-            mock_data.headers["X-OAuth-Scopes"] = "repo, user, read:org"
         elif "repositories" in query:
             start_index, end_index, subset_nodes = self.get_index_metadata(
                 variables, repos_data
@@ -337,6 +336,12 @@ class GitHubAPI:
                 },
             }
         ]
+
+    def get_scopes(self):
+        return {
+            "status_code": 200,
+            "headers": {"X-OAuth-Scopes": "repo, user, read:org"},
+        }
 
 
 if __name__ == "__main__":
