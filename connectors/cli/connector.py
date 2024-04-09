@@ -12,6 +12,8 @@ from connectors.protocol import (
 from connectors.source import get_source_klass
 from connectors.utils import iso_utc
 
+EVERYDAY_AT_MIDNIGHT = "0 0 0 * * ?"
+
 
 class IndexAlreadyExists(Exception):
     pass
@@ -183,9 +185,9 @@ class Connector:
 
     def default_scheduling(self):
         return {
-            "access_control": {"enabled": False, "interval": "0 0 0 * * ?"},
-            "full": {"enabled": False, "interval": "0 0 0 * * ?"},
-            "incremental": {"enabled": False, "interval": "0 0 0 * * ?"},
+            "access_control": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
+            "full": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
+            "incremental": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
         }
 
     def default_filtering(self, timestamp):
