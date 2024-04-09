@@ -11,6 +11,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
+from gidgethub.abc import GraphQLAuthorizationFailure, QueryError
 
 from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -245,32 +246,28 @@ PRIVATE_REPO = {
 }
 MOCK_RESPONSE_REPO = [
     {
-        "data": {
-            "user": {
-                "repositories": {
-                    "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
-                    "nodes": [
-                        {
-                            "name": "demo_repo",
-                            "nameWithOwner": "demo_user/demo_repo",
-                        }
-                    ],
-                }
+        "user": {
+            "repositories": {
+                "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
+                "nodes": [
+                    {
+                        "name": "demo_repo",
+                        "nameWithOwner": "demo_user/demo_repo",
+                    }
+                ],
             }
         }
     },
     {
-        "data": {
-            "user": {
-                "repositories": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                    "nodes": [
-                        {
-                            "name": "test_repo",
-                            "nameWithOwner": "test_repo",
-                        }
-                    ],
-                }
+        "user": {
+            "repositories": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                "nodes": [
+                    {
+                        "name": "test_repo",
+                        "nameWithOwner": "test_repo",
+                    }
+                ],
             }
         }
     },
@@ -613,21 +610,19 @@ MOCK_COMMITS = [
     }
 ]
 MOCK_RESPONSE_MEMBERS = {
-    "data": {
-        "organization": {
-            "membersWithRole": {
-                "edges": [
-                    {
-                        "node": {
-                            "id": "#123",
-                            "login": "demo-user",
-                            "name": "demo",
-                            "email": "demo@example.com",
-                            "updatedAt": "2023-04-17T12:55:01Z",
-                        }
+    "organization": {
+        "membersWithRole": {
+            "edges": [
+                {
+                    "node": {
+                        "id": "#123",
+                        "login": "demo-user",
+                        "name": "demo",
+                        "email": "demo@example.com",
+                        "updatedAt": "2023-04-17T12:55:01Z",
                     }
-                ]
-            }
+                }
+            ]
         }
     }
 }
@@ -655,38 +650,34 @@ EXPECTED_ACCESS_CONTROL = [
     }
 ]
 MOCK_CONTRIBUTOR = {
-    "data": {
-        "repository": {
-            "collaborators": {
-                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                "edges": [
-                    {
-                        "node": {
-                            "id": "#123",
-                            "login": "demo-user",
-                            "email": "demo@email.com",
-                        }
+    "repository": {
+        "collaborators": {
+            "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+            "edges": [
+                {
+                    "node": {
+                        "id": "#123",
+                        "login": "demo-user",
+                        "email": "demo@email.com",
                     }
-                ],
-            }
+                }
+            ],
         }
     }
 }
 MOCK_ORG_REPOS = {
-    "data": {
-        "organization": {
-            "repositories": {
-                "pageInfo": {
-                    "hasNextPage": False,
-                    "endCursor": "abcd1234",
-                },
-                "nodes": [
-                    {
-                        "name": "org1",
-                        "nameWithOwner": "org1/repo1",
-                    }
-                ],
-            }
+    "organization": {
+        "repositories": {
+            "pageInfo": {
+                "hasNextPage": False,
+                "endCursor": "abcd1234",
+            },
+            "nodes": [
+                {
+                    "name": "org1",
+                    "nameWithOwner": "org1/repo1",
+                }
+            ],
         }
     }
 }
@@ -742,8 +733,8 @@ async def test_validate_config_missing_fields_then_raise(field):
 @pytest.mark.asyncio
 async def test_ping_with_successful_connection():
     async with create_github_source() as source:
-        source.github_client._get_session.post = Mock(
-            return_value=get_json_mock(mock_response={"user": "username"}, status=200)
+        source.github_client._get_client.graphql = AsyncMock(
+            return_value={"user": "username"}
         )
         await source.ping()
 
@@ -777,26 +768,14 @@ async def test_ping_with_unsuccessful_connection():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_token_then_raise():
-    async with create_github_source() as source:
-        with patch.object(
-            source.github_client,
-            "post",
-            side_effect=UnauthorizedException(),
-        ):
-            with pytest.raises(UnauthorizedException):
-                await source.validate_config()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "scopes",
-    ["", "repo", "manage_runner:org, delete:packages, admin:public_key"],
+    [{}, {"repo"}, {"manage_runner:org, delete:packages, admin:public_key"}],
 )
 async def test_validate_config_with_insufficient_scope(scopes):
     async with create_github_source() as source:
-        source.github_client.post = AsyncMock(
-            return_value=({"user": "username"}, {"X-OAuth-Scopes": scopes})
+        source.github_client.get_personal_access_token_scopes = AsyncMock(
+            return_value=scopes
         )
         with pytest.raises(
             ConfigurableFieldValueError,
@@ -808,11 +787,8 @@ async def test_validate_config_with_insufficient_scope(scopes):
 @pytest.mark.asyncio
 async def test_validate_config_with_extra_scopes_token(patch_logger):
     async with create_github_source() as source:
-        source.github_client.post = AsyncMock(
-            return_value=(
-                {"user": "username"},
-                {"X-OAuth-Scopes": "user, repo, admin:org"},
-            )
+        source.github_client.get_personal_access_token_scopes = AsyncMock(
+            return_value={"user", "repo", "admin:org"}
         )
         await source.validate_config()
         patch_logger.assert_present(
@@ -825,8 +801,8 @@ async def test_validate_config_with_extra_scopes_token(patch_logger):
 async def test_validate_config_with_inaccessible_repositories_then_raise():
     async with create_github_source() as source:
         source.github_client.repos = ["repo1", "owner1/repo1", "repo2", "owner2/repo2"]
-        source.github_client.post = AsyncMock(
-            return_value=({"dummy": "dummy"}, {"X-OAuth-Scopes": "repo"})
+        source.github_client.get_personal_access_token_scopes = AsyncMock(
+            return_value={"repo"}
         )
         source.get_invalid_repos = AsyncMock(return_value=["repo2"])
         with pytest.raises(ConfigurableFieldValueError):
@@ -838,7 +814,7 @@ async def test_validate_config_with_inaccessible_repositories_then_raise():
 async def test_get_invalid_repos_with_max_retries():
     async with create_github_source() as source:
         with pytest.raises(Exception):
-            source.github_client.post = AsyncMock(side_effect=Exception())
+            source.github_client.graphql = AsyncMock(side_effect=Exception())
             await source.get_invalid_repos()
 
 
@@ -887,38 +863,31 @@ async def test_get_retry_after():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_post_with_errors():
+async def test_graphql_with_errors():
     async with create_github_source() as source:
-        source.github_client._get_session.post = Mock(
-            return_value=get_json_mock(
-                mock_response={
-                    "errors": [{"type": "QUERY", "message": "Invalid query"}]
-                },
-                status=200,
+        source.github_client._get_client.graphql = Mock(
+            side_effect=QueryError(
+                {"errors": [{"type": "QUERY", "message": "Invalid query"}]}
             )
         )
         with pytest.raises(Exception):
-            await source.github_client.post(
+            await source.github_client.graphql(
                 {"variable": {"owner": "demo_user"}, "query": "QUERY"}
             )
 
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_post_with_unauthorized():
+async def test_graphql_with_unauthorized():
     async with create_github_source() as source:
-        source.github_client._get_session.post = Mock(
-            side_effect=ClientResponseError(
-                status=401,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                history=None,
+        source.github_client._get_client.graphql = Mock(
+            side_effect=GraphQLAuthorizationFailure(
+                response={"message": "Unauthorized access"}
             )
         )
         with pytest.raises(UnauthorizedException):
-            await source.github_client.post(
-                {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+            await source.github_client.graphql(
+                query="QUERY", variables={"owner": "demo_user"}
             )
 
 
@@ -927,9 +896,11 @@ async def test_paginated_api_call():
     expected_response = MOCK_RESPONSE_REPO
     async with create_github_source() as source:
         actual_response = []
-        with patch.object(source.github_client, "post", side_effect=expected_response):
+        with patch.object(
+            source.github_client, "graphql", side_effect=expected_response
+        ):
             async for data in source.github_client.paginated_api_call(
-                {"owner": "demo_user"}, "demo_query", ["user", "repositories"]
+                "demo_query", {"owner": "demo_user"}, ["user", "repositories"]
             ):
                 actual_response.append(data)
             assert expected_response == actual_response
@@ -940,24 +911,22 @@ async def test_get_invalid_repos():
     expected_response = ["owner1/repo2", "owner2/repo2"]
     async with create_github_source() as source:
         source.github_client.repos = ["repo1", "owner1/repo2", "repo2", "owner2/repo2"]
-        source.github_client.post = AsyncMock(
+        source.github_client.graphql = AsyncMock(
             side_effect=[
-                {"data": {"viewer": {"login": "owner1"}}},
+                {"viewer": {"login": "owner1"}},
                 {
-                    "data": {
-                        "user": {
-                            "repositories": {
-                                "pageInfo": {
-                                    "hasNextPage": True,
-                                    "endCursor": "abcd1234",
-                                },
-                                "nodes": [
-                                    {
-                                        "name": "owner1",
-                                        "nameWithOwner": "owner1/repo2",
-                                    }
-                                ],
-                            }
+                    "user": {
+                        "repositories": {
+                            "pageInfo": {
+                                "hasNextPage": True,
+                                "endCursor": "abcd1234",
+                            },
+                            "nodes": [
+                                {
+                                    "name": "owner1",
+                                    "nameWithOwner": "owner1/repo2",
+                                }
+                            ],
                         }
                     }
                 },
@@ -978,9 +947,9 @@ async def test_get_invalid_repos_organization():
         source.github_client.repo_type = "organization"
         source.github_client.org_name = "org1"
         source.github_client.repos = ["repo1", "owner1/repo2", "repo3"]
-        source.github_client.post = AsyncMock(
+        source.github_client.graphql = AsyncMock(
             side_effect=[
-                {"data": {"viewer": {"login": "owner1"}}},
+                {"viewer": {"login": "owner1"}},
                 MOCK_ORG_REPOS,
             ]
         )
@@ -1056,8 +1025,8 @@ async def test_get_content_with_differernt_size(size, expected_content):
 async def test_fetch_repos():
     async with create_github_source() as source:
         source.github_client.repos = ["*"]
-        source.github_client.post = AsyncMock(
-            return_value={"data": {"viewer": {"login": "owner1"}}}
+        source.github_client.graphql = AsyncMock(
+            return_value={"viewer": {"login": "owner1"}}
         )
         source.github_client.get_user_repos = Mock(
             return_value=AsyncIterator(
@@ -1084,8 +1053,8 @@ async def test_fetch_repos_organization():
     async with create_github_source() as source:
         source.github_client.repos = ["*"]
         source.github_client.repo_type = "organization"
-        source.github_client.post = AsyncMock(
-            return_value={"data": {"viewer": {"login": "owner1"}}}
+        source.github_client.graphql = AsyncMock(
+            return_value={"viewer": {"login": "owner1"}}
         )
         source.org_repos = {
             "org1/repo1": {
@@ -1107,16 +1076,14 @@ async def test_fetch_repos_organization():
 async def test_fetch_repos_when_user_repos_is_available():
     async with create_github_source() as source:
         source.github_client.repos = ["demo_user/demo_repo", "", "demo_repo"]
-        source.github_client.post = AsyncMock(
+        source.github_client.graphql = AsyncMock(
             side_effect=[
-                {"data": {"viewer": {"login": "owner1"}}},
+                {"viewer": {"login": "owner1"}},
                 {
-                    "data": {
-                        "repository": {
-                            "id": "123",
-                            "updatedAt": "2023-04-17T12:55:01Z",
-                            "nameWithOwner": "demo_user/demo_repo",
-                        }
+                    "repository": {
+                        "id": "123",
+                        "updatedAt": "2023-04-17T12:55:01Z",
+                        "nameWithOwner": "demo_user/demo_repo",
                     }
                 },
             ]
@@ -1133,7 +1100,7 @@ async def test_fetch_repos_when_user_repos_is_available():
 @pytest.mark.asyncio
 async def test_fetch_repos_with_unauthorized_exception():
     async with create_github_source() as source:
-        source.github_client.post = Mock(side_effect=UnauthorizedException())
+        source.github_client.graphql = Mock(side_effect=UnauthorizedException())
         with pytest.raises(UnauthorizedException):
             async for _ in source._fetch_repos():
                 pass
@@ -1160,7 +1127,7 @@ async def test_fetch_issues():
 @pytest.mark.asyncio
 async def test_fetch_issues_with_unauthorized_exception():
     async with create_github_source() as source:
-        source.github_client.post = Mock(side_effect=UnauthorizedException())
+        source.github_client.graphql = Mock(side_effect=UnauthorizedException())
         with pytest.raises(UnauthorizedException):
             async for _ in source._fetch_issues(
                 repo_name="demo_user/demo_repo",
@@ -1194,7 +1161,7 @@ async def test_fetch_pull_requests():
 @pytest.mark.asyncio
 async def test_fetch_pull_requests_with_unauthorized_exception():
     async with create_github_source() as source:
-        source.github_client.post = Mock(side_effect=UnauthorizedException())
+        source.github_client.graphql = Mock(side_effect=UnauthorizedException())
         with pytest.raises(UnauthorizedException):
             async for _ in source._fetch_pull_requests(
                 repo_name="demo_user/demo_repo",
@@ -1611,3 +1578,22 @@ async def test_dls_enabled(repo_type, use_document_level_security, dls_enabled):
     ) as source:
         source.set_features(Features(GitHubDataSource.features()))
         assert source._dls_enabled() == dls_enabled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "scopes, expected_scopes",
+    [
+        (None, {}),
+        ("", {}),
+        ("repo", {"repo"}),
+        ("repo, read:org", {"repo", "read:org"}),
+    ],
+)
+async def test_get_personal_access_token_scopes(scopes, expected_scopes):
+    async with create_github_source() as source:
+        source.github_client._get_client._request = AsyncMock(
+            return_value=(200, {"X-OAuth-Scopes": scopes}, None)
+        )
+        actual_scopes = await source.github_client.get_personal_access_token_scopes()
+        assert actual_scopes == expected_scopes
