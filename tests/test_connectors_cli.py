@@ -37,9 +37,10 @@ def mock_job_es_client():
         yield mock
 
 
-def test_version():
+@pytest.mark.parametrize("commands", [["-v"], ["--version"]])
+def test_version(commands):
     runner = CliRunner()
-    result = runner.invoke(cli, ["-v"])
+    result = runner.invoke(cli, commands)
     assert result.exit_code == 0
     assert result.output.strip() == __version__
 
