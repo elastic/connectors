@@ -235,7 +235,7 @@ class GitHubAPI:
         mock_data = {}
         query = query.replace(" ", "").replace("\r", "").replace("\n", "")
         if "viewer{login}" in query:
-            mock_data = make_response({"data": {"viewer": {"login": "demo_repo"}}})
+            mock_data["data"] = {"viewer": {"login": "demo_repo"}}
         elif "repositories" in query:
             start_index, end_index, subset_nodes = self.get_index_metadata(
                 variables, repos_data
@@ -338,10 +338,10 @@ class GitHubAPI:
         ]
 
     def get_scopes(self):
-        return {
-            "status_code": 200,
-            "headers": {"X-OAuth-Scopes": "repo, user, read:org"},
-        }
+        response = make_response({})
+        response.headers["status_code"] = 200
+        response.headers["X-OAuth-Scopes"] = "repo, user, read:org"
+        return response
 
 
 if __name__ == "__main__":

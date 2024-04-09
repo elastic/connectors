@@ -1584,8 +1584,8 @@ async def test_dls_enabled(repo_type, use_document_level_security, dls_enabled):
 @pytest.mark.parametrize(
     "scopes, expected_scopes",
     [
-        (None, {}),
-        ("", {}),
+        (None, set()),
+        ("", set()),
         ("repo", {"repo"}),
         ("repo, read:org", {"repo", "read:org"}),
     ],
