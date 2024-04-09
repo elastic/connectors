@@ -69,10 +69,8 @@ class OpentextDocumentumClient:
         self.configuration = configuration
         self._logger = logger
         self.host_url = self.configuration["host_url"]
-        self.repositories = self.configuration["repositories"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
-        self.retry_count = self.configuration["retry_count"]
 
         if self.ssl_enabled and self.certificate:
             self.ssl_ctx = ssl_context(certificate=self.certificate)
@@ -277,19 +275,10 @@ class OpentextDocumentumDataSource(BaseDataSource):
                 "order": 6,
                 "type": "str",
             },
-            "retry_count": {
-                "default_value": 3,
-                "display": "numeric",
-                "label": "Retries for failed requests",
-                "order": 7,
-                "required": False,
-                "type": "int",
-                "ui_restrictions": ["advanced"],
-            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 8,
+                "order": 7,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -314,7 +303,7 @@ class OpentextDocumentumDataSource(BaseDataSource):
         """
         if not doit:
             return
-        
+
         file_size = int(attachment["size"])
         if file_size <= 0:
             return
@@ -405,21 +394,17 @@ class OpentextDocumentumDataSource(BaseDataSource):
                 f"Fetching data for configured repositories: {self.repositories}"
             )
             for repository_name in self.repositories:
-                repository_response = await anext(
-                    self.opentext_client.api_call(
-                        url_name=REPOSITORY_BY_NAME, repository_name=repository_name
-                    )
-                )
-                repository = await repository_response.json()
-
-                # Assuming that we don't get `entries` field for fetching single repository by its name
-                yield {
-                    "_id": repository.get("id"),
-                    "_timestamp": repository.get("updated"),
-                    "type": "Repository",
-                    "repository_name": repository.get("title"),
-                    "summary": repository.get("summary"),
-                }
+                async for repository in self.opentext_client.paginated_api_call(
+                    url_name=REPOSITORY_BY_NAME, repository_name=repository_name
+                ):
+                    # Assuming that we don't get `entries` field for fetching single repository by its name
+                    yield {
+                        "_id": repository.get("id"),
+                        "_timestamp": repository.get("updated"),
+                        "type": "Repository",
+                        "repository_name": repository.get("title"),
+                        "summary": repository.get("summary"),
+                    }
 
     async def fetch_cabinets(self, repository_name):
         self._logger.info(f"Fetching cabinets for '{repository_name}' repository")
