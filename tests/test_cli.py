@@ -9,7 +9,7 @@ import os
 import signal
 from io import StringIO
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -47,6 +47,27 @@ def test_main_and_kill(mock_responses):
     loop.create_task(kill())
 
     main([])
+
+
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
+@patch("connectors.cli.PreflightCheck")
+def test_shutdown_called_on_shutdown_signal(
+    patch_preflight_check, sig, patch_logger, mock_responses, set_env
+):
+    patch_preflight_check.return_value.run = AsyncMock()
+
+    async def emit_shutdown_signal():
+        await asyncio.sleep(0.2)
+        os.kill(os.getpid(), sig)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(emit_shutdown_signal())
+
+    main([])
+
+    patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
+    patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
 
 
 def test_run(mock_responses, set_env):
