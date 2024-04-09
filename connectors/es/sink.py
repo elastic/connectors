@@ -254,13 +254,19 @@ class Sink:
 
             requested_op = ids_to_ops.get(doc_id, None)
             if requested_op is None:
+                # This ID wasn't in the request we sent, meaning that the ID was changed (probably via pipeline).
                 self.counters.increment(
                     ID_CHANGED_AFTER_REQUEST, namespace=BULK_RESPONSES
                 )
             elif action_item != OP_UPDATE and result == "updated":
+                # This means we sent an `index` op, but didn't create a new doc. This could mean that there was a
+                # doc with this ID in the index before this sync, OR that this ID showed up more than once during
+                # this sync.
                 self.counters.increment(ID_DUPLICATE, namespace=BULK_RESPONSES)
 
             if result == "noop":
+                # This means that whatever the requested op was, nothing happened. This is most likely to mean
+                # that the document was dropped during the ingest pipeline
                 self.counters.increment(DOCS_DROPPED, namespace=BULK_RESPONSES)
 
             successful_result = result in SUCCESSFUL_RESULTS
