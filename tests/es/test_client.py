@@ -12,6 +12,7 @@ import pytest
 from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
 from connectors.es.client import (
+    X_ELASTIC_PRODUCT_ORIGIN_HEADER,
     ESClient,
     License,
     RetryInterruptedError,
@@ -235,6 +236,15 @@ class TestESClient:
             # Execute
             assert not await es_client.ping()
             await es_client.close()
+
+    def test_sets_product_origin_header(self):
+        config = {"headers": {"some-header": "some-value"}}
+
+        es_client = ESClient(config)
+
+        assert (
+            es_client.client._headers[X_ELASTIC_PRODUCT_ORIGIN_HEADER] == "connectors"
+        )
 
 
 class TestTransientElasticsearchRetrier:
