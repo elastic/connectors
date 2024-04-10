@@ -54,7 +54,7 @@ GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
 GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
 SECURITY_INFO_DACL = 0x00000004
 
-MAX_CHUNK_SIZE = 65536 * 2
+MAX_CHUNK_SIZE = 65536
 RETRIES = 3
 RETRY_INTERVAL = 2
 
