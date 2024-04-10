@@ -35,6 +35,7 @@ from connectors.utils import (
     deep_merge_dicts,
     filter_nested_dict_by_keys,
     iso_utc,
+    nested_get_from_dict,
     next_run,
 )
 
@@ -476,18 +477,18 @@ class Features:
         self.features = features
 
     def incremental_sync_enabled(self):
-        return self._nested_feature_enabled(
-            ["incremental_sync", "enabled"], default=False
+        return nested_get_from_dict(
+            self.features, ["incremental_sync", "enabled"], default=False
         )
 
     def document_level_security_enabled(self):
-        return self._nested_feature_enabled(
-            ["document_level_security", "enabled"], default=False
+        return nested_get_from_dict(
+            self.features, ["document_level_security", "enabled"], default=False
         )
 
     def native_connector_api_keys_enabled(self):
-        return self._nested_feature_enabled(
-            ["native_connector_api_keys", "enabled"], default=True
+        return nested_get_from_dict(
+            self.features, ["native_connector_api_keys", "enabled"], default=True
         )
 
     def sync_rules_enabled(self):
@@ -503,12 +504,12 @@ class Features:
     def feature_enabled(self, feature):
         match feature:
             case Features.BASIC_RULES_NEW:
-                return self._nested_feature_enabled(
-                    ["sync_rules", "basic", "enabled"], default=False
+                return nested_get_from_dict(
+                    self.features, ["sync_rules", "basic", "enabled"], default=False
                 )
             case Features.ADVANCED_RULES_NEW:
-                return self._nested_feature_enabled(
-                    ["sync_rules", "advanced", "enabled"], default=False
+                return nested_get_from_dict(
+                    self.features, ["sync_rules", "advanced", "enabled"], default=False
                 )
             case Features.BASIC_RULES_OLD:
                 return self.features.get("filtering_rules", False)
@@ -516,21 +517,6 @@ class Features:
                 return self.features.get("filtering_advanced_config", False)
             case _:
                 return False
-
-    def _nested_feature_enabled(self, keys, default=None):
-        def nested_get(dictionary, keys_, default_=None):
-            if dictionary is None:
-                return default_
-
-            if not keys_:
-                return dictionary
-
-            if not isinstance(dictionary, dict):
-                return default_
-
-            return nested_get(dictionary.get(keys_[0]), keys_[1:], default_)
-
-        return nested_get(self.features, keys, default)
 
 
 class Connector(ESDocument):
