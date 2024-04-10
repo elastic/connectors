@@ -51,7 +51,7 @@ class GraphQLAPI:
                     "id": f"user_{issue_number}",
                     "first_name": fake_provider.fake.name(),
                     "updatedAt": "2023-04-20T09:32:54Z",
-                    "description": fake_provider.get_text(),
+                    "description": fake_provider.fake.sentence(),
                 }
                 for issue_number in range(DOC_COUNT)
             ],
