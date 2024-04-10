@@ -1345,3 +1345,17 @@ async def test_get_permission():
 async def test_page_blog_coro(fetch_documents):
     async with create_confluence_source() as source:
         await source._page_blog_coro("api_query", "target")
+
+
+@pytest.mark.asyncio
+async def test_end_signal_is_added_to_queue_in_case_of_exception():
+    END_SIGNAL = "FINISHED_TASK"
+    async with create_confluence_source() as source:
+        with patch.object(
+            source,
+            "fetch_attachments",
+            side_effect=Exception("Error fetching attachments"),
+        ):
+            with pytest.raises(Exception):
+                await source._attachment_coro(document=EXPECTED_PAGE, access_control=[])
+                assert source.queue.get_nowait() == END_SIGNAL
