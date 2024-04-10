@@ -893,7 +893,7 @@ class JiraDataSource(BaseDataSource):
                         issue_key=issue["key"],
                         access_control=issue_access_control,
                     )
-            await self.queue.put(FINISHED)  # pyright: ignore
+            await self.queue.put(FINISHED)
         except Exception as exception:
             self._logger.warning(
                 f"Skipping data for type: {ISSUE_DATA}. Error: {exception}"
@@ -927,7 +927,7 @@ class JiraDataSource(BaseDataSource):
             for issue in response.get("issues", []):
                 await self.fetchers.put(partial(self._put_issue, issue))
                 self.tasks += 1
-        await self.queue.put(FINISHED)  # pyright: ignore
+        await self.queue.put(FINISHED)
 
     async def _put_attachment(self, attachments, issue_key, access_control):
         """Put attachments of a specific issue in a queue
