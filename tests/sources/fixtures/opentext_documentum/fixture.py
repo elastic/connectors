@@ -9,7 +9,6 @@
 
 import io
 import os
-import random
 
 from flask import Flask, request
 
@@ -22,28 +21,26 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
     case "small":
-        REPOSITORIES = 10
+        REPOSITORIES = 15
         CABINETS_PER_REPOSITORY = 20
         FOLDERS = 20
         FILES = 2
     case "medium":
-        REPOSITORIES = 50
-        CABINETS_PER_REPOSITORY = 50
-        FOLDERS = 50
+        REPOSITORIES = 25
+        CABINETS_PER_REPOSITORY = 20
+        FOLDERS = 20
         FILES = 2
     case "large":
-        REPOSITORIES = 100
-        CABINETS_PER_REPOSITORY = 100
-        FOLDERS = 100
+        REPOSITORIES = 35
+        CABINETS_PER_REPOSITORY = 30
+        FOLDERS = 30
         FILES = 2
 
 NUM_OF_REPOSITORIES_TO_DELETE = 5
 
-
 class UniqueID:
     def __init__(self, n):
         self.numbers = list(range(n))
-        random.shuffle(self.numbers)
         self.index = 0
 
     def get_next_number(self):
@@ -59,6 +56,12 @@ class DocumentumAPI:
     def __init__(self):
         self.app = Flask(__name__)
         self.first_sync = True
+
+        self.repo_ids = UniqueID(2 * REPOSITORIES + 2)
+        self.cabinets_ids = UniqueID(2 * REPOSITORIES * CABINETS_PER_REPOSITORY)
+        self.folders_ids = UniqueID(2 * REPOSITORIES * FOLDERS)
+        self.sub_folders_ids = UniqueID(2 * REPOSITORIES * FOLDERS)
+        self.file_ids = UniqueID(4 * REPOSITORIES * FOLDERS * FILES)
 
         self.app.route("/dctm-rest/repositories", methods=["GET"])(
             self.get_repositories
@@ -94,7 +97,6 @@ class DocumentumAPI:
             total = REPOSITORIES
         else:
             total = REPOSITORIES - NUM_OF_REPOSITORIES_TO_DELETE
-        unique_id = UniqueID(REPOSITORIES)
 
         response = {
             "id": "http://127.0.0.1:2099/repositories",
@@ -111,7 +113,7 @@ class DocumentumAPI:
         if page * items_per_page < total:
             docs_per_page = total if total < items_per_page else items_per_page
             for _ in range(1, docs_per_page + 1):
-                _id = unique_id.get_next_number()
+                _id = self.repo_ids.get_next_number()
                 response["entries"].append(
                     {
                         "id": _id,
@@ -135,8 +137,7 @@ class DocumentumAPI:
         return response
 
     def get_repository_by_name(self, repository_name):
-        unique_id = UniqueID(REPOSITORIES)
-        _id = unique_id.get_next_number()
+        _id = self.repo_ids.get_next_number()
 
         return {
             "id": _id,
@@ -162,7 +163,6 @@ class DocumentumAPI:
         page = int(args.get("page", 0))
 
         total_cabinets = CABINETS_PER_REPOSITORY
-        unique_id = UniqueID(REPOSITORIES)
 
         response = {
             "id": f"http://127.0.0.1:2099/repositories/{repository_name}/cabinets",
@@ -186,10 +186,10 @@ class DocumentumAPI:
                 total_cabinets if total_cabinets < items_per_page else items_per_page
             )
             for _ in range(1, docs_per_page + 1):
-                _id = unique_id.get_next_number()
+                _id = self.cabinets_ids.get_next_number()
                 response["entries"].append(
                     {
-                        "id": _id,
+                        "id": f"cabinet_{_id}",
                         "title": f"Cabinet_{_id}",
                         "type": "cabinet",
                         "updated": iso_utc(),
@@ -211,7 +211,6 @@ class DocumentumAPI:
         page = int(args.get("page", 0))
 
         total = FOLDERS
-        unique_id = UniqueID(REPOSITORIES)
 
         response = {
             "id": "http://127.0.0.1:2099/folders",
@@ -228,11 +227,11 @@ class DocumentumAPI:
         if page * items_per_page < total:
             docs_per_page = total if total < items_per_page else items_per_page
             for _ in range(1, docs_per_page + 1):
-                _id = unique_id.get_next_number()
+                _id = self.folders_ids.get_next_number()
                 response["entries"].append(
                     {
-                        "id": _id,
-                        "title": f"folder_{_id}",
+                        "id": f"folder_{_id}",
+                        "title": f"Folder_{_id}",
                         "updated": iso_utc(),
                         "created": "2018-09-28T14:41:29.686+00:00",
                         "parent_id": None,
@@ -247,7 +246,6 @@ class DocumentumAPI:
         page = int(args.get("page", 0))
 
         total = 1  # All folders contains 1 sub-folder
-        unique_id = UniqueID(REPOSITORIES)
 
         response = {
             "id": f"http://127.0.0.1:2099/folders/{folder_id}/folders",
@@ -269,11 +267,11 @@ class DocumentumAPI:
         if page * items_per_page < total:
             docs_per_page = total if total < items_per_page else items_per_page
             for _ in range(1, docs_per_page + 1):
-                _id = unique_id.get_next_number()
+                _id = self.sub_folders_ids.get_next_number()
                 response["entries"].append(
                     {
-                        "id": _id,
-                        "title": f"folder_{_id}",
+                        "id": f"sub_folder_{_id}",
+                        "title": f"Sub_Folder_{_id}",
                         "updated": iso_utc(),
                         "created": "2018-09-28T14:41:29.686+00:00",
                         "parent_id": folder_id,
@@ -288,7 +286,6 @@ class DocumentumAPI:
         page = int(args.get("page", 0))
 
         total = FILES
-        unique_id = UniqueID(REPOSITORIES)
 
         response = {
             "id": f"http://127.0.0.1:2099/folders/{folder_id}/documents",
@@ -310,10 +307,10 @@ class DocumentumAPI:
         if page * items_per_page < total:
             docs_per_page = total if total < items_per_page else items_per_page
             for _ in range(1, docs_per_page + 1):
-                _id = unique_id.get_next_number()
+                _id = self.file_ids.get_next_number()
                 response["entries"].append(
                     {
-                        "id": _id,
+                        "id": f"file_{_id}",
                         "title": f"document_{_id}.txt",
                         "size": 256,
                         "updated": iso_utc(),
