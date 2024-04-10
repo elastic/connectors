@@ -105,9 +105,9 @@ class ESClient:
         self.max_wait_duration = config.get("max_wait_duration", 60)
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
+
         options["headers"] = config.get("headers", {})
         options["headers"]["user-agent"] = f"elastic-connectors-{__version__}"
-
         options["headers"][
             X_ELASTIC_PRODUCT_ORIGIN_HEADER
         ] = self.__class__.product_origin
