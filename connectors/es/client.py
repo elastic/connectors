@@ -40,8 +40,11 @@ class License(Enum):
     UNSET = None
 
 
+USER_AGENT_BASE = f"elastic-connectors-{__version__}"
+
+
 class ESClient:
-    user_agent = f"elastic-connectors-{__version__}"
+    user_agent = f"{USER_AGENT_BASE}/service"
 
     def __init__(self, config):
         # We don't have a way to ask the server, but it's planned
@@ -105,7 +108,7 @@ class ESClient:
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
 
         options["headers"] = config.get("headers", {})
-        options["headers"]["user-agent"] = f"{self.__class__.user_agent}/service"
+        options["headers"]["user-agent"] = self.__class__.user_agent
         options["headers"]["X-elastic-product-origin"] = "connectors"
 
         self.client = AsyncElasticsearch(**options)
