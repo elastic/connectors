@@ -18,7 +18,7 @@ from connectors.service_cli import main
 
 SUCCESS_EXIT_CODE = 0
 CLICK_EXCEPTION_EXIT_CODE = ClickException.exit_code
-USAGE_ERROR_CODE = UsageError.exit_code
+USAGE_ERROR_EXIT_CODE = UsageError.exit_code
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
@@ -144,7 +144,7 @@ def test_list_cannot_be_used_with_other_actions(set_env):
         ],
     )
 
-    assert result.exit_code == USAGE_ERROR_CODE
+    assert result.exit_code == USAGE_ERROR_EXIT_CODE
     assert "Cannot use the `list` action with other actions" in result.output
 
 
@@ -167,7 +167,7 @@ def test_config_cannot_be_used_with_other_actions(set_env):
         ],
     )
 
-    assert result.exit_code == USAGE_ERROR_CODE
+    assert result.exit_code == USAGE_ERROR_EXIT_CODE
     assert "Cannot use the `config` action with other actions" in result.output
 
 
@@ -205,7 +205,7 @@ def test_unknown_service_type(set_env):
         ],
     )
 
-    assert result.exit_code == USAGE_ERROR_CODE
+    assert result.exit_code == USAGE_ERROR_EXIT_CODE
     assert (
         f"Could not find a connector for service type {unknown_service_type}"
         in result.output
