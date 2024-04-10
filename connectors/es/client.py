@@ -29,8 +29,6 @@ from connectors.utils import (
     time_to_sleep_between_retries,
 )
 
-X_ELASTIC_PRODUCT_ORIGIN_HEADER = "X-elastic-product-origin"
-
 
 class License(Enum):
     ENTERPRISE = "enterprise"
@@ -43,7 +41,7 @@ class License(Enum):
 
 
 class ESClient:
-    product_origin = "connectors"
+    user_agent = f"elastic-connectors-{__version__}"
 
     def __init__(self, config):
         # We don't have a way to ask the server, but it's planned
@@ -107,10 +105,8 @@ class ESClient:
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
 
         options["headers"] = config.get("headers", {})
-        options["headers"]["user-agent"] = f"elastic-connectors-{__version__}"
-        options["headers"][
-            X_ELASTIC_PRODUCT_ORIGIN_HEADER
-        ] = self.__class__.product_origin
+        options["headers"]["user-agent"] = self.__class__.user_agent
+        options["headers"]["X-elastic-product-origin"] = "connectors"
 
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True

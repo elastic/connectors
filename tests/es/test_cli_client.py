@@ -1,5 +1,4 @@
 from connectors.es.cli_client import CLIClient
-from connectors.es.client import X_ELASTIC_PRODUCT_ORIGIN_HEADER
 
 
 def test_overrides_product_origin_header():
@@ -10,6 +9,4 @@ def test_overrides_product_origin_header():
     }
     cli_client = CLIClient(config)
 
-    assert (
-        cli_client.client._headers[X_ELASTIC_PRODUCT_ORIGIN_HEADER] == "connectors-cli"
-    )
+    assert cli_client.client._headers["user-agent"] == CLIClient.user_agent

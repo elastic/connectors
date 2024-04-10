@@ -3,8 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+from connectors.es import ESClient
 from connectors.es.management_client import ESManagementClient
 
 
 class CLIClient(ESManagementClient):
-    product_origin = "connectors-cli"
+    user_agent = f"{ESClient.user_agent}/cli"

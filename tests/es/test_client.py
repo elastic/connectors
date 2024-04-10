@@ -12,7 +12,6 @@ import pytest
 from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
 from connectors.es.client import (
-    X_ELASTIC_PRODUCT_ORIGIN_HEADER,
     ESClient,
     License,
     RetryInterruptedError,
@@ -242,9 +241,14 @@ class TestESClient:
 
         es_client = ESClient(config)
 
-        assert (
-            es_client.client._headers[X_ELASTIC_PRODUCT_ORIGIN_HEADER] == "connectors"
-        )
+        assert es_client.client._headers["X-elastic-product-origin"] == "connectors"
+
+    def test_sets_user_agent(self):
+        config = {"headers": {"some-header": "some-value"}}
+
+        es_client = ESClient(config)
+
+        assert es_client.client._headers["user-agent"] == ESClient.user_agent
 
 
 class TestTransientElasticsearchRetrier:
