@@ -22,7 +22,6 @@ import copy
 import functools
 import logging
 import time
-from collections import defaultdict
 
 from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
@@ -33,6 +32,11 @@ from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_VOLUME,
+)
 from connectors.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
@@ -42,6 +46,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_MEM_SIZE,
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
+    Counters,
     MemQueue,
     aenumerate,
     get_size,
@@ -54,9 +59,28 @@ FETCH_ERROR = "FETCH_ERROR"
 END_DOCS = "END_DOCS"
 
 OP_INDEX = "index"
-OP_UPSERT = "update"
 OP_DELETE = "delete"
+OP_CREATE = "create"
+OP_UPDATE = "update"
+OP_UNKNOWN = "operation_unknown"
 CANCELATION_TIMEOUT = 5
+
+# counter keys
+BIN_DOCS_DOWNLOADED = "binary_docs_downloaded"
+BULK_OPERATIONS = "bulk_operations"
+BULK_RESPONSES = "bulk_item_responses"
+CREATES_QUEUED = "doc_creates_queued"
+UPDATES_QUEUED = "doc_updates_queued"
+DELETES_QUEUED = "doc_deletes_queued"
+DOCS_EXTRACTED = "docs_extracted"
+DOCS_FILTERED = "docs_filtered"
+DOCS_DROPPED = "docs_dropped"
+ID_MISSING = "_ids_missing"
+RESULT_ERROR = "result_errors"
+RESULT_SUCCESS = "result_successes"
+RESULT_UNDEFINED = "results_undefined"
+ID_CHANGED_AFTER_REQUEST = "_ids_changed_after_request"
+ID_DUPLICATE = "_id_duplicates"
 
 # Successful results according to the docs: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-api-response-body
 SUCCESSFUL_RESULTS = ("created", "deleted", "updated")
@@ -117,19 +141,16 @@ class Sink:
     ):
         self.client = client
         self.queue = queue
-        self.ops = defaultdict(int)
         self.chunk_size = chunk_size
         self.pipeline = pipeline
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
         self.retry_interval = retry_interval
-        self.indexed_document_count = 0
-        self.indexed_document_volume = 0
-        self.deleted_document_count = 0
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
+        self.counters = Counters()
 
     def _bulk_op(self, doc, operation=OP_INDEX):
         doc_id = doc["_id"]
@@ -137,7 +158,7 @@ class Sink:
 
         if operation == OP_INDEX:
             return [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
-        if operation == OP_UPSERT:
+        if operation == OP_UPDATE:
             return [
                 {operation: {"_index": index, "_id": doc_id}},
                 {"doc": doc["doc"], "doc_as_upsert": True},
@@ -166,9 +187,10 @@ class Sink:
 
         # TODO: retry 429s for individual items here
         res = await self.client.bulk_insert(operations, self.pipeline["name"])
-
-        if self._enable_bulk_operations_logging:
-            await self._log_bulk_operations(res)
+        ids_to_ops = self._map_id_to_op(operations)
+        await self._process_bulk_response(
+            res, ids_to_ops, do_log=self._enable_bulk_operations_logging
+        )
 
         if res.get("errors"):
             for item in res["items"]:
@@ -181,47 +203,92 @@ class Sink:
 
         return res
 
-    async def _log_bulk_operations(self, res):
+    def _map_id_to_op(self, operations):
+        """
+        Takes operations like: [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
+        and turns them into { doc_id : operation }
+        """
+        result = {}
+        for entry in operations:
+            if len(entry.keys()) == 1:  # only looking at "operation" entries
+                for op, doc in entry.items():
+                    if (
+                        isinstance(doc, dict)
+                        and "_id" in doc.keys()
+                        and "_index" in doc.keys()
+                    ):  # avoiding update bulk extra entries
+                        result[doc["_id"]] = op
+        return result
+
+    async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
         for item in res.get("items", []):
-            if "index" in item:
-                action_item = "index"
-            elif "delete" in item:
-                action_item = "delete"
-            elif "create" in item:
-                action_item = "create"
-            elif "update" in item:
-                action_item = "update"
+            if OP_INDEX in item:
+                action_item = OP_INDEX
+            elif OP_DELETE in item:
+                action_item = OP_DELETE
+            elif OP_CREATE in item:
+                action_item = OP_CREATE
+            elif OP_UPDATE in item:
+                action_item = OP_UPDATE
             else:
                 # Should only happen, if the _bulk API changes
                 # Unlikely, but as this functionality could be used for audits we want to detect changes fast
-                self._logger.error(
-                    f"Unknown action item returned from _bulk API for item {item}"
-                )
+                if do_log:
+                    self._logger.error(
+                        f"Unknown action item returned from _bulk API for item {item}"
+                    )
+                self.counters.increment(OP_UNKNOWN, namespace=BULK_RESPONSES)
                 continue
 
+            self.counters.increment(action_item, namespace=BULK_RESPONSES)
             doc_id = item[action_item].get("_id")
             if doc_id is None:
                 # Should only happen, if the _bulk API changes
                 # Unlikely, but as this functionality could be used for audits we want to detect changes fast
-                self._logger.error(f"Could not retrieve '_id' for document {item}")
+                if do_log:
+                    self._logger.error(f"Could not retrieve '_id' for document {item}")
+                self.counters.increment(ID_MISSING, namespace=BULK_RESPONSES)
                 continue
 
             result = item[action_item].get("result")
-            successful_result = result in SUCCESSFUL_RESULTS
 
+            requested_op = ids_to_ops.get(doc_id, None)
+            if requested_op is None:
+                # This ID wasn't in the request we sent, meaning that the ID was changed (probably via pipeline).
+                self.counters.increment(
+                    ID_CHANGED_AFTER_REQUEST, namespace=BULK_RESPONSES
+                )
+            elif action_item != OP_UPDATE and result == "updated":
+                # This means we sent an `index` op, but didn't create a new doc. This could mean that there was a
+                # doc with this ID in the index before this sync, OR that this ID showed up more than once during
+                # this sync.
+                self.counters.increment(ID_DUPLICATE, namespace=BULK_RESPONSES)
+
+            if result == "noop":
+                # This means that whatever the requested op was, nothing happened. This is most likely to mean
+                # that the document was dropped during the ingest pipeline
+                self.counters.increment(DOCS_DROPPED, namespace=BULK_RESPONSES)
+
+            successful_result = result in SUCCESSFUL_RESULTS
             if not successful_result:
                 if "error" in item[action_item]:
-                    self._logger.debug(
-                        f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
-                    )
+                    if do_log:
+                        self._logger.debug(
+                            f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
+                        )
+                    self.counters.increment(RESULT_ERROR, namespace=BULK_RESPONSES)
                 else:
-                    self._logger.debug(
-                        f"Executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
-                    )
+                    if do_log:
+                        self._logger.debug(
+                            f"Executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
+                        )
+                    self.counters.increment(RESULT_UNDEFINED, namespace=BULK_RESPONSES)
             else:
-                self._logger.debug(
-                    f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"
-                )
+                if do_log:
+                    self._logger.debug(
+                        f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"
+                    )
+                self.counters.increment(RESULT_SUCCESS)
 
     def _populate_stats(self, stats, res):
         for item in res["items"]:
@@ -230,14 +297,17 @@ class Sink:
                 if "result" not in data:
                     del stats[op][data["_id"]]
 
-        self.indexed_document_count += len(stats[OP_INDEX]) + len(stats[OP_UPSERT])
-        self.indexed_document_volume += sum(stats[OP_INDEX].values()) + sum(
-            stats[OP_UPSERT].values()
+        self.counters.increment(
+            INDEXED_DOCUMENT_COUNT, len(stats[OP_INDEX]) + len(stats[OP_UPDATE])
         )
-        self.deleted_document_count += len(stats[OP_DELETE])
+        self.counters.increment(
+            INDEXED_DOCUMENT_VOLUME,
+            sum(stats[OP_INDEX].values()) + sum(stats[OP_UPDATE].values()),
+        )
+        self.counters.increment(DELETED_DOCUMENT_COUNT, len(stats[OP_DELETE]))
 
         self._logger.debug(
-            f"Sink stats - no. of docs indexed: {self.indexed_document_count}, volume of docs indexed: {round(self.indexed_document_volume)} bytes, no. of docs deleted: {self.deleted_document_count}"
+            f"Sink stats - no. of docs indexed: {self.counters.get(INDEXED_DOCUMENT_COUNT)}, volume of docs indexed: {round(self.counters.get(INDEXED_DOCUMENT_VOLUME))} bytes, no. of docs deleted: {self.counters.get(DELETED_DOCUMENT_COUNT)}"
         )
 
     def force_cancel(self):
@@ -276,7 +346,7 @@ class Sink:
         """
         batch = []
         # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
-        stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
+        stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
         bulk_size = 0
         overhead_size = None
 
@@ -299,7 +369,7 @@ class Sink:
                     }
                     overhead_size = get_size(overhead)
                 stats[operation][doc_id] = max(doc_size - overhead_size, 0)
-            self.ops[operation] += 1
+            self.counters.increment(operation, namespace=BULK_OPERATIONS)
             batch.extend(self._bulk_op(doc, operation))
 
             bulk_size += doc_size
@@ -312,7 +382,7 @@ class Sink:
                     )
                 )
                 batch.clear()
-                stats = {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}}
+                stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
                 bulk_size = 0
 
             await asyncio.sleep(0)
@@ -357,10 +427,7 @@ class Extractor:
         self.queue = queue
         self.index = index
         self.loop = asyncio.get_event_loop()
-        self.total_downloads = 0
-        self.total_docs_updated = 0
-        self.total_docs_created = 0
-        self.total_docs_deleted = 0
+        self.counters = Counters()
         self.fetch_error = None
         self.filter_ = filter_
         self.basic_rule_engine = (
@@ -377,7 +444,7 @@ class Extractor:
         data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
         if data is not None:
-            self.total_downloads += 1
+            self.counters.increment(BIN_DOCS_DOWNLOADED)
             data.pop("_id", None)
             data.pop(TIMESTAMP_FIELD, None)
             doc.update(data)
@@ -458,6 +525,7 @@ class Extractor:
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
         try:
             async for count, doc in aenumerate(generator):
+                self.counters.increment(DOCS_EXTRACTED)
                 doc, lazy_download, operation = doc
                 if count % self.display_every == 0:
                     self._log_progress()
@@ -467,6 +535,7 @@ class Extractor:
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
                 ):
+                    self.counters.increment((DOCS_FILTERED))
                     continue
 
                 if doc_id in existing_ids:
@@ -490,9 +559,10 @@ class Extractor:
                         )
                         continue
 
-                    self.total_docs_updated += 1
+                    self.counters.increment(UPDATES_QUEUED)
+
                 else:
-                    self.total_docs_created += 1
+                    self.counters.increment(CREATES_QUEUED)
                     if TIMESTAMP_FIELD not in doc:
                         doc[TIMESTAMP_FIELD] = iso_utc()
 
@@ -570,11 +640,11 @@ class Extractor:
                     continue
 
                 if operation == OP_INDEX:
-                    self.total_docs_created += 1
-                elif operation == OP_UPSERT:
-                    self.total_docs_updated += 1
+                    self.counters.increment(CREATES_QUEUED)
+                elif operation == OP_UPDATE:
+                    self.counters.increment(UPDATES_QUEUED)
                 elif operation == OP_DELETE:
-                    self.total_docs_deleted += 1
+                    self.counters.increment(DELETES_QUEUED)
                 else:
                     self._logger.error(
                         f"unsupported operation {operation} for doc {doc_id}"
@@ -598,7 +668,7 @@ class Extractor:
                         "_index": self.index,
                         "_id": doc_id,
                     }
-                    if operation in (OP_INDEX, OP_UPSERT):
+                    if operation in (OP_INDEX, OP_UPDATE):
                         item["doc"] = doc
                     await self.put_doc(item)
 
@@ -650,11 +720,11 @@ class Extractor:
                 if doc_not_updated:
                     continue
 
-                self.total_docs_updated += 1
+                self.counters.increment(UPDATES_QUEUED)
 
-                operation = OP_UPSERT
+                operation = OP_UPDATE
             else:
-                self.total_docs_created += 1
+                self.counters.increment(CREATES_QUEUED)
 
                 if TIMESTAMP_FIELD not in doc:
                     doc[TIMESTAMP_FIELD] = iso_utc()
@@ -684,14 +754,16 @@ class Extractor:
                     "_id": doc_id,
                 }
             )
-            self.total_docs_deleted += 1
+            self.counters.increment(DELETES_QUEUED)
 
-    def _log_progress(self):
+    def _log_progress(
+        self,
+    ):
         self._logger.info(
             "Sync progress -- "
-            f"created: {self.total_docs_created} | "
-            f"updated: {self.total_docs_updated} | "
-            f"deleted: {self.total_docs_deleted}"
+            f"created: {self.counters.get(CREATES_QUEUED)} | "
+            f"updated: {self.counters.get(UPDATES_QUEUED)} | "
+            f"deleted: {self.counters.get(DELETES_QUEUED)}"
         )
 
 
@@ -802,26 +874,12 @@ class SyncOrchestrator:
     def ingestion_stats(self):
         stats = {}
         if self._extractor is not None:
-            stats.update(
-                {
-                    "doc_created": self._extractor.total_docs_created,
-                    "attachment_extracted": self._extractor.total_downloads,
-                    "doc_updated": self._extractor.total_docs_updated,
-                    "doc_deleted": self._extractor.total_docs_deleted,
-                }
-            )
+            stats.update(self._extractor.counters.to_dict())
         if self._sink is not None:
-            stats.update(
-                {
-                    "bulk_operations": dict(self._sink.ops),
-                    "indexed_document_count": self._sink.indexed_document_count,
-                    # return indexed_document_volume in number of MiB
-                    "indexed_document_volume": round(
-                        self._sink.indexed_document_volume / (1024 * 1024)
-                    ),
-                    "deleted_document_count": self._sink.deleted_document_count,
-                }
-            )
+            stats.update(self._sink.counters.to_dict())
+            stats[INDEXED_DOCUMENT_VOLUME] = round(
+                self._sink.counters.get(INDEXED_DOCUMENT_VOLUME) / (1024 * 1024)
+            )  # return indexed_document_volume in number of MiB
         return stats
 
     def fetch_error(self):
