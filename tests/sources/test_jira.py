@@ -302,7 +302,9 @@ ACCESS_CONTROL = "_allow_access_control"
 
 
 @asynccontextmanager
-async def create_jira_source(use_text_extraction_service=False):
+async def create_jira_source(
+    use_text_extraction_service=False, jira_url="http://127.0.0.1:8080"
+):
     async with create_source(
         JiraDataSource,
         data_source="jira_cloud",
@@ -310,7 +312,7 @@ async def create_jira_source(use_text_extraction_service=False):
         password="changeme",
         account_email="me@example.com",
         api_token="abc#123",
-        jira_url="http://127.0.0.1:8080",
+        jira_url=jira_url,
         projects="*",
         ssl_enabled=False,
         use_text_extraction_service=use_text_extraction_service,
@@ -367,6 +369,8 @@ def side_effect_function(url, ssl):
         mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG], "total": 1}
         return get_json_mock(mock_response=mocked_issue_data)
     elif url == f"{HOST_URL}/rest/api/2/myself":
+        return get_json_mock(mock_response=MOCK_MYSELF)
+    elif url == f"{HOST_URL}/test/rest/api/2/myself":
         return get_json_mock(mock_response=MOCK_MYSELF)
     elif url == f"{HOST_URL}/rest/api/2/project?expand=description,lead,url":
         return get_json_mock(mock_response=MOCK_PROJECT)
@@ -553,6 +557,15 @@ async def test_get_with_500_status():
                     url="http://localhost:1000/err"
                 ):
                     await response.json()
+
+
+@pytest.mark.asyncio
+async def test_ping_to_custom_path_server():
+    async with create_jira_source(jira_url="http://127.0.0.1:8080/test/") as source:
+        with patch.object(
+            aiohttp.ClientSession, "get", side_effect=side_effect_function
+        ):
+            await source.ping()
 
 
 @pytest.mark.asyncio
