@@ -104,7 +104,10 @@ class JiraClient:
         self.configuration = configuration
         self._logger = logger
         self.data_source_type = self.configuration["data_source"]
-        self.host_url = self.configuration["jira_url"] + "/"
+
+        jira_url = self.configuration["jira_url"]
+        self.host_url = jira_url if jira_url[-1] == "/" else jira_url + "/"
+
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
