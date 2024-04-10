@@ -38,6 +38,7 @@ match DATA_SIZE:
 
 NUM_OF_REPOSITORIES_TO_DELETE = 5
 
+
 class UniqueID:
     def __init__(self, n):
         self.numbers = list(range(n))
@@ -57,11 +58,11 @@ class DocumentumAPI:
         self.app = Flask(__name__)
         self.first_sync = True
 
-        self.repo_ids = UniqueID(2 * REPOSITORIES + 2)
-        self.cabinets_ids = UniqueID(2 * REPOSITORIES * CABINETS_PER_REPOSITORY)
-        self.folders_ids = UniqueID(2 * REPOSITORIES * FOLDERS)
-        self.sub_folders_ids = UniqueID(2 * REPOSITORIES * FOLDERS)
-        self.file_ids = UniqueID(4 * REPOSITORIES * FOLDERS * FILES)
+        self.repo_ids = UniqueID(3 * REPOSITORIES + 3)
+        self.cabinets_ids = UniqueID(3 * REPOSITORIES * CABINETS_PER_REPOSITORY)
+        self.folders_ids = UniqueID(3 * REPOSITORIES * FOLDERS)
+        self.sub_folders_ids = UniqueID(3 * REPOSITORIES * FOLDERS)
+        self.file_ids = UniqueID(6 * REPOSITORIES * FOLDERS * FILES)
 
         self.app.route("/dctm-rest/repositories", methods=["GET"])(
             self.get_repositories
