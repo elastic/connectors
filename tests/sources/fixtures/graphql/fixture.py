@@ -49,7 +49,7 @@ class GraphQLAPI:
             "nodes": [
                 {
                     "id": f"user_{issue_number}",
-                    "first_name": fake_provider.name(),
+                    "first_name": fake_provider.fake.name(),
                     "updatedAt": "2023-04-20T09:32:54Z",
                     "description": fake_provider.get_text(),
                 }
