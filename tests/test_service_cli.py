@@ -7,27 +7,25 @@ import asyncio
 import logging
 import os
 import signal
-from io import StringIO
-from unittest import mock
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from click import ClickException, UsageError
+from click.testing import CliRunner
 
 from connectors import __version__
-from connectors.service_cli import main, run
+from connectors.service_cli import main
+
+SUCCESS_EXIT_CODE = 0
+CLICK_EXCEPTION_EXIT_CODE = ClickException.exit_code
+USAGE_ERROR_EXIT_CODE = UsageError.exit_code
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
 CONFIG = os.path.join(FIXTURES_DIR, "config.yml")
 
 
-def test_main(catch_stdout):
-    assert main(["--version"]) == 0
-    catch_stdout.seek(0)
-    assert catch_stdout.read().strip() == __version__
-
-
-def test_main_and_kill(mock_responses):
+def test_main_exits_on_sigterm(mock_responses):
     headers = {"X-Elastic-Product": "Elasticsearch"}
     host = "http://localhost:9200"
 
@@ -46,7 +44,16 @@ def test_main_and_kill(mock_responses):
     asyncio.set_event_loop(loop)
     loop.create_task(kill())
 
-    main([])
+    CliRunner().invoke(main, [])
+
+
+@pytest.mark.parametrize("option", ["-v", "--version"])
+def test_version_action(option):
+    runner = CliRunner()
+    result = runner.invoke(main, [option])
+
+    assert result.exit_code == SUCCESS_EXIT_CODE
+    assert __version__ in result.output
 
 
 @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
@@ -64,51 +71,104 @@ def test_shutdown_called_on_shutdown_signal(
     asyncio.set_event_loop(loop)
     loop.create_task(emit_shutdown_signal())
 
-    main([])
+    CliRunner().invoke(main, [])
 
     patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
     patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
 
 
-def test_run(mock_responses, set_env):
-    args = mock.MagicMock()
-    args.log_level = "DEBUG"
-    args.config_file = CONFIG
-    args.action = ["list"]
-    with patch("sys.stdout", new=StringIO()) as patched_stdout:
-        assert run(args) == 0
+def test_list_action(set_env):
+    runner = CliRunner()
 
-        output = patched_stdout.getvalue().strip()
+    config_file = CONFIG
+    action = "list"
 
-        assert "Registered connectors:" in output
-        assert "- Fakey" in output
-        assert "- Large Fake" in output
-        assert "Bye" in output
+    result = runner.invoke(
+        main,
+        ["--config-file", config_file, "--action", action],
+    )
 
+    assert result.exit_code == SUCCESS_EXIT_CODE
 
-def test_config_action(mock_responses, set_env):
-    args = mock.MagicMock()
-    args.log_level = "DEBUG"
-    args.config_file = CONFIG
-    args.action = ["config"]
-    args.service_type = "fake"
-    with patch("sys.stdout", new=StringIO()) as patched_stdout:
-        result = run(args)
-        output = patched_stdout.getvalue().strip()
-        assert result == 0
-        assert "Could not find a connector for service type" not in output
-        assert "Getting default configuration for service type fake" in output
+    output = result.output
+
+    assert "Registered connectors:" in output
+    assert "- Fakey" in output
+    assert "- Large Fake" in output
+    assert "Bye" in output
 
 
-def test_run_snowflake(mock_responses, set_env):
-    args = mock.MagicMock()
-    args.log_level = "DEBUG"
-    args.config_file = CONFIG
-    args.action = ["list", "poll"]
-    with patch("sys.stdout", new=StringIO()) as patched_stdout:
-        assert run(args) == -1
-        output = patched_stdout.getvalue().strip()
-        assert "Cannot use the `list` action with other actions" in output
+def test_config_with_service_type_actions(set_env):
+    runner = CliRunner()
+
+    config_file = CONFIG
+    action = "config"
+    service_type = "fake"
+
+    result = runner.invoke(
+        main,
+        [
+            "--config-file",
+            config_file,
+            "--action",
+            action,
+            "--service-type",
+            service_type,
+        ],
+    )
+
+    assert result.exit_code == SUCCESS_EXIT_CODE
+
+    output = result.output
+
+    assert "Could not find a connector for service type" not in output
+    assert "Getting default configuration for service type fake" in output
+
+
+def test_list_cannot_be_used_with_other_actions(set_env):
+    runner = CliRunner()
+
+    config_file = CONFIG
+    first_action = "cleanup"
+    second_action = "list"
+
+    result = runner.invoke(
+        main,
+        [
+            "--config-file",
+            config_file,
+            "--action",
+            first_action,
+            "--action",
+            second_action,
+        ],
+    )
+
+    assert result.exit_code == USAGE_ERROR_EXIT_CODE
+    assert "Cannot use the `list` action with other actions" in result.output
+
+
+def test_config_cannot_be_used_with_other_actions(set_env):
+    runner = CliRunner()
+
+    config_file = CONFIG
+    first_action = "cleanup"
+    second_action = "config"
+
+    result = runner.invoke(
+        main,
+        [
+            "--config-file",
+            config_file,
+            "--action",
+            first_action,
+            "--action",
+            second_action,
+        ],
+    )
+
+    assert result.exit_code == USAGE_ERROR_EXIT_CODE
+    assert "Cannot use the `config` action with other actions" in result.output
 
 
 @patch("connectors.service_cli.set_logger")
@@ -116,11 +176,37 @@ def test_run_snowflake(mock_responses, set_env):
     "connectors.service_cli.load_config", side_effect=Exception("something went wrong")
 )
 def test_main_with_invalid_configuration(load_config, set_logger):
-    args = mock.MagicMock()
-    args.log_level = logging.DEBUG  # should be ignored!
-    args.filebeat = True
+    runner = CliRunner()
 
-    with pytest.raises(Exception):
-        run(args)
+    log_level = "DEBUG"  # should be ignored!
 
+    result = runner.invoke(main, ["--log-level", log_level, "--filebeat"])
+
+    assert result.exit_code == CLICK_EXCEPTION_EXIT_CODE
     set_logger.assert_called_with(logging.INFO, filebeat=True)
+
+
+def test_unknown_service_type(set_env):
+    runner = CliRunner()
+
+    config_file = CONFIG
+    action = "config"
+    unknown_service_type = "unknown"
+
+    result = runner.invoke(
+        main,
+        [
+            "--config-file",
+            config_file,
+            "--action",
+            action,
+            "--service-type",
+            unknown_service_type,
+        ],
+    )
+
+    assert result.exit_code == USAGE_ERROR_EXIT_CODE
+    assert (
+        f"Could not find a connector for service type {unknown_service_type}"
+        in result.output
+    )
