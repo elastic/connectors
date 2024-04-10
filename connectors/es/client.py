@@ -105,7 +105,7 @@ class ESClient:
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
 
         options["headers"] = config.get("headers", {})
-        options["headers"]["user-agent"] = self.__class__.user_agent
+        options["headers"]["user-agent"] = f"{self.__class__.user_agent}/service"
         options["headers"]["X-elastic-product-origin"] = "connectors"
 
         self.client = AsyncElasticsearch(**options)

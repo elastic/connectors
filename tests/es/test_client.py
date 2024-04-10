@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
+from connectors import __version__
 from connectors.es.client import (
     ESClient,
     License,
@@ -248,7 +249,10 @@ class TestESClient:
 
         es_client = ESClient(config)
 
-        assert es_client.client._headers["user-agent"] == ESClient.user_agent
+        assert (
+            es_client.client._headers["user-agent"]
+            == f"elastic-connectors-{__version__}/service"
+        )
 
 
 class TestTransientElasticsearchRetrier:
