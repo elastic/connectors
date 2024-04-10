@@ -432,11 +432,14 @@ class MicrosoftAPISession:
                 self._logger.warning(f"Batch request item failed with: {response}")
                 headers = response.get("headers", {})
                 req_info = RequestInfo(url=url, method="POST", headers=headers)
+                response_body = response.get("body", {}) or {}
+                body_error = response_body.get("error", {}) or {}
+                error_message = body_error.get("message", "No error message returned from server")
                 raise ClientResponseError(
                     request_info=req_info,
                     headers=headers,
                     status=status,
-                    message=response.get("body", {}).get("error", {}).get("message"),
+                    message=error_message,
                     history=(batch_resp),
                 )
 
