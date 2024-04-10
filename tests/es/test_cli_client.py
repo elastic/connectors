@@ -1,7 +1,7 @@
 from connectors.es.cli_client import CLIClient
 
 
-def test_overrides_product_origin_header():
+def test_overrides_user_agent_header():
     config = {
         "username": "elastic",
         "password": "changeme",
