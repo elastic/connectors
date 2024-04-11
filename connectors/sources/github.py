@@ -693,6 +693,9 @@ class GitHubClient:
 
     # update the current installation id and re-generate access token
     async def update_installation_id(self, installation_id):
+        self._logger.debug(
+            f"Updating installation id - new ID: {installation_id}, original ID: {self._installation_id}"
+        )
         self._installation_id = installation_id
         await self._update_installation_access_token()
 
@@ -704,7 +707,7 @@ class GitHubClient:
     async def _update_installation_access_token(self):
         try:
             access_token_response = await get_installation_access_token(
-                gh=self._app_client,
+                gh=self._get_client,
                 installation_id=self._installation_id,
                 app_id=self.app_id,
                 private_key=self.private_key,
@@ -878,11 +881,12 @@ class GitHubClient:
             raise
 
     async def _github_app_paginated_get(self, url):
-        data, more = await self._github_app_get(url)
-        for item in data:
-            yield item
+        data, more = await self._github_app_get(url)  # pyright: ignore
+        if data:
+            for item in data:
+                yield item
         if more:
-            async for item in self._github_app_paginated_get(more):
+            async for item in self._github_app_paginated_get(more):  # pyright: ignore
                 yield item
 
     async def get_installations(self):

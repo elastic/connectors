@@ -1623,5 +1623,44 @@ async def test_get_installations():
                 installation
                 async for installation in source.github_client.get_installations()
             ]
+            source.github_client._get_client._make_request.assert_awaited_with(
+                "GET", "/app/installations", ANY, ANY, ANY, ANY
+            )
             assert len(expected_installations) == 1
             assert expected_installations[0]["id"] == "expected_installation"
+
+
+@pytest.mark.asyncio
+async def test_github_app_paginated_get():
+    async with create_github_source(auth_method=GITHUB_APP) as source:
+        item_1 = {"id": 1}
+        item_2 = {"id": 2}
+        item_3 = {"id": 3}
+        source.github_client._get_client._make_request = AsyncMock(
+            side_effect=[([item_1, item_2], "fake_url_2"), ([item_3], None)]
+        )
+        with patch("connectors.sources.github.get_jwt", return_value="changeme"):
+            expected_results = [
+                item
+                async for item in source.github_client._github_app_paginated_get(
+                    "fake_url_1"
+                )
+            ]
+            assert source.github_client._get_client._make_request.await_count == 2
+            assert len(expected_results) == 3
+            assert expected_results == [item_1, item_2, item_3]
+
+
+@pytest.mark.asyncio
+async def test_update_installation_id():
+    async with create_github_source(auth_method=GITHUB_APP) as source:
+        jwt_response = {"token": "changeme"}
+        with patch(
+            "connectors.sources.github.get_installation_access_token",
+            return_value=jwt_response,
+        ):
+            assert source.github_client._installation_id is None
+            assert source.github_client._installation_access_token is None
+            await source.github_client.update_installation_id(123)
+            assert source.github_client._installation_id == 123
+            assert source.github_client._installation_access_token == "changeme"
