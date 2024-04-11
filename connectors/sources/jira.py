@@ -35,6 +35,9 @@ from connectors.utils import (
     ssl_context,
 )
 
+FINISHED = "FINISHED"
+WILDCARD = "*"
+
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
@@ -96,6 +99,10 @@ class NotFound(Exception):
     pass
 
 
+class InvalidJiraDataSourceTypeError(ValueError):
+    pass
+
+
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
@@ -131,7 +138,7 @@ class JiraClient:
         if self.session:
             return self.session
 
-        self._logger.debug("Creating a client session")
+        self._logger.debug(f"Creating a '{self.data_source_type}' client session")
         if self.data_source_type == JIRA_CLOUD:
             login, password = (
                 self.configuration["account_email"],
@@ -142,11 +149,18 @@ class JiraClient:
                 self.configuration["username"],
                 self.configuration["password"],
             )
-        else:
+        elif self.data_source_type == JIRA_DATA_CENTER:
             login, password = (
                 self.configuration["data_center_username"],
                 self.configuration["data_center_password"],
             )
+        else:
+            msg = (
+                f"Unknown data source type '{self.data_source_type}' for Jira connector"
+            )
+            self._logger.error(msg)
+
+            raise InvalidJiraDataSourceTypeError(msg)
 
         basic_auth = aiohttp.BasicAuth(login=login, password=password)
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -750,7 +764,7 @@ class JiraDataSource(BaseDataSource):
         Raises:
             Exception: Configured unavailable projects: <unavailable_project_keys>
         """
-        if self.jira_client.projects == ["*"]:
+        if self.jira_client.projects == [WILDCARD]:
             return
 
         self._logger.info(
@@ -809,7 +823,7 @@ class JiraDataSource(BaseDataSource):
             timestamp = iso_utc(
                 when=datetime.now(pytz.timezone(timezone))  # pyright: ignore
             )
-            if self.jira_client.projects == ["*"]:
+            if self.jira_client.projects == [WILDCARD]:
                 self._logger.info("Fetching all Jira projects")
                 async for response in self.jira_client.api_call(url_name=PROJECT):
                     response = await response.json()
@@ -825,7 +839,7 @@ class JiraDataSource(BaseDataSource):
                     ):
                         project = await response.json()
                         await self._put_projects(project=project, timestamp=timestamp)
-            await self.queue.put("FINISHED")  # pyright: ignore
+            await self.queue.put(FINISHED)
         except Exception as exception:
             self._logger.warning(
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
@@ -882,7 +896,7 @@ class JiraDataSource(BaseDataSource):
                         issue_key=issue["key"],
                         access_control=issue_access_control,
                     )
-            await self.queue.put("FINISHED")  # pyright: ignore
+            await self.queue.put(FINISHED)
         except Exception as exception:
             self._logger.warning(
                 f"Skipping data for type: {ISSUE_DATA}. Error: {exception}"
@@ -899,7 +913,9 @@ class JiraDataSource(BaseDataSource):
         projects_query = f"project in ({','.join(self.jira_client.projects)})"
 
         jql = custom_query or (
-            wildcard_query if self.jira_client.projects == ["*"] else projects_query
+            wildcard_query
+            if self.jira_client.projects == [WILDCARD]
+            else projects_query
         )
 
         info_msg = (
@@ -914,7 +930,7 @@ class JiraDataSource(BaseDataSource):
             for issue in response.get("issues", []):
                 await self.fetchers.put(partial(self._put_issue, issue))
                 self.tasks += 1
-        await self.queue.put("FINISHED")  # pyright: ignore
+        await self.queue.put(FINISHED)
 
     async def _put_attachment(self, attachments, issue_key, access_control):
         """Put attachments of a specific issue in a queue
@@ -955,7 +971,7 @@ class JiraDataSource(BaseDataSource):
         """
         while self.tasks > 0:
             _, item = await self.queue.get()
-            if item == "FINISHED":
+            if item == FINISHED:
                 self.tasks -= 1
             else:
                 yield item
@@ -977,9 +993,9 @@ class JiraDataSource(BaseDataSource):
             )
 
             for rule in advanced_rules:
-                await self.fetchers.put(
-                    partial(self._get_issues, rule.get("query", ""))
-                )
+                query = rule.get("query", "")
+                self._logger.debug(f"Fetching issues using query: {query}")
+                await self.fetchers.put(partial(self._get_issues, query))
                 self.tasks += 1
 
         else:

@@ -19,9 +19,21 @@ from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
 from connectors.es.management_client import ESManagementClient
-from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
+from connectors.es.sink import (
+    CREATES_QUEUED,
+    DELETES_QUEUED,
+    OP_INDEX,
+    UPDATES_QUEUED,
+    SyncOrchestrator,
+    UnsupportedJobType,
+)
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_VOLUME,
+)
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
@@ -341,11 +353,9 @@ class SyncJobRunner:
             else self.sync_orchestrator.ingestion_stats()
         )
         persisted_stats = {
-            "indexed_document_count": ingestion_stats.get("indexed_document_count", 0),
-            "indexed_document_volume": ingestion_stats.get(
-                "indexed_document_volume", 0
-            ),
-            "deleted_document_count": ingestion_stats.get("deleted_document_count", 0),
+            INDEXED_DOCUMENT_COUNT: ingestion_stats.get(INDEXED_DOCUMENT_COUNT, 0),
+            INDEXED_DOCUMENT_VOLUME: ingestion_stats.get(INDEXED_DOCUMENT_VOLUME, 0),
+            DELETED_DOCUMENT_COUNT: ingestion_stats.get(DELETED_DOCUMENT_COUNT, 0),
         }
 
         if await self.reload_sync_job():
@@ -376,9 +386,9 @@ class SyncJobRunner:
 
         self.sync_job.log_info(
             f"Sync ended with status {sync_status.value} -- "
-            f"created: {ingestion_stats.get('doc_created', 0)} | "
-            f"updated: {ingestion_stats.get('doc_updated', 0)} | "
-            f"deleted: {ingestion_stats.get('doc_deleted', 0)} "
+            f"created: {ingestion_stats.get(CREATES_QUEUED, 0)} | "
+            f"updated: {ingestion_stats.get(UPDATES_QUEUED, 0)} | "
+            f"deleted: {ingestion_stats.get(DELETES_QUEUED, 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
         self.log_counters(ingestion_stats)
@@ -508,9 +518,9 @@ class SyncJobRunner:
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
-                "indexed_document_count": result.get("indexed_document_count", 0),
-                "indexed_document_volume": result.get("indexed_document_volume", 0),
-                "deleted_document_count": result.get("deleted_document_count", 0),
+                INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
+                INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
+                DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
 

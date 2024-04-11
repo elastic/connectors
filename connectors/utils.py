@@ -16,6 +16,7 @@ import ssl
 import subprocess
 import time
 import urllib.parse
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
@@ -936,3 +937,23 @@ def nested_get_from_dict(dictionary, keys, default=None):
         return nested_get(dictionary_.get(keys_[0]), keys_[1:], default_)
 
     return nested_get(dictionary, keys, default)
+
+
+class Counters:
+    """
+    A utility to provide code readability to managing a collection of counts
+    """
+
+    def __init__(self):
+        self._storage = {}
+
+    def increment(self, key, value=1, namespace=None):
+        if namespace:
+            key = f"{namespace}.{key}"
+        self._storage[key] = self._storage.get(key, 0) + value
+
+    def get(self, key) -> int:
+        return self._storage.get(key, 0)
+
+    def to_dict(self):
+        return deepcopy(self._storage)
