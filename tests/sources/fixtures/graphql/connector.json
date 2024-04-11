@@ -68,7 +68,7 @@
         "graphql_object_list": {
             "label": "GraphQL Objects to ID mapping",
             "order": 9,
-            "type": "list",
+            "type": "str",
             "value": "{'sampleData.users.nodes': 'id'}"
         },
         "headers": {
