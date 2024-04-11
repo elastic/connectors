@@ -70,7 +70,8 @@ URLS = {
     ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
     USERS: "/rest/api/3/users/search",
-    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
+    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",
+    # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
     PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?{key}&permissions=BROWSE&maxResults={max_results}&startAt={start_at}",
     PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
     ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
@@ -227,14 +228,14 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        url = url_kwargs.get("url") or self.host_url.rstrip('/')+'/'+URLS[url_name].format(**url_kwargs).lstrip('/')
+        url = url_kwargs.get("url") or self.host_url.rstrip('/') + '/' + URLS[url_name].format(**url_kwargs).lstrip('/')
 
         self._logger.debug(f"Making a GET call for url: {url}")
         while True:
             try:
                 async with self._get_session().get(  # pyright: ignore
-                    url=url,
-                    ssl=self.ssl_ctx,
+                        url=url,
+                        ssl=self.ssl_ctx,
                 ) as response:
                     yield response
                     break
@@ -263,20 +264,17 @@ class JiraClient:
             try:
                 url = None
                 if kwargs.get("level_id"):
-                    url = parse.urljoin(
-                        self.host_url,
-                        URLS[url_name].format(
-                            max_results=FETCH_SIZE,
-                            start_at=start_at,
-                            level_id=kwargs.get("level_id"),
-                        ),  # pyright: ignore
-                    )
+                    url = self.host_url.rstrip('/') + '/' + URLS[url_name].format(
+                        max_results=FETCH_SIZE,
+                        start_at=start_at,
+                        level_id=kwargs.get("level_id")
+                    ).lstrip('/')
                 async for response in self.api_call(
-                    url_name=url_name,
-                    start_at=start_at,
-                    max_results=FETCH_SIZE,
-                    jql=jql,
-                    url=url,
+                        url_name=url_name,
+                        start_at=start_at,
+                        max_results=FETCH_SIZE,
+                        jql=jql,
+                        url=url,
                 ):
                     response_json = await response.json()
                     total = response_json["total"]
@@ -470,10 +468,10 @@ class JiraDataSource(BaseDataSource):
         start_at = 0
         while True:
             async for users in self.jira_client.api_call(
-                url_name=PERMISSIONS_BY_KEY,
-                key=key,
-                start_at=start_at,
-                max_results=MAX_USER_FETCH_LIMIT,
+                    url_name=PERMISSIONS_BY_KEY,
+                    key=key,
+                    start_at=start_at,
+                    max_results=MAX_USER_FETCH_LIMIT,
             ):
                 response = await users.json()
                 if len(response) == 0:
@@ -490,12 +488,12 @@ class JiraDataSource(BaseDataSource):
         )
         access_control = set()
         async for actors in self._user_information_list(
-            key=f"projectKey={project['key']}"
+                key=f"projectKey={project['key']}"
         ):
             for actor in actors:
                 if (
-                    self.jira_client.data_source_type == JIRA_CLOUD
-                    and actor["accountType"] == ATLASSIAN
+                        self.jira_client.data_source_type == JIRA_CLOUD
+                        and actor["accountType"] == ATLASSIAN
                 ):
                     access_control.add(
                         prefix_account_id(account_id=actor.get("accountId"))
@@ -516,14 +514,14 @@ class JiraDataSource(BaseDataSource):
     async def _issue_security_level(self, issue_key):
         self._logger.debug(f"Fetching security level for issue: {issue_key}")
         async for response in self.jira_client.api_call(
-            url_name=ISSUE_SECURITY_LEVEL, issue_key=issue_key
+                url_name=ISSUE_SECURITY_LEVEL, issue_key=issue_key
         ):
             yield await response.json()
 
     async def _issue_security_level_members(self, level_id):
         self._logger.debug(f"Fetching members for issue security level: {level_id}")
         async for response in self.jira_client.paginated_api_call(
-            url_name=SECURITY_LEVEL_MEMBERS, level_id=level_id
+                url_name=SECURITY_LEVEL_MEMBERS, level_id=level_id
         ):
             yield response
 
@@ -532,9 +530,9 @@ class JiraDataSource(BaseDataSource):
             f"Fetching users and groups with role ID '{role_id}' for project '{project['key']}'"
         )
         async for actor_response in self.jira_client.api_call(
-            url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
-            project_key=project["key"],
-            role_id=role_id,
+                url_name=PROJECT_ROLE_MEMBERS_BY_ROLE_ID,
+                project_key=project["key"],
+                role_id=role_id,
         ):
             actors = await actor_response.json()
             for actor in actors.get("actors", []):
@@ -574,7 +572,7 @@ class JiraDataSource(BaseDataSource):
         access_control = set()
         if self.jira_client.data_source_type != JIRA_CLOUD:
             async for actors in self._user_information_list(
-                key=f"issueKey={issue_key}"
+                    key=f"issueKey={issue_key}"
             ):
                 for actor in actors:
                     access_control.add(prefix_account_id(account_id=actor.get("name")))
@@ -587,14 +585,14 @@ class JiraDataSource(BaseDataSource):
             if security := response.get("fields", {}).get("security"):
                 level_id = security.get("id")
                 async for members in self._issue_security_level_members(
-                    level_id=level_id
+                        level_id=level_id
                 ):
                     for actor in members["values"]:
                         actor_type = actor.get("holder", {}).get("type")
                         if actor_type == "user":
                             user = actor.get("holder", {}).get("user", {})
                             if self.atlassian_access_control.is_active_atlassian_user(
-                                user_info=user
+                                    user_info=user
                             ):
                                 access_control.add(
                                     prefix_account_id(account_id=user.get("accountId"))
@@ -611,9 +609,9 @@ class JiraDataSource(BaseDataSource):
                             access_control.add(prefix_group_id(group_id=group_id))
                         elif actor_type == "projectRole":
                             if (
-                                role_id := actor.get("holder", {})
-                                .get("projectRole", {})
-                                .get("id")
+                                    role_id := actor.get("holder", {})
+                                            .get("projectRole", {})
+                                            .get("id")
                             ):
                                 # Project Role - `atlassian-addons-project-access` with id 10003 is not needed for DLS
                                 is_addons_projects_access = role_id == 10003
@@ -659,7 +657,7 @@ class JiraDataSource(BaseDataSource):
             if self.jira_client.data_source_type == JIRA_CLOUD
             else URLS[USERS_FOR_DATA_CENTER]
         )
-        url = parse.urljoin(self.configuration["jira_url"], users_endpoint)
+        url = self.configuration["jira_url"].rstrip('/') + '/' + users_endpoint.lstrip('/')
         async for users in self.atlassian_access_control.fetch_all_users(url=url):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
@@ -831,7 +829,7 @@ class JiraDataSource(BaseDataSource):
                 )
                 for project_key in self.jira_client.projects:
                     async for response in self.jira_client.api_call(
-                        url_name=PROJECT_BY_KEY, key=project_key
+                            url_name=PROJECT_BY_KEY, key=project_key
                     ):
                         project = await response.json()
                         await self._put_projects(project=project, timestamp=timestamp)
@@ -849,7 +847,7 @@ class JiraDataSource(BaseDataSource):
         """
         try:
             async for response in self.jira_client.api_call(
-                url_name=ISSUE_DATA, id=issue["key"]
+                    url_name=ISSUE_DATA, id=issue["key"]
             ):
                 issue = await response.json()
                 response_fields = issue.get("fields")
@@ -862,8 +860,8 @@ class JiraDataSource(BaseDataSource):
                 if restrictions := [
                     restriction["restrictionValue"]
                     for restriction in response_fields.get("issuerestriction", {})
-                    .get("issuerestrictions", {})
-                    .get("projectrole", [])
+                            .get("issuerestrictions", {})
+                            .get("projectrole", [])
                 ]:
                     issue_access_control = []
                     for role_id in restrictions:
@@ -921,7 +919,7 @@ class JiraDataSource(BaseDataSource):
         )
         self._logger.info(info_msg)
         async for response in self.jira_client.paginated_api_call(
-            url_name=ISSUES, jql=jql
+                url_name=ISSUES, jql=jql
         ):
             for issue in response.get("issues", []):
                 await self.fetchers.put(partial(self._put_issue, issue))
