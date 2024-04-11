@@ -6,6 +6,7 @@
 """Notion source module responsible to fetch documents from the Notion Platform."""
 import asyncio
 import os
+import re
 from copy import copy
 from functools import cached_property, partial
 from typing import Any, Awaitable, Callable
@@ -582,12 +583,7 @@ class NotionDataSource(BaseDataSource):
         if properties is None:
             return False
         for field in properties.keys():
-            if field.startswith("Related to") and (
-                "(Figma File)" in field
-                or "(Google Drive File)" in field
-                or "(GitHub Pull Requests)" in field
-                or "(Zendesk Ticket)" in field
-            ):
+            if re.match(r"^Related to.*\(.*\)$", field):
                 return True
 
         return False
@@ -603,6 +599,9 @@ class NotionDataSource(BaseDataSource):
             self._logger.info(f"Fetching child blocks for block {block_id}")
 
             if self.is_connected_property_block(page_database):
+                self._logger.debug(
+                    f"Skipping children of block with id: {block_id} as not supported by API"
+                )
                 continue
 
             async for child_block in self.notion_client.fetch_child_blocks(
