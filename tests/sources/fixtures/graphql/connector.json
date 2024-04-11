@@ -1,0 +1,219 @@
+{
+    "api_key_id": null,
+    "configuration": {
+        "http_endpoint": {
+            "label": "HTTP URL & Endpoint",
+            "order": 1,
+            "type": "str",
+            "value": "http://127.0.0.1:9094/graphql"
+        },
+        "http_method": {
+            "display": "dropdown",
+            "label": "GET/POST",
+            "options": [
+                {"label": "GET", "value": "get"},
+                {"label": "POST", "value": "post"}
+            ],
+            "order": 2,
+            "type": "str",
+            "value": "post"
+        },
+        "authentication_method": {
+            "display": "dropdown",
+            "label": "Authentication Method",
+            "options": [
+                {"label": "No Auth", "value": "none"},
+                {"label": "Basic Auth", "value": "basic"},
+                {"label": "Bearer Token", "value": "bearer"}
+            ],
+            "order": 3,
+            "type": "str",
+            "value": "none"
+        },
+        "username": {
+            "depends_on": [{"field": "authentication_method", "value": "basic"}],
+            "label": "Username",
+            "order": 4,
+            "type": "str"
+        },
+        "password": {
+            "depends_on": [{"field": "authentication_method", "value": "basic"}],
+            "label": "Password",
+            "order": 5,
+            "sensitive": true,
+            "type": "str"
+        },
+        "token": {
+            "depends_on": [{"field": "authentication_method", "value": "bearer"}],
+            "label": "Bearer Token",
+            "order": 6,
+            "sensitive": true,
+            "type": "str"
+        },
+        "graphql_query": {
+            "display": "textarea",
+            "label": "GraphQL Body",
+            "order": 7,
+            "type": "str",
+            "value": "query($cursor: String!) {sampleData {users(after: $cursor) {pageInfo {endCursor hasNextPage} nodes {id first_name updatedAt description}}}}"
+        },
+        "graphql_variables": {
+            "depends_on": [{"field": "http_method", "value": "post"}],
+            "display": "textarea",
+            "label": "Graphql Variables",
+            "order": 8,
+            "type": "str",
+            "required": false
+        },
+        "graphql_object_list": {
+            "label": "GraphQL Objects List",
+            "order": 9,
+            "type": "list",
+            "value": "sampleData.users.nodes"
+        },
+        "headers": {
+            "label": "Headers",
+            "order": 10,
+            "type": "str",
+            "required": false
+        },
+        "pagination_model": {
+          "display": "dropdown",
+          "label": "Pagination model",
+          "options": [
+              {"label": "No pagination", "value": "no_pagination"},
+              {"label": "Cursor-based pagination", "value": "cursor_pagination"}
+          ],
+          "order": 11,
+          "tooltip": "Cursor based pagination requires 'pageInfo' field along with argument 'after' for objects mentioned in 'GraphQL Objects List'. It also requires variable for 'after' argument.",
+          "type": "str",
+          "value": "cursor_pagination"
+      },
+      "pagination_key": {
+          "depends_on": [
+              {"field": "pagination_model", "value": "cursor_pagination"}
+          ],
+          "label": "Pagination key",
+          "order": 12,
+          "tooltip": "Specifies which GraphQL object is used for pagination. Use '.' to provide full path of the object from the root of the response. For example 'organization.users'",
+          "type": "str",
+          "value": "sampleData.users"
+      },
+      "connection_timeout": {
+          "default_value": 300,
+          "display": "numeric",
+          "label": "Connection Timeout",
+          "order": 13,
+          "required": false,
+          "type": "int",
+          "ui_restrictions": ["advanced"]
+      }
+    },
+    "custom_scheduling": {},
+    "description": null,
+    "error": null,
+    "features": {
+      "incremental_sync": {
+        "enabled": false
+      },
+      "document_level_security": {
+        "enabled": false
+      },
+      "sync_rules": {
+        "advanced": {
+          "enabled": false
+        },
+        "basic": {
+          "enabled": true
+        }
+      }
+    },
+    "filtering": [
+      {
+        "active": {
+          "advanced_snippet": {
+            "created_at": "2023-06-30T08:20:14.686Z",
+            "updated_at": "2023-06-30T08:20:14.686Z",
+            "value": {}
+          },
+          "rules": [
+            {
+              "created_at": "2023-06-30T08:20:14.686Z",
+              "field": "_",
+              "id": "DEFAULT",
+              "order": 0,
+              "policy": "include",
+              "rule": "regex",
+              "updated_at": "2023-06-30T08:20:14.686Z",
+              "value": ".*"
+            }
+          ],
+          "validation": {
+            "errors": [],
+            "state": "valid"
+          }
+        },
+        "domain": "DEFAULT",
+        "draft": {
+          "advanced_snippet": {
+            "created_at": "2023-06-30T08:20:14.686Z",
+            "updated_at": "2023-06-30T08:20:14.686Z",
+            "value": {}
+          },
+          "rules": [
+            {
+              "created_at": "2023-06-30T08:20:14.686Z",
+              "field": "_",
+              "id": "DEFAULT",
+              "order": 0,
+              "policy": "include",
+              "rule": "regex",
+              "updated_at": "2023-06-30T08:20:14.686Z",
+              "value": ".*"
+            }
+          ],
+          "validation": {
+            "errors": [],
+            "state": "valid"
+          }
+        }
+      }
+    ],
+    "index_name": "search-graphql",
+    "is_native": false,
+    "language": null,
+    "last_access_control_sync_error": null,
+    "last_access_control_sync_scheduled_at": null,
+    "last_access_control_sync_status": null,
+    "last_incremental_sync_scheduled_at": null,
+    "last_seen": "2023-06-30T09:26:21.281198+00:00",
+    "last_sync_error": null,
+    "last_sync_scheduled_at": null,
+    "last_sync_status": null,
+    "last_synced": null,
+    "name": "grapqhql",
+    "pipeline": {
+      "extract_binary_content": true,
+      "name": "ent-search-generic-ingestion",
+      "reduce_whitespace": true,
+      "run_ml_inference": true
+    },
+    "scheduling": {
+      "access_control": {
+        "enabled": false,
+        "interval": "0 0 0 * * ?"
+      },
+      "full": {
+        "enabled": true,
+        "interval": "* * * * * 1"
+      },
+      "incremental": {
+        "enabled": false,
+        "interval": "0 0 0 * * ?"
+      }
+    },
+    "service_type": "graphql",
+    "status": "configured",
+    "sync_now": true
+  }
+  

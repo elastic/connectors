@@ -302,3 +302,15 @@ steps:
                 - ".buildkite/run_nigthly.sh microsoft_teams small"
               artifact_paths:
                 - "perf8-report-*/**/*"
+
+          - path:
+            - "connectors/sources/graphql.py"
+            - "tests/sources/fixtures/graphql/**"
+            - "tests/sources/fixtures/fixture.py"
+            - "Dockerfile.ftest"
+            config:
+              label: "🔨 GraphQL"
+              command:
+                - ".buildkite/run_nigthly.sh graphql small"
+              artifact_paths:
+                - "perf8-report-*/**/*"
