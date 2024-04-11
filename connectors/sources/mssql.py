@@ -257,7 +257,7 @@ class MSSQLClient:
         if is_wildcard(tables) or is_filtering:
             msg = (
                 "Fetching all tables as the configuration field 'tables' is set to '*'"
-                if is_wildcard(tables)
+                if not is_filtering
                 else "Fetching all tables as the advanced sync rules are enabled."
             )
             self._logger.info(msg)
