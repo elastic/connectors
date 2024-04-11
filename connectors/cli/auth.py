@@ -4,7 +4,7 @@ import os
 import yaml
 from elasticsearch import ApiError
 
-from connectors.es.management_client import ESManagementClient
+from connectors.es.cli_client import CLIClient
 
 CONFIG_FILE_PATH = ".cli/config.yml"
 
@@ -21,7 +21,7 @@ class Auth:
         # remove empty values
         self.elastic_config = {k: v for k, v in elastic_config.items() if v is not None}
 
-        self.es_management_client = ESManagementClient(self.elastic_config)
+        self.cli_client = CLIClient(self.elastic_config)
 
     def authenticate(self):
         if asyncio.run(self.__ping_es_client()):
@@ -35,11 +35,11 @@ class Auth:
 
     async def __ping_es_client(self):
         try:
-            return await self.es_management_client.ping()
+            return await self.cli_client.ping()
         except ApiError:
             return False
         finally:
-            await self.es_management_client.close()
+            await self.cli_client.close()
 
     def __save_config(self):
         yaml_content = yaml.dump({"elasticsearch": self.elastic_config})
