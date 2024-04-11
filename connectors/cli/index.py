@@ -2,7 +2,7 @@ import asyncio
 
 from elasticsearch import ApiError
 
-from connectors.es.management_client import ESManagementClient
+from connectors.es.cli_client import CLIClient
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
@@ -13,7 +13,7 @@ from connectors.protocol import (
 class Index:
     def __init__(self, config):
         self.elastic_config = config
-        self.es_management_client = ESManagementClient(self.elastic_config)
+        self.cli_client = CLIClient(self.elastic_config)
         self.connectors_index = ConnectorIndex(self.elastic_config)
 
     def list_indices(self):
@@ -29,12 +29,12 @@ class Index:
         return asyncio.run(self.__index_or_connector_exists(index_name))
 
     async def __close(self):
-        await self.es_management_client.close()
+        await self.cli_client.close()
         await self.connectors_index.close()
 
     async def __list_indices(self):
         try:
-            return await self.es_management_client.list_indices()
+            return await self.cli_client.list_indices()
         except ApiError as e:
             raise e
         finally:
@@ -42,7 +42,7 @@ class Index:
 
     async def __clean_index(self, index_name):
         try:
-            return await self.es_management_client.clean_index(index_name)
+            return await self.cli_client.clean_index(index_name)
         except ApiError:
             return False
         finally:
@@ -50,7 +50,7 @@ class Index:
 
     async def __delete_index(self, index_name):
         try:
-            await self.es_management_client.delete_indices([index_name])
+            await self.cli_client.delete_indices([index_name])
             return True
         except ApiError:
             return False
@@ -59,12 +59,12 @@ class Index:
 
     async def __index_or_connector_exists(self, index_name):
         try:
-            await self.es_management_client.ensure_exists(
+            await self.cli_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
 
             index_exists, connector_doc = await asyncio.gather(
-                self.es_management_client.index_exists(index_name),
+                self.cli_client.index_exists(index_name),
                 self.connectors_index.get_connector_by_index(index_name),
             )
             connector_exists = False if connector_doc is None else True
