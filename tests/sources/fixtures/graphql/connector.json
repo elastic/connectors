@@ -69,7 +69,7 @@
             "label": "GraphQL Objects to ID mapping",
             "order": 9,
             "type": "str",
-            "value": "{'sampleData.users.nodes': 'id'}"
+            "value": "{\"sampleData.users.nodes\": \"id\"}"
         },
         "headers": {
             "label": "Headers",
