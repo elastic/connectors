@@ -376,7 +376,7 @@ class GraphQLDataSource(BaseDataSource):
                 "required": False,
             },
             "graphql_object_list": {
-                "label": "GraphQL Objects List",
+                "label": "GraphQL Objects to ID mapping",
                 "order": 9,
                 "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents. Use a JSON with key as the GraphQL object name and value as string field within the document, with the requirement that each document must have a distinct value for this field. Use '.' to provide full path of the object from the root of the response. For example {'organization.users.nodes': 'id'}",
                 "type": "str",
@@ -504,6 +504,9 @@ class GraphQLDataSource(BaseDataSource):
             except Exception as exception:
                 msg = f"Error while processing configured GraphQL objects and IDs. Exception: {exception}"
                 raise ConfigurableFieldValueError(msg) from exception
+        else:
+            msg = "GraphQL Objects to ID mapping field is not configured."
+            raise ConfigurableFieldValueError(msg)
 
         for (
             graphql_object,
