@@ -16,6 +16,7 @@ import ssl
 import subprocess
 import time
 import urllib.parse
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
@@ -152,7 +153,12 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self):
+    def cancel(self, sig=None):
+        if sig:
+            logger.debug(f"Caught {sig}. Cancelling sleeps...")
+        else:
+            logger.debug("Cancelling sleeps...")
+
         for task in self._sleeps:
             task.cancel()
 
@@ -480,6 +486,9 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
+sleeps_for_retryable = CancellableSleeps()
+
+
 def retryable(
     retries=3,
     interval=1.0,
@@ -526,7 +535,7 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -550,7 +559,7 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -928,3 +937,23 @@ def nested_get_from_dict(dictionary, keys, default=None):
         return nested_get(dictionary_.get(keys_[0]), keys_[1:], default_)
 
     return nested_get(dictionary, keys, default)
+
+
+class Counters:
+    """
+    A utility to provide code readability to managing a collection of counts
+    """
+
+    def __init__(self):
+        self._storage = {}
+
+    def increment(self, key, value=1, namespace=None):
+        if namespace:
+            key = f"{namespace}.{key}"
+        self._storage[key] = self._storage.get(key, 0) + value
+
+    def get(self, key) -> int:
+        return self._storage.get(key, 0)
+
+    def to_dict(self):
+        return deepcopy(self._storage)

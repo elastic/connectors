@@ -20,7 +20,11 @@ from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.jira import (
+    JIRA_CLOUD,
+    JIRA_DATA_CENTER,
+    JIRA_SERVER,
     InternalServerError,
+    InvalidJiraDataSourceTypeError,
     JiraClient,
     JiraDataSource,
     NotFound,
@@ -302,10 +306,12 @@ ACCESS_CONTROL = "_allow_access_control"
 
 
 @asynccontextmanager
-async def create_jira_source(use_text_extraction_service=False):
+async def create_jira_source(
+    use_text_extraction_service=False, data_source="jira_cloud"
+):
     async with create_source(
         JiraDataSource,
-        data_source="jira_cloud",
+        data_source=data_source,
         username="admin",
         password="changeme",
         account_email="me@example.com",
@@ -625,12 +631,32 @@ async def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_get_session():
-    """Test that the instance of session returned is always the same for the datasource class."""
+@pytest.mark.parametrize(
+    "data_source_type", [JIRA_CLOUD, JIRA_DATA_CENTER, JIRA_SERVER]
+)
+async def test_get_session(data_source_type):
+    async with create_jira_source(data_source=data_source_type) as source:
+        try:
+            source.jira_client._get_session()
+        except Exception as e:
+            pytest.fail(
+                f"Should not raise for valid data source type '{data_source_type}'. Exception: {e}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_session_multiple_calls_return_same_instance():
     async with create_jira_source() as source:
         first_instance = source.jira_client._get_session()
         second_instance = source.jira_client._get_session()
         assert first_instance is second_instance
+
+
+@pytest.mark.asyncio
+async def test_get_session_raise_on_invalid_data_source_type():
+    async with create_jira_source(data_source="invalid") as source:
+        with pytest.raises(InvalidJiraDataSourceTypeError):
+            source.jira_client._get_session()
 
 
 @pytest.mark.asyncio

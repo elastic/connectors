@@ -35,6 +35,9 @@ from connectors.utils import (
     ssl_context,
 )
 
+FINISHED = "FINISHED"
+WILDCARD = "*"
+
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
@@ -96,6 +99,10 @@ class NotFound(Exception):
     pass
 
 
+class InvalidJiraDataSourceTypeError(ValueError):
+    pass
+
+
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
@@ -128,7 +135,7 @@ class JiraClient:
         if self.session:
             return self.session
 
-        self._logger.debug("Creating a client session")
+        self._logger.debug(f"Creating a '{self.data_source_type}' client session")
         if self.data_source_type == JIRA_CLOUD:
             login, password = (
                 self.configuration["account_email"],
@@ -139,11 +146,18 @@ class JiraClient:
                 self.configuration["username"],
                 self.configuration["password"],
             )
-        else:
+        elif self.data_source_type == JIRA_DATA_CENTER:
             login, password = (
                 self.configuration["data_center_username"],
                 self.configuration["data_center_password"],
             )
+        else:
+            msg = (
+                f"Unknown data source type '{self.data_source_type}' for Jira connector"
+            )
+            self._logger.error(msg)
+
+            raise InvalidJiraDataSourceTypeError(msg)
 
         basic_auth = aiohttp.BasicAuth(login=login, password=password)
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -911,7 +925,9 @@ class JiraDataSource(BaseDataSource):
         projects_query = f"project in ({','.join(self.jira_client.projects)})"
 
         jql = custom_query or (
-            wildcard_query if self.jira_client.projects == ["*"] else projects_query
+            wildcard_query
+            if self.jira_client.projects == [WILDCARD]
+            else projects_query
         )
         async for issue in self.jira_client.get_issues_for_jql(jql=jql):
             await self.fetchers.put(partial(self._put_issue, issue))
@@ -957,7 +973,7 @@ class JiraDataSource(BaseDataSource):
         """
         while self.tasks > 0:
             _, item = await self.queue.get()
-            if item == "FINISHED":
+            if item == FINISHED:
                 self.tasks -= 1
             else:
                 yield item
@@ -979,9 +995,9 @@ class JiraDataSource(BaseDataSource):
             )
 
             for rule in advanced_rules:
-                await self.fetchers.put(
-                    partial(self._get_issues, rule.get("query", ""))
-                )
+                query = rule.get("query", "")
+                self._logger.debug(f"Fetching issues using query: {query}")
+                await self.fetchers.put(partial(self._get_issues, query))
                 self.tasks += 1
 
         else:
