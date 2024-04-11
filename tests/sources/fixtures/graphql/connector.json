@@ -66,10 +66,10 @@
             "required": false
         },
         "graphql_object_list": {
-            "label": "GraphQL Objects List",
+            "label": "GraphQL Objects to ID mapping",
             "order": 9,
-            "type": "list",
-            "value": "sampleData.users.nodes"
+            "type": "str",
+            "value": "{\"sampleData.users.nodes\": \"id\"}"
         },
         "headers": {
             "label": "Headers",
