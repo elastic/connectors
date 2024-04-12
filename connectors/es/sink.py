@@ -348,61 +348,57 @@ class Sink:
         Bulk calls are executed concurrently with a maximum number of concurrent
         requests.
         """
-        batch = []
-        # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
-        stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
-        bulk_size = 0
-        overhead_size = None
+        try:
+            batch = []
+            # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
+            stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
+            bulk_size = 0
+            overhead_size = None
 
-        while True:
-            doc_size, doc = await self.fetch_doc()
-            if doc in (END_DOCS, FETCH_ERROR):
-                break
-            operation = doc["_op_type"]
-            doc_id = doc["_id"]
-            if operation == OP_DELETE:
-                stats[operation][doc_id] = 0
-            else:
-                # the doc_size also includes _op_type, _index and _id,
-                # which we want to exclude when calculating the size.
-                if overhead_size is None:
-                    overhead = {
-                        "_op_type": operation,
-                        "_index": doc["_index"],
-                        "_id": doc_id,
-                    }
-                    overhead_size = get_size(overhead)
-                stats[operation][doc_id] = max(doc_size - overhead_size, 0)
-            self.counters.increment(operation, namespace=BULK_OPERATIONS)
-            batch.extend(self._bulk_op(doc, operation))
+            while True:
+                doc_size, doc = await self.fetch_doc()
+                if doc in (END_DOCS, FETCH_ERROR):
+                    break
+                operation = doc["_op_type"]
+                doc_id = doc["_id"]
+                if operation == OP_DELETE:
+                    stats[operation][doc_id] = 0
+                else:
+                    # the doc_size also includes _op_type, _index and _id,
+                    # which we want to exclude when calculating the size.
+                    if overhead_size is None:
+                        overhead = {
+                            "_op_type": operation,
+                            "_index": doc["_index"],
+                            "_id": doc_id,
+                        }
+                        overhead_size = get_size(overhead)
+                    stats[operation][doc_id] = max(doc_size - overhead_size, 0)
+                self.counters.increment(operation, namespace=BULK_OPERATIONS)
+                batch.extend(self._bulk_op(doc, operation))
 
-            bulk_size += doc_size
-            if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                await self.bulk_tasks.put(
-                    functools.partial(
-                        self._batch_bulk,
-                        copy.copy(batch),
-                        copy.copy(stats),
-                    ),
-                    result_callback=functools.partial(self.batch_bulk_callback),
-                )
-                batch.clear()
-                stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
-                bulk_size = 0
+                bulk_size += doc_size
+                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
+                    await self.bulk_tasks.put(
+                        functools.partial(
+                            self._batch_bulk,
+                            copy.copy(batch),
+                            copy.copy(stats),
+                        )
+                    )
+                    batch.clear()
+                    stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
+                    bulk_size = 0
 
-            await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                self.bulk_tasks.raise_any_exception()
 
-        await self.bulk_tasks.join(raise_on_error=True)
-        if len(batch) > 0:
-            await self._batch_bulk(batch, stats)
-
-    def batch_bulk_callback(self, task):
-        if task.exception():
-            self._logger.error(
-                f"Had an error while processing a bulk batch of Elasticsearch docs: {task.get_name()}: {task.exception()}",
-                exc_info=True,
-            )
-            self.sink_error = task.exception()
+            await self.bulk_tasks.join(raise_on_error=True)
+            if len(batch) > 0:
+                await self._batch_bulk(batch, stats)
+        except Exception as e:
+            self.sink_error = e
+            raise
 
 
 class Extractor:
@@ -1002,7 +998,6 @@ class SyncOrchestrator:
         if task.exception():
             self._logger.error(
                 f"Encountered an error in the sync's Sink: {task.get_name()}: {task.exception()}",
-                exc_info=True,
             )
             self._sink_error = task.exception()
 
@@ -1010,6 +1005,5 @@ class SyncOrchestrator:
         if task.exception():
             self._logger.error(
                 f"Encountered an error in the sync's Extractor: {task.get_name()}: {task.exception()}",
-                exc_info=True,
             )
             self._extractor_error = task.exception()
