@@ -1026,7 +1026,7 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.repositories = {rule["repository"] for rule in advanced_rules}
+        self.source.configured_repos = {rule["repository"] for rule in advanced_rules}
         invalid_repos = await self.source.get_invalid_repos()
 
         if len(invalid_repos) > 0:
@@ -1068,7 +1068,7 @@ class GitHubDataSource(BaseDataSource):
             ssl_enabled=self.configuration["ssl_enabled"],
             ssl_ca=self.configuration["ssl_ca"],
         )
-        self.repositories = self.configuration["repositories"]
+        self.configured_repos = self.configuration["repositories"]
         self.user_repos = {}
         self.org_repos = {}
         self.foreign_repos = {}
@@ -1239,7 +1239,7 @@ class GitHubDataSource(BaseDataSource):
                 if not self._user:
                     self._user = await self.github_client.get_logged_in_user()
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
-                    repos=self.repositories,
+                    repos=self.configured_repos,
                     owner=self._user,
                 )
                 async for repo in self.github_client.get_user_repos(self._user):
@@ -1260,7 +1260,7 @@ class GitHubDataSource(BaseDataSource):
                         invalid_repos.append(repo_name)
             else:
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
-                    repos=self.repositories,
+                    repos=self.configured_repos,
                     owner=self.configuration["org_name"],
                 )
                 configured_repos.extend(foreign_repos)
@@ -1330,7 +1330,7 @@ class GitHubDataSource(BaseDataSource):
             msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
             raise ConfigurableFieldValueError(msg)
 
-        if self.repositories != [WILDCARD]:
+        if WILDCARD not in self.configured_repos:
             invalid_repos = await self.get_invalid_repos()
             if invalid_repos:
                 msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
@@ -1463,13 +1463,13 @@ class GitHubDataSource(BaseDataSource):
                 self._user = await self.github_client.get_logged_in_user()
 
             if (
-                self.repositories == [WILDCARD]
+                WILDCARD in self.configured_repos
                 and self.configuration["repo_type"] == "other"
             ):
                 async for repo_object in self._get_personal_repos(self._user):
                     yield repo_object
             elif (
-                self.repositories == [WILDCARD]
+                WILDCARD in self.configured_repos
                 and self.configuration["repo_type"] == "organization"
             ):
                 async for repo_object in self._get_org_repos(
@@ -1478,7 +1478,7 @@ class GitHubDataSource(BaseDataSource):
                     yield repo_object
             else:
                 async for repo_object in self._get_configured_repos(
-                    configured_repos=self.repositories
+                    configured_repos=self.configured_repos
                 ):
                     yield repo_object
         except UnauthorizedException:
