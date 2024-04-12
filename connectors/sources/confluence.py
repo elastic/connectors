@@ -963,7 +963,7 @@ class ConfluenceDataSource(BaseDataSource):
                 )
         except Exception as exception:
             self._logger.exception(
-                f"Error while fetching attachments of {document.get('title')}: {exception}"
+                f"Error while fetching attachments of {document.get('title')} with id {document.get('_id')}, type: {document.get('type')} in space {document.get('space')}: {exception}"
             )
             raise
         finally:
