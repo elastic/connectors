@@ -376,6 +376,7 @@ class GraphQLDataSource(BaseDataSource):
                 "required": False,
             },
             "graphql_object_list": {
+                "display": "textarea",
                 "label": "GraphQL Objects to ID mapping",
                 "order": 9,
                 "tooltip": "Specifies which GraphQL objects should be indexed as individual documents. This allows finer control over indexing, ensuring only relevant data sections from the GraphQL response are stored as separate documents. Use a JSON with key as the GraphQL object name and value as string field within the document, with the requirement that each document must have a distinct value for this field. Use '.' to provide full path of the object from the root of the response. For example {'organization.users.nodes': 'id'}",
@@ -481,19 +482,22 @@ class GraphQLDataSource(BaseDataSource):
         headers = self.graphql_client.configuration["headers"]
         graphql_variables = self.graphql_client.configuration["graphql_variables"]
         graphql_object_list = self.graphql_client.configuration["graphql_object_list"]
+        invalid_json_msg = (
+            "GraphQL {field} must be in valid JSON format. Exception: {exception}"
+        )
 
         if headers:
             try:
                 self.graphql_client.headers = json.loads(headers)
             except Exception as exception:
-                msg = f"Error while processing configured GraphQL headers. Exception: {exception}"
+                msg = invalid_json_msg.format(field="Headers", exception=exception)
                 raise ConfigurableFieldValueError(msg) from exception
 
         if graphql_variables:
             try:
                 self.graphql_client.variables = json.loads(graphql_variables)
             except Exception as exception:
-                msg = f"Error while processing configured GraphQL variables. Exception: {exception}"
+                msg = invalid_json_msg.format(field="Variables", exception=exception)
                 raise ConfigurableFieldValueError(msg) from exception
 
         if graphql_object_list:
@@ -502,7 +506,9 @@ class GraphQLDataSource(BaseDataSource):
                     graphql_object_list
                 )
             except Exception as exception:
-                msg = f"Error while processing configured GraphQL objects and IDs. Exception: {exception}"
+                msg = invalid_json_msg.format(
+                    field="Objects to ID mapping", exception=exception
+                )
                 raise ConfigurableFieldValueError(msg) from exception
         else:
             msg = "GraphQL Objects to ID mapping field is not configured."
