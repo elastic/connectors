@@ -19,9 +19,21 @@ from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
 from connectors.es.management_client import ESManagementClient
-from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
+from connectors.es.sink import (
+    CREATES_QUEUED,
+    DELETES_QUEUED,
+    OP_INDEX,
+    UPDATES_QUEUED,
+    SyncOrchestrator,
+    UnsupportedJobType,
+)
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_VOLUME,
+)
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
@@ -335,31 +347,31 @@ class SyncJobRunner:
             except asyncio.CancelledError:
                 self.sync_job.log_debug("Job reporting task is stopped.")
 
-        result = (
+        ingestion_stats = (
             {}
             if self.sync_orchestrator is None
             else self.sync_orchestrator.ingestion_stats()
         )
-        ingestion_stats = {
-            "indexed_document_count": result.get("indexed_document_count", 0),
-            "indexed_document_volume": result.get("indexed_document_volume", 0),
-            "deleted_document_count": result.get("deleted_document_count", 0),
+        persisted_stats = {
+            INDEXED_DOCUMENT_COUNT: ingestion_stats.get(INDEXED_DOCUMENT_COUNT, 0),
+            INDEXED_DOCUMENT_VOLUME: ingestion_stats.get(INDEXED_DOCUMENT_VOLUME, 0),
+            DELETED_DOCUMENT_COUNT: ingestion_stats.get(DELETED_DOCUMENT_COUNT, 0),
         }
 
         if await self.reload_sync_job():
             if await self.reload_connector():
-                ingestion_stats[
+                persisted_stats[
                     "total_document_count"
                 ] = await self.connector.document_count()
 
             if sync_status == JobStatus.ERROR:
-                await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
+                await self.sync_job.fail(sync_error, ingestion_stats=persisted_stats)
             elif sync_status == JobStatus.SUSPENDED:
-                await self.sync_job.suspend(ingestion_stats=ingestion_stats)
+                await self.sync_job.suspend(ingestion_stats=persisted_stats)
             elif sync_status == JobStatus.CANCELED:
-                await self.sync_job.cancel(ingestion_stats=ingestion_stats)
+                await self.sync_job.cancel(ingestion_stats=persisted_stats)
             else:
-                await self.sync_job.done(ingestion_stats=ingestion_stats)
+                await self.sync_job.done(ingestion_stats=persisted_stats)
 
         if await self.reload_connector():
             sync_cursor = (
@@ -374,11 +386,30 @@ class SyncJobRunner:
 
         self.sync_job.log_info(
             f"Sync ended with status {sync_status.value} -- "
-            f"created: {result.get('doc_created', 0)} | "
-            f"updated: {result.get('doc_updated', 0)} | "
-            f"deleted: {result.get('doc_deleted', 0)} "
+            f"created: {ingestion_stats.get(CREATES_QUEUED, 0)} | "
+            f"updated: {ingestion_stats.get(UPDATES_QUEUED, 0)} | "
+            f"deleted: {ingestion_stats.get(DELETES_QUEUED, 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
+        self.log_counters(ingestion_stats)
+
+    def log_counters(self, counters):
+        """
+        Logs out a dump of everything in "counters"
+
+        This serves a dual-purpose:
+        1. Providing human-readable counts on separate lines, which can be helpful for
+            visualizing how a counter changes over multiple runs (like in Discover)
+        2. Providing a machine-readable hash of all counters, that can be easily copy-pasted
+           into a REPL or script for analysis.
+        See more of the discussion: https://github.com/elastic/connectors/pull/2323
+        :param counters: a dictionary of counter_name -> counter_value like: {"added": 2, "deleted": 1}
+        """
+        self.sync_job.log_info("--- Counters ---")
+        for k, v in sorted(counters.items()):
+            self.sync_job.log_info(f"'{k}' : {v}")
+        self.sync_job.log_info(f"full counters dictionary: {counters}")
+        self.sync_job.log_info("----------------")
 
     @with_concurrency_control()
     async def sync_starts(self):
@@ -487,9 +518,9 @@ class SyncJobRunner:
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
-                "indexed_document_count": result.get("indexed_document_count", 0),
-                "indexed_document_volume": result.get("indexed_document_volume", 0),
-                "deleted_document_count": result.get("deleted_document_count", 0),
+                INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
+                INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
+                DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
 

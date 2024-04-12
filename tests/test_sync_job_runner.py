@@ -134,7 +134,7 @@ def sync_orchestrator_mock():
         sync_orchestrator_mock.done = Mock(return_value=True)
         sync_orchestrator_mock.fetch_error = Mock(return_value=None)
         sync_orchestrator_mock.cancel = AsyncMock()
-        sync_orchestrator_mock.ingestion_stats = Mock()
+        sync_orchestrator_mock.ingestion_stats = Mock(return_value={})
         sync_orchestrator_mock.close = AsyncMock()
         sync_orchestrator_mock.has_active_license_enabled = AsyncMock(
             return_value=(True, License.PLATINUM)

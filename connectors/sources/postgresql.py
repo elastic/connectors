@@ -550,7 +550,7 @@ class PostgreSQLDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         self._logger.info(
-            f"Fetching records for '{tables}' tables using the custom query: {query}"
+            f"Fetching records for {tables} tables using the custom query: {query}"
         )
         try:
             docs_generator = self._yield_docs_custom_query(tables=tables, query=query)

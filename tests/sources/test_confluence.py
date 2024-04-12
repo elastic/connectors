@@ -50,6 +50,32 @@ RESPONSE_SPACE = {
     "_links": {},
 }
 
+SPACE = {
+    "id": 4554779,
+    "name": "DEMO",
+    "_links": {
+        "webui": "/spaces/DM",
+    },
+    "permissions": [
+        {
+            "id": 1,
+            "subjects": {
+                "group": {
+                    "results": [
+                        {
+                            "type": "group",
+                            "name": "group1",
+                            "id": "group_id_1",
+                        }
+                    ],
+                    "size": 1,
+                },
+            },
+            "operation": {"operation": "read", "targetType": "space"},
+        }
+    ],
+}
+
 RESPONSE_PAGE = {
     "results": [
         {
@@ -85,8 +111,8 @@ EXPECTED_SPACE = {
     "_id": 4554779,
     "type": "Space",
     "title": "DEMO",
-    "_timestamp": "2023-01-24T04:07:19+00:00",
-    "url": f"{HOST_URL}/spaces/DM",
+    "_timestamp": "2024-04-02T09:53:15.818621+00:00",
+    "url": "http://127.0.0.1:9696/spaces/DM",
 }
 
 RESPONSE_ATTACHMENT = {
@@ -467,6 +493,7 @@ async def test_validate_config_with_valid_dependency_fields_does_not_raise_error
     configs,
 ):
     async with create_confluence_source() as source:
+        source.confluence_client.ping = AsyncMock()
         for k, v in configs.items():
             source.configuration.get_field(k).value = v
 
@@ -653,8 +680,8 @@ async def test_fetch_spaces():
         )
 
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
-            async for response, _, _ in source.fetch_spaces():
-                assert response == EXPECTED_SPACE
+            async for response in source.confluence_client.fetch_spaces():
+                assert response == RESPONSE_SPACE["results"][0]
 
 
 @pytest.mark.asyncio
@@ -694,6 +721,23 @@ async def test_fetch_attachments():
 async def test_search_by_query():
     async with create_confluence_source() as source:
         async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
+        )
+        documents = []
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for response, _ in source.search_by_query(
+                query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
+            ):
+                documents.append(response)
+        assert documents == EXPECTED_SEARCH_RESULT
+
+
+@pytest.mark.asyncio
+async def test_search_by_query_for_datacenter():
+    async with create_confluence_source() as source:
+        async_response = AsyncMock()
+        source.confluence_client.data_source_type = "confluence_data_center"
         async_response.__aenter__ = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
         )
@@ -835,9 +879,9 @@ async def test_download_attachment_with_text_extraction_enabled_adds_body():
 
 @pytest.mark.asyncio
 @mock.patch.object(
-    ConfluenceDataSource,
+    ConfluenceClient,
     "fetch_spaces",
-    return_value=AsyncIterator([[copy(EXPECTED_SPACE), [], "space_key"]]),
+    return_value=AsyncIterator([copy(SPACE)]),
 )
 @mock.patch.object(
     ConfluenceDataSource,
@@ -860,6 +904,7 @@ async def test_download_attachment_with_text_extraction_enabled_adds_body():
     "download_attachment",
     return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
 )
+@freeze_time("2024-04-02T09:53:15.818621+00:00")
 async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_patch):
     """Tests the get_docs method"""
 
@@ -878,7 +923,6 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
         source.confluence_client.data_source_type = "confluence_cloud"
         async for item, _ in source.get_docs():
             documents.append(item)
-
         assert documents == expected_responses
 
 
@@ -1065,7 +1109,9 @@ async def test_get_access_control_dls_enabled_for_datacenter():
         source._dls_enabled = MagicMock(return_value=True)
         source.confluence_client.data_source_type = "confluence_data_center"
 
-        source.fetch_confluence_server_users = AsyncIterator([mock_users])
+        source.confluence_client.fetch_confluence_server_users = AsyncIterator(
+            [mock_users]
+        )
 
         user_documents = []
         async for user_doc in source.get_access_control():
@@ -1111,7 +1157,9 @@ async def test_get_access_control_dls_enabled_for_server():
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
 
-        source.fetch_confluence_server_users = AsyncIterator([mock_users])
+        source.confluence_client.fetch_confluence_server_users = AsyncIterator(
+            [mock_users]
+        )
 
         user_documents = []
         async for user_doc in source.get_access_control():
@@ -1126,17 +1174,15 @@ async def test_fetch_confluence_server_users():
         source.confluence_client.api_call = AsyncIterator(
             [JSONAsyncMock({"start": 0, "users": []})]
         )
-        async for user in source.fetch_confluence_server_users():
+        async for user in source.confluence_client.fetch_confluence_server_users():
             assert user is None
 
 
 @pytest.mark.asyncio
 @mock.patch.object(
-    ConfluenceDataSource,
+    ConfluenceClient,
     "fetch_spaces",
-    return_value=AsyncIterator(
-        [[copy(EXPECTED_SPACE), SPACE_PERMISSION_RESPONSE, "space_key"]]
-    ),
+    return_value=AsyncIterator(([copy(SPACE)])),
 )
 @mock.patch.object(
     ConfluenceDataSource,
@@ -1201,6 +1247,7 @@ async def test_fetch_confluence_server_users():
     "download_attachment",
     return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
 )
+@freeze_time("2024-04-02T09:53:15.818621+00:00")
 async def test_get_docs_dls_enabled(
     spaces_patch, pages_patch, attachment_patch, content_patch
 ):
