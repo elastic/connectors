@@ -1077,6 +1077,7 @@ class GitHubDataSource(BaseDataSource):
         self.prev_repos = []
         self.members = set()
         self._user = None
+        self._installations = {}
 
     def _set_internal_logger(self):
         self.github_client.set_logger(self._logger)
@@ -1241,11 +1242,62 @@ class GitHubDataSource(BaseDataSource):
         return self._user
 
     async def get_invalid_repos(self):
-        try:
-            self._logger.debug(
-                "Checking if there are any inaccessible repositories configured"
+        self._logger.debug(
+            "Checking if there are any inaccessible repositories configured"
+        )
+        if self.configuration["auth_method"] == GITHUB_APP:
+            return await self._get_invalid_repos_for_github_app()
+        else:
+            return await self._get_invalid_repos_for_personal_access_token()
+
+    async def _get_invalid_repos_for_github_app(self):
+        # A github app can be installed on multiple orgs/personal accounts, so the OWNER in 'OWNER/REPO' is mandatory
+        incomplete_repos = list(
+            filter(
+                lambda repo: repo
+                and repo.strip()
+                and len(repo.strip().split("/")) != 2,
+                self.configured_repos,
             )
-            if self.configuration["repo_type"] == "other":
+        )
+        if incomplete_repos:
+            return incomplete_repos
+
+        await self._get_installations()
+        invalid_repos = []
+        for repo in self.configured_repos:
+            owner, repo_name = self.github_client.get_repo_details(repo_name=repo)
+            if owner not in self._installations:
+                self._logger.debug(
+                    f"Invalid repo {repo} as the github app is not installed on {owner}"
+                )
+                invalid_repos.append(repo)
+                continue
+
+            if "repos" not in self._installations[owner]:
+                repos = {}
+                await self.github_client.update_installation_id(
+                    self._installations[owner]["installation_id"]
+                )
+                if self.configuration["repo_type"] == "organization":
+                    async for repo in self.github_client.get_org_repos(owner):
+                        repos[repo["nameWithOwner"]] = repo
+                else:
+                    async for repo in self.github_client.get_user_repos(owner):
+                        repos[repo["nameWithOwner"]] = repo
+                self._installations[owner]["repos"] = repos
+
+            if repo not in self._installations[owner]["repos"]:
+                self._logger.debug(
+                    f"Invalid repo {repo} as it's either non-existing or not accessible"
+                )
+                invalid_repos.append(repo)
+
+        return invalid_repos
+
+    async def _get_invalid_repos_for_personal_access_token(self):
+        try:
+            if self.github_client.repo_type == "other":
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
                     owner=await self._logged_in_user(),
@@ -1318,11 +1370,19 @@ class GitHubDataSource(BaseDataSource):
             yield await self._user_access_control_doc(user=user)
 
     async def _remote_validation(self):
-        """Validate scope of the configured Token and accessibility of repositories
+        """Validate scope of the configured personal access token and accessibility of repositories
 
         Raises:
             ConfigurableFieldValueError: Insufficient privileges error.
         """
+
+        await self._validate_personal_access_token_scopes()
+        await self._validate_configured_repos()
+
+    async def _validate_personal_access_token_scopes(self):
+        if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
+            return
+
         scopes = await self.github_client.get_personal_access_token_scopes()
         required_scopes = {"repo", "user", "read:org"}
 
@@ -1340,11 +1400,14 @@ class GitHubDataSource(BaseDataSource):
             msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
             raise ConfigurableFieldValueError(msg)
 
-        if WILDCARD not in self.configured_repos:
-            invalid_repos = await self.get_invalid_repos()
-            if invalid_repos:
-                msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
-                raise ConfigurableFieldValueError(msg)
+    async def _validate_configured_repos(self):
+        if WILDCARD in self.configured_repos:
+            return
+
+        invalid_repos = await self.get_invalid_repos()
+        if invalid_repos:
+            msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
+            raise ConfigurableFieldValueError(msg)
 
     async def validate_config(self):
         """Validates whether user input is empty or not for configuration fields
@@ -1399,6 +1462,26 @@ class GitHubDataSource(BaseDataSource):
             "state": review.get("state"),
             "comments": review.get("comments").get("nodes"),
         }
+
+    async def _get_installations(self):
+        if self.configuration["auth_method"] != GITHUB_APP:
+            return {}
+        if self._installations:
+            return self._installations
+
+        async for installation in self.github_client.get_installations():
+            if (
+                self.configuration["repo_type"] == "organization"
+                and installation["account"]["type"] == "Organization"
+            ) or (
+                self.configuration["repo_type"] == "other"
+                and installation["account"]["type"] == "User"
+            ):
+                self._installations[installation["account"]["login"]] = {
+                    "installation_id": installation["id"]
+                }
+
+        return self._installations
 
     async def _get_personal_repos(self, user):
         self._logger.info(f"Fetching personal repos {user}")
