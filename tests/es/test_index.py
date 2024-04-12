@@ -118,7 +118,7 @@ async def test_fetch_response_by_id_not_found(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_fetch_response_by_id_api_error(mock_responses):
+async def test_fetch_response_by_id_api_error(mock_responses, patch_sleep):
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -129,6 +129,7 @@ async def test_fetch_response_by_id_api_error(mock_responses):
         f"http://nowhere.com:9200/{index_name}/_doc/{doc_id}",
         headers=headers,
         status=500,
+        repeat=True,
     )
 
     with pytest.raises(ApiError):
@@ -201,7 +202,7 @@ async def test_update_by_script():
 
 
 @pytest.mark.asyncio
-async def test_get_all_docs_with_error(mock_responses, patch_logger):
+async def test_get_all_docs_with_error(mock_responses, patch_logger, patch_sleep):
     index = FakeIndex(index_name, config)
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
@@ -211,6 +212,7 @@ async def test_get_all_docs_with_error(mock_responses, patch_logger):
         f"http://nowhere.com:9200/{index_name}/_search?expand_wildcards=hidden",
         headers=headers,
         status=500,
+        repeat=True,
     )
 
     with pytest.raises(ApiError) as e:

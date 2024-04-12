@@ -20,7 +20,11 @@ from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.jira import (
+    JIRA_CLOUD,
+    JIRA_DATA_CENTER,
+    JIRA_SERVER,
     InternalServerError,
+    InvalidJiraDataSourceTypeError,
     JiraClient,
     JiraDataSource,
     NotFound,
@@ -201,6 +205,8 @@ MOCK_USER = (
         "accountType": "atlassian",
         "displayName": "user1",
         "active": True,
+        "email_address": "user.test@gmail.com",
+        "locale": "US",
     },
 )
 
@@ -300,15 +306,19 @@ ACCESS_CONTROL = "_allow_access_control"
 
 
 @asynccontextmanager
-async def create_jira_source(use_text_extraction_service=False):
+async def create_jira_source(
+    use_text_extraction_service=False,
+    data_source="jira_cloud",
+    jira_url="http://127.0.0.1:8080",
+):
     async with create_source(
         JiraDataSource,
-        data_source="jira_cloud",
+        data_source=data_source,
         username="admin",
         password="changeme",
         account_email="me@example.com",
         api_token="abc#123",
-        jira_url="http://127.0.0.1:8080",
+        jira_url=jira_url,
         projects="*",
         ssl_enabled=False,
         use_text_extraction_service=use_text_extraction_service,
@@ -366,6 +376,8 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=mocked_issue_data)
     elif url == f"{HOST_URL}/rest/api/2/myself":
         return get_json_mock(mock_response=MOCK_MYSELF)
+    elif url == f"{HOST_URL}/test/rest/api/2/myself":
+        return get_json_mock(mock_response=MOCK_MYSELF)
     elif url == f"{HOST_URL}/rest/api/2/project?expand=description,lead,url":
         return get_json_mock(mock_response=MOCK_PROJECT)
     elif url == f"{HOST_URL}/rest/api/2/search?jql=type=bug&maxResults=100&startAt=0":
@@ -378,22 +390,22 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=0"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE&maxResults=1000&startAt=0"
     ):
         return get_json_mock(mock_response=MOCK_USER)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=100"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=DP&permissions=BROWSE&maxResults=1000&startAt=1000"
     ):
         return get_json_mock(mock_response=[])
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=0"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE&maxResults=1000&startAt=0"
     ):
         return get_json_mock(mock_response=MOCK_USER)
     elif (
         url
-        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE_PROJECTS&maxResults=100&startAt=100"
+        == f"{HOST_URL}/rest/api/2/user/permission/search?projectKey=TP&permissions=BROWSE&maxResults=1000&startAt=1000"
     ):
         return get_json_mock(mock_response=[])
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1?fields=security":
@@ -554,6 +566,26 @@ async def test_get_with_500_status():
 
 
 @pytest.mark.asyncio
+async def test_ping_to_custom_path_server():
+    expected_url = "http://127.0.0.1:8080/test/"
+
+    async with create_jira_source(jira_url=expected_url) as source:
+        with patch.object(
+            aiohttp.ClientSession,
+            "get",
+            side_effect=side_effect_function,
+        ) as mock_get:
+            await source.ping()
+
+            call_args = mock_get.call_args
+            actual_url = call_args.kwargs["url"]
+
+            # pinged URL: http://127.0.0.1:8080/test/rest/api/2/myself
+            # checking if expected_url - 'http://127.0.0.1:8080/test/' is a part of pinged URL
+            assert expected_url in actual_url
+
+
+@pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
 async def test_ping_with_ssl(
     mock_get,
@@ -623,12 +655,32 @@ async def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_get_session():
-    """Test that the instance of session returned is always the same for the datasource class."""
+@pytest.mark.parametrize(
+    "data_source_type", [JIRA_CLOUD, JIRA_DATA_CENTER, JIRA_SERVER]
+)
+async def test_get_session(data_source_type):
+    async with create_jira_source(data_source=data_source_type) as source:
+        try:
+            source.jira_client._get_session()
+        except Exception as e:
+            pytest.fail(
+                f"Should not raise for valid data source type '{data_source_type}'. Exception: {e}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_session_multiple_calls_return_same_instance():
     async with create_jira_source() as source:
         first_instance = source.jira_client._get_session()
         second_instance = source.jira_client._get_session()
         assert first_instance is second_instance
+
+
+@pytest.mark.asyncio
+async def test_get_session_raise_on_invalid_data_source_type():
+    async with create_jira_source(data_source="invalid") as source:
+        with pytest.raises(InvalidJiraDataSourceTypeError):
+            source.jira_client._get_session()
 
 
 @pytest.mark.asyncio
@@ -653,7 +705,7 @@ async def test_get_timezone():
         with patch.object(
             aiohttp.ClientSession, "get", side_effect=side_effect_function
         ):
-            timezone = await source._get_timezone()
+            timezone = await source.jira_client.get_timezone()
             assert timezone == "Asia/Kolkata"
 
 
@@ -702,12 +754,12 @@ async def test_get_projects_for_specific_project():
 
 @pytest.mark.asyncio
 async def test_verify_projects():
-    """Test _verify_projects method"""
+    """Test verify_projects method"""
     async with create_jira_source() as source:
         source.jira_client.projects = ["TP", "DP"]
 
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
-            await source._verify_projects()
+            await source.jira_client.verify_projects()
 
 
 @pytest.mark.asyncio
@@ -717,7 +769,7 @@ async def test_verify_projects_with_unavailable_project_keys():
 
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
             with pytest.raises(Exception, match="Configured unavailable projects: AP"):
-                await source._verify_projects()
+                await source.jira_client.verify_projects()
 
 
 @pytest.mark.asyncio
@@ -992,9 +1044,9 @@ async def test_get_access_control_dls_enabled():
         "accountId": "607194d6bc3c3f006f4c35d6",
         "accountType": "atlassian",
         "displayName": "user1",
-        "locale": "en-US",
-        "emailAddress": "user1@dummy-domain.com",
         "active": True,
+        "emailAddress": "user1.test@gmail.com",
+        "locale": "US",
         "groups": {
             "size": 1,
             "items": [
@@ -1020,8 +1072,8 @@ async def test_get_access_control_dls_enabled():
         "identity": {
             "account_id": "account_id:607194d6bc3c3f006f4c35d6",
             "display_name": "name:user1",
-            "locale": "locale:en-US",
-            "email_address": "email_address:user1@dummy-domain.com",
+            "email_address": "email_address:user1.test@gmail.com",
+            "locale": "locale:US",
         },
         "created_at": "2023-01-24T04:07:19+00:00",
         "query": {

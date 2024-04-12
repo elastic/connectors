@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
+from connectors import __version__
 from connectors.es.client import (
     ESClient,
     License,
@@ -212,7 +213,7 @@ class TestESClient:
         assert not await es_client.ping()
 
         await es_client.close()
-        patch_logger.assert_present("The server returned a 401 code")
+        patch_logger.assert_present("The Elasticsearch server returned a 401 code")
         patch_logger.assert_present("missing authentication credentials")
 
     @pytest.mark.asyncio
@@ -235,6 +236,23 @@ class TestESClient:
             # Execute
             assert not await es_client.ping()
             await es_client.close()
+
+    def test_sets_product_origin_header(self):
+        config = {"headers": {"some-header": "some-value"}}
+
+        es_client = ESClient(config)
+
+        assert es_client.client._headers["X-elastic-product-origin"] == "connectors"
+
+    def test_sets_user_agent(self):
+        config = {"headers": {"some-header": "some-value"}}
+
+        es_client = ESClient(config)
+
+        assert (
+            es_client.client._headers["user-agent"]
+            == f"elastic-connectors-{__version__}/service"
+        )
 
 
 class TestTransientElasticsearchRetrier:

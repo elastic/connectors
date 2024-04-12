@@ -1846,33 +1846,6 @@ def test_incremental_sync_enabled(features_json, incremental_sync_enabled):
     assert features.incremental_sync_enabled() == incremental_sync_enabled
 
 
-@pytest.mark.parametrize(
-    "nested_dict, keys, default, expected",
-    [
-        # extract True
-        ({"a": {"b": {"c": True}}}, ["a", "b", "c"], False, True),
-        (
-            {"a": {"b": {"c": True}}},
-            # "d" doesn't exist -> fall back to False
-            ["a", "b", "c", "d"],
-            False,
-            False,
-        ),
-        (
-            {"a": {"b": {"c": True}}},
-            # "wrong_key" doesn't exist -> fall back to False
-            ["wrong_key", "b", "c"],
-            False,
-            False,
-        ),
-        # fallback to True
-        (None, ["a", "b", "c"], True, True),
-    ],
-)
-def test_nested_get(nested_dict, keys, default, expected):
-    assert expected == Features(nested_dict)._nested_feature_enabled(keys, default)
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "trigger_method",

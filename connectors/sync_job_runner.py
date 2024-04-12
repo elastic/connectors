@@ -7,14 +7,33 @@ import asyncio
 import time
 
 import elasticsearch
+from elasticsearch import (
+    AuthorizationException as ElasticAuthorizationException,
+)
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
-from connectors.es.sink import OP_INDEX, SyncOrchestrator, UnsupportedJobType
+from connectors.es.management_client import ESManagementClient
+from connectors.es.sink import (
+    CREATES_QUEUED,
+    DELETES_QUEUED,
+    OP_INDEX,
+    UPDATES_QUEUED,
+    SyncOrchestrator,
+    UnsupportedJobType,
+)
 from connectors.logger import logger
 from connectors.protocol import JobStatus, JobType
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_VOLUME,
+)
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
 
@@ -61,6 +80,10 @@ class ConnectorJobNotRunningError(Exception):
         )
 
 
+class ApiKeyNotFoundError(Exception):
+    pass
+
+
 class SyncJobRunner:
     """The class to run a sync job.
 
@@ -94,6 +117,9 @@ class SyncJobRunner:
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
         self.running = False
+        self._enable_bulk_operations_logging = self.bulk_options.get(
+            "enable_operations_logging"
+        )
 
     async def execute(self):
         if self.running:
@@ -101,6 +127,10 @@ class SyncJobRunner:
             raise SyncJobRunningError(msg)
 
         self.running = True
+
+        job_type = self.sync_job.job_type
+
+        self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
 
         await self.sync_starts()
         sync_cursor = (
@@ -111,6 +141,8 @@ class SyncJobRunner:
         await self.sync_job.claim(sync_cursor=sync_cursor)
         self._start_time = time.time()
 
+        self.sync_job.log_debug("Successfully claimed the sync job.")
+
         try:
             self.data_provider = self.source_klass(
                 configuration=self.sync_job.configuration
@@ -119,6 +151,9 @@ class SyncJobRunner:
             self.data_provider.set_framework_config(
                 self._data_source_framework_config()
             )
+
+            self.sync_job.log_debug("Instantiated data provider for the sync job.")
+
             if not await self.data_provider.changed():
                 self.sync_job.log_info("No change in remote source, skipping sync")
                 await self._sync_done(sync_status=JobStatus.COMPLETED)
@@ -139,17 +174,16 @@ class SyncJobRunner:
             bulk_options = self.bulk_options.copy()
             self.data_provider.tweak_bulk_options(bulk_options)
 
-            self.sync_orchestrator = SyncOrchestrator(
-                self.es_config, self.sync_job.logger
-            )
-
             if (
                 self.connector.native
                 and self.connector.features.native_connector_api_keys_enabled()
             ):
-                await self.sync_orchestrator.update_authorization(
-                    self.connector.index_name, self.connector.api_key_secret_id
-                )
+                # Update the config so native connectors can use API key authentication during sync
+                await self._update_native_connector_authentication()
+
+            self.sync_orchestrator = SyncOrchestrator(
+                self.es_config, self.sync_job.logger
+            )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
@@ -176,6 +210,10 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
             await self._sync_done(sync_status=JobStatus.CANCELED)
+        except ElasticAuthorizationException as e:
+            error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
+            self.sync_job.log_error(error_msg, exc_info=True)
+            await self._sync_done(sync_status=JobStatus.ERROR, sync_error=error_msg)
         except Exception as e:
             self.sync_job.log_error(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
@@ -185,6 +223,33 @@ class SyncJobRunner:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
                 await self.data_provider.close()
+
+    async def _update_native_connector_authentication(self):
+        """
+        The connector secrets API endpoint can only be accessed by the Enterprise Search system role,
+        so we need to use a client initialised with the config's username and password to first fetch
+        the API key for native connectors.
+        After that, we can provide the API key to the sync orchestrator to initialise a new client
+        so that an API key can be used for the sync.
+        This function should not be run for connector clients.
+        """
+        es_management_client = ESManagementClient(self.es_config)
+        try:
+            self.sync_job.log_debug(
+                f"Checking secrets storage for API key for index [{self.connector.index_name}]..."
+            )
+            api_key = await es_management_client.get_connector_secret(
+                self.connector.api_key_secret_id
+            )
+            self.sync_job.log_debug(
+                f"API key found in secrets storage for index [{self.connector.index_name}], will use this for authorization."
+            )
+            self.es_config["api_key"] = api_key
+        except ElasticNotFoundError as e:
+            msg = f"API key not found in secrets storage for index [{self.connector.index_name}]."
+            raise ApiKeyNotFoundError(msg) from e
+        finally:
+            await es_management_client.close()
 
     def _data_source_framework_config(self):
         builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
@@ -212,6 +277,7 @@ class SyncJobRunner:
             self.sync_job.pipeline,
             job_type,
             options=bulk_options,
+            enable_bulk_operations_logging=self._enable_bulk_operations_logging,
         )
 
     def _skip_unchanged_documents_enabled(self, job_type, data_provider):
@@ -248,7 +314,7 @@ class SyncJobRunner:
         logger.debug("Preparing the content index")
 
         await self.sync_orchestrator.prepare_content_index(
-            index=self.sync_job.index_name, language_code=self.sync_job.language
+            index_name=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
         content_extraction_enabled = (
@@ -268,6 +334,7 @@ class SyncJobRunner:
             skip_unchanged_documents=self._skip_unchanged_documents_enabled(
                 job_type, self.data_provider
             ),
+            enable_bulk_operations_logging=self._enable_bulk_operations_logging,
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
@@ -280,31 +347,31 @@ class SyncJobRunner:
             except asyncio.CancelledError:
                 self.sync_job.log_debug("Job reporting task is stopped.")
 
-        result = (
+        ingestion_stats = (
             {}
             if self.sync_orchestrator is None
             else self.sync_orchestrator.ingestion_stats()
         )
-        ingestion_stats = {
-            "indexed_document_count": result.get("indexed_document_count", 0),
-            "indexed_document_volume": result.get("indexed_document_volume", 0),
-            "deleted_document_count": result.get("deleted_document_count", 0),
+        persisted_stats = {
+            INDEXED_DOCUMENT_COUNT: ingestion_stats.get(INDEXED_DOCUMENT_COUNT, 0),
+            INDEXED_DOCUMENT_VOLUME: ingestion_stats.get(INDEXED_DOCUMENT_VOLUME, 0),
+            DELETED_DOCUMENT_COUNT: ingestion_stats.get(DELETED_DOCUMENT_COUNT, 0),
         }
 
         if await self.reload_sync_job():
             if await self.reload_connector():
-                ingestion_stats[
+                persisted_stats[
                     "total_document_count"
                 ] = await self.connector.document_count()
 
             if sync_status == JobStatus.ERROR:
-                await self.sync_job.fail(sync_error, ingestion_stats=ingestion_stats)
+                await self.sync_job.fail(sync_error, ingestion_stats=persisted_stats)
             elif sync_status == JobStatus.SUSPENDED:
-                await self.sync_job.suspend(ingestion_stats=ingestion_stats)
+                await self.sync_job.suspend(ingestion_stats=persisted_stats)
             elif sync_status == JobStatus.CANCELED:
-                await self.sync_job.cancel(ingestion_stats=ingestion_stats)
+                await self.sync_job.cancel(ingestion_stats=persisted_stats)
             else:
-                await self.sync_job.done(ingestion_stats=ingestion_stats)
+                await self.sync_job.done(ingestion_stats=persisted_stats)
 
         if await self.reload_connector():
             sync_cursor = (
@@ -319,11 +386,30 @@ class SyncJobRunner:
 
         self.sync_job.log_info(
             f"Sync ended with status {sync_status.value} -- "
-            f"created: {result.get('doc_created', 0)} | "
-            f"updated: {result.get('doc_updated', 0)} | "
-            f"deleted: {result.get('doc_deleted', 0)} "
+            f"created: {ingestion_stats.get(CREATES_QUEUED, 0)} | "
+            f"updated: {ingestion_stats.get(UPDATES_QUEUED, 0)} | "
+            f"deleted: {ingestion_stats.get(DELETES_QUEUED, 0)} "
             f"(took {int(time.time() - self._start_time)} seconds)"  # pyright: ignore
         )
+        self.log_counters(ingestion_stats)
+
+    def log_counters(self, counters):
+        """
+        Logs out a dump of everything in "counters"
+
+        This serves a dual-purpose:
+        1. Providing human-readable counts on separate lines, which can be helpful for
+            visualizing how a counter changes over multiple runs (like in Discover)
+        2. Providing a machine-readable hash of all counters, that can be easily copy-pasted
+           into a REPL or script for analysis.
+        See more of the discussion: https://github.com/elastic/connectors/pull/2323
+        :param counters: a dictionary of counter_name -> counter_value like: {"added": 2, "deleted": 1}
+        """
+        self.sync_job.log_info("--- Counters ---")
+        for k, v in sorted(counters.items()):
+            self.sync_job.log_info(f"'{k}' : {v}")
+        self.sync_job.log_info(f"full counters dictionary: {counters}")
+        self.sync_job.log_info("----------------")
 
     @with_concurrency_control()
     async def sync_starts(self):
@@ -403,7 +489,11 @@ class SyncJobRunner:
                 ):
                     yield doc, lazy_download, OP_INDEX
             case [JobType.INCREMENTAL, optimization] if optimization is False:
-                async for doc, lazy_download, operation in self.data_provider.get_docs_incrementally(
+                async for (
+                    doc,
+                    lazy_download,
+                    operation,
+                ) in self.data_provider.get_docs_incrementally(
                     sync_cursor=self.connector.sync_cursor,
                     filtering=self.sync_job.filtering,
                 ):
@@ -428,9 +518,9 @@ class SyncJobRunner:
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
-                "indexed_document_count": result.get("indexed_document_count", 0),
-                "indexed_document_volume": result.get("indexed_document_volume", 0),
-                "deleted_document_count": result.get("deleted_document_count", 0),
+                INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
+                INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
+                DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
             await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
 

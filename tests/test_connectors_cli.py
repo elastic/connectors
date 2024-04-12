@@ -25,36 +25,30 @@ def mock_cli_config():
 
 @pytest.fixture(autouse=True)
 def mock_connector_es_client():
-    with patch("connectors.cli.connector.ESManagementClient") as mock:
+    with patch("connectors.cli.connector.CLIClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
 
 @pytest.fixture(autouse=True)
 def mock_job_es_client():
-    with patch("connectors.cli.job.ESManagementClient") as mock:
+    with patch("connectors.cli.job.CLIClient") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
 
-def test_version():
+@pytest.mark.parametrize("commands", [["-v"], ["--version"]])
+def test_version(commands):
     runner = CliRunner()
-    result = runner.invoke(cli, ["-v"])
+    result = runner.invoke(cli, commands)
     assert result.exit_code == 0
     assert result.output.strip() == __version__
 
 
-def test_help_page():
+@pytest.mark.parametrize("commands", [["-h"], ["--help"], []])
+def test_help_page(commands):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--help"])
-    assert "Usage:" in result.output
-    assert "Options:" in result.output
-    assert "Commands:" in result.output
-
-
-def test_help_page_when_no_arguments():
-    runner = CliRunner()
-    result = runner.invoke(cli, [])
+    result = runner.invoke(cli, commands)
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
@@ -206,8 +200,8 @@ def test_connector_create(patch_click_confirm):
 @pytest.mark.parametrize(
     "native_flag, input_index_name, expected_index_name",
     (
-        ["--native", "test", "search-test"],
-        ["--native", "search-test", "search-search-test"],
+        ["--native", "test", "test"],
+        ["--native", "search-test", "search-test"],
         [None, "test", "test"],
         [None, "search-test", "search-test"],
     ),
@@ -365,6 +359,7 @@ def test_connector_create_from_file():
         [
             "test-connector",
             "en",
+            "test-connector-name",
         ]
     )
 
@@ -490,35 +485,42 @@ def test_connector_create_native_connector(patched_confirm):
     )
 
     with patch(
-        "connectors.cli.connector.Connector._Connector__create_api_key", AsyncMock()
+        "connectors.cli.connector.Connector._Connector__create_api_key",
+        AsyncMock(return_value={"id": "api-key-123", "encoded": "foo"}),
     ) as patched_create_api_key:
         with patch(
-            "connectors.protocol.connectors.ConnectorIndex.index",
-            AsyncMock(return_value={"_id": "new_connector_id"}),
-        ) as patched_create:
-            result = runner.invoke(
-                cli,
-                [
-                    "connector",
-                    "create",
-                    "--service-type",
-                    "mongodb",
-                    "--from-index",
-                    "--native",
-                ],
-                input=input_params,
-            )
+            "connectors.cli.connector.Connector._Connector__store_api_key",
+            AsyncMock(return_value="secret-123"),
+        ) as patched_store_api_key:
+            with patch(
+                "connectors.protocol.connectors.ConnectorIndex.index",
+                AsyncMock(return_value={"_id": "new_connector_id"}),
+            ) as patched_create:
+                result = runner.invoke(
+                    cli,
+                    [
+                        "connector",
+                        "create",
+                        "--service-type",
+                        "mongodb",
+                        "--from-index",
+                        "--native",
+                    ],
+                    input=input_params,
+                )
 
-            patched_create.assert_called_once()
+                patched_create.assert_called_once()
 
-            call_args = patched_create.call_args[0][0]
-            assert call_args["is_native"] is True
-            assert call_args["api_key_id"] is None
+                call_args = patched_create.call_args[0][0]
+                assert call_args["is_native"] is True
+                assert call_args["api_key_id"] == "api-key-123"
+                assert call_args["api_key_secret_id"] == "secret-123"
 
-            patched_create_api_key.assert_not_called()
-            assert result.exit_code == 0
+                patched_create_api_key.assert_called_once()
+                patched_store_api_key.assert_called_once()
+                assert result.exit_code == 0
 
-            assert "has been created" in result.output
+                assert "has been created" in result.output
 
 
 def test_index_help_page():
@@ -543,7 +545,7 @@ def test_index_list_one_index():
     indices = {"indices": {"test_index": {"primaries": {"docs": {"count": 10}}}}}
 
     with patch(
-        "connectors.es.management_client.ESManagementClient.list_indices",
+        "connectors.es.cli_client.CLIClient.list_indices",
         AsyncMock(return_value=indices),
     ):
         result = runner.invoke(cli, ["index", "list"])
@@ -557,7 +559,7 @@ def test_index_clean():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.management_client.ESManagementClient.clean_index",
+        "connectors.es.cli_client.CLIClient.clean_index",
         AsyncMock(return_value=True),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -572,7 +574,7 @@ def test_index_clean_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.management_client.ESManagementClient.clean_index",
+        "connectors.es.cli_client.CLIClient.clean_index",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "clean", index_name])
@@ -586,7 +588,7 @@ def test_index_delete():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.management_client.ESManagementClient.delete_indices",
+        "connectors.es.cli_client.CLIClient.delete_indices",
         AsyncMock(return_value=None),
     ) as mocked_method:
         result = runner.invoke(cli, ["index", "delete", index_name])
@@ -601,7 +603,7 @@ def test_delete_index_error():
     runner = CliRunner()
     index_name = "test_index"
     with patch(
-        "connectors.es.management_client.ESManagementClient.delete_indices",
+        "connectors.es.cli_client.CLIClient.delete_indices",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["index", "delete", index_name])
@@ -651,9 +653,7 @@ def test_job_cancel():
 
     job = SyncJobObject(job_index, doc)
 
-    with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs", AsyncMock(return_value=[job])
-    ):
+    with patch("connectors.protocol.SyncJobIndex.get_all_docs", AsyncIterator([job])):
         with patch.object(job, "_terminate") as mocked_method:
             result = runner.invoke(cli, ["job", "cancel", job_id])
 
@@ -667,7 +667,7 @@ def test_job_cancel_error():
     runner = CliRunner()
     job_id = "test_job_id"
     with patch(
-        "connectors.cli.job.Job._Job__async_list_jobs",
+        "connectors.protocol.SyncJobIndex.get_all_docs",
         side_effect=ApiError(500, meta="meta", body="error"),
     ):
         result = runner.invoke(cli, ["job", "cancel", job_id])

@@ -35,6 +35,7 @@ from connectors.utils import (
     deep_merge_dicts,
     filter_nested_dict_by_keys,
     iso_utc,
+    nested_get_from_dict,
     next_run,
 )
 
@@ -74,11 +75,15 @@ CONNECTORS_ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 JOB_NOT_FOUND_ERROR = "Couldn't find the job"
 UNKNOWN_ERROR = "unknown error"
 
+INDEXED_DOCUMENT_COUNT = "indexed_document_count"
+INDEXED_DOCUMENT_VOLUME = "indexed_document_volume"
+DELETED_DOCUMENT_COUNT = "deleted_document_count"
+TOTAL_DOCUMENT_COUNT = "total_document_count"
 ALLOWED_INGESTION_STATS_KEYS = (
-    "indexed_document_count",
-    "indexed_document_volume",
-    "deleted_document_count",
-    "total_document_count",
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_VOLUME,
+    DELETED_DOCUMENT_COUNT,
+    TOTAL_DOCUMENT_COUNT,
 )
 
 
@@ -265,19 +270,19 @@ class SyncJob(ESDocument):
 
     @property
     def indexed_document_count(self):
-        return self.get("indexed_document_count", default=0)
+        return self.get(INDEXED_DOCUMENT_COUNT, default=0)
 
     @property
     def indexed_document_volume(self):
-        return self.get("indexed_document_volume", default=0)
+        return self.get(INDEXED_DOCUMENT_VOLUME, default=0)
 
     @property
     def deleted_document_count(self):
-        return self.get("deleted_document_count", default=0)
+        return self.get(DELETED_DOCUMENT_COUNT, default=0)
 
     @property
     def total_document_count(self):
-        return self.get("total_document_count", default=0)
+        return self.get(TOTAL_DOCUMENT_COUNT, default=0)
 
     @property
     def job_type(self):
@@ -476,18 +481,18 @@ class Features:
         self.features = features
 
     def incremental_sync_enabled(self):
-        return self._nested_feature_enabled(
-            ["incremental_sync", "enabled"], default=False
+        return nested_get_from_dict(
+            self.features, ["incremental_sync", "enabled"], default=False
         )
 
     def document_level_security_enabled(self):
-        return self._nested_feature_enabled(
-            ["document_level_security", "enabled"], default=False
+        return nested_get_from_dict(
+            self.features, ["document_level_security", "enabled"], default=False
         )
 
     def native_connector_api_keys_enabled(self):
-        return self._nested_feature_enabled(
-            ["native_connector_api_keys", "enabled"], default=False
+        return nested_get_from_dict(
+            self.features, ["native_connector_api_keys", "enabled"], default=True
         )
 
     def sync_rules_enabled(self):
@@ -503,12 +508,12 @@ class Features:
     def feature_enabled(self, feature):
         match feature:
             case Features.BASIC_RULES_NEW:
-                return self._nested_feature_enabled(
-                    ["sync_rules", "basic", "enabled"], default=False
+                return nested_get_from_dict(
+                    self.features, ["sync_rules", "basic", "enabled"], default=False
                 )
             case Features.ADVANCED_RULES_NEW:
-                return self._nested_feature_enabled(
-                    ["sync_rules", "advanced", "enabled"], default=False
+                return nested_get_from_dict(
+                    self.features, ["sync_rules", "advanced", "enabled"], default=False
                 )
             case Features.BASIC_RULES_OLD:
                 return self.features.get("filtering_rules", False)
@@ -516,21 +521,6 @@ class Features:
                 return self.features.get("filtering_advanced_config", False)
             case _:
                 return False
-
-    def _nested_feature_enabled(self, keys, default=None):
-        def nested_get(dictionary, keys_, default_=None):
-            if dictionary is None:
-                return default_
-
-            if not keys_:
-                return dictionary
-
-            if not isinstance(dictionary, dict):
-                return default_
-
-            return nested_get(dictionary.get(keys_[0]), keys_[1:], default_)
-
-        return nested_get(self.features, keys, default)
 
 
 class Connector(ESDocument):
@@ -973,7 +963,7 @@ class Connector(ESDocument):
         }
 
 
-IDLE_JOBS_THRESHOLD = 60  # 60 seconds
+IDLE_JOBS_THRESHOLD = 60 * 5  # 5 minutes
 
 
 class SyncJobIndex(ESIndex):
@@ -1019,9 +1009,9 @@ class SyncJobIndex(ESIndex):
             "trigger_method": trigger_method.value,
             "job_type": job_type.value,
             "status": JobStatus.PENDING.value,
-            "indexed_document_count": 0,
-            "indexed_document_volume": 0,
-            "deleted_document_count": 0,
+            INDEXED_DOCUMENT_COUNT: 0,
+            INDEXED_DOCUMENT_VOLUME: 0,
+            DELETED_DOCUMENT_COUNT: 0,
             "created_at": iso_utc(),
             "last_seen": iso_utc(),
         }

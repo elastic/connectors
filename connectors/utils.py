@@ -16,6 +16,7 @@ import ssl
 import subprocess
 import time
 import urllib.parse
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
@@ -152,7 +153,12 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self):
+    def cancel(self, sig=None):
+        if sig:
+            logger.debug(f"Caught {sig}. Cancelling sleeps...")
+        else:
+            logger.debug("Cancelling sleeps...")
+
         for task in self._sleeps:
             task.cancel()
 
@@ -341,6 +347,13 @@ class MemQueue(asyncio.Queue):
 
         super().put_nowait((item_size, item))
 
+    def clear(self):
+        while not self.empty():
+            # Depending on your program, you may want to
+            # catch QueueEmpty
+            self.get_nowait()
+            self.task_done()
+
     def put_nowait(self, item):
         item_size = get_size(item)
         if self.full(item_size):
@@ -403,7 +416,11 @@ class ConcurrentTasks:
     def _callback(self, task, result_callback=None):
         self.tasks.remove(task)
         self._sem.release()
-        if task.exception():
+        if task.cancelled():
+            logger.error(
+                f"Task {task.get_name()} was cancelled",
+            )
+        elif task.exception():
             logger.error(
                 f"Exception found for task {task.get_name()}: {task.exception()}",
                 exc_info=True,
@@ -469,6 +486,9 @@ class UnknownRetryStrategyError(Exception):
     pass
 
 
+sleeps_for_retryable = CancellableSleeps()
+
+
 def retryable(
     retries=3,
     interval=1.0,
@@ -515,7 +535,7 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -539,7 +559,7 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -891,3 +911,49 @@ def shorten_str(string, shorten_by):
     else:
         # keep one more at the front
         return f"{string[:keep + 1]}...{string[-keep:]}"
+
+
+def func_human_readable_name(func):
+    if isinstance(func, functools.partial):
+        return func.func.__name__
+
+    try:
+        return func.__name__
+    except AttributeError:
+        return str(func)
+
+
+def nested_get_from_dict(dictionary, keys, default=None):
+    def nested_get(dictionary_, keys_, default_=None):
+        if dictionary_ is None:
+            return default_
+
+        if not keys_:
+            return dictionary_
+
+        if not isinstance(dictionary_, dict):
+            return default_
+
+        return nested_get(dictionary_.get(keys_[0]), keys_[1:], default_)
+
+    return nested_get(dictionary, keys, default)
+
+
+class Counters:
+    """
+    A utility to provide code readability to managing a collection of counts
+    """
+
+    def __init__(self):
+        self._storage = {}
+
+    def increment(self, key, value=1, namespace=None):
+        if namespace:
+            key = f"{namespace}.{key}"
+        self._storage[key] = self._storage.get(key, 0) + value
+
+    def get(self, key) -> int:
+        return self._storage.get(key, 0)
+
+    def to_dict(self):
+        return deepcopy(self._storage)

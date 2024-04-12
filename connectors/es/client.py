@@ -25,6 +25,7 @@ from connectors.logger import logger, set_extra_logger
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
+    func_human_readable_name,
     time_to_sleep_between_retries,
 )
 
@@ -39,14 +40,20 @@ class License(Enum):
     UNSET = None
 
 
+USER_AGENT_BASE = f"elastic-connectors-{__version__}"
+
+
 class ESClient:
+    user_agent = f"{USER_AGENT_BASE}/service"
+
     def __init__(self, config):
         # We don't have a way to ask the server, but it's planned
         # for now we just use an env flag
         self.serverless = "SERVERLESS" in os.environ
         self.config = config
+        self.configured_host = config.get("host", "http://localhost:9200")
         self.host = url_to_node_config(
-            config.get("host", "http://localhost:9200"),
+            self.configured_host,
             use_default_ports_for_scheme=True,
         )
         self._sleeps = CancellableSleeps()
@@ -61,7 +68,7 @@ class ESClient:
             "request_timeout": config.get("request_timeout", 120),
             "retry_on_timeout": config.get("retry_on_timeout", True),
         }
-        logger.debug(f"Host is {self.host}")
+        logger.debug(f"Initial Elasticsearch node configuration is {self.host}")
 
         if "api_key" in config:
             logger.debug(f"Connecting with an API Key ({config['api_key'][:5]}...)")
@@ -99,8 +106,11 @@ class ESClient:
         self.max_wait_duration = config.get("max_wait_duration", 60)
         self.initial_backoff_duration = config.get("initial_backoff_duration", 5)
         self.backoff_multiplier = config.get("backoff_multiplier", 2)
+
         options["headers"] = config.get("headers", {})
-        options["headers"]["user-agent"] = f"elastic-connectors-{__version__}"
+        options["headers"]["user-agent"] = self.__class__.user_agent
+        options["headers"]["X-elastic-product-origin"] = "connectors"
+
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True
 
@@ -155,7 +165,10 @@ class ESClient:
                 return False
 
             logger.info(
-                f"Waiting for {self.host} (so far: {int(time.time() - start)} secs)"
+                f"Waiting for Elasticsearch at {self.configured_host} (so far: {int(time.time() - start)} secs)"
+            )
+            logger.debug(
+                f"Seed node configuration: {self.client.transport.node_pool._seed_nodes}"
             )
             if await self.ping():
                 return True
@@ -169,12 +182,12 @@ class ESClient:
         try:
             await self.client.info()
         except ApiError as e:
-            logger.error(f"The server returned a {e.status_code} code")
+            logger.error(f"The Elasticsearch server returned a {e.status_code} code")
             if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
                 logger.error(e.info["error"]["reason"])
             return False
         except ElasticConnectionError as e:
-            logger.error("Could not connect to the server")
+            logger.error("Could not connect to the Elasticsearch server")
             if e.message is not None:
                 logger.error(e.message)
             return False
@@ -213,6 +226,7 @@ class TransientElasticsearchRetrier:
         await self._sleeps.sleep(time_to_sleep)
 
     async def execute_with_retry(self, func):
+        func_name = func_human_readable_name(func)
         retry = 0
         while self._keep_retrying and retry < self._max_retries:
             retry += 1
@@ -221,13 +235,15 @@ class TransientElasticsearchRetrier:
 
                 return result
             except ConnectionTimeout:
-                self._logger.debug(f"Attempt {retry}: connection timeout")
+                self._logger.warning(
+                    f"Client method '{func_name}' retry {retry}: connection timeout"
+                )
 
                 if retry >= self._max_retries:
                     raise
             except ApiError as e:
-                self._logger.debug(
-                    f"Attempt {retry}: api error with status {e.status_code}"
+                self._logger.warning(
+                    f"Client method '{func_name}' retry {retry}: api error with status {e.status_code}"
                 )
 
                 if e.status_code not in self._error_codes_to_retry:
@@ -251,7 +267,7 @@ def with_concurrency_control(retries=3):
                     return await func(*args, **kwargs)
                 except ConflictError as e:
                     logger.debug(
-                        f"A conflict error was returned from elasticsearch: {e.message}"
+                        f"A conflict error was returned from Elasticsearch: {e.message}"
                     )
                     if retry >= retries:
                         raise e

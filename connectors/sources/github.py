@@ -29,6 +29,7 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
+    nested_get_from_dict,
     retryable,
     ssl_context,
 )
@@ -37,6 +38,8 @@ WILDCARD = "*"
 BLOB = "blob"
 GITHUB_CLOUD = "github_cloud"
 GITHUB_SERVER = "github_server"
+PERSONAL_ACCESS_TOKEN = "personal_access_token"  # noqa: S105
+GITHUB_APP = "github_app"
 PULL_REQUEST_OBJECT = "pullRequest"
 REPOSITORY_OBJECT = "repository"
 
@@ -652,13 +655,11 @@ class GitHubClient:
     async def _get_retry_after(self, resource_type):
         current_time = time.time()
         response = await self._get_client.getitem("/rate_limit")
-        reset = (
-            response.get("resources", {})
-            .get(resource_type, {})
-            .get("reset", current_time)
+        reset = nested_get_from_dict(
+            response, ["resources", resource_type, "reset"], default=current_time
         )
         # Adding a 5 second delay to account for server delays
-        return (reset - current_time) + 5
+        return (reset - current_time) + 5  # pyright: ignore
 
     async def _put_to_sleep(self, resource_type):
         retry_after = await self._get_retry_after(resource_type=resource_type)
@@ -774,25 +775,6 @@ class GitHubClient:
         except Exception:
             raise
 
-    def get_data_by_keys(self, response, keys, endKey):
-        """Retrieve data from a nested dictionary using a list of keys and an end key.
-
-        Args:
-            response (dict): The nested dictionary from which data will be extracted.
-            keys (list): A list of strings representing the keys to navigate the nested dictionary.
-            endKey (str): The final key to retrieve the desired data from the nested dictionary.
-
-        Returns:
-            The value corresponding to the `endKey` in the nested dictionary, if all the keys
-            in the `keys` list are found in the dictionary. If any key is missing, None is returned.
-        """
-        current_level = response.get("data", {})
-        for key in keys:
-            current_level = current_level.get(key)
-            if current_level is None:
-                break
-        return current_level.get(endKey)
-
     async def paginated_api_call(self, variables, query, keys):
         """Make a paginated API call for fetching GitHub objects.
 
@@ -809,12 +791,12 @@ class GitHubClient:
             response = await self.post(query_data=query_data)
             yield response
 
-            page_info = self.get_data_by_keys(
-                response=response, keys=keys, endKey="pageInfo"
+            page_info = nested_get_from_dict(
+                response, ["data"] + keys + ["pageInfo"], default={}
             )
             if not page_info.get("hasNextPage"):
                 break
-            variables["cursor"] = page_info["endCursor"]
+            variables["cursor"] = page_info["endCursor"]  # pyright: ignore
 
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
@@ -829,11 +811,8 @@ class GitHubClient:
             query=GithubQuery.ORG_REPOS_QUERY.value,
             keys=["organization", "repositories"],
         ):
-            for repo in (
-                response.get("data", {})  # pyright: ignore
-                .get("organization", {})
-                .get("repositories", {})
-                .get("nodes")
+            for repo in nested_get_from_dict(  # pyright: ignore
+                response, ["data", "organization", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
@@ -847,11 +826,8 @@ class GitHubClient:
             query=GithubQuery.REPOS_QUERY.value,
             keys=["user", "repositories"],
         ):
-            for repo in (
-                response.get("data", {})  # pyright: ignore
-                .get("user", {})
-                .get("repositories", {})
-                .get("nodes")
+            for repo in nested_get_from_dict(  # pyright: ignore
+                response, ["data", "user", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
@@ -875,11 +851,10 @@ class GitHubClient:
             query=GithubQuery.ORG_MEMBERS_QUERY.value,
             keys=["organization", "membersWithRole"],
         ):
-            for repo in (
-                response.get("data", {})  # pyright: ignore
-                .get("organization", {})
-                .get("membersWithRole", {})
-                .get("edges")
+            for repo in nested_get_from_dict(  # pyright: ignore
+                response,
+                ["data", "organization", "membersWithRole", "edges"],
+                default=[],
             ):
                 yield repo.get("node")
 
@@ -889,9 +864,7 @@ class GitHubClient:
             "variables": None,
         }
         response = await self.post(query_data=query_data)
-        return (
-            response.get("data", {}).get("viewer", {}).get("login")  # pyright: ignore
-        )
+        return nested_get_from_dict(response, ["data", "viewer", "login"])
 
     async def ping(self):
         query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
@@ -982,6 +955,7 @@ class GitHubDataSource(BaseDataSource):
     service_type = "github"
     advanced_rules_enabled = True
     dls_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the GitHub instance.
@@ -1013,7 +987,7 @@ class GitHubDataSource(BaseDataSource):
         return {
             "data_source": {
                 "display": "dropdown",
-                "label": "GitHub data source",
+                "label": "Data source",
                 "options": [
                     {"label": "GitHub Cloud", "value": GITHUB_CLOUD},
                     {"label": "GitHub Server", "value": GITHUB_SERVER},
@@ -1024,13 +998,27 @@ class GitHubDataSource(BaseDataSource):
             },
             "host": {
                 "depends_on": [{"field": "data_source", "value": GITHUB_SERVER}],
-                "label": "GitHub URL",
+                "label": "Server URL",
                 "order": 2,
                 "type": "str",
             },
-            "token": {
-                "label": "GitHub Token",
+            "auth_method": {
+                "display": "dropdown",
+                "label": "Authentication method",
+                "options": [
+                    {"label": "Personal access token", "value": PERSONAL_ACCESS_TOKEN},
+                    {"label": "GitHub App", "value": GITHUB_APP},
+                ],
                 "order": 3,
+                "type": "str",
+                "value": PERSONAL_ACCESS_TOKEN,
+            },
+            "token": {
+                "depends_on": [
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN}
+                ],
+                "label": "Token",
+                "order": 4,
                 "sensitive": True,
                 "type": "str",
             },
@@ -1041,42 +1029,60 @@ class GitHubDataSource(BaseDataSource):
                     {"label": "Organization", "value": "organization"},
                     {"label": "Other", "value": "other"},
                 ],
-                "order": 4,
+                "order": 5,
                 "tooltip": "The Document Level Security feature is not available for the Other Repository Type",
                 "type": "str",
                 "value": "other",
             },
             "org_name": {
-                "depends_on": [{"field": "repo_type", "value": "organization"}],
+                "depends_on": [
+                    {"field": "auth_method", "value": PERSONAL_ACCESS_TOKEN},
+                    {"field": "repo_type", "value": "organization"},
+                ],
                 "label": "Organization Name",
-                "order": 5,
+                "order": 6,
+                "type": "str",
+            },
+            "app_id": {
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
+                "display": "numeric",
+                "label": "App ID",
+                "order": 7,
+                "type": "int",
+            },
+            "private_key": {
+                "depends_on": [{"field": "auth_method", "value": GITHUB_APP}],
+                "display": "textarea",
+                "label": "App private key",
+                "order": 8,
+                "sensitive": True,
                 "type": "str",
             },
             "repositories": {
                 "display": "textarea",
                 "label": "List of repositories",
-                "order": 6,
+                "order": 9,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 7,
+                "order": 10,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 8,
+                "order": 11,
                 "type": "str",
             },
             "retry_count": {
                 "display_value": RETRIES,
                 "display": "numeric",
                 "label": "Maximum retries per request",
-                "order": 9,
+                "order": 12,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -1085,7 +1091,7 @@ class GitHubDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 10,
+                "order": 13,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1095,7 +1101,7 @@ class GitHubDataSource(BaseDataSource):
                 "display": "toggle",
                 "depends_on": [{"field": "repo_type", "value": "organization"}],
                 "label": "Enable document level security",
-                "order": 11,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1114,7 +1120,10 @@ class GitHubDataSource(BaseDataSource):
         ):
             return False
 
-        return self.configuration["use_document_level_security"]
+        return (
+            self.configuration["repo_type"] == "organization"
+            and self.configuration["use_document_level_security"]
+        )
 
     async def get_invalid_repos(self):
         try:
@@ -1331,8 +1340,8 @@ class GitHubDataSource(BaseDataSource):
                     "variables": {"owner": owner, "repositoryName": repo},
                 }
                 response = await self.github_client.post(query_data=query_data)
-                repo_object = response.get("data", {}).get(  # pyright: ignore
-                    REPOSITORY_OBJECT
+                repo_object = nested_get_from_dict(
+                    response, ["data", REPOSITORY_OBJECT]
                 )
             repo_object = repo_object.copy()
             repo_object.update(
@@ -1381,9 +1390,9 @@ class GitHubDataSource(BaseDataSource):
         async for response in self.github_client.paginated_api_call(
             variables=variables, query=query, keys=keys
         ):
-            yield response.get("data", {}).get(  # pyright: ignore
-                REPOSITORY_OBJECT, {}
-            ).get(object_type, {}).get(field_type, {}).get("nodes")
+            yield nested_get_from_dict(
+                response, ["data", REPOSITORY_OBJECT, object_type, field_type, "nodes"]
+            )
 
     async def _fetch_remaining_fields(
         self, type_obj, object_type, owner, repo, field_type
@@ -1432,7 +1441,7 @@ class GitHubDataSource(BaseDataSource):
                 keys=[REPOSITORY_OBJECT, object_type, field_type],
             ):
                 if field_type == "reviews":
-                    for review in response:
+                    for review in response:  # pyright: ignore
                         type_obj["reviews_comments"].append(
                             self._prepare_review_doc(review=review)
                         )
@@ -1461,7 +1470,7 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_pull_requests(
         self,
         repo_name,
-        response_key=(REPOSITORY_OBJECT, "pullRequests"),
+        response_key,
         filter_query=None,
     ):
         self._logger.info(
@@ -1485,8 +1494,8 @@ class GitHubDataSource(BaseDataSource):
                 query=query,
                 keys=response_key,
             ):
-                for pull_request in self.github_client.get_data_by_keys(
-                    response=response, keys=response_key, endKey="nodes"
+                for pull_request in nested_get_from_dict(  # pyright: ignore
+                    response, ["data"] + response_key + ["nodes"], default=[]
                 ):
                     async for pull_request_doc in self._extract_pull_request(
                         pull_request=pull_request, owner=owner, repo=repo
@@ -1501,8 +1510,8 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _extract_issues(self, response, owner, repo, response_key):
-        for issue in self.github_client.get_data_by_keys(
-            response=response, keys=response_key, endKey="nodes"
+        for issue in nested_get_from_dict(  # pyright: ignore
+            response, ["data"] + response_key + ["nodes"], default=[]
         ):
             issue.update(self._prepare_issue_doc(issue=issue))
             for field in ["comments", "labels", "assignees"]:
@@ -1519,7 +1528,7 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_issues(
         self,
         repo_name,
-        response_key=(REPOSITORY_OBJECT, "issues"),
+        response_key,
         filter_query=None,
     ):
         self._logger.info(
@@ -1706,11 +1715,8 @@ class GitHubDataSource(BaseDataSource):
             query=GithubQuery.COLLABORATORS_QUERY.value,
             keys=["repository", "collaborators"],
         ):
-            for user in (
-                response.get("data", {})  # pyright: ignore
-                .get("repository", {})
-                .get("collaborators", {})
-                .get("edges", [])
+            for user in nested_get_from_dict(  # pyright: ignore
+                response, ["data", "repository", "collaborators", "edges"], default=[]
             ):
                 user_id = user.get("node", {}).get("id")
                 user_name = user.get("node", {}).get("login")
@@ -1751,7 +1757,7 @@ class GitHubDataSource(BaseDataSource):
                     if query_status:
                         async for pull_request in self._fetch_pull_requests(
                             repo_name=repo_name,
-                            response_key=("search",),
+                            response_key=["search"],
                             filter_query=pull_request_query,
                         ):
                             yield pull_request, None
@@ -1769,7 +1775,7 @@ class GitHubDataSource(BaseDataSource):
                     if query_status:
                         async for issue in self._fetch_issues(
                             repo_name=repo_name,
-                            response_key=("search",),
+                            response_key=["search"],
                             filter_query=issue_query,
                         ):
                             yield issue, None
@@ -1790,21 +1796,23 @@ class GitHubDataSource(BaseDataSource):
             async for repo in self._fetch_repos():
                 if self.is_previous_repo(repo["nameWithOwner"]):
                     continue
+
                 access_control = []
-                if self._dls_enabled():
-                    is_public_repo = repo.get("visibility").lower() == "public"
-                    if is_public_repo:
-                        async for user in self.github_client._fetch_all_members():
-                            access_control.append(
-                                _prefix_user_id(user_id=user.get("id"))
-                            )
-                    else:
-                        access_control = await self._fetch_access_control(
-                            repo_name=repo.get("nameWithOwner")
-                        )
-                yield self._decorate_with_access_control(
-                    document=repo, access_control=access_control
-                ), None
+                is_public_repo = repo.get("visibility").lower() == "public"
+                needs_access_control = self._dls_enabled() and not is_public_repo
+
+                if needs_access_control:
+                    access_control = await self._fetch_access_control(
+                        repo_name=repo.get("nameWithOwner")
+                    )
+
+                if needs_access_control:
+                    yield self._decorate_with_access_control(
+                        document=repo, access_control=access_control
+                    ), None
+                else:
+                    yield repo, None
+
                 repo_name = repo.get("nameWithOwner")
                 default_branch = (
                     repo.get("defaultBranchRef", {}).get("name")
@@ -1813,26 +1821,47 @@ class GitHubDataSource(BaseDataSource):
                 )
 
                 async for pull_request in self._fetch_pull_requests(
-                    repo_name=repo_name
+                    repo_name=repo_name,
+                    response_key=[REPOSITORY_OBJECT, "pullRequests"],
                 ):
-                    yield self._decorate_with_access_control(
-                        document=pull_request, access_control=access_control
-                    ), None
+                    if needs_access_control:
+                        yield self._decorate_with_access_control(
+                            document=pull_request, access_control=access_control
+                        ), None
+                    else:
+                        yield pull_request, None
 
-                async for issue in self._fetch_issues(repo_name=repo_name):
-                    yield self._decorate_with_access_control(
-                        document=issue, access_control=access_control
-                    ), None
+                async for issue in self._fetch_issues(
+                    repo_name=repo_name, response_key=[REPOSITORY_OBJECT, "issues"]
+                ):
+                    if needs_access_control:
+                        yield self._decorate_with_access_control(
+                            document=issue, access_control=access_control
+                        ), None
+                    else:
+                        yield issue, None
 
                 if default_branch:
                     async for file_document, attachment_metadata in self._fetch_files(
                         repo_name=repo_name, default_branch=default_branch
                     ):
                         if file_document["type"] == BLOB:
-                            yield self._decorate_with_access_control(
-                                document=file_document, access_control=access_control
-                            ), partial(self.get_content, attachment=attachment_metadata)
+                            if needs_access_control:
+                                yield self._decorate_with_access_control(
+                                    document=file_document,
+                                    access_control=access_control,
+                                ), partial(
+                                    self.get_content, attachment=attachment_metadata
+                                )
+                            else:
+                                yield file_document, partial(
+                                    self.get_content, attachment=attachment_metadata
+                                )
                         else:
-                            yield self._decorate_with_access_control(
-                                document=file_document, access_control=access_control
-                            ), None
+                            if needs_access_control:
+                                yield self._decorate_with_access_control(
+                                    document=file_document,
+                                    access_control=access_control,
+                                ), None
+                            else:
+                                yield file_document, None

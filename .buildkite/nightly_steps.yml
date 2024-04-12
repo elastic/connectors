@@ -116,6 +116,14 @@ steps:
       - ".buildkite/run_nigthly.sh box"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 Notion"
+    command:
+      - ".buildkite/run_nigthly.sh notion"
+  - label: "🔨 Redis"
+    command:
+      - ".buildkite/run_nigthly.sh redis"
+    artifact_paths:
+      - "perf8-report-*/**/*"
   - label: "🔨 GraphQL"
     command:
       - ".buildkite/run_nigthly.sh graphql"

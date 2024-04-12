@@ -40,12 +40,15 @@ def load_config(ctx, config):
     elif ctx.invoked_subcommand == "login":
         pass
     else:
-        msg = f"{CONFIG_FILE_PATH} is not found"
+        msg = f"{CONFIG_FILE_PATH} was not found."
         raise FileNotFoundError(msg)
 
 
 # Main group
-@click.group(invoke_without_command=True)
+@click.group(
+    invoke_without_command=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 @click.version_option(__version__, "-v", "--version", message="%(version)s")
 @click.option("-c", "--config", type=click.File("rb"))
 @click.pass_context
@@ -56,7 +59,13 @@ def cli(ctx, config):
         return
 
     ctx.ensure_object(dict)
-    ctx.obj["config"] = load_config(ctx, config)
+    try:
+        ctx.obj["config"] = load_config(ctx, config)
+    except FileNotFoundError as e:
+        click.echo(
+            f"{e} Make sure that the config is either present at the default location ({CONFIG_FILE_PATH}) or it's passed via the '-c' or '--config' option."
+        )
+        ctx.exit(1)
 
 
 @click.command(help="Authenticate Connectors CLI with an Elasticsearch instance")
@@ -220,6 +229,11 @@ def interactive_service_type_prompt():
     default="config.yml",
     help="Path to the connector service config file. Used in combination with --update-config flag.",
 )
+@click.option(
+    "--name",
+    prompt=f"{click.style('?', fg='green')} Connector name",
+    help="Connector name",
+)
 @click.pass_obj
 def create(
     obj,
@@ -231,13 +245,8 @@ def create(
     from_file,
     update_config,
     connector_service_config,
+    name,
 ):
-    if is_native:
-        index_name = f"search-{index_name}"
-        click.echo(
-            f"Prepending {click.style('search-', fg='green')} to index name because it will be a native connector. New index name is {click.style(index_name, fg='green')}."
-        )
-
     connector_configuration = {}
     if from_file:
         with open(from_file) as fd:
@@ -314,6 +323,7 @@ def create(
         service_type,
         configuration,
         is_native,
+        name=name,
         language=index_language,
         from_index=from_index,
     )

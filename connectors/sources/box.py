@@ -28,6 +28,8 @@ from connectors.utils import (
     retryable,
 )
 
+FINISHED = "FINISHED"
+
 ENDPOINTS = {
     "TOKEN": "/oauth2/token",
     "PING": "/2.0/users/me",
@@ -306,7 +308,7 @@ class BoxDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Box.")
             raise
 
-    async def get_users_id(self):
+    async def get_user_ids(self):
         async for user in self.client.paginated_call(
             url=ENDPOINTS["USERS"], params={}, headers={}
         ):
@@ -346,7 +348,7 @@ class BoxDataSource(BaseDataSource):
                         )
                     )
                     self.tasks += 1
-            await self.queue.put("FINISHED")
+            await self.queue.put(FINISHED)
         except Exception as exception:
             self._logger.info(
                 f"Something went wrong while fetching data from the folder ID: {doc_id}. Error: {exception}"
@@ -447,30 +449,38 @@ class BoxDataSource(BaseDataSource):
         """
         while self.tasks > 0:
             _, item = await self.queue.get()
-            if item == "FINISHED":
+            if item == FINISHED:
                 self.tasks -= 1
             else:
                 yield item
 
     async def get_docs(self, filtering=None):
-        stored_id = set()
+        already_processed_ids = set()
+        root_folder = "0"
+
         if self.is_enterprise == BOX_ENTERPRISE:
-            async for user_id in self.get_users_id():
-                # "0" refers to the root folder
+            async for user_id in self.get_user_ids():
+                logger.debug(
+                    f"Fetching content for user with id '{user_id}' starting from root folder"
+                )
                 await self.fetchers.put(
-                    partial(self._fetch, doc_id="0", user_id=user_id)
+                    partial(self._fetch, doc_id=root_folder, user_id=user_id)
                 )
                 self.tasks += 1
         else:
-            await self.fetchers.put(partial(self._fetch, doc_id="0"))
+            logger.debug("Fetching content starting from root folder")
+            await self.fetchers.put(partial(self._fetch, doc_id=root_folder))
             self.tasks += 1
 
         async for item in self._consumer():
             current_id = item[0].get("_id")
-            if current_id in stored_id:
+            if current_id in already_processed_ids:
+                logger.debug(
+                    f"Already processed item with id '{current_id}'. Skipping item..."
+                )
                 continue
             else:
-                stored_id.add(current_id)
+                already_processed_ids.add(current_id)
                 yield item
 
         await self.fetchers.join()
