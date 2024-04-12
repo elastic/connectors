@@ -705,7 +705,7 @@ async def test_get_timezone():
         with patch.object(
             aiohttp.ClientSession, "get", side_effect=side_effect_function
         ):
-            timezone = await source._get_timezone()
+            timezone = await source.jira_client.get_timezone()
             assert timezone == "Asia/Kolkata"
 
 
@@ -754,12 +754,12 @@ async def test_get_projects_for_specific_project():
 
 @pytest.mark.asyncio
 async def test_verify_projects():
-    """Test _verify_projects method"""
+    """Test verify_projects method"""
     async with create_jira_source() as source:
         source.jira_client.projects = ["TP", "DP"]
 
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
-            await source._verify_projects()
+            await source.jira_client.verify_projects()
 
 
 @pytest.mark.asyncio
@@ -769,7 +769,7 @@ async def test_verify_projects_with_unavailable_project_keys():
 
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
             with pytest.raises(Exception, match="Configured unavailable projects: AP"):
-                await source._verify_projects()
+                await source.jira_client.verify_projects()
 
 
 @pytest.mark.asyncio
