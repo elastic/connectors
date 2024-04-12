@@ -1049,7 +1049,7 @@ class ConfluenceDataSource(BaseDataSource):
                     self.fetcher_count += 1
         except Exception as exception:
             self._logger.exception(
-                f"Error while fetching pages and blogposts: {exception}"
+                f"Error while fetching pages and blogposts with query '{api_query}': {exception}"
             )
             raise
         finally:
