@@ -805,6 +805,7 @@ class SyncOrchestrator:
         self._sink = None
         self._sink_task = None
         self.error = None
+        self.canceled = False
 
     async def close(self):
         await self.es_management_client.close()
@@ -847,11 +848,23 @@ class SyncOrchestrator:
             self._logger.info(f"Content index successfully created:  {index_name}")
 
     def done(self):
-        if self._extractor_task is not None and not self._extractor_task.done():
-            return False
-        if self._sink_task is not None and not self._sink_task.done():
-            return False
-        return True
+        """
+        An async task (which this mimics) should be "done" if:
+         - it was canceled
+         - it errored
+         - it completed successfully
+        :return: True if the orchestrator is "done", else False
+        """
+        if self.get_error() is not None:
+            return True
+
+        extractor_done = (
+            True
+            if self._extractor_task is None or self._extractor_task.done()
+            else False
+        )
+        sink_done = True if self._sink_task is None or self._sink_task.done() else False
+        return extractor_done and sink_done
 
     def _sink_task_running(self):
         return self._sink_task is not None and not self._sink_task.done()
@@ -864,6 +877,7 @@ class SyncOrchestrator:
             self._sink_task.cancel()
         if self._extractor_task_running():
             self._extractor_task.cancel()
+        self.canceled = True
 
         cancelation_timeout = CANCELATION_TIMEOUT
         while cancelation_timeout > 0:
