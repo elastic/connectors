@@ -87,7 +87,7 @@ class OpentextDocumentumClient:
         Returns:
             aiohttp.ClientSession: An instance of Client Session
         """
-        self._logger.debug("Creating a client session")
+        self._logger.debug("Creating a client session using basic auth")
         login, password = (
             self.configuration["username"],
             self.configuration["password"],
@@ -105,7 +105,6 @@ class OpentextDocumentumClient:
         )
 
     async def close_session(self):
-        """Closes unclosed client session"""
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
@@ -133,7 +132,7 @@ class OpentextDocumentumClient:
             self._logger.exception(f"Getting Not Found Error for url: {url}")
             raise NotFound
         elif exception.status == 500:
-            self._logger.exception("Internal Server Error occurred")
+            self._logger.exception("Internal Server Error occurred for url: {url}")
             raise InternalServerError
         else:
             raise
@@ -170,7 +169,7 @@ class OpentextDocumentumClient:
                     yield response
                     break
             except ServerConnectionError:
-                self._logger.exception(f"Getting ServerConnectionError for url: {url}")
+                self._logger.exception(f"Getting {ServerConnectionError.__class__.__name__} for url: {url}. Closing client session...")
                 await self.close_session()
                 raise
             except ClientResponseError as exception:
@@ -349,6 +348,7 @@ class OpentextDocumentumDataSource(BaseDataSource):
 
     async def _remote_validation(self):
         if self.repositories == [WILDCARD]:
+            self._logger.debug(f"Skipping validation for repositories as '{WILDCARD}' is set for the config value `repositories`")
             return
         available_repos = []
         async for response in self.opentext_client.paginated_api_call(
