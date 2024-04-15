@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${VERSION}
+    container_name: elasticsearch
+    environment:
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      - ELASTIC_PASSWORD=changeme
+      - xpack.security.enabled=true
+      - xpack.security.authc.api_key.enabled=true
+      - discovery.type=single-node
+      - action.destructive_requires_name=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - esnet
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${VERSION}
+    ports:
+      - 5601:5601
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+        - "elasticsearch"
+    profiles:
+      - "enterprise-search"
+    environment:
+      ELASTICSEARCH_URL: http://host.docker.internal:9200
+      ELASTICSEARCH_HOSTS: http://host.docker.internal:9200
+      ENTERPRISESEARCH_HOST: http://host.docker.internal:3002
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: changeme
+    networks:
+      - esnet
+
+  graphql:
+    build: 
+      context: ../../../../
+      dockerfile: Dockerfile.ftest
+    command: bin/python tests/sources/fixtures/graphql/fixture.py
+    ports:
+      - "9094:9094"
+    volumes:
+      - .:/python-flask
+    restart: always
+
+volumes:
+  esdata:
+    driver: local
+
+networks:
+  esnet:
+    driver: bridge
