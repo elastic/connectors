@@ -171,7 +171,9 @@ class OpentextDocumentumClient:
                     yield response
                     break
             except ServerConnectionError:
-                self._logger.exception(f"Getting {ServerConnectionError.__class__.__name__} for url: {url}. Closing client session...")
+                self._logger.exception(
+                    f"Getting {ServerConnectionError.__class__.__name__} for url: {url}. Closing client session..."
+                )
                 await self.close_session()
                 raise
             except ClientResponseError as exception:
@@ -349,7 +351,9 @@ class OpentextDocumentumDataSource(BaseDataSource):
 
     async def _remote_validation(self):
         if self.repositories == [WILDCARD]:
-            self._logger.debug(f"Skipping validation for repositories as '{WILDCARD}' is set for the config value `repositories`")
+            self._logger.debug(
+                f"Skipping validation for repositories as '{WILDCARD}' is set for the config value `repositories`"
+            )
             return
         available_repos = []
         async for response in self.opentext_client.paginated_api_call(
