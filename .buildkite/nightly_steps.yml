@@ -124,3 +124,8 @@ steps:
       - ".buildkite/run_nigthly.sh redis"
     artifact_paths:
       - "perf8-report-*/**/*"
+  - label: "🔨 GraphQL"
+    command:
+      - ".buildkite/run_nigthly.sh graphql"
+    artifact_paths:
+      - "perf8-report-*/**/*"

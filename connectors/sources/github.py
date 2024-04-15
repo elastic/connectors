@@ -12,6 +12,11 @@ from functools import cached_property, partial
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
+from gidgethub import sansio
+from gidgethub.abc import (
+    BadGraphQLRequest,
+    GraphQLAuthorizationFailure,
+)
 from gidgethub.aiohttp import GitHubAPI
 
 from connectors.access_control import (
@@ -672,14 +677,9 @@ class GitHubClient:
 
     @cached_property
     def _get_session(self):
-        headers = {
-            "Authorization": f"Bearer {self.github_token}",
-            "Accept": "application/vnd.github.raw",
-        }
         connector = aiohttp.TCPConnector(ssl=self.ssl_ctx)
         timeout = aiohttp.ClientTimeout(total=None)
         return aiohttp.ClientSession(
-            headers=headers,
             timeout=timeout,
             raise_for_status=True,
             connector=connector,
@@ -698,12 +698,14 @@ class GitHubClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=UnauthorizedException,
     )
-    async def post(self, query_data, need_headers=False):
+    async def graphql(self, query, variables=None):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
-            query_data: Dictionary comprising of query and variables for the GraphQL request.
+            query: Dictionary comprising of query for the GraphQL request.
+            variables: Dictionary comprising of query for the GraphQL request.
 
         Raises:
             UnauthorizedException: Unauthorized exception
@@ -714,35 +716,18 @@ class GitHubClient:
         """
         url = f"{self.github_url}/graphql"
         self._logger.debug(
-            f"Sending POST to {url} with body: '{json.dumps(query_data)}'"
+            f"Sending POST to {url} with query: '{json.dumps(query)}' and variables: '{json.dumps(variables)}'"
         )
         try:
-            async with self._get_session.post(
-                url=url, json=query_data, ssl=self.ssl_ctx
-            ) as response:
-                json_response = await response.json()
-                if not json_response.get("errors"):
-                    return (
-                        (json_response, response.headers)
-                        if need_headers
-                        else json_response
-                    )
-                for error in json_response.get("errors"):
-                    if (
-                        error.get("type") == "RATE_LIMITED"
-                        and "api rate limit exceeded" in error.get("message").lower()
-                    ):
-                        await self._put_to_sleep(resource_type="graphql")
-                msg = (
-                    f"Error while executing query. Exception: {json_response['errors']}"
-                )
-                raise Exception(msg)
-        except ClientResponseError as exception:
-            if exception.status == 401:
-                msg = "Your Github token is either expired or revoked. Please check again."
-                raise UnauthorizedException(msg) from exception
-            else:
-                raise
+            return await self._get_client.graphql(
+                query=query, endpoint=url, **variables or {}
+            )
+        except GraphQLAuthorizationFailure as exception:
+            msg = "Your Github token is either expired or revoked. Please check again."
+            raise UnauthorizedException(msg) from exception
+        except BadGraphQLRequest as exception:
+            if self.get_rate_limit_encountered(exception.status_code, exception):
+                await self._put_to_sleep(resource_type="graphql")
         except Exception:
             raise
 
@@ -775,25 +760,22 @@ class GitHubClient:
         except Exception:
             raise
 
-    async def paginated_api_call(self, variables, query, keys):
+    async def paginated_api_call(self, query, variables, keys):
         """Make a paginated API call for fetching GitHub objects.
 
         Args:
-            variables (dict): Variables for Graphql API
             query (string): Graphql Query
+            variables (dict): Variables for Graphql API
             keys (list): List of fields to get pageInfo
 
         Yields:
             dict: dictionary containing response of GitHub.
         """
         while True:
-            query_data = {"query": query, "variables": variables}
-            response = await self.post(query_data=query_data)
+            response = await self.graphql(query=query, variables=variables)
             yield response
 
-            page_info = nested_get_from_dict(
-                response, ["data"] + keys + ["pageInfo"], default={}
-            )
+            page_info = nested_get_from_dict(response, keys + ["pageInfo"], default={})
             if not page_info.get("hasNextPage"):
                 break
             variables["cursor"] = page_info["endCursor"]  # pyright: ignore
@@ -801,18 +783,32 @@ class GitHubClient:
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
 
+    async def get_personal_access_token_scopes(self):
+        request_headers = sansio.create_headers(
+            self._get_client.requester,
+            accept=sansio.accept_format(),
+            oauth_token=self.github_token,
+        )
+        _, headers, _ = await self._get_client._request(
+            "HEAD", self.github_url, request_headers
+        )
+        scopes = headers.get("X-OAuth-Scopes")
+        if not scopes or not scopes.strip():
+            return set()
+        return {scope.strip() for scope in scopes.split(",")}
+
     async def get_org_repos(self):
         repo_variables = {
             "orgName": self.org_name,
             "cursor": None,
         }
         async for response in self.paginated_api_call(
-            variables=repo_variables,
             query=GithubQuery.ORG_REPOS_QUERY.value,
+            variables=repo_variables,
             keys=["organization", "repositories"],
         ):
             for repo in nested_get_from_dict(  # pyright: ignore
-                response, ["data", "organization", "repositories", "nodes"], default=[]
+                response, ["organization", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
@@ -822,24 +818,22 @@ class GitHubClient:
             "cursor": None,
         }
         async for response in self.paginated_api_call(
-            variables=repo_variables,
             query=GithubQuery.REPOS_QUERY.value,
+            variables=repo_variables,
             keys=["user", "repositories"],
         ):
             for repo in nested_get_from_dict(  # pyright: ignore
-                response, ["data", "user", "repositories", "nodes"], default=[]
+                response, ["user", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
     async def get_foreign_repo(self, repo_name):
         owner, repo = self.get_repo_details(repo_name=repo_name)
         repo_variables = {"owner": owner, "repositoryName": repo}
-        query_data = {
-            "query": GithubQuery.REPO_QUERY.value,
-            "variables": repo_variables,
-        }
-        repo_response = await self.post(query_data=query_data)
-        return repo_response.get("data", {}).get(REPOSITORY_OBJECT)  # pyright: ignore
+        data = await self.graphql(
+            query=GithubQuery.REPO_QUERY.value, variables=repo_variables
+        )
+        return data.get(REPOSITORY_OBJECT)
 
     async def _fetch_all_members(self):
         org_variables = {
@@ -847,28 +841,23 @@ class GitHubClient:
             "cursor": None,
         }
         async for response in self.paginated_api_call(
-            variables=org_variables,
             query=GithubQuery.ORG_MEMBERS_QUERY.value,
+            variables=org_variables,
             keys=["organization", "membersWithRole"],
         ):
             for repo in nested_get_from_dict(  # pyright: ignore
                 response,
-                ["data", "organization", "membersWithRole", "edges"],
+                ["organization", "membersWithRole", "edges"],
                 default=[],
             ):
                 yield repo.get("node")
 
     async def get_logged_in_user(self):
-        query_data = {
-            "query": GithubQuery.USER_QUERY.value,
-            "variables": None,
-        }
-        response = await self.post(query_data=query_data)
-        return nested_get_from_dict(response, ["data", "viewer", "login"])
+        data = await self.graphql(query=GithubQuery.USER_QUERY.value)
+        return nested_get_from_dict(data, ["viewer", "login"])
 
     async def ping(self):
-        query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
-        await self.post(query_data=query_data)
+        await self.get_logged_in_user()
 
     async def close(self):
         self._sleeps.cancel()
@@ -1201,13 +1190,7 @@ class GitHubDataSource(BaseDataSource):
         Raises:
             ConfigurableFieldValueError: Insufficient privileges error.
         """
-        query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
-        _, headers = await self.github_client.post(  # pyright: ignore
-            query_data=query_data, need_headers=True
-        )
-
-        scopes = headers.get("X-OAuth-Scopes", "")
-        scopes = {scope.strip() for scope in scopes.split(",")}
+        scopes = await self.github_client.get_personal_access_token_scopes()
         required_scopes = {"repo", "user", "read:org"}
 
         for scope in ["write:org", "admin:org"]:
@@ -1335,14 +1318,11 @@ class GitHubDataSource(BaseDataSource):
 
             if not repo_object:
                 owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
-                query_data = {
-                    "query": GithubQuery.REPO_QUERY.value,
-                    "variables": {"owner": owner, "repositoryName": repo},
-                }
-                response = await self.github_client.post(query_data=query_data)
-                repo_object = nested_get_from_dict(
-                    response, ["data", REPOSITORY_OBJECT]
+                variables = {"owner": owner, "repositoryName": repo}
+                data = await self.github_client.graphql(
+                    query=GithubQuery.REPO_QUERY.value, variables=variables
                 )
+                repo_object = data.get(REPOSITORY_OBJECT)
             repo_object = repo_object.copy()
             repo_object.update(
                 {
@@ -1388,10 +1368,10 @@ class GitHubDataSource(BaseDataSource):
         self, variables, object_type, query, field_type, keys
     ):
         async for response in self.github_client.paginated_api_call(
-            variables=variables, query=query, keys=keys
+            query=query, variables=variables, keys=keys
         ):
             yield nested_get_from_dict(
-                response, ["data", REPOSITORY_OBJECT, object_type, field_type, "nodes"]
+                response, [REPOSITORY_OBJECT, object_type, field_type, "nodes"]
             )
 
     async def _fetch_remaining_fields(
@@ -1490,12 +1470,12 @@ class GitHubDataSource(BaseDataSource):
                 "filter_query": filter_query,
             }
             async for response in self.github_client.paginated_api_call(
-                variables=pull_request_variables,
                 query=query,
+                variables=pull_request_variables,
                 keys=response_key,
             ):
                 for pull_request in nested_get_from_dict(  # pyright: ignore
-                    response, ["data"] + response_key + ["nodes"], default=[]
+                    response, response_key + ["nodes"], default=[]
                 ):
                     async for pull_request_doc in self._extract_pull_request(
                         pull_request=pull_request, owner=owner, repo=repo
@@ -1511,7 +1491,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _extract_issues(self, response, owner, repo, response_key):
         for issue in nested_get_from_dict(  # pyright: ignore
-            response, ["data"] + response_key + ["nodes"], default=[]
+            response, response_key + ["nodes"], default=[]
         ):
             issue.update(self._prepare_issue_doc(issue=issue))
             for field in ["comments", "labels", "assignees"]:
@@ -1548,8 +1528,8 @@ class GitHubDataSource(BaseDataSource):
                 "filter_query": filter_query,
             }
             async for response in self.github_client.paginated_api_call(
-                variables=issue_variables,
                 query=query,
+                variables=issue_variables,
                 keys=response_key,
             ):
                 async for issue in self._extract_issues(
@@ -1711,12 +1691,12 @@ class GitHubDataSource(BaseDataSource):
             async for user in self.github_client._fetch_all_members():
                 self.members.add(user.get("id"))
         async for response in self.github_client.paginated_api_call(
-            variables=collaborator_variables,
             query=GithubQuery.COLLABORATORS_QUERY.value,
+            variables=collaborator_variables,
             keys=["repository", "collaborators"],
         ):
             for user in nested_get_from_dict(  # pyright: ignore
-                response, ["data", "repository", "collaborators", "edges"], default=[]
+                response, ["repository", "collaborators", "edges"], default=[]
             ):
                 user_id = user.get("node", {}).get("id")
                 user_name = user.get("node", {}).get("login")
