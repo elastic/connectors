@@ -402,6 +402,10 @@ class NASDataSource(BaseDataSource):
                         ),
                     )
                 )
+                for file in directory_info:
+                    yield self.format_document(file=file)
+                    if file.is_dir():
+                        stack.append(file.path)
             except SMBConnectionClosed as exception:
                 self._logger.exception(
                     f"Connection got closed. Error {exception}. Registering new session"
