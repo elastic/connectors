@@ -987,6 +987,7 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.exception(
                 f"Error while fetching attachments of {document.get('title')} with id {document.get('_id')}, type: {document.get('type')} in space {document.get('space')}: {exception}"
             )
+            raise
         finally:
             await self.queue.put(END_SIGNAL)  # pyright: ignore
 
@@ -1093,6 +1094,7 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.exception(
                 f"Error while fetching pages and blogposts with query '{api_query}': {exception}"
             )
+            raise
         finally:
             await self.queue.put(END_SIGNAL)  # pyright: ignore
 
