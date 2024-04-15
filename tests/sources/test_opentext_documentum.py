@@ -87,13 +87,32 @@ MOCK_REPOSITORIES = {
     ],
 }
 
+MOCK_REPOSITORY = {
+    "id": 10001,
+    "title": "Repo_1",
+    "summary": "Repository Summary for Repo_1",
+    "updated": "2024-12-12T00:00:00Z",
+    "published": "2018-09-28T14:41:29.738+00:00",
+    "links": [
+        {
+            "rel": "edit",
+            "href": "http://127.0.0.1:2099/repositories/",
+        }
+    ],
+    "content": {
+        "type": "application/vnd.emc.documentum+json",
+        "src": "http://127.0.0.1:2099/repositories/",
+    },
+    "author": [{"name": "Alex Wilber"}],
+}
+
 EXPECTED_REPO_1 = {
     "_id": 10001,
     "_timestamp": "2024-12-12T00:00:00Z",
     "type": "Repository",
     "repository_name": "Repo_1",
     "summary": "Repository Summary for Repo_1",
-    "authors": [{"name": "Alex Wilber"}],
+    "authors": ["Alex Wilber"],
 }
 
 EXPECTED_REPO_2 = {
@@ -102,7 +121,7 @@ EXPECTED_REPO_2 = {
     "type": "Repository",
     "repository_name": "Repo_2",
     "summary": "Repository Summary for Repo_2",
-    "authors": [{"name": "Alex Wilber"}],
+    "authors": ["Alex Wilber"],
 }
 
 MOCK_CABINETS = {
@@ -411,7 +430,10 @@ async def test_remote_validation_when_invalid_repos_raise():
     with patch.object(
         OpentextDocumentumClient,
         "api_call",
-        return_value=AsyncIterator([MOCK_REPOSITORIES]),
+        side_effect=[
+            AsyncIterator([JSONAsyncMock(MOCK_REPOSITORIES)]),
+            AsyncIterator([JSONAsyncMock({"entries": []})]),
+        ],
     ):
         async with create_opentext_documentum() as source:
             with pytest.raises(ConfigurableFieldValueError):
@@ -457,11 +479,10 @@ async def test_fetch_repositories_with_no_repos_available():
 async def test_fetch_configured_repositories():
     async with create_opentext_documentum() as source:
         source.repositories = ["Repo_1"]
-        mocked_repo = MOCK_REPOSITORIES["entries"][0]
         with patch.object(
             OpentextDocumentumClient,
             "paginated_api_call",
-            return_value=AsyncIterator([mocked_repo]),
+            return_value=AsyncIterator([MOCK_REPOSITORY]),
         ):
             async for repository in source.fetch_repositories():
                 assert repository == {
@@ -470,6 +491,7 @@ async def test_fetch_configured_repositories():
                     "type": "Repository",
                     "repository_name": "Repo_1",
                     "summary": "Repository Summary for Repo_1",
+                    "authors": ["Alex Wilber"],
                 }
 
 
@@ -488,7 +510,7 @@ async def test_fetch_cabinets():
                     "type": "Cabinet",
                     "cabinet_name": "Cabinet",
                     "definition": "Human Resources Cabinet",
-                    "authors": [{"name": "Alex Wilber"}],
+                    "authors": ["Alex Wilber"],
                 }
 
 

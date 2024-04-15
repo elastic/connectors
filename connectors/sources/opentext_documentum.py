@@ -73,8 +73,10 @@ class OpentextDocumentumClient:
         self.certificate = self.configuration["ssl_ca"]
 
         if self.ssl_enabled and self.certificate:
+            self._logger.debug("SSL is enabled")
             self.ssl_ctx = ssl_context(certificate=self.certificate)
         else:
+            self._logger.debug("SSL is not enabled")
             self.ssl_ctx = False
 
     def set_logger(self, logger_):
@@ -208,7 +210,7 @@ class OpentextDocumentumClient:
                 self._logger.warning(
                     f"Skipping data for type: {url_name}, page: {page}. Error: {exception}."
                 )
-                break
+                raise
 
 
 class OpentextDocumentumDataSource(BaseDataSource):
@@ -259,7 +261,6 @@ class OpentextDocumentumDataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "Repositories",
                 "order": 4,
-                "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
             "ssl_enabled": {
@@ -387,7 +388,7 @@ class OpentextDocumentumDataSource(BaseDataSource):
                         "type": "Repository",
                         "repository_name": repository.get("title"),
                         "summary": repository.get("summary"),
-                        "authors": page["author"],
+                        "authors": [author["name"] for author in page.get("author")],
                     }
         else:
             self._logger.info(
@@ -404,6 +405,9 @@ class OpentextDocumentumDataSource(BaseDataSource):
                         "type": "Repository",
                         "repository_name": repository.get("title"),
                         "summary": repository.get("summary"),
+                        "authors": [
+                            author["name"] for author in repository.get("author")
+                        ],
                     }
 
     async def fetch_cabinets(self, repository_name):
@@ -418,7 +422,7 @@ class OpentextDocumentumDataSource(BaseDataSource):
                     "type": "Cabinet",
                     "cabinet_name": cabinet.get("title"),
                     "definition": cabinet.get("definition"),
-                    "authors": page["author"],
+                    "authors": [author["name"] for author in page.get("author")],
                 }
 
     async def fetch_folders_recursively(self, repository_name):
