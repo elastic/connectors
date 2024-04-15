@@ -384,7 +384,7 @@ class Sink:
                             copy.copy(batch),
                             copy.copy(stats),
                         ),
-                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}"
+                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
                     )
                     batch.clear()
                     stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
@@ -583,7 +583,7 @@ class Extractor:
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
                         ),
-                        name=f"Extractor download #{download_num}"
+                        name=f"Extractor download #{download_num}",
                     )
 
                 else:
@@ -673,7 +673,7 @@ class Extractor:
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
                         ),
-                        name=f"Extractor download #{num_downloads}"
+                        name=f"Extractor download #{num_downloads}",
                     )
 
                 else:
