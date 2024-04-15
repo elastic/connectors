@@ -171,8 +171,6 @@ class Sink:
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
     async def _batch_bulk(self, operations, stats):
-        msg = "I think this will reproduce"
-        raise Exception(msg)
 
         # TODO: make this retry policy work with unified retry strategy
         @retryable(retries=self.max_retires, interval=self.retry_interval)
