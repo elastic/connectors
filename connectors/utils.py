@@ -422,8 +422,8 @@ class ConcurrentTasks:
                 f"Exception found for task {task.get_name()}: {task.exception()}",
             )
 
-    def _add_task(self, coroutine):
-        task = asyncio.create_task(coroutine())
+    def _add_task(self, coroutine, name=None):
+        task = asyncio.create_task(coroutine(), name=name)
         self.tasks.append(task)
         # _callback will be executed when the task is done,
         # i.e. the wrapped coroutine either returned a value, raised an exception, or the Task was cancelled.
@@ -431,16 +431,16 @@ class ConcurrentTasks:
         task.add_done_callback(functools.partial(self._callback))
         return task
 
-    async def put(self, coroutine):
+    async def put(self, coroutine, name=None):
         """Adds a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
         function will block and wait for a free slot.
         """
         await self._sem.acquire()
-        return self._add_task(coroutine)
+        return self._add_task(coroutine, name=name)
 
-    def try_put(self, coroutine):
+    def try_put(self, coroutine, name=None):
         """Tries to add a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
@@ -448,7 +448,7 @@ class ConcurrentTasks:
         """
 
         if self._sem.try_acquire():
-            return self._add_task(coroutine)
+            return self._add_task(coroutine, name=name)
         return None
 
     async def join(self, raise_on_error=False):

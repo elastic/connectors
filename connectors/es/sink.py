@@ -351,8 +351,10 @@ class Sink:
             stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
             bulk_size = 0
             overhead_size = None
+            batch_num = 0
 
             while True:
+                batch_num += 1
                 doc_size, doc = await self.fetch_doc()
                 if doc in (END_DOCS, FETCH_ERROR):
                     break
@@ -381,7 +383,8 @@ class Sink:
                             self._batch_bulk,
                             copy.copy(batch),
                             copy.copy(stats),
-                        )
+                        ),
+                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}"
                     )
                     batch.clear()
                     stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
@@ -529,6 +532,7 @@ class Extractor:
 
         self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
+        download_num = 0
         try:
             async for count, doc in aenumerate(generator):
                 self.counters.increment(DOCS_EXTRACTED)
@@ -574,10 +578,12 @@ class Extractor:
 
                 # if we need to call lazy_download we push it in lazy_downloads
                 if self.content_extraction_enabled and lazy_download is not None:
+                    download_num += 1
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
-                        )
+                        ),
+                        name=f"Extractor download #{download_num}"
                     )
 
                 else:
@@ -632,6 +638,7 @@ class Extractor:
 
         self._logger.info("Iterating on remote documents incrementally when possible")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
+        num_downloads = 0
         try:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
@@ -661,10 +668,12 @@ class Extractor:
 
                 # if we need to call lazy_download we push it in lazy_downloads
                 if self.content_extraction_enabled and lazy_download is not None:
+                    num_downloads += 1
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
-                        )
+                        ),
+                        name=f"Extractor download #{num_downloads}"
                     )
 
                 else:
