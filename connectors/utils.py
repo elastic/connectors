@@ -428,9 +428,7 @@ class ConcurrentTasks:
         # _callback will be executed when the task is done,
         # i.e. the wrapped coroutine either returned a value, raised an exception, or the Task was cancelled.
         # Ref: https://docs.python.org/3/library/asyncio-task.html#asyncio.Task.done
-        task.add_done_callback(
-            functools.partial(self._callback)
-        )
+        task.add_done_callback(functools.partial(self._callback))
         return task
 
     async def put(self, coroutine):
@@ -455,7 +453,11 @@ class ConcurrentTasks:
 
     async def join(self, raise_on_error=False):
         """Wait for all tasks to finish."""
-        await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
+        try:
+            await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
+        except:
+            self.cancel()
+            raise
 
     def raise_any_exception(self):
         for task in self.tasks:
@@ -464,6 +466,7 @@ class ConcurrentTasks:
                     logger.error(
                         f"Exception found for task {task.get_name()}: {task.exception()}",
                     )
+                    self.cancel()  # cancel all the pending tasks
                     raise task.exception()
 
     def cancel(self):

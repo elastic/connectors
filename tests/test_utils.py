@@ -458,13 +458,15 @@ async def test_concurrent_runner_join():
     assert len(results) == 4
     assert 3 in results
 
+
 @pytest.mark.asyncio
 async def test_concurrent_tasks_raise_any_exception():
     async def return_1():
         return 1
 
     async def raise_error():
-        raise Exception("This task had an error")
+        msg = "This task had an error"
+        raise Exception(msg)
 
     async def long_sleep_then_return_2():
         try:
@@ -474,16 +476,14 @@ async def test_concurrent_tasks_raise_any_exception():
             pass
 
     runner = ConcurrentTasks()
-    task1 = await runner.put(functools.partial(return_1))
+    await runner.put(functools.partial(return_1))
     await runner.put(functools.partial(raise_error))
-    task3 = await runner.put(functools.partial(long_sleep_then_return_2))
+    await runner.put(functools.partial(long_sleep_then_return_2))
 
     await asyncio.sleep(0)
     with pytest.raises(Exception):
         runner.raise_any_exception()
 
-    assert not task3.done() # We didn't have to `gather` or `wait`, we can check for exceptions while things are still running
-    task3.cancel() # just to clean it up
 
 @pytest.mark.asyncio
 async def test_concurrent_tasks_join_raise_on_error():
@@ -496,7 +496,8 @@ async def test_concurrent_tasks_join_raise_on_error():
         return 1
 
     async def raise_error():
-        raise Exception("This task had an error")
+        msg = "This task had an error"
+        raise Exception(msg)
 
     async def long_sleep_then_return_2():
         try:
@@ -513,10 +514,11 @@ async def test_concurrent_tasks_join_raise_on_error():
     task3.add_done_callback(functools.partial(_results_callback))
 
     with pytest.raises(Exception):
-        output = await runner.join(raise_on_error=True)
+        await runner.join(raise_on_error=True)
 
     assert len(results) == 1
     assert results[0] == 1
+
 
 @contextlib.contextmanager
 def temp_file(converter):

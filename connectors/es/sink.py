@@ -147,7 +147,7 @@ class Sink:
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
         self.retry_interval = retry_interval
-        self.sink_error = None
+        self.error = None
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
@@ -397,7 +397,7 @@ class Sink:
             if len(batch) > 0:
                 await self._batch_bulk(batch, stats)
         except Exception as e:
-            self.sink_error = e
+            self.error = e
             raise
 
 
@@ -437,7 +437,7 @@ class Extractor:
         self.index = index
         self.loop = asyncio.get_event_loop()
         self.counters = Counters()
-        self.extractor_error = None
+        self.error = None
         self.filter_ = filter_
         self.basic_rule_engine = (
             BasicRuleEngine(parse(filter_.basic_rules)) if sync_rules_enabled else None
@@ -501,7 +501,7 @@ class Extractor:
             # After that we indicate that we've encountered an error
             self.queue.clear()
             await self.put_doc(FETCH_ERROR)
-            self.extractor_error = ElasticsearchOverloadedError(e)
+            self.error = ElasticsearchOverloadedError(e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
@@ -511,7 +511,7 @@ class Extractor:
 
             self._logger.critical("Document extractor failed", exc_info=True)
             await self.put_doc(FETCH_ERROR)
-            self.extractor_error = e
+            self.error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
     async def _decorate_with_metrics_span(self, generator):
@@ -802,10 +802,9 @@ class SyncOrchestrator:
         self.loop = asyncio.get_event_loop()
         self._extractor = None
         self._extractor_task = None
-        self._extractor_error = None
         self._sink = None
         self._sink_task = None
-        self._sink_error = None
+        self.error = None
 
     async def close(self):
         await self.es_management_client.close()
@@ -897,10 +896,7 @@ class SyncOrchestrator:
         return (
             None
             if self._extractor is None
-            else self._extractor.extractor_error
-            or self._extractor_error
-            or self._sink.sink_error
-            or self._sink_error
+            else (self._extractor.error or self._sink.error or self.error)
         )
 
     async def async_bulk(
@@ -999,11 +995,11 @@ class SyncOrchestrator:
             self._logger.error(
                 f"Encountered an error in the sync's Sink: {task.get_name()}: {task.exception()}",
             )
-            self._sink_error = task.exception()
+            self.error = task.exception()
 
     def extractor_task_callback(self, task):
         if task.exception():
             self._logger.error(
                 f"Encountered an error in the sync's Extractor: {task.get_name()}: {task.exception()}",
             )
-            self._extractor_error = task.exception()
+            self.error = task.exception()

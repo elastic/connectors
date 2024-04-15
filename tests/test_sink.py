@@ -1416,7 +1416,7 @@ async def test_extractor_run_when_mem_full_is_raised():
     await extractor.run(doc_generator, JobType.FULL)
 
     queue.clear.assert_called_once()
-    assert isinstance(extractor.extractor_error, ElasticsearchOverloadedError)
+    assert isinstance(extractor.error, ElasticsearchOverloadedError)
 
 
 @pytest.mark.asyncio
