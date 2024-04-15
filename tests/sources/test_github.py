@@ -1668,3 +1668,23 @@ async def test_update_installation_id():
             get_installation_access_token.assert_awaited_with(
                 gh=ANY, installation_id=installation_id, app_id=ANY, private_key=ANY
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "auth_method, expected_await_count, expected_user",
+    [
+        (GITHUB_APP, 0, None),
+        (PERSONAL_ACCESS_TOKEN, 1, "foo"),
+    ],
+)
+async def test_logged_in_user(auth_method, expected_await_count, expected_user):
+    async with create_github_source(auth_method=auth_method) as source:
+        source.github_client.get_logged_in_user = AsyncMock(return_value="foo")
+        user = await source._logged_in_user()
+        assert user == expected_user
+        user = await source._logged_in_user()
+        assert user == expected_user
+        assert (
+            source.github_client.get_logged_in_user.await_count == expected_await_count
+        )

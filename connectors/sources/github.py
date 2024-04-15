@@ -1232,19 +1232,27 @@ class GitHubDataSource(BaseDataSource):
             and self.configuration["use_document_level_security"]
         )
 
+    async def _logged_in_user(self):
+        if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
+            return None
+        if self._user:
+            return self._user
+        self._user = await self.github_client.get_logged_in_user()
+        return self._user
+
     async def get_invalid_repos(self):
         try:
             self._logger.debug(
                 "Checking if there are any inaccessible repositories configured"
             )
             if self.configuration["repo_type"] == "other":
-                if not self._user:
-                    self._user = await self.github_client.get_logged_in_user()
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
-                    owner=self._user,
+                    owner=await self._logged_in_user(),
                 )
-                async for repo in self.github_client.get_user_repos(self._user):
+                async for repo in self.github_client.get_user_repos(
+                    await self._logged_in_user()
+                ):
                     self.user_repos[repo["nameWithOwner"]] = repo
                 invalid_repos = list(
                     set(configured_repos) - set(self.user_repos.keys())
@@ -1432,7 +1440,7 @@ class GitHubDataSource(BaseDataSource):
             # Converting the local repository names to username/repo_name format.
             if "/" not in repo_name:
                 owner = (
-                    self._user
+                    await self._logged_in_user()
                     if self.configuration["repo_type"] == "other"
                     else self.configuration["org_name"]
                 )
@@ -1461,14 +1469,13 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_repos(self):
         self._logger.info("Fetching repos")
         try:
-            if not self._user:
-                self._user = await self.github_client.get_logged_in_user()
-
             if (
                 WILDCARD in self.configured_repos
                 and self.configuration["repo_type"] == "other"
             ):
-                async for repo_object in self._get_personal_repos(self._user):
+                async for repo_object in self._get_personal_repos(
+                    await self._logged_in_user()
+                ):
                     yield repo_object
             elif (
                 WILDCARD in self.configured_repos
