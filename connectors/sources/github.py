@@ -12,7 +12,13 @@ from functools import cached_property, partial
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
+from gidgethub import RateLimitExceeded, sansio
+from gidgethub.abc import (
+    BadGraphQLRequest,
+    GraphQLAuthorizationFailure,
+)
 from gidgethub.aiohttp import GitHubAPI
+from gidgethub.apps import get_installation_access_token, get_jwt
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -617,34 +623,42 @@ class UnauthorizedException(Exception):
     pass
 
 
+class NoInstallationAccessTokenException(Exception):
+    pass
+
+
 class GitHubClient:
-    def __init__(self, configuration):
+    def __init__(
+        self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca
+    ):
         self._sleeps = CancellableSleeps()
-        self.configuration = configuration
         self._logger = logger
-        self.is_cloud = configuration["data_source"] == GITHUB_CLOUD
-        self.ssl_enabled = self.configuration["ssl_enabled"]
-        self.certificate = self.configuration["ssl_ca"]
-        self.github_url = f"{configuration['host'].rstrip('/')}/api"
-        self.repos = self.configuration["repositories"]
-        self.github_token = self.configuration["token"]
-        self.repo_type = self.configuration["repo_type"]
-        self.org_name = self.configuration["org_name"]
-        if self.ssl_enabled and self.certificate:
-            self.ssl_ctx = ssl_context(certificate=self.certificate)
-        else:
-            self.ssl_ctx = False
-        self.endpoints = {
-            "TREE": "/api/v3/repos/{repo_name}/git/trees/{default_branch}?recursive=1",
-            "COMMITS": "api/v3/repos/{repo_name}/commits?path={path}",
-        }
-        if self.is_cloud:
-            self.github_url = "https://api.github.com"
+        self.auth_method = auth_method
+        self.base_url = base_url
+        self.app_id = app_id if self.auth_method == GITHUB_APP else None
+        self.private_key = private_key if self.auth_method == GITHUB_APP else None
+        self._personal_access_token = (
+            token if self.auth_method == PERSONAL_ACCESS_TOKEN else None
+        )
+        self._installation_access_token = None
+
+        if self.base_url == "https://api.github.com":
             self.endpoints = {
                 "TREE": "/repos/{repo_name}/git/trees/{default_branch}?recursive=1",
                 "COMMITS": "/repos/{repo_name}/commits?path={path}",
             }
-        self.user = None
+        else:
+            self.endpoints = {
+                "TREE": "/api/v3/repos/{repo_name}/git/trees/{default_branch}?recursive=1",
+                "COMMITS": "api/v3/repos/{repo_name}/commits?path={path}",
+            }
+        if ssl_enabled and ssl_ca:
+            self.ssl_ctx = ssl_context(certificate=ssl_ca)
+        else:
+            self.ssl_ctx = False
+
+        # a variable to hold the current installation id, used to refresh the access token
+        self._installation_id = None
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -654,7 +668,9 @@ class GitHubClient:
 
     async def _get_retry_after(self, resource_type):
         current_time = time.time()
-        response = await self._get_client.getitem("/rate_limit")
+        response = await self._get_client.getitem(
+            "/rate_limit", oauth_token=self._access_token()
+        )
         reset = nested_get_from_dict(
             response, ["resources", resource_type, "reset"], default=current_time
         )
@@ -670,16 +686,47 @@ class GitHubClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
+    def _access_token(self):
+        if self.auth_method == PERSONAL_ACCESS_TOKEN:
+            return self._personal_access_token
+        if not self._installation_access_token:
+            raise NoInstallationAccessTokenException
+        return self._installation_access_token
+
+    # update the current installation id and re-generate access token
+    async def update_installation_id(self, installation_id):
+        self._logger.debug(
+            f"Updating installation id - new ID: {installation_id}, original ID: {self._installation_id}"
+        )
+        self._installation_id = installation_id
+        await self._update_installation_access_token()
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _update_installation_access_token(self):
+        try:
+            access_token_response = await get_installation_access_token(
+                gh=self._get_client,
+                installation_id=self._installation_id,
+                app_id=self.app_id,
+                private_key=self.private_key,
+            )
+            self._installation_access_token = access_token_response["token"]
+        except Exception:
+            self._logger.exception(
+                f"Failed to get access token for installation {self._installation_id}.",
+                exc_info=True,
+            )
+            raise
+
     @cached_property
     def _get_session(self):
-        headers = {
-            "Authorization": f"Bearer {self.github_token}",
-            "Accept": "application/vnd.github.raw",
-        }
         connector = aiohttp.TCPConnector(ssl=self.ssl_ctx)
         timeout = aiohttp.ClientTimeout(total=None)
         return aiohttp.ClientSession(
-            headers=headers,
             timeout=timeout,
             raise_for_status=True,
             connector=connector,
@@ -690,20 +737,21 @@ class GitHubClient:
         return GitHubAPI(
             session=self._get_session,
             requester="",
-            oauth_token=self.github_token,
-            base_url=self.github_url,
+            base_url=self.base_url,
         )
 
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=UnauthorizedException,
     )
-    async def post(self, query_data, need_headers=False):
+    async def graphql(self, query, variables=None):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
-            query_data: Dictionary comprising of query and variables for the GraphQL request.
+            query: Dictionary comprising of query for the GraphQL request.
+            variables: Dictionary comprising of query for the GraphQL request.
 
         Raises:
             UnauthorizedException: Unauthorized exception
@@ -712,37 +760,27 @@ class GitHubClient:
         Yields:
             dictionary: Client response
         """
-        url = f"{self.github_url}/graphql"
+        url = f"{self.base_url}/graphql"
         self._logger.debug(
-            f"Sending POST to {url} with body: '{json.dumps(query_data)}'"
+            f"Sending POST to {url} with query: '{json.dumps(query)}' and variables: '{json.dumps(variables)}'"
         )
         try:
-            async with self._get_session.post(
-                url=url, json=query_data, ssl=self.ssl_ctx
-            ) as response:
-                json_response = await response.json()
-                if not json_response.get("errors"):
-                    return (
-                        (json_response, response.headers)
-                        if need_headers
-                        else json_response
-                    )
-                for error in json_response.get("errors"):
-                    if (
-                        error.get("type") == "RATE_LIMITED"
-                        and "api rate limit exceeded" in error.get("message").lower()
-                    ):
-                        await self._put_to_sleep(resource_type="graphql")
-                msg = (
-                    f"Error while executing query. Exception: {json_response['errors']}"
+            self._get_client.oauth_token = self._access_token()
+            return await self._get_client.graphql(
+                query=query, endpoint=url, **variables or {}
+            )
+        except GraphQLAuthorizationFailure as exception:
+            if self.auth_method == GITHUB_APP:
+                self._logger.debug(
+                    f"The access token for installation #{self._installation_id} expired, Regenerating a new token."
                 )
-                raise Exception(msg)
-        except ClientResponseError as exception:
-            if exception.status == 401:
-                msg = "Your Github token is either expired or revoked. Please check again."
-                raise UnauthorizedException(msg) from exception
-            else:
+                await self._update_installation_access_token()
                 raise
+            msg = "Your Github token is either expired or revoked. Please check again."
+            raise UnauthorizedException(msg) from exception
+        except BadGraphQLRequest as exception:
+            if self.get_rate_limit_encountered(exception.status_code, exception):
+                await self._put_to_sleep(resource_type="graphql")
         except Exception:
             raise
 
@@ -750,6 +788,7 @@ class GitHubClient:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=UnauthorizedException,
     )
     async def get_github_item(self, resource):
         """Execute request using getitem method of GitHubAPI which is using REST API.
@@ -763,37 +802,42 @@ class GitHubClient:
         """
         self._logger.debug(f"Getting github item: {resource}")
         try:
-            return await self._get_client.getitem(url=resource)
+            return await self._get_client.getitem(
+                url=resource, oauth_token=self._access_token()
+            )
         except ClientResponseError as exception:
             if exception.status == 401:
+                if self.auth_method == GITHUB_APP:
+                    self._logger.debug(
+                        f"The access token for installation #{self._installation_id} expired, Regenerating a new token."
+                    )
+                    await self._update_installation_access_token()
+                    raise
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
-            elif self.get_rate_limit_encountered(exception.status, exception):
-                await self._put_to_sleep("core")
             else:
                 raise
+        except RateLimitExceeded:
+            await self._put_to_sleep("core")
         except Exception:
             raise
 
-    async def paginated_api_call(self, variables, query, keys):
+    async def paginated_api_call(self, query, variables, keys):
         """Make a paginated API call for fetching GitHub objects.
 
         Args:
-            variables (dict): Variables for Graphql API
             query (string): Graphql Query
+            variables (dict): Variables for Graphql API
             keys (list): List of fields to get pageInfo
 
         Yields:
             dict: dictionary containing response of GitHub.
         """
         while True:
-            query_data = {"query": query, "variables": variables}
-            response = await self.post(query_data=query_data)
+            response = await self.graphql(query=query, variables=variables)
             yield response
 
-            page_info = nested_get_from_dict(
-                response, ["data"] + keys + ["pageInfo"], default={}
-            )
+            page_info = nested_get_from_dict(response, keys + ["pageInfo"], default={})
             if not page_info.get("hasNextPage"):
                 break
             variables["cursor"] = page_info["endCursor"]  # pyright: ignore
@@ -801,83 +845,136 @@ class GitHubClient:
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
 
-    async def get_org_repos(self):
+    async def get_personal_access_token_scopes(self):
+        request_headers = sansio.create_headers(
+            self._get_client.requester,
+            accept=sansio.accept_format(),
+            oauth_token=self._access_token(),
+        )
+        _, headers, _ = await self._get_client._request(
+            "HEAD", self.base_url, request_headers
+        )
+        scopes = headers.get("X-OAuth-Scopes")
+        if not scopes or not scopes.strip():
+            self._logger.warning(f"Couldn't find 'X-OAuth-Scopes' in headers {headers}")
+            return set()
+        return {scope.strip() for scope in scopes.split(",")}
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _github_app_get(self, url):
+        self._logger.debug(f"Making a get request to GitHub: {url}")
+        try:
+            return await self._get_client._make_request(
+                "GET",
+                url,
+                {},
+                b"",
+                sansio.accept_format(),
+                get_jwt(app_id=self.app_id, private_key=self.private_key),
+            )
+        # we don't expect any 401 error as the jwt is freshly generated
+        except RateLimitExceeded:
+            await self._put_to_sleep("core")
+        except Exception:
+            raise
+
+    async def _github_app_paginated_get(self, url):
+        data, more = await self._github_app_get(url)  # pyright: ignore
+        if data:
+            for item in data:
+                yield item
+        if more:
+            async for item in self._github_app_paginated_get(more):  # pyright: ignore
+                yield item
+
+    async def get_installations(self):
+        async for installation in self._github_app_paginated_get(
+            url="/app/installations"
+        ):
+            if installation["suspended_at"]:
+                self._logger.debug(
+                    f"Skip installation '{installation['id']}' because it's suspended."
+                )
+                continue
+            yield installation
+
+    async def get_org_repos(self, org_name):
         repo_variables = {
-            "orgName": self.org_name,
+            "orgName": org_name,
             "cursor": None,
         }
         async for response in self.paginated_api_call(
-            variables=repo_variables,
             query=GithubQuery.ORG_REPOS_QUERY.value,
+            variables=repo_variables,
             keys=["organization", "repositories"],
         ):
             for repo in nested_get_from_dict(  # pyright: ignore
-                response, ["data", "organization", "repositories", "nodes"], default=[]
+                response, ["organization", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
-    async def get_user_repos(self):
+    async def get_user_repos(self, user):
         repo_variables = {
-            "login": self.user,
+            "login": user,
             "cursor": None,
         }
         async for response in self.paginated_api_call(
-            variables=repo_variables,
             query=GithubQuery.REPOS_QUERY.value,
+            variables=repo_variables,
             keys=["user", "repositories"],
         ):
             for repo in nested_get_from_dict(  # pyright: ignore
-                response, ["data", "user", "repositories", "nodes"], default=[]
+                response, ["user", "repositories", "nodes"], default=[]
             ):
                 yield repo
 
     async def get_foreign_repo(self, repo_name):
         owner, repo = self.get_repo_details(repo_name=repo_name)
         repo_variables = {"owner": owner, "repositoryName": repo}
-        query_data = {
-            "query": GithubQuery.REPO_QUERY.value,
-            "variables": repo_variables,
-        }
-        repo_response = await self.post(query_data=query_data)
-        return repo_response.get("data", {}).get(REPOSITORY_OBJECT)  # pyright: ignore
+        data = await self.graphql(
+            query=GithubQuery.REPO_QUERY.value, variables=repo_variables
+        )
+        return data.get(REPOSITORY_OBJECT)
 
-    async def _fetch_all_members(self):
+    async def _fetch_all_members(self, org_name):
         org_variables = {
-            "orgName": self.org_name,
+            "orgName": org_name,
             "cursor": None,
         }
         async for response in self.paginated_api_call(
-            variables=org_variables,
             query=GithubQuery.ORG_MEMBERS_QUERY.value,
+            variables=org_variables,
             keys=["organization", "membersWithRole"],
         ):
             for repo in nested_get_from_dict(  # pyright: ignore
                 response,
-                ["data", "organization", "membersWithRole", "edges"],
+                ["organization", "membersWithRole", "edges"],
                 default=[],
             ):
                 yield repo.get("node")
 
     async def get_logged_in_user(self):
-        query_data = {
-            "query": GithubQuery.USER_QUERY.value,
-            "variables": None,
-        }
-        response = await self.post(query_data=query_data)
-        return nested_get_from_dict(response, ["data", "viewer", "login"])
+        data = await self.graphql(query=GithubQuery.USER_QUERY.value)
+        return nested_get_from_dict(data, ["viewer", "login"])
 
     async def ping(self):
-        query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
-        await self.post(query_data=query_data)
+        if self.auth_method == GITHUB_APP:
+            await self._github_app_get(url="/app")
+        else:
+            await self.get_logged_in_user()
 
     async def close(self):
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
 
-    def bifurcate_repos(self, owner):
+    def bifurcate_repos(self, repos, owner):
         foreign_repos, configured_repos = [], []
-        for repo_name in self.repos:
+        for repo_name in repos:
             if repo_name not in ["", None]:
                 if "/" in repo_name:
                     foreign_repos.append(repo_name)
@@ -931,9 +1028,7 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
                 validation_message=e.message,
             )
 
-        self.source.github_client.repos = {
-            rule["repository"] for rule in advanced_rules
-        }
+        self.source.configured_repos = {rule["repository"] for rule in advanced_rules}
         invalid_repos = await self.source.get_invalid_repos()
 
         if len(invalid_repos) > 0:
@@ -964,12 +1059,24 @@ class GitHubDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.github_client = GitHubClient(configuration=configuration)
+        self.github_client = GitHubClient(
+            auth_method=self.configuration["auth_method"],
+            base_url="https://api.github.com"
+            if self.configuration["data_source"] == GITHUB_CLOUD
+            else f"{self.configuration['host'].rstrip('/')}/api",
+            app_id=self.configuration["app_id"],
+            private_key=self.configuration["private_key"],
+            token=self.configuration["token"],
+            ssl_enabled=self.configuration["ssl_enabled"],
+            ssl_ca=self.configuration["ssl_ca"],
+        )
+        self.configured_repos = self.configuration["repositories"]
         self.user_repos = {}
         self.org_repos = {}
         self.foreign_repos = {}
         self.prev_repos = []
         self.members = set()
+        self._user = None
 
     def _set_internal_logger(self):
         self.github_client.set_logger(self._logger)
@@ -1125,17 +1232,27 @@ class GitHubDataSource(BaseDataSource):
             and self.configuration["use_document_level_security"]
         )
 
+    async def _logged_in_user(self):
+        if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
+            return None
+        if self._user:
+            return self._user
+        self._user = await self.github_client.get_logged_in_user()
+        return self._user
+
     async def get_invalid_repos(self):
         try:
             self._logger.debug(
                 "Checking if there are any inaccessible repositories configured"
             )
-            self.github_client.user = await self.github_client.get_logged_in_user()
-            if self.github_client.repo_type == "other":
+            if self.configuration["repo_type"] == "other":
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
-                    owner=self.github_client.user
+                    repos=self.configured_repos,
+                    owner=await self._logged_in_user(),
                 )
-                async for repo in self.github_client.get_user_repos():
+                async for repo in self.github_client.get_user_repos(
+                    await self._logged_in_user()
+                ):
                     self.user_repos[repo["nameWithOwner"]] = repo
                 invalid_repos = list(
                     set(configured_repos) - set(self.user_repos.keys())
@@ -1153,10 +1270,13 @@ class GitHubDataSource(BaseDataSource):
                         invalid_repos.append(repo_name)
             else:
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
-                    owner=self.github_client.org_name
+                    repos=self.configured_repos,
+                    owner=self.configuration["org_name"],
                 )
                 configured_repos.extend(foreign_repos)
-                async for repo in self.github_client.get_org_repos():
+                async for repo in self.github_client.get_org_repos(
+                    self.configuration["org_name"]
+                ):
                     self.org_repos[repo["nameWithOwner"]] = repo
                 invalid_repos = list(set(configured_repos) - set(self.org_repos.keys()))
             return invalid_repos
@@ -1192,7 +1312,9 @@ class GitHubDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        async for user in self.github_client._fetch_all_members():
+        async for user in self.github_client._fetch_all_members(
+            self.configuration["org_name"]
+        ):
             yield await self._user_access_control_doc(user=user)
 
     async def _remote_validation(self):
@@ -1201,13 +1323,7 @@ class GitHubDataSource(BaseDataSource):
         Raises:
             ConfigurableFieldValueError: Insufficient privileges error.
         """
-        query_data = {"query": GithubQuery.USER_QUERY.value, "variables": None}
-        _, headers = await self.github_client.post(  # pyright: ignore
-            query_data=query_data, need_headers=True
-        )
-
-        scopes = headers.get("X-OAuth-Scopes", "")
-        scopes = {scope.strip() for scope in scopes.split(",")}
+        scopes = await self.github_client.get_personal_access_token_scopes()
         required_scopes = {"repo", "user", "read:org"}
 
         for scope in ["write:org", "admin:org"]:
@@ -1224,7 +1340,7 @@ class GitHubDataSource(BaseDataSource):
             msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
             raise ConfigurableFieldValueError(msg)
 
-        if self.github_client.repos != [WILDCARD]:
+        if WILDCARD not in self.configured_repos:
             invalid_repos = await self.get_invalid_repos()
             if invalid_repos:
                 msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
@@ -1284,10 +1400,10 @@ class GitHubDataSource(BaseDataSource):
             "comments": review.get("comments").get("nodes"),
         }
 
-    async def _get_personal_repos(self):
-        self._logger.info("Fetching personal repos")
+    async def _get_personal_repos(self, user):
+        self._logger.info(f"Fetching personal repos {user}")
         if not self.user_repos:
-            async for repo_object in self.github_client.get_user_repos():
+            async for repo_object in self.github_client.get_user_repos(user):
                 self.user_repos[repo_object["nameWithOwner"]] = repo_object
         for repo_object in self.user_repos.values():
             repo_object.update(
@@ -1299,10 +1415,10 @@ class GitHubDataSource(BaseDataSource):
             )
             yield repo_object
 
-    async def _get_org_repos(self):
-        self._logger.info("Fetching org repos")
+    async def _get_org_repos(self, org_name):
+        self._logger.info(f"Fetching org repos for {org_name}")
         if not self.org_repos:
-            async for repo_object in self.github_client.get_org_repos():
+            async for repo_object in self.github_client.get_org_repos(org_name):
                 self.org_repos[repo_object["nameWithOwner"]] = repo_object
         for repo_object in self.org_repos.values():
             repo_object.update(
@@ -1324,9 +1440,9 @@ class GitHubDataSource(BaseDataSource):
             # Converting the local repository names to username/repo_name format.
             if "/" not in repo_name:
                 owner = (
-                    self.github_client.user
-                    if self.github_client.repo_type == "other"
-                    else self.github_client.org_name
+                    await self._logged_in_user()
+                    if self.configuration["repo_type"] == "other"
+                    else self.configuration["org_name"]
                 )
                 repo_name = f"{owner}/{repo_name}"
             repo_object = self.foreign_repos.get(repo_name) or self.user_repos.get(
@@ -1335,14 +1451,11 @@ class GitHubDataSource(BaseDataSource):
 
             if not repo_object:
                 owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
-                query_data = {
-                    "query": GithubQuery.REPO_QUERY.value,
-                    "variables": {"owner": owner, "repositoryName": repo},
-                }
-                response = await self.github_client.post(query_data=query_data)
-                repo_object = nested_get_from_dict(
-                    response, ["data", REPOSITORY_OBJECT]
+                variables = {"owner": owner, "repositoryName": repo}
+                data = await self.github_client.graphql(
+                    query=GithubQuery.REPO_QUERY.value, variables=variables
                 )
+                repo_object = data.get(REPOSITORY_OBJECT)
             repo_object = repo_object.copy()
             repo_object.update(
                 {
@@ -1356,24 +1469,25 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_repos(self):
         self._logger.info("Fetching repos")
         try:
-            if self.github_client.user is None:
-                self.github_client.user = await self.github_client.get_logged_in_user()
-
             if (
-                self.github_client.repos == [WILDCARD]
-                and self.github_client.repo_type == "other"
+                WILDCARD in self.configured_repos
+                and self.configuration["repo_type"] == "other"
             ):
-                async for repo_object in self._get_personal_repos():
+                async for repo_object in self._get_personal_repos(
+                    await self._logged_in_user()
+                ):
                     yield repo_object
             elif (
-                self.github_client.repos == [WILDCARD]
-                and self.github_client.repo_type == "organization"
+                WILDCARD in self.configured_repos
+                and self.configuration["repo_type"] == "organization"
             ):
-                async for repo_object in self._get_org_repos():
+                async for repo_object in self._get_org_repos(
+                    self.configuration["org_name"]
+                ):
                     yield repo_object
             else:
                 async for repo_object in self._get_configured_repos(
-                    configured_repos=self.github_client.repos
+                    configured_repos=self.configured_repos
                 ):
                     yield repo_object
         except UnauthorizedException:
@@ -1388,10 +1502,10 @@ class GitHubDataSource(BaseDataSource):
         self, variables, object_type, query, field_type, keys
     ):
         async for response in self.github_client.paginated_api_call(
-            variables=variables, query=query, keys=keys
+            query=query, variables=variables, keys=keys
         ):
             yield nested_get_from_dict(
-                response, ["data", REPOSITORY_OBJECT, object_type, field_type, "nodes"]
+                response, [REPOSITORY_OBJECT, object_type, field_type, "nodes"]
             )
 
     async def _fetch_remaining_fields(
@@ -1490,12 +1604,12 @@ class GitHubDataSource(BaseDataSource):
                 "filter_query": filter_query,
             }
             async for response in self.github_client.paginated_api_call(
-                variables=pull_request_variables,
                 query=query,
+                variables=pull_request_variables,
                 keys=response_key,
             ):
                 for pull_request in nested_get_from_dict(  # pyright: ignore
-                    response, ["data"] + response_key + ["nodes"], default=[]
+                    response, response_key + ["nodes"], default=[]
                 ):
                     async for pull_request_doc in self._extract_pull_request(
                         pull_request=pull_request, owner=owner, repo=repo
@@ -1511,7 +1625,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _extract_issues(self, response, owner, repo, response_key):
         for issue in nested_get_from_dict(  # pyright: ignore
-            response, ["data"] + response_key + ["nodes"], default=[]
+            response, response_key + ["nodes"], default=[]
         ):
             issue.update(self._prepare_issue_doc(issue=issue))
             for field in ["comments", "labels", "assignees"]:
@@ -1548,8 +1662,8 @@ class GitHubDataSource(BaseDataSource):
                 "filter_query": filter_query,
             }
             async for response in self.github_client.paginated_api_call(
-                variables=issue_variables,
                 query=query,
+                variables=issue_variables,
                 keys=response_key,
             ):
                 async for issue in self._extract_issues(
@@ -1708,15 +1822,17 @@ class GitHubDataSource(BaseDataSource):
         }
         access_control = []
         if len(self.members) <= 0:
-            async for user in self.github_client._fetch_all_members():
+            async for user in self.github_client._fetch_all_members(
+                self.configuration["org_name"]
+            ):
                 self.members.add(user.get("id"))
         async for response in self.github_client.paginated_api_call(
-            variables=collaborator_variables,
             query=GithubQuery.COLLABORATORS_QUERY.value,
+            variables=collaborator_variables,
             keys=["repository", "collaborators"],
         ):
             for user in nested_get_from_dict(  # pyright: ignore
-                response, ["data", "repository", "collaborators", "edges"], default=[]
+                response, ["repository", "collaborators", "edges"], default=[]
             ):
                 user_id = user.get("node", {}).get("id")
                 user_name = user.get("node", {}).get("login")
