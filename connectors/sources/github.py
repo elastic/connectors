@@ -12,7 +12,7 @@ from functools import cached_property, partial
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
-from gidgethub import sansio
+from gidgethub import RateLimitExceeded, sansio
 from gidgethub.abc import (
     BadGraphQLRequest,
     GraphQLAuthorizationFailure,
@@ -668,7 +668,9 @@ class GitHubClient:
 
     async def _get_retry_after(self, resource_type):
         current_time = time.time()
-        response = await self._get_client.getitem("/rate_limit")
+        response = await self._get_client.getitem(
+            "/rate_limit", oauth_token=self._access_token()
+        )
         reset = nested_get_from_dict(
             response, ["resources", resource_type, "reset"], default=current_time
         )
@@ -813,10 +815,10 @@ class GitHubClient:
                     raise
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
-            elif self.get_rate_limit_encountered(exception.status, exception):
-                await self._put_to_sleep("core")
             else:
                 raise
+        except RateLimitExceeded:
+            await self._put_to_sleep("core")
         except Exception:
             raise
 
@@ -874,11 +876,9 @@ class GitHubClient:
                 sansio.accept_format(),
                 get_jwt(app_id=self.app_id, private_key=self.private_key),
             )
-        except ClientResponseError as exception:
-            if self.get_rate_limit_encountered(exception.status, exception):
-                await self._put_to_sleep("core")
-            else:
-                raise
+        # we don't expect any 401 error as the jwt is freshly generated
+        except RateLimitExceeded:
+            await self._put_to_sleep("core")
         except Exception:
             raise
 
