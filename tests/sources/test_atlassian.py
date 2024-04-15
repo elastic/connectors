@@ -138,7 +138,9 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 )
 @pytest.mark.asyncio
 async def test_active_atlassian_user(user_info, result):
-    async with create_source(JiraDataSource) as source:
+    async with create_source(
+        JiraDataSource, jira_url="https://127.0.0.1:8080/test"
+    ) as source:
         validation_result = AtlassianAccessControl(
             source, JiraClient
         ).is_active_atlassian_user(user_info)
