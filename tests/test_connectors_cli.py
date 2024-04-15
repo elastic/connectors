@@ -37,24 +37,18 @@ def mock_job_es_client():
         yield mock
 
 
-def test_version():
+@pytest.mark.parametrize("commands", [["-v"], ["--version"]])
+def test_version(commands):
     runner = CliRunner()
-    result = runner.invoke(cli, ["-v"])
+    result = runner.invoke(cli, commands)
     assert result.exit_code == 0
     assert result.output.strip() == __version__
 
 
-def test_help_page():
+@pytest.mark.parametrize("commands", [["-h"], ["--help"], []])
+def test_help_page(commands):
     runner = CliRunner()
-    result = runner.invoke(cli, ["--help"])
-    assert "Usage:" in result.output
-    assert "Options:" in result.output
-    assert "Commands:" in result.output
-
-
-def test_help_page_when_no_arguments():
-    runner = CliRunner()
-    result = runner.invoke(cli, [])
+    result = runner.invoke(cli, commands)
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output

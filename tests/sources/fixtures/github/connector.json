@@ -18,7 +18,7 @@
         "configuration": {
                 "data_source": {
                         "display": "dropdown",
-                        "label": "GitHub data source",
+                        "label": "Data source",
                         "options": [
                                 {"label": "GitHub Cloud", "value": "github_cloud"},
                                 {"label": "GitHub Server", "value": "github_server"}
@@ -29,14 +29,28 @@
                 },
                 "host": {
                         "depends_on": [{"field": "data_source", "value": "github_server"}],
-                        "label": "GitHub URL",
+                        "label": "Server URL",
                         "order": 2,
                         "type": "str",
                         "value": "http://127.0.0.1:9091"
                 },
-                "token": {
-                        "label": "GitHub Token",
+                "auth_method": {
+                        "display": "dropdown",
+                        "label": "Authentication method",
+                        "options": [
+                            {"label": "Personal access token", "value": "personal_access_token"},
+                            {"label": "GitHub App", "value": "github_app"}
+                        ],
                         "order": 3,
+                        "type": "str",
+                        "value": "personal_access_token"
+                },
+                "token": {
+                        "depends_on": [
+                            {"field": "auth_method", "value": "personal_access_token"}
+                        ],
+                        "label": "Token",
+                        "order": 4,
                         "sensitive": true,
                         "type": "str",
                         "value": "changeme"
@@ -48,22 +62,42 @@
                             {"label": "Organization", "value": "organization"},
                             {"label": "Other", "value": "other"}
                         ],
-                        "order": 4,
+                        "order": 5,
                         "tooltip": "The Document Level Security feature is not available for the Other Repository Type",
                         "type": "str",
                         "value": "other"
                 },
                 "org_name": {
-                        "depends_on": [{"field": "repo_type", "value": "organization"}],
+                        "depends_on": [
+                          {"field": "auth_method", "value": "personal_access_token"},
+                          {"field": "repo_type", "value": "organization"}
+                        ],
                         "label": "Organization Name",
-                        "order": 5,
+                        "order": 6,
                         "type": "str",
                         "value": "demo_org"
+                },
+                "app_id": {
+                        "depends_on": [{"field": "auth_method", "value": "github_app"}],
+                        "display": "numeric",
+                        "label": "App ID",
+                        "order": 7,
+                        "type": "int",
+                        "value": 0
+                },
+                "private_key": {
+                        "depends_on": [{"field": "auth_method", "value": "github_app"}],
+                        "display": "textarea",
+                        "label": "App private key",
+                        "order": 8,
+                        "sensitive": true,
+                        "type": "str",
+                        "value": "changeme"
                 },
                 "repositories": {
                         "display": "textarea",
                         "label": "List of repositories",
-                        "order": 6,
+                        "order": 9,
                         "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                         "type": "list",
                         "value": "*"
@@ -71,14 +105,14 @@
                 "ssl_enabled": {
                         "display": "toggle",
                         "label": "Enable SSL",
-                        "order": 7,
+                        "order": 10,
                         "type": "bool",
                         "value": false
                 },
                 "ssl_ca": {
                         "depends_on": [{"field": "ssl_enabled", "value": true}],
                         "label": "SSL certificate",
-                        "order": 8,
+                        "order": 11,
                         "type": "str",
                         "value": ""
                 },
@@ -86,7 +120,7 @@
                         "display_value": 3,
                         "display": "numeric",
                         "label": "Maximum retries per request",
-                        "order": 9,
+                        "order": 12,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -99,7 +133,7 @@
                         "display": "toggle",
                         "label": "Use text extraction service",
                         "options": [],
-                        "order": 10,
+                        "order": 13,
                         "required": true,
                         "sensitive": false,
                         "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
@@ -112,7 +146,7 @@
                         "display": "toggle",
                         "depends_on": [{"field": "repo_type", "value": "organization"}],
                         "label": "Enable document level security",
-                        "order": 11,
+                        "order": 14,
                         "tooltip": "Document level security ensures identities and permissions set in GitHub are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                         "type": "bool",
                         "value": false
