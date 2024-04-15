@@ -260,7 +260,7 @@ async def test_ping():
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection(mock_api_call):
+async def test_ping_when_failed_connection_raise_exception(mock_api_call):
     async with create_opentext_documentum() as source:
         with patch.object(
             OpentextDocumentumClient,
@@ -273,7 +273,7 @@ async def test_ping_for_failed_connection(mock_api_call):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status():
+async def test_get_with_429_status_should_retry():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -324,7 +324,7 @@ async def test_get_with_429_status_retry_after_header_string():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status_without_retry_after_header():
+async def test_get_with_429_status_without_retry_after_header_should_use_default_interval():
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -348,7 +348,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
-async def test_get_with_404_status():
+async def test_get_with_404_status_should_raise():
     error = ClientResponseError(None, None)
     error.status = 404
 
@@ -366,7 +366,7 @@ async def test_get_with_404_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_500_status():
+async def test_get_with_500_status_should_raise():
     error = ClientResponseError(None, None)
     error.status = 500
 
@@ -384,7 +384,7 @@ async def test_get_with_500_status():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["host_url", "username", "password", "repositories"])
-async def test_validate_config_missing_fields_then_raise(field):
+async def test_validate_when_config_missing_fields_raise(field):
     async with create_opentext_documentum() as source:
         source.configuration.get_field(field).value = ""
 
@@ -407,7 +407,7 @@ async def test_get_content():
                 assert response == EXPECTED_CONTENT
 
 
-async def test_remote_validation_with_invalid_repos():
+async def test_remote_validation_when_invalid_repos_raise():
     with patch.object(
         OpentextDocumentumClient,
         "api_call",
