@@ -1,7 +1,7 @@
 import asyncio
 from collections import OrderedDict
 
-from connectors.es.management_client import ESManagementClient
+from connectors.es.cli_client import CLIClient
 from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
@@ -11,6 +11,8 @@ from connectors.protocol import (
 )
 from connectors.source import get_source_klass
 from connectors.utils import iso_utc
+
+EVERYDAY_AT_MIDNIGHT = "0 0 0 * * ?"
 
 
 class IndexAlreadyExists(Exception):
@@ -22,14 +24,14 @@ class Connector:
         self.config = config
 
         # initialize ES client
-        self.es_management_client = ESManagementClient(self.config)
+        self.cli_client = CLIClient(self.config)
 
         self.connector_index = ConnectorIndex(self.config)
 
     async def list_connectors(self):
         # TODO move this on top
         try:
-            await self.es_management_client.ensure_exists(
+            await self.cli_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
 
@@ -40,7 +42,7 @@ class Connector:
         # TODO catch exceptions
         finally:
             await self.connector_index.close()
-            await self.es_management_client.close()
+            await self.cli_client.close()
 
     def service_type_configuration(self, source_class):
         source_klass = get_source_klass(source_class)
@@ -93,7 +95,7 @@ class Connector:
         except Exception as e:
             raise e
         finally:
-            await self.es_management_client.close()
+            await self.cli_client.close()
 
     async def __create_connector(
         self,
@@ -106,15 +108,13 @@ class Connector:
         from_index,
     ):
         try:
-            await self.es_management_client.ensure_exists(
+            await self.cli_client.ensure_exists(
                 indices=[CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX]
             )
             timestamp = iso_utc()
 
             if not from_index:
-                await self.es_management_client.create_content_index(
-                    index_name, language
-                )
+                await self.cli_client.create_content_index(index_name, language)
 
             api_key_id = None
             api_key_secret_id = None
@@ -178,14 +178,14 @@ class Connector:
                 "api_key_error": api_key_error,
             }
         finally:
-            await self.es_management_client.close()
+            await self.cli_client.close()
             await self.connector_index.close()
 
     def default_scheduling(self):
         return {
-            "access_control": {"enabled": False, "interval": "0 0 0 * * ?"},
-            "full": {"enabled": False, "interval": "0 0 0 * * ?"},
-            "incremental": {"enabled": False, "interval": "0 0 0 * * ?"},
+            "access_control": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
+            "full": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
+            "incremental": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
         }
 
     def default_filtering(self, timestamp):
@@ -253,11 +253,11 @@ class Connector:
                 ],
             },
         }
-        return await self.es_management_client.client.security.create_api_key(
+        return await self.cli_client.client.security.create_api_key(
             name=f"{name}-connector",
             role_descriptors=role_descriptors,
             metadata=metadata,
         )
 
     async def __store_api_key(self, encoded_api_key):
-        return await self.es_management_client.create_connector_secret(encoded_api_key)
+        return await self.cli_client.create_connector_secret(encoded_api_key)
