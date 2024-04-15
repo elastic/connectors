@@ -412,10 +412,20 @@ class NASDataSource(BaseDataSource):
                 self._logger.exception(
                     f"Error while scanning the path {current_path}. Error {exception}"
                 )
-            for file in directory_info:
-                yield self.format_document(file=file)
-                if file.is_dir():
-                    stack.append(file.path)
+                continue
+
+    def is_match_with_previous_rules(
+        self, file_path, indexed_rules, match_with_previous_rules
+    ):
+        # Check if the file is matched with any of the previous indexed rules
+        for indexed_rule in indexed_rules:
+            if not match_with_previous_rules:
+                match_with_previous_rules = glob.globmatch(
+                    file_path, indexed_rule, flags=glob.GLOBSTAR
+                )
+                if match_with_previous_rules:
+                    break
+        return match_with_previous_rules
 
     @retryable(
         retries=RETRIES,
@@ -423,7 +433,7 @@ class NASDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[SMBOSError, SMBException],
     )
-    async def traverse_directory_for_syncrule(self, path, glob_pattern):
+    async def traverse_directory_for_syncrule(self, path, glob_pattern, indexed_rules):
         self._logger.debug(
             "Fetching the directory tree from remote server and content of directory on path"
         )
@@ -441,6 +451,20 @@ class NASDataSource(BaseDataSource):
                         port=self.port,
                     ),
                 )
+                for file in directory_info:
+                    match_with_previous_rules = False
+                    if file.is_dir():
+                        stack.append(file.path)
+                    file_path = file.path.split("/", 1)[1].replace("\\", "/")
+                    is_file_match = glob.globmatch(
+                        file_path, glob_pattern, flags=glob.GLOBSTAR
+                    )
+                    match_with_previous_rules = self.is_match_with_previous_rules(
+                        file_path, indexed_rules, match_with_previous_rules
+                    )
+
+                    if not match_with_previous_rules and is_file_match:
+                        yield self.format_document(file=file)
             except SMBConnectionClosed as exception:
                 self._logger.exception(
                     f"Connection got closed. Error {exception}. Registering new session"
@@ -453,15 +477,12 @@ class NASDataSource(BaseDataSource):
                 )
                 continue
 
-            for file in directory_info:
-                if file.is_dir():
-                    stack.append(file.path)
-                file_path = file.path.split("/", 1)[1].replace("\\", "/")
-                is_file_match = glob.globmatch(
-                    file_path, glob_pattern, flags=glob.GLOBSTAR
-                )
-                if is_file_match:
-                    yield self.format_document(file=file)
+    def get_base_path(self, pattern):
+        wildcards = ["*", "?", "[", "{", "!", "^"]
+        for i, char in enumerate(pattern):
+            if char in wildcards:
+                return rf"\\{self.server_ip}/{pattern[:i].rsplit('/', 1)[0]}/"
+        return rf"\\{self.server_ip}/{pattern}"
 
     async def fetch_filtered_directory(self, advanced_rules):
         """
@@ -477,22 +498,26 @@ class NASDataSource(BaseDataSource):
             "Fetching the matched directory/files using the list of advanced rules configured"
         )
         unmatched_rules = set()
+        indexed_rules = set()
         for rule in advanced_rules:
             rule_matched = False
             glob_pattern = rule["pattern"].replace("\\", "/")
+            base_path = self.get_base_path(pattern=glob_pattern)
             async for document in self.traverse_directory_for_syncrule(
-                path=rf"\\{self.server_ip}/{self.drive_path}",
+                path=base_path,
                 glob_pattern=glob_pattern,
+                indexed_rules=indexed_rules,
             ):
                 yield document
                 rule_matched = True
 
             if not rule_matched:
                 unmatched_rules.add(rule["pattern"])
+            indexed_rules.add(glob_pattern)
 
         if len(unmatched_rules) > 0:
             self._logger.warning(
-                f"Following advanced rules do not match with any path present in network drive: {unmatched_rules}"
+                f"Following advanced rules do not match with any path present in network drive or the rule is similar to another rule: {unmatched_rules}"
             )
 
     async def validate_config(self):

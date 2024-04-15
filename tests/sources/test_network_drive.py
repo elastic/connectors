@@ -564,7 +564,16 @@ class MockFile:
 @pytest.mark.parametrize(
     "filtering",
     [
-        Filter({ADVANCED_SNIPPET: {"value": [{"pattern": "training/python/**"}]}}),
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"pattern": "training/python/**"},
+                        {"pattern": "training/**"},
+                    ]
+                }
+            }
+        ),
     ],
 )
 @mock.patch("smbclient.register_session")
@@ -1072,7 +1081,7 @@ async def test_traverse_diretory_smb_timeout_for_sync_rule(dir_mock):
                 "type": "file",
             }
             async for file in source.traverse_directory_for_syncrule(
-                path=path, glob_pattern="/a*"
+                path=path, glob_pattern="/a*", indexed_rules=[]
             ):
                 assert file == expected_output
 
@@ -1087,6 +1096,6 @@ async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock):
 
         # Execute
         async for file in source.traverse_directory_for_syncrule(
-            path=path, glob_pattern="/a*"
+            path=path, glob_pattern="/a*", indexed_rules=[]
         ):
             assert file == []
