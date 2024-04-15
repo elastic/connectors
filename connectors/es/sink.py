@@ -1005,13 +1005,13 @@ class SyncOrchestrator:
     def sink_task_callback(self, task):
         if task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's Sink: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {Sink.__class__.__name__}: {task.get_name()}: {task.exception()}",
             )
             self.error = task.exception()
 
     def extractor_task_callback(self, task):
         if task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's Extractor: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {Extractor.__class__.__name__}: {task.get_name()}: {task.exception()}",
             )
             self.error = task.exception()
