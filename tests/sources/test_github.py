@@ -1655,12 +1655,16 @@ async def test_github_app_paginated_get():
 async def test_update_installation_id():
     async with create_github_source(auth_method=GITHUB_APP) as source:
         jwt_response = {"token": "changeme"}
+        installation_id = 123
         with patch(
             "connectors.sources.github.get_installation_access_token",
             return_value=jwt_response,
-        ):
+        ) as get_installation_access_token:
             assert source.github_client._installation_id is None
             assert source.github_client._installation_access_token is None
-            await source.github_client.update_installation_id(123)
-            assert source.github_client._installation_id == 123
+            await source.github_client.update_installation_id(installation_id)
+            assert source.github_client._installation_id == installation_id
             assert source.github_client._installation_access_token == "changeme"
+            get_installation_access_token.assert_awaited_with(
+                gh=ANY, installation_id=installation_id, app_id=ANY, private_key=ANY
+            )

@@ -763,6 +763,7 @@ class GitHubClient:
             f"Sending POST to {url} with query: '{json.dumps(query)}' and variables: '{json.dumps(variables)}'"
         )
         try:
+            self._get_client.oauth_token = self._access_token()
             return await self._get_client.graphql(
                 query=query, endpoint=url, **variables or {}
             )
@@ -846,13 +847,14 @@ class GitHubClient:
         request_headers = sansio.create_headers(
             self._get_client.requester,
             accept=sansio.accept_format(),
-            oauth_token=self.github_token,
+            oauth_token=self._access_token(),
         )
         _, headers, _ = await self._get_client._request(
-            "HEAD", self.github_url, request_headers
+            "HEAD", self.base_url, request_headers
         )
         scopes = headers.get("X-OAuth-Scopes")
         if not scopes or not scopes.strip():
+            self._logger.warning(f"Couldn't find 'X-OAuth-Scopes' in headers {headers}")
             return set()
         return {scope.strip() for scope in scopes.split(",")}
 
