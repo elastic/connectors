@@ -46,7 +46,7 @@ services:
   graphql:
     build: 
       context: ../../../../
-      dockerfile: Dockerfile.ftest
+      dockerfile: ${DOCKERFILE_FTEST_PATH}
     command: bin/python tests/sources/fixtures/graphql/fixture.py
     ports:
       - "9094:9094"
