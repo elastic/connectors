@@ -1,3 +1,6 @@
+env:
+  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+
 steps:
   - label: "🔨 MySQL"
     command:
