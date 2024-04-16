@@ -1077,6 +1077,17 @@ class GitHubDataSource(BaseDataSource):
         self.prev_repos = []
         self.members = set()
         self._user = None
+        # A dict caches GitHub App installation info, where the key is the org name/user login,
+        # and the value is another dict contains installation id and repo details (lazy-loaded)
+        # An example:
+        # {
+        #     "org_name": {
+        #         "installation_id": 123,
+        #         "repos": {
+        #             "org_name/repo_name": {}
+        #         }
+        #     }
+        # }
         self._installations = {}
 
     def _set_internal_logger(self):
@@ -1251,7 +1262,8 @@ class GitHubDataSource(BaseDataSource):
             return await self._get_invalid_repos_for_personal_access_token()
 
     async def _get_invalid_repos_for_github_app(self):
-        # A github app can be installed on multiple orgs/personal accounts, so the OWNER in 'OWNER/REPO' is mandatory
+        # A github app can be installed on multiple orgs/personal accounts,
+        # so the repo must be configured in the format of 'OWNER/REPO', any other format will be rejected
         invalid_repos = set(
             filter(
                 lambda repo: repo
@@ -1261,7 +1273,7 @@ class GitHubDataSource(BaseDataSource):
             )
         )
 
-        await self._get_installations()
+        await self._fetch_installations()
         for repo in self.configured_repos:
             if repo in invalid_repos:
                 continue
@@ -1462,7 +1474,10 @@ class GitHubDataSource(BaseDataSource):
             "comments": review.get("comments").get("nodes"),
         }
 
-    async def _get_installations(self):
+    async def _fetch_installations(self):
+        """Fetches GitHub App installations, and populates instance variable self._installations
+        Only populates Organization installations when repo_type is organization, and only populates User installations when repo_type is other
+        """
         if self.configuration["auth_method"] != GITHUB_APP:
             return {}
         if self._installations:

@@ -683,6 +683,12 @@ MOCK_ORG_REPOS = {
         }
     }
 }
+MOCK_INSTALLATIONS = [
+    {"id": 1, "account": {"login": "org_1", "type": "Organization"}},
+    {"id": 2, "account": {"login": "org_2", "type": "Organization"}},
+    {"id": 3, "account": {"login": "user_1", "type": "User"}},
+    {"id": 4, "account": {"login": "user_2", "type": "User"}},
+]
 
 
 @asynccontextmanager
@@ -991,14 +997,7 @@ async def test_get_invalid_repos_organization_for_github_app(
         auth_method=GITHUB_APP, repos=configured_repos, repo_type=repo_type
     ) as source:
         source.github_client.get_installations = Mock(
-            return_value=AsyncIterator(
-                [
-                    {"id": 1, "account": {"login": "org_1", "type": "Organization"}},
-                    {"id": 2, "account": {"login": "org_2", "type": "Organization"}},
-                    {"id": 3, "account": {"login": "user_1", "type": "User"}},
-                    {"id": 4, "account": {"login": "user_2", "type": "User"}},
-                ]
-            )
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
         )
         source.github_client._installation_access_token = "changeme"
         source.github_client._update_installation_access_token = AsyncMock()
@@ -1681,7 +1680,7 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes):
 
 
 @pytest.mark.asyncio
-async def test_get_installations():
+async def test_github_client_get_installations():
     async with create_github_source(auth_method=GITHUB_APP) as source:
         mock_response = [
             {
@@ -1766,3 +1765,46 @@ async def test_logged_in_user(auth_method, expected_await_count, expected_user):
         assert (
             source.github_client.get_logged_in_user.await_count == expected_await_count
         )
+
+
+@pytest.mark.asyncio
+async def test_fetch_installations_personal_access_token():
+    async with create_github_source() as source:
+        source.github_client.get_installations = AsyncMock()
+        await source._fetch_installations()
+        assert len(source._installations) == 0
+        source.github_client.get_installations.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fetch_installations_withp_prepopulated_installations():
+    prepopulated_installations = {"fake_org": {"installation_id": 1}}
+    async with create_github_source(auth_method=GITHUB_APP) as source:
+        source.github_client.get_installations = AsyncMock()
+        source._installations = prepopulated_installations
+        await source._fetch_installations()
+        assert source._installations == prepopulated_installations
+        source.github_client.get_installations.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repo_type, expected_installations",
+    [
+        (
+            "organization",
+            {"org_1": {"installation_id": 1}, "org_2": {"installation_id": 2}},
+        ),
+        ("other", {"user_1": {"installation_id": 3}, "user_2": {"installation_id": 4}}),
+    ],
+)
+async def test_fetch_installations(repo_type, expected_installations):
+    async with create_github_source(
+        auth_method=GITHUB_APP, repo_type=repo_type
+    ) as source:
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        await source._fetch_installations()
+        assert source._installations == expected_installations
+        source.github_client.get_installations.assert_called_once()
