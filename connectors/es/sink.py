@@ -55,7 +55,7 @@ from connectors.utils import (
 )
 
 __all__ = ["SyncOrchestrator"]
-FETCH_ERROR = "FETCH_ERROR"
+EXTRACTOR_ERROR = "EXTRACTOR_ERROR"
 END_DOCS = "END_DOCS"
 
 OP_INDEX = "index"
@@ -340,7 +340,7 @@ class Sink:
         """Creates batches of bulk calls given a queue of items.
 
         An item is a (size, object) tuple. Exits when the
-        item is the `END_DOCS` or `FETCH_ERROR` string.
+        item is the `END_DOCS` or `EXTRACTOR_ERROR` string.
 
         Bulk calls are executed concurrently with a maximum number of concurrent
         requests.
@@ -356,7 +356,7 @@ class Sink:
             while True:
                 batch_num += 1
                 doc_size, doc = await self.fetch_doc()
-                if doc in (END_DOCS, FETCH_ERROR):
+                if doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
                 operation = doc["_op_type"]
                 doc_id = doc["_id"]
@@ -500,7 +500,7 @@ class Extractor:
             # We clear the queue as we could not actually ingest anything.
             # After that we indicate that we've encountered an error
             self.queue.clear()
-            await self.put_doc(FETCH_ERROR)
+            await self.put_doc(EXTRACTOR_ERROR)
             self.error = ElasticsearchOverloadedError(e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
@@ -510,7 +510,7 @@ class Extractor:
                 return
 
             self._logger.critical("Document extractor failed", exc_info=True)
-            await self.put_doc(FETCH_ERROR)
+            await self.put_doc(EXTRACTOR_ERROR)
             self.error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
