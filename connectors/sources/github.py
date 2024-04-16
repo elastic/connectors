@@ -1381,7 +1381,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _get_orgs(self):
         if self.configuration["auth_method"] == GITHUB_APP:
-            await self._get_installations()
+            await self._fetch_installations()
             for org_name, org_details in self._installations.items():
                 await self.github_client.update_installation_id(
                     org_details["installation_id"]
