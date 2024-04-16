@@ -5,6 +5,7 @@
 #
 import json
 from unittest.mock import ANY
+from urllib import parse
 
 import pytest
 
@@ -18,7 +19,7 @@ from connectors.sources.atlassian import (
 )
 from connectors.sources.jira import JiraClient, JiraDataSource
 from tests.sources.support import create_source
-from urllib import parse
+
 
 @pytest.mark.parametrize(
     "advanced_rules, expected_validation_result",
@@ -147,6 +148,7 @@ async def test_active_atlassian_user(user_info, result):
         ).is_active_atlassian_user(user_info)
         assert validation_result == result
 
+
 user_response = """
 [
   {
@@ -181,19 +183,27 @@ user_response = """
   }
 ]
 """
+
+
 @pytest.mark.asyncio
 async def test_fetch_all_users(mock_responses):
     jira_host = "https://127.0.0.1:8080"
     users_path = "rest/api/3/users/search"
 
-    mock_responses.get(f"{parse.urljoin(jira_host, users_path)}?startAt=0", status=200, payload=json.loads(user_response))
-    mock_responses.get(f"{parse.urljoin(jira_host, users_path)}?startAt=50", status=200, payload=[])
-    async with create_source(
-        JiraDataSource, jira_url=jira_host
-    ) as source:
+    mock_responses.get(
+        f"{parse.urljoin(jira_host, users_path)}?startAt=0",
+        status=200,
+        payload=json.loads(user_response),
+    )
+    mock_responses.get(
+        f"{parse.urljoin(jira_host, users_path)}?startAt=50", status=200, payload=[]
+    )
+    async with create_source(JiraDataSource, jira_url=jira_host) as source:
         access_control = AtlassianAccessControl(source, source.jira_client)
         results = []
-        async for response in access_control.fetch_all_users(url=parse.urljoin(jira_host, users_path)):
+        async for response in access_control.fetch_all_users(
+            url=parse.urljoin(jira_host, users_path)
+        ):
             for user in response:
                 results.append(user)
 
