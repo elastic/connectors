@@ -1678,12 +1678,7 @@ async def test_get_access_control_github_app():
     ) as source:
         source._dls_enabled = Mock(return_value=True)
         source.github_client.get_installations = Mock(
-            return_value=AsyncIterator(
-                [
-                    {"id": 1, "account": {"login": "org_1", "type": "Organization"}},
-                    {"id": 2, "account": {"login": "org_2", "type": "Organization"}},
-                ]
-            )
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
         )
         source.github_client._installation_access_token = "changeme"
         source.github_client._fetch_all_members = Mock(
