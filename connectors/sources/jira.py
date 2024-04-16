@@ -834,6 +834,7 @@ class JiraDataSource(BaseDataSource):
         document = {
             "_id": f"project-{project['id']}",
             "_timestamp": timestamp,
+            "Key": project.get("key"),
             "Type": "Project",
             "Project": project,
         }
@@ -878,6 +879,7 @@ class JiraDataSource(BaseDataSource):
             document = {
                 "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
                 "_timestamp": response_fields.get("updated"),
+                "Key": issue_metadata.get("key"),
                 "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
             }
