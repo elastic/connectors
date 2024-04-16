@@ -963,26 +963,33 @@ class ConfluenceDataSource(BaseDataSource):
             document (dict): Formatted document of page/blogpost
             access_control (list): List of identities which have access to document
         """
-        async for attachment, download_link in self.fetch_attachments(
-            content_id=document.get("_id"),
-            parent_name=document.get("title"),
-            parent_space=document.get("space"),
-            parent_type=document.get("type"),
-        ):
-            attachment = self._decorate_with_access_control(
-                document=attachment, access_control=access_control
-            )
-            await self.queue.put(
-                (  # pyright: ignore
-                    attachment,
-                    partial(
-                        self.download_attachment,
-                        download_link[1:],
-                        copy(attachment),
-                    ),
+        try:
+            async for attachment, download_link in self.fetch_attachments(
+                content_id=document.get("_id"),
+                parent_name=document.get("title"),
+                parent_space=document.get("space"),
+                parent_type=document.get("type"),
+            ):
+                attachment = self._decorate_with_access_control(
+                    document=attachment, access_control=access_control
                 )
+                await self.queue.put(
+                    (  # pyright: ignore
+                        attachment,
+                        partial(
+                            self.download_attachment,
+                            download_link[1:],
+                            copy(attachment),
+                        ),
+                    )
+                )
+        except Exception as exception:
+            self._logger.exception(
+                f"Error while fetching attachments of {document.get('title')} with id {document.get('_id')}, type: {document.get('type')} in space {document.get('space')}: {exception}"
             )
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
+            raise
+        finally:
+            await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     def format_space(self, space):
         space_url = os.path.join(
@@ -999,63 +1006,20 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
-        self._logger.info("Fetching spaces and its permissions from Confluence")
-        async for space_metadata in self.confluence_client.fetch_spaces():
-            space = self.format_space(space=space_metadata)
-            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-                access_control = list(
-                    self._get_access_control_from_permission(
-                        permissions=space_metadata.get("permissions", []),
-                        target_type=SPACE,
-                    )
-                )
-            else:
-                permission = await self.fetch_server_space_permission(
-                    space_key=space_metadata.get("key")
-                )
-                access_control = list(
-                    self.get_permission(
-                        permission=permission.get("permissions", {}).get(
-                            "VIEWSPACE", {}
-                        )
-                    )
-                )
-            space = self._decorate_with_access_control(
-                document=space, access_control=access_control
-            )
-            await self.queue.put((space, None))  # pyright: ignore
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
-
-    async def _page_blog_coro(self, api_query, target_type):
-        """Coroutine to add pages/blogposts to Queue
-
-        Args:
-            api_query (str): API Query Parameters for fetching page/blogpost
-            target_type (str): Type of object to filter permission
-        """
-        self._logger.info(f"Fetching {target_type} and its permissions from Confluence")
-        async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
-            api_query
-        ):
-            # Pages and blog posts are open to viewing or editing by default,
-            # but you can restrict either viewing or editing to certain users or groups.
-            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-                access_control = list(self._extract_identities(response=restrictions))
-                if len(access_control) == 0:
-                    # Every space has its own independent set of permissions, managed by the space admin(s),
-                    # which determine the access settings for different users and groups.
+        try:
+            self._logger.info("Fetching spaces and its permissions from Confluence")
+            async for space_metadata in self.confluence_client.fetch_spaces():
+                space = self.format_space(space=space_metadata)
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                     access_control = list(
                         self._get_access_control_from_permission(
-                            permissions=permissions, target_type=target_type
+                            permissions=space_metadata.get("permissions", []),
+                            target_type=SPACE,
                         )
                     )
-            else:
-                access_control = list(
-                    self._extract_identities_for_datacenter(response=restrictions)
-                )
-                if len(access_control) == 0:
+                else:
                     permission = await self.fetch_server_space_permission(
-                        space_key=space_key
+                        space_key=space_metadata.get("key")
                     )
                     access_control = list(
                         self.get_permission(
@@ -1064,16 +1028,75 @@ class ConfluenceDataSource(BaseDataSource):
                             )
                         )
                     )
-            document = self._decorate_with_access_control(
-                document=document, access_control=access_control
-            )
-            await self.queue.put((document, None))  # pyright: ignore
-            if attachment_count > 0:
-                await self.fetchers.put(
-                    partial(self._attachment_coro, copy(document), access_control)
+                space = self._decorate_with_access_control(
+                    document=space, access_control=access_control
                 )
-                self.fetcher_count += 1
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
+                await self.queue.put((space, None))  # pyright: ignore
+        except Exception as exception:
+            self._logger.exception(f"Error while fetching spaces: {exception}")
+            raise
+        finally:
+            await self.queue.put(END_SIGNAL)  # pyright: ignore
+
+    async def _page_blog_coro(self, api_query, target_type):
+        """Coroutine to add pages/blogposts to Queue
+
+        Args:
+            api_query (str): API Query Parameters for fetching page/blogpost
+            target_type (str): Type of object to filter permission
+        """
+        try:
+            self._logger.info(
+                f"Fetching {target_type} and its permissions from Confluence"
+            )
+            async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
+                api_query
+            ):
+                # Pages and blog posts are open to viewing or editing by default,
+                # but you can restrict either viewing or editing to certain users or groups.
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+                    access_control = list(
+                        self._extract_identities(response=restrictions)
+                    )
+                    if len(access_control) == 0:
+                        # Every space has its own independent set of permissions, managed by the space admin(s),
+                        # which determine the access settings for different users and groups.
+                        access_control = list(
+                            self._get_access_control_from_permission(
+                                permissions=permissions, target_type=target_type
+                            )
+                        )
+                else:
+                    access_control = list(
+                        self._extract_identities_for_datacenter(response=restrictions)
+                    )
+                    if len(access_control) == 0:
+                        permission = await self.fetch_server_space_permission(
+                            space_key=space_key
+                        )
+                        access_control = list(
+                            self.get_permission(
+                                permission=permission.get("permissions", {}).get(
+                                    "VIEWSPACE", {}
+                                )
+                            )
+                        )
+                document = self._decorate_with_access_control(
+                    document=document, access_control=access_control
+                )
+                await self.queue.put((document, None))  # pyright: ignore
+                if attachment_count > 0:
+                    await self.fetchers.put(
+                        partial(self._attachment_coro, copy(document), access_control)
+                    )
+                    self.fetcher_count += 1
+        except Exception as exception:
+            self._logger.exception(
+                f"Error while fetching pages and blogposts with query '{api_query}': {exception}"
+            )
+            raise
+        finally:
+            await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _consumer(self):
         """Async generator to process entries of the queue
