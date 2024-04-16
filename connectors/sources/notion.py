@@ -194,10 +194,12 @@ class NotionClient:
                     async for record in self.query_database(block.get("id")):
                         yield record
         except APIResponseError as error:
-            if error.code == "validation_error":
+            if error.code == "validation_error" and "external_object" in str(error):
                 self._logger.warning(
-                    f"Skipping children of block with id: {block_id} as not supported by API : {error}"
+                    f"Encountered external object with id: {block_id}. Skipping : {error}"
                 )
+            else:
+                raise
 
     async def fetch_by_query(self, query):
         async for document in self.async_iterate_paginated_api(
