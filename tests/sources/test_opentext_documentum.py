@@ -15,10 +15,12 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.opentext_documentum import (
+    PING,
     InternalServerError,
     NotFound,
     OpentextDocumentumClient,
     OpentextDocumentumDataSource,
+    ServerConnectionError,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -397,6 +399,37 @@ async def test_get_with_500_status_should_raise():
             with pytest.raises(InternalServerError):
                 async for response in source.opentext_client.api_call(
                     url="http://localhost:1000/err"
+                ):
+                    await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_server_connection_error_raise():
+    async with create_opentext_documentum() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=ServerConnectionError(),
+        ):
+            with pytest.raises(ServerConnectionError):
+                async for response in source.opentext_client.api_call(
+                    url="http://localhost:1000/err"
+                ):
+                    await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_paginated_get_with_exception_raise():
+    async with create_opentext_documentum() as source:
+        with patch.object(
+            OpentextDocumentumClient,
+            "api_call",
+            side_effect=Exception(),
+        ):
+            with pytest.raises(Exception):
+                async for response in source.opentext_client.paginated_api_call(
+                    url_name=PING
                 ):
                     await response.json()
 
