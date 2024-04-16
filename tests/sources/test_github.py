@@ -964,6 +964,84 @@ async def test_get_invalid_repos_organization():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repo_type, configured_repos, expected_invalid_repos",
+    [
+        (
+            "organization",
+            "a_repo_without_owner, invalid/repo/format",
+            {"a_repo_without_owner", "invalid/repo/format"},
+        ),
+        (
+            "organization",
+            "org_1/repo_1, org_2/repo_2, user_1/repo_2, org_1/fake_repo",
+            {"user_1/repo_2", "org_1/fake_repo"},
+        ),
+        (
+            "other",
+            "user_1/repo_1, user_2/repo_2, org_1/repo_2, user_1/fake_repo",
+            {"org_1/repo_2", "user_1/fake_repo"},
+        ),
+    ],
+)
+async def test_get_invalid_repos_organization_for_github_app(
+    repo_type, configured_repos, expected_invalid_repos
+):
+    async with create_github_source(
+        auth_method=GITHUB_APP, repos=configured_repos, repo_type=repo_type
+    ) as source:
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(
+                [
+                    {"id": 1, "account": {"login": "org_1", "type": "Organization"}},
+                    {"id": 2, "account": {"login": "org_2", "type": "Organization"}},
+                    {"id": 3, "account": {"login": "user_1", "type": "User"}},
+                    {"id": 4, "account": {"login": "user_2", "type": "User"}},
+                ]
+            )
+        )
+        source.github_client._installation_access_token = "changeme"
+        source.github_client._update_installation_access_token = AsyncMock()
+        source.github_client.get_org_repos = Mock(
+            side_effect=(
+                lambda owner: AsyncIterator(
+                    [
+                        {"nameWithOwner": "org_1/repo_1"},
+                        {"nameWithOwner": "org_1/repo_2"},
+                    ]
+                )
+                if owner == "org_1"
+                else AsyncIterator(
+                    [
+                        {"nameWithOwner": "org_2/repo_1"},
+                        {"nameWithOwner": "org_2/repo_2"},
+                    ]
+                )
+            )
+        )
+        source.github_client.get_user_repos = Mock(
+            side_effect=(
+                lambda owner: AsyncIterator(
+                    [
+                        {"nameWithOwner": "user_1/repo_1"},
+                        {"nameWithOwner": "user_1/repo_2"},
+                    ]
+                )
+                if owner == "user_1"
+                else AsyncIterator(
+                    [
+                        {"nameWithOwner": "user_2/repo_2"},
+                        {"nameWithOwner": "user_2/repo_2"},
+                    ]
+                )
+            )
+        )
+
+        invalid_repos = await source.get_invalid_repos()
+        assert set(invalid_repos) == expected_invalid_repos
+
+
+@pytest.mark.asyncio
 async def test_get_content_with_md_file():
     expected_response = {
         "_id": "demo_repo/source.md",

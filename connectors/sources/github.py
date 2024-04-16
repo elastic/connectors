@@ -1252,7 +1252,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _get_invalid_repos_for_github_app(self):
         # A github app can be installed on multiple orgs/personal accounts, so the OWNER in 'OWNER/REPO' is mandatory
-        incomplete_repos = list(
+        invalid_repos = set(
             filter(
                 lambda repo: repo
                 and repo.strip()
@@ -1260,18 +1260,17 @@ class GitHubDataSource(BaseDataSource):
                 self.configured_repos,
             )
         )
-        if incomplete_repos:
-            return incomplete_repos
 
         await self._get_installations()
-        invalid_repos = []
         for repo in self.configured_repos:
+            if repo in invalid_repos:
+                continue
             owner, repo_name = self.github_client.get_repo_details(repo_name=repo)
             if owner not in self._installations:
                 self._logger.debug(
                     f"Invalid repo {repo} as the github app is not installed on {owner}"
                 )
-                invalid_repos.append(repo)
+                invalid_repos.add(repo)
                 continue
 
             if "repos" not in self._installations[owner]:
@@ -1280,24 +1279,24 @@ class GitHubDataSource(BaseDataSource):
                     self._installations[owner]["installation_id"]
                 )
                 if self.configuration["repo_type"] == "organization":
-                    async for repo in self.github_client.get_org_repos(owner):
-                        repos[repo["nameWithOwner"]] = repo
+                    async for org_repo in self.github_client.get_org_repos(owner):
+                        repos[org_repo["nameWithOwner"]] = org_repo
                 else:
-                    async for repo in self.github_client.get_user_repos(owner):
-                        repos[repo["nameWithOwner"]] = repo
+                    async for user_repo in self.github_client.get_user_repos(owner):
+                        repos[user_repo["nameWithOwner"]] = user_repo
                 self._installations[owner]["repos"] = repos
 
             if repo not in self._installations[owner]["repos"]:
                 self._logger.debug(
                     f"Invalid repo {repo} as it's either non-existing or not accessible"
                 )
-                invalid_repos.append(repo)
+                invalid_repos.add(repo)
 
-        return invalid_repos
+        return list(invalid_repos)
 
     async def _get_invalid_repos_for_personal_access_token(self):
         try:
-            if self.github_client.repo_type == "other":
+            if self.configuration["repo_type"] == "other":
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
                     owner=await self._logged_in_user(),
