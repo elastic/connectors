@@ -16,6 +16,7 @@ import ssl
 import subprocess
 import time
 import urllib.parse
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
@@ -152,7 +153,12 @@ class CancellableSleeps:
 
         await _sleep(delay, result=result, loop=loop)
 
-    def cancel(self):
+    def cancel(self, sig=None):
+        if sig:
+            logger.debug(f"Caught {sig}. Cancelling sleeps...")
+        else:
+            logger.debug("Cancelling sleeps...")
+
         for task in self._sleeps:
             task.cancel()
 
@@ -377,8 +383,6 @@ class ConcurrentTasks:
     concurrency value.
 
     - `max_concurrency`: max concurrent tasks allowed, default: 5
-    - `results_callback`: when provided, synchronous function called with the result of each task.
-
     Examples:
 
         # create a task pool with the default max concurrency
@@ -399,15 +403,14 @@ class ConcurrentTasks:
         await task_pool.join()
     """
 
-    def __init__(self, max_concurrency=5, results_callback=None):
+    def __init__(self, max_concurrency=5):
         self.tasks = []
-        self.results_callback = results_callback
         self._sem = NonBlockingBoundedSemaphore(max_concurrency)
 
     def __len__(self):
         return len(self.tasks)
 
-    def _callback(self, task, result_callback=None):
+    def _callback(self, task):
         self.tasks.remove(task)
         self._sem.release()
         if task.cancelled():
@@ -417,52 +420,54 @@ class ConcurrentTasks:
         elif task.exception():
             logger.error(
                 f"Exception found for task {task.get_name()}: {task.exception()}",
-                exc_info=True,
             )
-        if result_callback is not None:
-            result_callback(task.result())
-        # global callback
-        if self.results_callback is not None:
-            self.results_callback(task.result())
 
-    def _add_task(self, coroutine, result_callback=None):
-        task = asyncio.create_task(coroutine())
+    def _add_task(self, coroutine, name=None):
+        task = asyncio.create_task(coroutine(), name=name)
         self.tasks.append(task)
         # _callback will be executed when the task is done,
         # i.e. the wrapped coroutine either returned a value, raised an exception, or the Task was cancelled.
         # Ref: https://docs.python.org/3/library/asyncio-task.html#asyncio.Task.done
-        task.add_done_callback(
-            functools.partial(self._callback, result_callback=result_callback)
-        )
+        task.add_done_callback(functools.partial(self._callback))
         return task
 
-    async def put(self, coroutine, result_callback=None):
+    async def put(self, coroutine, name=None):
         """Adds a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
         function will block and wait for a free slot.
-
-        If provided, `result_callback` will be called when the task is done.
         """
         await self._sem.acquire()
-        return self._add_task(coroutine, result_callback=result_callback)
+        return self._add_task(coroutine, name=name)
 
-    def try_put(self, coroutine, result_callback=None):
+    def try_put(self, coroutine, name=None):
         """Tries to add a coroutine for immediate execution.
 
         If the number of running tasks reach `max_concurrency`, this
         function return a None task immediately
-
-        If provided, `result_callback` will be called when the task is done.
         """
 
         if self._sem.try_acquire():
-            return self._add_task(coroutine, result_callback=result_callback)
+            return self._add_task(coroutine, name=name)
         return None
 
-    async def join(self):
+    async def join(self, raise_on_error=False):
         """Wait for all tasks to finish."""
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        try:
+            await asyncio.gather(*self.tasks, return_exceptions=(not raise_on_error))
+        except:
+            self.cancel()
+            raise
+
+    def raise_any_exception(self):
+        for task in self.tasks:
+            if task.done() and not task.cancelled():
+                if task.exception():
+                    logger.error(
+                        f"Exception found for task {task.get_name()}: {task.exception()}",
+                    )
+                    self.cancel()  # cancel all the pending tasks
+                    raise task.exception()
 
     def cancel(self):
         """Cancels all tasks"""
@@ -478,6 +483,9 @@ class RetryStrategy(Enum):
 
 class UnknownRetryStrategyError(Exception):
     pass
+
+
+sleeps_for_retryable = CancellableSleeps()
 
 
 def retryable(
@@ -526,7 +534,7 @@ def retryable_async_function(func, retries, interval, strategy, skipped_exceptio
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -550,7 +558,7 @@ def retryable_async_generator(func, retries, interval, strategy, skipped_excepti
                 logger.debug(
                     f"Retrying ({retry} of {retries}) with interval: {interval} and strategy: {strategy.name}"
                 )
-                await asyncio.sleep(
+                await sleeps_for_retryable.sleep(
                     time_to_sleep_between_retries(strategy, interval, retry)
                 )
                 retry += 1
@@ -928,3 +936,23 @@ def nested_get_from_dict(dictionary, keys, default=None):
         return nested_get(dictionary_.get(keys_[0]), keys_[1:], default_)
 
     return nested_get(dictionary, keys, default)
+
+
+class Counters:
+    """
+    A utility to provide code readability to managing a collection of counts
+    """
+
+    def __init__(self):
+        self._storage = {}
+
+    def increment(self, key, value=1, namespace=None):
+        if namespace:
+            key = f"{namespace}.{key}"
+        self._storage[key] = self._storage.get(key, 0) + value
+
+    def get(self, key) -> int:
+        return self._storage.get(key, 0)
+
+    def to_dict(self):
+        return deepcopy(self._storage)

@@ -18,9 +18,17 @@ from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import Settings
 from connectors.es.sink import (
+    BIN_DOCS_DOWNLOADED,
+    BULK_OPERATIONS,
+    BULK_RESPONSES,
+    CREATES_QUEUED,
+    DELETES_QUEUED,
+    DOCS_EXTRACTED,
     OP_DELETE,
     OP_INDEX,
-    OP_UPSERT,
+    OP_UPDATE,
+    RESULT_SUCCESS,
+    UPDATES_QUEUED,
     AsyncBulkRunningError,
     ElasticsearchOverloadedError,
     Extractor,
@@ -29,6 +37,11 @@ from connectors.es.sink import (
     SyncOrchestrator,
 )
 from connectors.protocol import JobType, Pipeline
+from connectors.protocol.connectors import (
+    DELETED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_COUNT,
+    INDEXED_DOCUMENT_VOLUME,
+)
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -326,14 +339,20 @@ async def test_async_bulk(mock_responses):
     ingestion_stats = es.ingestion_stats()
 
     assert ingestion_stats == {
-        "doc_created": 1,
-        "attachment_extracted": 1,
-        "doc_updated": 1,
-        "doc_deleted": 1,
-        "bulk_operations": {"index": 2, "delete": 1},
-        "indexed_document_count": 2,
-        "indexed_document_volume": ANY,
-        "deleted_document_count": 1,
+        CREATES_QUEUED: 1,
+        BIN_DOCS_DOWNLOADED: 1,
+        UPDATES_QUEUED: 1,
+        DELETES_QUEUED: 1,
+        f"{BULK_OPERATIONS}.{OP_INDEX}": 2,
+        f"{BULK_OPERATIONS}.{OP_DELETE}": 1,
+        INDEXED_DOCUMENT_COUNT: 2,
+        INDEXED_DOCUMENT_VOLUME: ANY,
+        DELETED_DOCUMENT_COUNT: 1,
+        f"{BULK_RESPONSES}.{OP_DELETE}": 1,
+        f"{BULK_RESPONSES}.{OP_INDEX}": 1,
+        f"{BULK_RESPONSES}.{OP_UPDATE}": 1,
+        DOCS_EXTRACTED: 2,
+        RESULT_SUCCESS: 3,
     }
 
     # 2nd sync
@@ -587,7 +606,7 @@ async def setup_extractor(
             [Exception()],
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            ["FETCH_ERROR"],
+            ["EXTRACTOR_ERROR"],
             updated(0),
             created(0),
             deleted(0),
@@ -726,10 +745,10 @@ async def test_get_docs(
 
         await extractor.run(doc_generator, JobType.FULL)
 
-        assert extractor.total_docs_updated == expected_total_docs_updated
-        assert extractor.total_docs_created == expected_total_docs_created
-        assert extractor.total_docs_deleted == expected_total_docs_deleted
-        assert extractor.total_downloads == expected_total_downloads
+        assert extractor.counters.get(UPDATES_QUEUED) == expected_total_docs_updated
+        assert extractor.counters.get(CREATES_QUEUED) == expected_total_docs_created
+        assert extractor.counters.get(DELETES_QUEUED) == expected_total_docs_deleted
+        assert extractor.counters.get(BIN_DOCS_DOWNLOADED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -814,7 +833,7 @@ async def test_get_docs(
             [Exception()],
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            ["FETCH_ERROR"],
+            ["EXTRACTOR_ERROR"],
             updated(0),
             created(0),
             deleted(0),
@@ -903,10 +922,10 @@ async def test_get_docs_incrementally(
 
         await extractor.run(doc_generator, JobType.INCREMENTAL)
 
-        assert extractor.total_docs_updated == expected_total_docs_updated
-        assert extractor.total_docs_created == expected_total_docs_created
-        assert extractor.total_docs_deleted == expected_total_docs_deleted
-        assert extractor.total_downloads == expected_total_downloads
+        assert extractor.counters.get(UPDATES_QUEUED) == expected_total_docs_updated
+        assert extractor.counters.get(CREATES_QUEUED) == expected_total_docs_created
+        assert extractor.counters.get(DELETES_QUEUED) == expected_total_docs_deleted
+        assert extractor.counters.get(BIN_DOCS_DOWNLOADED) == expected_total_downloads
 
         assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -1008,9 +1027,9 @@ async def test_get_access_control_docs(
 
     await extractor.run(doc_generator, JobType.ACCESS_CONTROL)
 
-    assert extractor.total_docs_updated == expected_total_docs_updated
-    assert extractor.total_docs_created == expected_total_docs_created
-    assert extractor.total_docs_deleted == expected_total_docs_deleted
+    assert extractor.counters.get(UPDATES_QUEUED) == expected_total_docs_updated
+    assert extractor.counters.get(CREATES_QUEUED) == expected_total_docs_created
+    assert extractor.counters.get(DELETES_QUEUED) == expected_total_docs_deleted
 
     assert queue_called_with_operations(queue, expected_queue_operations)
 
@@ -1111,9 +1130,18 @@ def test_bulk_populate_stats(res, expected_result):
     )
     sink._populate_stats(deepcopy(STATS), res)
 
-    assert sink.indexed_document_count == expected_result["indexed_document_count"]
-    assert sink.indexed_document_volume == expected_result["indexed_document_volume"]
-    assert sink.deleted_document_count == expected_result["deleted_document_count"]
+    assert (
+        sink.counters.get(INDEXED_DOCUMENT_COUNT)
+        == expected_result[INDEXED_DOCUMENT_COUNT]
+    )
+    assert (
+        sink.counters.get(INDEXED_DOCUMENT_VOLUME)
+        == expected_result[INDEXED_DOCUMENT_VOLUME]
+    )
+    assert (
+        sink.counters.get(DELETED_DOCUMENT_COUNT)
+        == expected_result[DELETED_DOCUMENT_COUNT]
+    )
 
 
 @pytest.mark.asyncio
@@ -1145,7 +1173,7 @@ async def test_batch_bulk_with_retry():
         client.client.bulk = AsyncMock(
             side_effect=[first_call_error, second_call_result]
         )
-        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPSERT: {}, OP_DELETE: {}})
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
 
         assert client.client.bulk.await_count == 2
 
@@ -1388,7 +1416,7 @@ async def test_extractor_run_when_mem_full_is_raised():
     await extractor.run(doc_generator, JobType.FULL)
 
     queue.clear.assert_called_once()
-    assert isinstance(extractor.fetch_error, ElasticsearchOverloadedError)
+    assert isinstance(extractor.error, ElasticsearchOverloadedError)
 
 
 @pytest.mark.asyncio
