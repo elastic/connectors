@@ -111,6 +111,7 @@ def _default_config():
             "network_drive": "connectors.sources.network_drive:NASDataSource",
             "notion": "connectors.sources.notion:NotionDataSource",
             "onedrive": "connectors.sources.onedrive:OneDriveDataSource",
+            "opentext_documentum": "connectors.sources.opentext_documentum:OpentextDocumentumDataSource",
             "oracle": "connectors.sources.oracle:OracleDataSource",
             "outlook": "connectors.sources.outlook:OutlookDataSource",
             "postgresql": "connectors.sources.postgresql:PostgreSQLDataSource",

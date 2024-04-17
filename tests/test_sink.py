@@ -606,7 +606,7 @@ async def setup_extractor(
             [Exception()],
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            ["FETCH_ERROR"],
+            ["EXTRACTOR_ERROR"],
             updated(0),
             created(0),
             deleted(0),
@@ -833,7 +833,7 @@ async def test_get_docs(
             [Exception()],
             SYNC_RULES_ENABLED,
             CONTENT_EXTRACTION_ENABLED,
-            ["FETCH_ERROR"],
+            ["EXTRACTOR_ERROR"],
             updated(0),
             created(0),
             deleted(0),
@@ -1416,7 +1416,7 @@ async def test_extractor_run_when_mem_full_is_raised():
     await extractor.run(doc_generator, JobType.FULL)
 
     queue.clear.assert_called_once()
-    assert isinstance(extractor.fetch_error, ElasticsearchOverloadedError)
+    assert isinstance(extractor.error, ElasticsearchOverloadedError)
 
 
 @pytest.mark.asyncio
