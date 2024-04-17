@@ -20,7 +20,7 @@ class JobCleanUpService(BaseService):
     name = "cleanup"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config, "Job Cleanup Service")
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())

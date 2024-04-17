@@ -23,8 +23,8 @@ from connectors.utils import ConcurrentTasks
 class JobExecutionService(BaseService):
     name = "execute"
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, service_name):
+        super().__init__(config, service_name)
         self.idling = self.service_config["idling"]
         self.source_list = config["sources"]
         self.sync_job_pool = ConcurrentTasks(max_concurrency=self.max_concurrency)

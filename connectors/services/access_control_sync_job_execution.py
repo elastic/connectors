@@ -12,6 +12,9 @@ from connectors.services.job_execution import JobExecutionService
 class AccessControlSyncJobExecutionService(JobExecutionService):
     name = "sync_access_control"
 
+    def __init__(self, config):
+        super().__init__(config, "Access Control Sync Job Execution Service")
+
     @cached_property
     def display_name(self):
         return "access control sync job execution"

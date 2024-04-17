@@ -3,84 +3,11 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.logger import logger
+from connectors.logger import logger, DocumentLogger
 
 
 class InvalidDocumentSourceError(Exception):
     pass
-
-
-class DocumentLogger:
-    def __init__(self, prefix, extra):
-        self._prefix = prefix
-        self._extra = extra
-
-    def isEnabledFor(self, level):
-        return logger.isEnabledFor(level)
-
-    def debug(self, msg, *args, **kwargs):
-        logger.debug(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            **kwargs,
-        )
-
-    def info(self, msg, *args, **kwargs):
-        logger.info(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            **kwargs,
-        )
-
-    def warning(self, msg, *args, **kwargs):
-        logger.warning(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            **kwargs,
-        )
-
-    def error(self, msg, *args, **kwargs):
-        logger.error(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            **kwargs,
-        )
-
-    def exception(self, msg, *args, exc_info=True, **kwargs):
-        logger.exception(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            exc_info=exc_info,
-            **kwargs,
-        )
-
-    def critical(self, msg, *args, **kwargs):
-        logger.critical(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            **kwargs,
-        )
-
-    def fatal(self, msg, *args, **kwargs):
-        logger.fatal(
-            msg,
-            *args,
-            prefix=self._prefix,  # pyright: ignore
-            extra=self._extra,
-            **kwargs,
-        )
 
 
 class ESDocument:

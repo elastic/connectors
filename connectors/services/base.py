@@ -14,7 +14,7 @@ import asyncio
 import time
 from copy import deepcopy
 
-from connectors.logger import logger
+from connectors.logger import DocumentLogger, logger
 from connectors.utils import CancellableSleeps
 
 __all__ = [
@@ -68,7 +68,7 @@ class BaseService(metaclass=_Registry):
 
     name = None  # using None here avoids registering this class
 
-    def __init__(self, config):
+    def __init__(self, config, service_name):
         self.config = config
         self.service_config = self.config["service"]
         self.es_config = self.config["elasticsearch"]
@@ -78,6 +78,7 @@ class BaseService(metaclass=_Registry):
         self.running = False
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
+        self.logger = DocumentLogger(service_name, { 'service_name': service_name })
 
     def stop(self):
         self.running = False
@@ -121,14 +122,14 @@ class BaseService(metaclass=_Registry):
             for connector in configured_connectors:
                 connector_id = connector.get("connector_id")
                 if not connector_id:
-                    logger.warning(
+                    self.logger.warning(
                         f"Found invalid connector configuration. Connector id is missing for {connector}"
                     )
                     continue
 
                 connector_id = str(connector_id)
                 if connector_id in connectors:
-                    logger.warning(
+                    self.logger.warning(
                         f"Found duplicate configuration for connector {connector_id}, overriding with the later config"
                     )
                 connectors[connector_id] = connector

@@ -13,6 +13,9 @@ from connectors.services.job_execution import JobExecutionService
 class ContentSyncJobExecutionService(JobExecutionService):
     name = "sync_content"
 
+    def __init__(self, config):
+        super().__init__(config, "Content Sync Job Execution Service")
+
     @cached_property
     def display_name(self):
         return "content sync job execution"
