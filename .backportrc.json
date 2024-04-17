@@ -1,18 +1,17 @@
 {
   "targetBranchChoices": [
     { "name": "main", "checked": true },
+    "8.14",
     "8.13",
     "8.12",
     "8.11",
     "8.10",
-    "pre-8.10-stable",
     "8.9"
   ],
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v8.14.0(.0)?$": "main",
-    "^vpre-8.10-stable$": "pre-8.10-stable",
+    "^v8.15.0(.0)?$": "main",
     "^v(\\d+).(\\d+)(.\\d+)+$": "$1.$2"
   },
   "upstream": "elastic/connectors"
