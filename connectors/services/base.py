@@ -78,7 +78,7 @@ class BaseService(metaclass=_Registry):
         self.running = False
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
-        self.logger = DocumentLogger(service_name, { 'service_name': service_name })
+        self.logger = DocumentLogger(f"[{service_name}]", { 'service_name': service_name })
 
     def stop(self):
         self.running = False

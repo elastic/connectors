@@ -103,22 +103,22 @@ class JobExecutionService(BaseService):
 
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
-            logger.debug(
+            self.logger.debug(
                 f"Native support for {self.display_name} for {', '.join(native_service_types)}"
             )
         else:
-            logger.debug(f"No native service types configured for {self.display_name}")
+            self.logger.debug(f"No native service types configured for {self.display_name}")
 
         connector_ids = list(self.connectors.keys())
 
-        logger.info(
+        self.logger.info(
             f"{self.display_name.capitalize()} service started, listening to events from {self.es_config['host']}"
         )
 
         try:
             while self.running:
                 try:
-                    logger.debug(
+                    self.logger.debug(
                         f"Polling every {self.idling} seconds for {self.display_name}"
                     )
                     supported_connector_ids = [
@@ -130,7 +130,7 @@ class JobExecutionService(BaseService):
                     ]
 
                     if len(supported_connector_ids) == 0:
-                        logger.debug(
+                        self.logger.debug(
                             f"There's no supported connectors found with native service types [{', '.join(native_service_types)}] or connector ids [{', '.join(connector_ids)}]"
                         )
                     else:
@@ -140,7 +140,7 @@ class JobExecutionService(BaseService):
                         ):
                             await self._sync(sync_job)
                 except Exception as e:
-                    logger.critical(e, exc_info=True)
+                    self.logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
