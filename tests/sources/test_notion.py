@@ -875,7 +875,10 @@ async def test_fetch_child_blocks_for_external_object_instance_page(caplog):
         side_effect=APIResponseError(
             code="validation_error",
             message="external_object_instance_page is not supported via the API",
-            response=Response(status_code=400, text="Validation error"),
+            response=Response(
+                status_code=400,
+                text='{"message": "external_object_instance_page is not supported via the API"}',
+            ),
         ),
     ):
         async with create_source(

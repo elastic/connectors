@@ -5,6 +5,7 @@
 #
 """Notion source module responsible to fetch documents from the Notion Platform."""
 import asyncio
+import json
 import os
 import re
 from copy import copy
@@ -194,7 +195,9 @@ class NotionClient:
                     async for record in self.query_database(block.get("id")):
                         yield record
         except APIResponseError as error:
-            if error.code == "validation_error" and "external_object" in str(error):
+            if error.code == "validation_error" and "external_object" in json.loads(
+                error.body
+            ).get("message"):
                 self._logger.warning(
                     f"Encountered external object with id: {block_id}. Skipping : {error}"
                 )
