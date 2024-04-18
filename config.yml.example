@@ -54,7 +54,7 @@
 #elasticsearch.ssl: true
 #
 #
-##  Path to a CA bundle
+##  Path to a CA bundle, e.g. /path/to/ca.crt
 #elasticsearch.ca_certs: null
 #
 #
