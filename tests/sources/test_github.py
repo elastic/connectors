@@ -226,7 +226,6 @@ PUBLIC_REPO = {
     "_id": "R_kgDOJXuc8A",
     "_timestamp": "2023-06-20T07:09:34Z",
     "isArchived": False,
-    "type": "Repository",
 }
 PRIVATE_REPO = {
     "name": "demo_repo",
@@ -733,6 +732,50 @@ MOCK_INSTALLATIONS = [
     {"id": 3, "account": {"login": "user_1", "type": "User"}},
     {"id": 4, "account": {"login": "user_2", "type": "User"}},
 ]
+MOCK_REPO_1 = {
+    "nameWithOwner": "org_1/repo_1",
+    "id": "repo_1_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_1_DOC = {
+    "nameWithOwner": "org_1/repo_1",
+    "_id": "repo_1_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
+MOCK_REPO_2 = {
+    "nameWithOwner": "org_2/repo_2",
+    "id": "repo_2_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_2_DOC = {
+    "nameWithOwner": "org_2/repo_2",
+    "_id": "repo_2_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
+MOCK_REPO_3 = {
+    "nameWithOwner": "user_1/repo_3",
+    "id": "repo_3_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_3_DOC = {
+    "nameWithOwner": "user_1/repo_3",
+    "_id": "repo_3_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
+MOCK_REPO_4 = {
+    "nameWithOwner": "user_2/repo_4",
+    "id": "repo_4_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_4_DOC = {
+    "nameWithOwner": "user_2/repo_4",
+    "_id": "repo_4_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
 
 
 @asynccontextmanager
@@ -1228,6 +1271,42 @@ async def test_fetch_repos_with_unauthorized_exception():
         with pytest.raises(UnauthorizedException):
             async for _ in source._fetch_repos():
                 pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repo_type, repos, expected_repos",
+    [
+        ("organization", "*", [MOCK_REPO_1_DOC, MOCK_REPO_2_DOC]),
+        ("other", "*", [MOCK_REPO_3_DOC, MOCK_REPO_4_DOC]),
+        ("organization", "org_1/repo_1", [MOCK_REPO_1_DOC]),
+        ("other", "user_1/repo_3", [MOCK_REPO_3_DOC]),
+    ],
+)
+async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
+    async with create_github_source(
+        auth_method=GITHUB_APP, repo_type=repo_type, repos=repos
+    ) as source:
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        source.github_client.get_user_repos = Mock(
+            side_effect=lambda user: AsyncIterator([MOCK_REPO_3])
+            if user == "user_1"
+            else AsyncIterator([MOCK_REPO_4])
+        )
+        source.github_client.get_org_repos = Mock(
+            side_effect=lambda org_name: AsyncIterator([MOCK_REPO_1])
+            if org_name == "org_1"
+            else AsyncIterator([MOCK_REPO_2])
+        )
+        jwt_response = {"token": "changeme"}
+        with patch(
+            "connectors.sources.github.get_installation_access_token",
+            return_value=jwt_response,
+        ):
+            actual_repos = [repo async for repo in source._fetch_repos()]
+            assert actual_repos == expected_repos
 
 
 @pytest.mark.asyncio
@@ -1948,9 +2027,9 @@ async def test_fetch_installations_withp_prepopulated_installations():
     [
         (
             "organization",
-            {"org_1": {"installation_id": 1}, "org_2": {"installation_id": 2}},
+            {"org_1": 1, "org_2": 2},
         ),
-        ("other", {"user_1": {"installation_id": 3}, "user_2": {"installation_id": 4}}),
+        ("other", {"user_1": 3, "user_2": 4}),
     ],
 )
 async def test_fetch_installations(repo_type, expected_installations):
