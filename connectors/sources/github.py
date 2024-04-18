@@ -1311,11 +1311,11 @@ class GitHubDataSource(BaseDataSource):
     async def _get_invalid_repos_for_personal_access_token(self):
         try:
             if self.configuration["repo_type"] == "other":
+                logged_in_user = await self._logged_in_user()
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
-                    owner=await self._logged_in_user(),
+                    owner=logged_in_user,
                 )
-                logged_in_user = await self._logged_in_user()
                 if logged_in_user not in self.user_repos:
                     self.user_repos[logged_in_user] = {}
                 async for repo in self.github_client.get_user_repos(logged_in_user):
