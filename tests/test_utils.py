@@ -259,16 +259,17 @@ def test_try_acquire():
 async def test_concurrent_runner():
     results = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i):
         await asyncio.sleep(0.1)
         return i
 
-    runner = ConcurrentTasks(results_callback=_results_callback)
+    runner = ConcurrentTasks()
     for i in range(10):
-        await runner.put(functools.partial(coroutine, i))
+        task = await runner.put(functools.partial(coroutine, i))
+        task.add_done_callback(functools.partial(_results_callback))
 
     await runner.join()
     assert results == list(range(10))
@@ -279,16 +280,18 @@ async def test_concurrent_runner_canceled():
     results = []
     tasks = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i):
         await asyncio.sleep(1)
         return i
 
-    runner = ConcurrentTasks(max_concurrency=10, results_callback=_results_callback)
+    runner = ConcurrentTasks(max_concurrency=10)
     for i in range(10):
-        tasks.append(await runner.put(functools.partial(coroutine, i)))
+        task = await runner.put(functools.partial(coroutine, i))
+        task.add_done_callback(functools.partial(_results_callback))
+        tasks.append(task)
 
     runner.cancel()
     await runner.join()
@@ -302,34 +305,36 @@ async def test_concurrent_runner_canceled():
 async def test_concurrent_runner_canceled_with_waiting_task():
     results = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i, sleep_time):
         await asyncio.sleep(sleep_time)
         return i
 
-    runner = ConcurrentTasks(max_concurrency=10, results_callback=_results_callback)
+    runner = ConcurrentTasks(max_concurrency=10)
     for i in range(10):
-        await runner.put(functools.partial(coroutine, i, 1))  # long-running task
+        task = await runner.put(functools.partial(coroutine, i, 1))  # long-running task
+        task.add_done_callback(functools.partial(_results_callback))
 
     # create a task to put a waiting task so that it won't block
-    asyncio.create_task(runner.put(functools.partial(coroutine, 100, 0.1)))
+    task = asyncio.create_task(runner.put(functools.partial(coroutine, 100, 0.1)))
+    task.add_done_callback(functools.partial(_results_callback))
     runner.cancel()
     # wait for the first 10 tasks to be canceled
     await runner.join()
     # wait for the 11th task to complete
     await runner.join()
     assert len(results) == 1
-    assert results[0] == 100
+    assert results[0].result() == 100
 
 
 @pytest.mark.asyncio
 async def test_concurrent_runner_fails():
     results = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i):
         await asyncio.sleep(0.1)
@@ -338,9 +343,10 @@ async def test_concurrent_runner_fails():
             raise Exception(msg)
         return i
 
-    runner = ConcurrentTasks(results_callback=_results_callback)
+    runner = ConcurrentTasks()
     for i in range(10):
-        await runner.put(functools.partial(coroutine, i))
+        task = await runner.put(functools.partial(coroutine, i))
+        task.add_done_callback(functools.partial(_results_callback))
 
     await runner.join()
     assert 5 not in results
@@ -350,8 +356,8 @@ async def test_concurrent_runner_fails():
 async def test_concurrent_runner_high_concurrency():
     results = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i):
         await asyncio.sleep(0)
@@ -359,16 +365,15 @@ async def test_concurrent_runner_high_concurrency():
 
     second_results = []
 
-    def _second_callback(result):
-        second_results.append(result)
+    def _second_callback(task):
+        second_results.append(task.result())
 
-    runner = ConcurrentTasks(results_callback=_results_callback)
+    runner = ConcurrentTasks()
     for i in range(1000):
+        task = await runner.put(functools.partial(coroutine, i))
+        task.add_done_callback(functools.partial(_results_callback))
         if i == 3:
-            callback = _second_callback
-        else:
-            callback = None
-        await runner.put(functools.partial(coroutine, i), result_callback=callback)
+            task.add_done_callback(functools.partial(_second_callback))
 
     await runner.join()
     assert results == list(range(1000))
@@ -389,20 +394,23 @@ async def test_concurrent_runner_high_concurrency():
 async def test_concurrent_runner_try_put(initial_capacity, expected_result):
     results = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i):
         await asyncio.sleep(0.1)
         return i
 
-    runner = ConcurrentTasks(10, results_callback=_results_callback)
+    runner = ConcurrentTasks(10)
     # fill the pool with initial capacity
     for i in range(initial_capacity):
-        await runner.put(functools.partial(coroutine, i))
+        task = await runner.put(functools.partial(coroutine, i))
+        task.add_done_callback(functools.partial(_results_callback))
 
     # try to put an additional task
     task = runner.try_put(functools.partial(coroutine, 100))
+    if task:
+        task.add_done_callback(functools.partial(_results_callback))
 
     await runner.join()
 
@@ -418,20 +426,22 @@ async def test_concurrent_runner_try_put(initial_capacity, expected_result):
 async def test_concurrent_runner_join():
     results = []
 
-    def _results_callback(result):
-        results.append(result)
+    def _results_callback(task):
+        results.append(task.result())
 
     async def coroutine(i):
         await asyncio.sleep(0.2)
         return i
 
-    runner = ConcurrentTasks(results_callback=_results_callback)
+    runner = ConcurrentTasks()
     for i in range(3):
-        await runner.put(functools.partial(coroutine, i))
+        task = await runner.put(functools.partial(coroutine, i))
+        task.add_done_callback(functools.partial(_results_callback))
 
     async def delayed_coroutine():
         await asyncio.sleep(0.1)
-        await runner.put(functools.partial(coroutine, 3))
+        task = await runner.put(functools.partial(coroutine, 3))
+        task.add_done_callback(functools.partial(_results_callback))
 
     # put the 4th task after 0.1 second during the execution of the first 3 tasks
     asyncio.create_task(delayed_coroutine())
@@ -447,6 +457,67 @@ async def test_concurrent_runner_join():
     await runner.join()
     assert len(results) == 4
     assert 3 in results
+
+
+@pytest.mark.asyncio
+async def test_concurrent_tasks_raise_any_exception():
+    async def return_1():
+        return 1
+
+    async def raise_error():
+        msg = "This task had an error"
+        raise Exception(msg)
+
+    async def long_sleep_then_return_2():
+        try:
+            await asyncio.sleep(100)
+            return 2
+        except asyncio.CancelledError:
+            pass
+
+    runner = ConcurrentTasks()
+    await runner.put(functools.partial(return_1))
+    await runner.put(functools.partial(raise_error))
+    await runner.put(functools.partial(long_sleep_then_return_2))
+
+    await asyncio.sleep(0)
+    with pytest.raises(Exception):
+        runner.raise_any_exception()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_tasks_join_raise_on_error():
+    results = []
+
+    def _results_callback(task):
+        results.append(task.result())
+
+    async def return_1():
+        return 1
+
+    async def raise_error():
+        msg = "This task had an error"
+        raise Exception(msg)
+
+    async def long_sleep_then_return_2():
+        try:
+            await asyncio.sleep(100)
+            return 2
+        except asyncio.CancelledError:
+            pass
+
+    runner = ConcurrentTasks()
+    task1 = await runner.put(functools.partial(return_1))
+    task1.add_done_callback(functools.partial(_results_callback))
+    await runner.put(functools.partial(raise_error))
+    task3 = await runner.put(functools.partial(long_sleep_then_return_2))
+    task3.add_done_callback(functools.partial(_results_callback))
+
+    with pytest.raises(Exception):
+        await runner.join(raise_on_error=True)
+
+    assert len(results) == 1
+    assert results[0] == 1
 
 
 @contextlib.contextmanager
