@@ -1375,10 +1375,24 @@ class GitHubDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        async for user in self.github_client._fetch_all_members(
-            self.configuration["org_name"]
-        ):
-            yield await self._user_access_control_doc(user=user)
+        async for org_name in self._get_owners():
+            async for user in self.github_client._fetch_all_members(org_name):
+                yield await self._user_access_control_doc(user=user)
+
+    async def _get_owners(self):
+        """Yields organization or personal accounts based on the configured repo_type"""
+        if self.configuration["auth_method"] == GITHUB_APP:
+            await self._fetch_installations()
+            for owner, installation in self._installations.items():
+                await self.github_client.update_installation_id(
+                    installation["installation_id"]
+                )
+                yield owner
+        else:
+            if self.configuration["repo_type"] == "organization":
+                yield self.configuration["org_name"]
+            else:
+                yield await self._logged_in_user()
 
     async def _remote_validation(self):
         """Validate scope of the configured personal access token and accessibility of repositories
