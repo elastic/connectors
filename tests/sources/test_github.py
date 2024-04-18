@@ -1652,7 +1652,7 @@ async def test_is_previous_repo():
 
 @pytest.mark.asyncio
 async def test_get_access_control():
-    async with create_github_source() as source:
+    async with create_github_source(repo_type="organization") as source:
         actual_response = []
         source._dls_enabled = Mock(return_value=True)
         with patch.object(
@@ -1899,3 +1899,30 @@ async def test_fetch_installations(repo_type, expected_installations):
         await source._fetch_installations()
         assert source._installations == expected_installations
         source.github_client.get_installations.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "auth_method, repo_type, expected_owners",
+    [
+        (PERSONAL_ACCESS_TOKEN, "organization", ["demo_org"]),
+        (PERSONAL_ACCESS_TOKEN, "other", ["demo_user"]),
+        (GITHUB_APP, "organization", ["org_1", "org_2"]),
+        (GITHUB_APP, "other", ["user_1", "user_2"]),
+    ],
+)
+async def test_get_owners(auth_method, repo_type, expected_owners):
+    async with create_github_source(
+        auth_method=auth_method, repo_type=repo_type, org_name="demo_org"
+    ) as source:
+        source.github_client.get_logged_in_user = AsyncMock(return_value="demo_user")
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        jwt_response = {"token": "changeme"}
+        with patch(
+            "connectors.sources.github.get_installation_access_token",
+            return_value=jwt_response,
+        ):
+            actual_owners = [owner async for owner in source._get_owners()]
+            assert actual_owners == expected_owners
