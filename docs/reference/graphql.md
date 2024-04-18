@@ -6,7 +6,7 @@ The [Elastic GraphQL connector](../connectors/sources/graphql.py) is built with 
 
 This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
-This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
+This connector is in **technical preview** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Technical preview features are not subject to the support SLA of official GA features.
 
 ## Usage
 
@@ -92,7 +92,27 @@ Json of custom headers to be sent with each GraphQL request. Example:
 
 #### `pagination_model` (required)
 
-This field specifies the pagination model to be used by the connector. The connector supports `No pagination` and `Cursor-based pagination` pagination models. For cursor-based pagination, add `pageInfo` and an `after` argument variable in your query at the desired node (Pagination key). Use `after` query argument with a variable to iterate through pages. Detailed examples and setup instructions are available in the docs. The default value for this field is `No pagination`.
+This field specifies the pagination model to be used by the connector. The connector supports `No pagination` and `Cursor-based pagination` pagination models. For cursor-based pagination, add `pageInfo {endCursor hasNextPage}` and an `after` argument variable in your query at the desired node (`Pagination key`). Use `after` query argument with a variable to iterate through pages. Detailed examples and setup instructions are available in the docs. The default value for this field is `No pagination`. Example:
+
+```
+For `Cursor-based pagination`, the query should look like below example:
+
+query getUsers($cursor: String!) {
+    sampleData { 
+        users(after: $cursor) {
+            pageInfo {
+                endCursor
+                hasNextPage
+            }
+            nodes {
+                first_name
+                last_name
+                address
+            } 
+        } 
+    } 
+}
+and the value of `pagination_key` is `sampleData.users` so, it must contain `pageInfo {endCursor hasNextPage}` and `after` argument with a variable in case of `Cursor-based pagination`.
 
 #### `pagination_key` (required)
 
