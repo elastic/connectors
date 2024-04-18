@@ -36,6 +36,7 @@ from connectors.utils import (
 )
 
 RETRY_INTERVAL = 2
+LIMIT = 100
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
@@ -46,6 +47,7 @@ DOWNLOAD = "download"
 SEARCH = "search"
 USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
+SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
@@ -59,6 +61,7 @@ URLS = {
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
+    SEARCH_FOR_DATA_CENTER: "rest/api/search?cql={query}&start={start}",
     USER: "rest/api/3/users/search",
     USERS_FOR_DATA_CENTER: "rest/api/user/list?limit={limit}&start={start}",
     USERS_FOR_SERVER: "rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt={start}&maxResults={limit}",
@@ -110,6 +113,8 @@ class ConfluenceClient:
         """
         if self.session:
             return self.session
+
+        self._logger.debug("Creating a client session")
         if self.data_source_type == CONFLUENCE_CLOUD:
             auth = (
                 self.configuration["account_email"],
@@ -159,6 +164,7 @@ class ConfluenceClient:
         Yields:
             response: Client response
         """
+        self._logger.debug(f"Making a GET call for url: {url}")
         retry_counter = 0
         while True:
             try:
@@ -189,6 +195,9 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
+        self._logger.info(
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url}"
+        )
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
@@ -209,6 +218,127 @@ class ConfluenceClient:
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
                 break
+
+    async def paginated_api_call_for_datacenter_syncrule(self, url_name, **url_kwargs):
+        """Make a paginated API call for datacenter using the passed url_name.
+        Args:
+            url_name (str): URL Name to identify the API endpoint to hit
+        Yields:
+            response: JSON response.
+        """
+        self._logger.info(
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> start: 0, limit: {LIMIT}"
+        )
+        while True:
+            url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
+            json_response = {}
+            try:
+                async for response in self.api_call(
+                    url=url,
+                ):
+                    json_response = await response.json()
+                    yield json_response
+
+                    start = url_kwargs.get("start", 0)
+                    start += LIMIT
+                    url_kwargs["start"] = start
+                if len(json_response.get("results", [])) < LIMIT:
+                    break
+            except Exception as exception:
+                self._logger.warning(
+                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
+                )
+                break
+
+    async def search_by_query(self, query):
+        if self.data_source_type == CONFLUENCE_DATA_CENTER:
+            search_documents = self.paginated_api_call_for_datacenter_syncrule(
+                url_name=SEARCH_FOR_DATA_CENTER,
+                query=f"{query}&{SEARCH_QUERY}",
+                start=0,
+            )
+        else:
+            search_documents = self.paginated_api_call(
+                url_name=SEARCH,
+                query=f"{query}&{SEARCH_QUERY}",
+            )
+        async for response in search_documents:
+            for entity in response.get("results", []):
+                yield entity
+
+    async def fetch_spaces(self):
+        async for response in self.paginated_api_call(
+            url_name=SPACE,
+            api_query=SPACE_QUERY,
+        ):
+            for space in response.get("results", []):
+                spaces = self.configuration.get("spaces", "")
+                if (spaces == [WILDCARD]) or (space.get("key", "") in spaces):
+                    yield space
+
+    async def fetch_server_space_permission(self, url):
+        try:
+            async for permissions in self.api_call(
+                url=os.path.join(self.host_url, url),
+            ):
+                permission = await permissions.json()
+                return permission
+        except ClientResponseError as exception:
+            self._logger.warning(
+                f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
+            )
+            return {}
+
+    async def fetch_page_blog_documents(self, api_query):
+        async for response in self.paginated_api_call(
+            url_name=CONTENT,
+            api_query=api_query,
+        ):
+            attachment_count = 0
+            for document in response.get("results", []):
+                if document.get("children").get("attachment"):
+                    attachment_count = (
+                        document.get("children", {})
+                        .get("attachment", {})
+                        .get("size", 0)
+                    )
+                yield document, attachment_count
+
+    async def fetch_attachments(self, content_id):
+        async for response in self.paginated_api_call(
+            url_name=ATTACHMENT,
+            api_query=ATTACHMENT_QUERY,
+            id=content_id,
+        ):
+            for attachment in response.get("results", []):
+                yield attachment
+
+    async def ping(self):
+        await anext(
+            self.api_call(
+                url=os.path.join(self.host_url, PING_URL),
+            )
+        )
+
+    async def fetch_confluence_server_users(self):
+        start_at = 0
+        if self.data_source_type == CONFLUENCE_DATA_CENTER:
+            limit = DATACENTER_USER_BATCH
+            key = "results"
+            url = urljoin(self.host_url, URLS[USERS_FOR_DATA_CENTER])
+        else:
+            limit = SERVER_USER_BATCH
+            key = "users"
+            url = urljoin(self.host_url, URLS[USERS_FOR_SERVER])
+
+        while True:
+            url_ = url.format(start=start_at, limit=limit)
+            async for users in self.api_call(url=url_):
+                response = await users.json()
+                if len(response.get(key)) == 0:
+                    return
+                yield response.get(key)
+                start_at += limit
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -492,30 +622,8 @@ class ConfluenceDataSource(BaseDataSource):
             access_control=access_control
         )
 
-    async def fetch_confluence_server_users(self):
-        start_at = 0
-        if self.confluence_client.data_source_type == CONFLUENCE_DATA_CENTER:
-            limit = DATACENTER_USER_BATCH
-            key = "results"
-            url = urljoin(
-                self.configuration["confluence_url"], URLS[USERS_FOR_DATA_CENTER]
-            )
-        else:
-            limit = SERVER_USER_BATCH
-            key = "users"
-            url = urljoin(self.configuration["confluence_url"], URLS[USERS_FOR_SERVER])
-
-        while True:
-            url_ = url.format(start=start_at, limit=limit)
-            async for users in self.confluence_client.api_call(url=url_):
-                response = await users.json()
-                if len(response.get(key)) == 0:
-                    return
-                yield response.get(key)
-                start_at += limit
-
     async def get_user_for_server(self):
-        async for users in self.fetch_confluence_server_users():
+        async for users in self.confluence_client.fetch_confluence_server_users():
             for user_info in users:
                 if self.confluence_client.data_source_type == CONFLUENCE_DATA_CENTER:
                     yield await self.user_access_control_data_center(user=user_info)
@@ -561,7 +669,7 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.warning("DLS is not enabled. Skipping")
             return
 
-        self._logger.info("Fetching all users")
+        self._logger.info("Fetching all users for Access Control sync")
         if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
             users = self.get_user()
         else:
@@ -648,6 +756,7 @@ class ConfluenceDataSource(BaseDataSource):
         await self._remote_validation()
 
     async def _remote_validation(self):
+        await self.confluence_client.ping()
         if self.spaces == [WILDCARD]:
             return
         space_keys = []
@@ -655,7 +764,7 @@ class ConfluenceDataSource(BaseDataSource):
             url_name=SPACE, api_query=SPACE_QUERY
         ):
             spaces = response.get("results", [])
-            space_keys.extend([space["key"] for space in spaces])
+            space_keys.extend([space.get("key", "") for space in spaces])
         if unavailable_spaces := set(self.spaces) - set(space_keys):
             msg = f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
             raise ConfigurableFieldValueError(msg)
@@ -663,39 +772,11 @@ class ConfluenceDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with Confluence"""
         try:
-            await anext(
-                self.confluence_client.api_call(
-                    url=os.path.join(self.confluence_client.host_url, PING_URL),
-                )
-            )
+            await self.confluence_client.ping()
             self._logger.info("Successfully connected to Confluence")
         except Exception:
             self._logger.exception("Error while connecting to Confluence")
             raise
-
-    async def fetch_spaces(self):
-        """Get spaces with the help of REST APIs
-
-        Yields:
-            Dictionary: Space document to get indexed
-            List: List of permissions attached to space
-        """
-        async for response in self.confluence_client.paginated_api_call(
-            url_name=SPACE,
-            api_query=SPACE_QUERY,
-        ):
-            for space in response.get("results", []):
-                space_url = os.path.join(
-                    self.confluence_client.host_url, space["_links"]["webui"][1:]
-                )
-                if (self.spaces == [WILDCARD]) or (space["key"] in self.spaces):
-                    yield {
-                        "_id": space["id"],
-                        "type": "Space",
-                        "title": space["name"],
-                        "_timestamp": iso_utc(),
-                        "url": space_url,
-                    }, space.get("permissions", []), space.get("key")
 
     def get_permission(self, permission):
         permissions = set()
@@ -714,17 +795,10 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
-        try:
-            async for permissions in self.confluence_client.api_call(
-                url=os.path.join(self.confluence_client.host_url, url),
-            ):
-                permission = await permissions.json()
-                return permission
-        except ClientResponseError as exception:
-            self._logger.warning(
-                f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
-            )
-            return {}
+        self._logger.debug(
+            f"Fetching permissions for space '{space_key} from Confluence server'"
+        )
+        return await self.confluence_client.fetch_server_space_permission(url=url)
 
     async def fetch_documents(self, api_query):
         """Get pages and blog posts with the help of REST APIs
@@ -738,38 +812,34 @@ class ConfluenceDataSource(BaseDataSource):
             List: List of permissions attached to document
             Dictionary: Dictionary of restrictions attached to document
         """
-        async for response in self.confluence_client.paginated_api_call(
-            url_name=CONTENT,
+        async for document, attachment_count in self.confluence_client.fetch_page_blog_documents(
             api_query=api_query,
         ):
-            documents = response.get("results", [])
-            attachment_count = 0
-            for document in documents:
-                updated_time = document["history"]["lastUpdated"]["when"]
-                if document.get("children").get("attachment"):
-                    attachment_count = document["children"]["attachment"]["size"]
-                document_url = os.path.join(
-                    self.confluence_client.host_url, document["_links"]["webui"][1:]
-                )
-                yield {
-                    "_id": document["id"],
-                    "type": document["type"],
-                    "_timestamp": updated_time,
-                    "title": document["title"],
-                    "space": document["space"]["name"],
-                    "body": document["body"]["storage"]["value"],
-                    "url": document_url,
-                }, attachment_count, document.get("space", {}).get("key"), document.get(
-                    "space", {}
-                ).get(
-                    "permissions", []
-                ), document.get(
-                    "restrictions", {}
-                ).get(
-                    "read", {}
-                ).get(
-                    "restrictions", {}
-                )
+            document_url = os.path.join(
+                self.confluence_client.host_url,
+                document.get("_links", {}).get("webui", "")[1:],
+            )
+            yield {
+                "_id": document.get("id"),
+                "type": document.get("type", ""),
+                "_timestamp": document.get("history", {})
+                .get("lastUpdated", {})
+                .get("when", iso_utc()),
+                "title": document.get("title", ""),
+                "space": document.get("space", {}).get("name", ""),
+                "body": document.get("body", {}).get("storage", {}).get("value", ""),
+                "url": document_url,
+            }, attachment_count, document.get("space", {}).get("key"), document.get(
+                "space", {}
+            ).get(
+                "permissions", []
+            ), document.get(
+                "restrictions", {}
+            ).get(
+                "read", {}
+            ).get(
+                "restrictions", {}
+            )
 
     async def fetch_attachments(
         self, content_id, parent_name, parent_space, parent_type
@@ -786,77 +856,69 @@ class ConfluenceDataSource(BaseDataSource):
             Dictionary: Confluence attachment on the given page or blog post
             String: Download link to get the content of the attachment
         """
-        async for response in self.confluence_client.paginated_api_call(
-            url_name=ATTACHMENT,
-            api_query=ATTACHMENT_QUERY,
-            id=content_id,
+        self._logger.info(
+            f"Fetching attachments for '{parent_name}' from '{parent_space}' space"
+        )
+        async for attachment in self.confluence_client.fetch_attachments(
+            content_id=content_id,
         ):
-            attachments = response.get("results", [])
-            for attachment in attachments:
-                attachment_url = os.path.join(
-                    self.confluence_client.host_url,
-                    attachment["_links"]["webui"][1:],
-                )
-                yield {
-                    "type": attachment["type"],
-                    "title": attachment["title"],
-                    "_id": attachment["id"],
-                    "space": parent_space,
-                    parent_type: parent_name,
-                    "_timestamp": attachment["version"]["when"],
-                    "size": attachment["extensions"]["fileSize"],
-                    "url": attachment_url,
-                }, attachment["_links"]["download"]
+            attachment_url = os.path.join(
+                self.confluence_client.host_url,
+                attachment.get("_links", {}).get("webui", "")[1:],
+            )
+            yield {
+                "type": attachment.get("type"),
+                "title": attachment.get("title"),
+                "_id": attachment.get("id"),
+                "space": parent_space,
+                parent_type: parent_name,
+                "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
+                "size": attachment.get("extensions", {}).get("fileSize", 0),
+                "url": attachment_url,
+            }, attachment.get("_links", {}).get("download")
 
     async def search_by_query(self, query):
-        async for response in self.confluence_client.paginated_api_call(
-            url_name=SEARCH,
-            query=f"{query}&{SEARCH_QUERY}",
-        ):
-            results = response.get("results", [])
-            for entity in results:
-                # entity can be space or content
-                entity_details = entity.get(SPACE) or entity.get(CONTENT)
+        async for entity in self.confluence_client.search_by_query(query=query):
+            # entity can be space or content
+            entity_details = entity.get(SPACE) or entity.get(CONTENT)
 
-                if (
-                    entity_details["type"] == "attachment"
-                    and entity_details["container"].get("title") is None
-                ):
-                    continue
+            if (
+                entity_details.get("type", "") == "attachment"
+                and entity_details.get("container", {}).get("title") is None
+            ):
+                continue
 
-                document = {
-                    "_id": entity_details.get("id"),
-                    "title": entity.get("title"),
-                    "_timestamp": entity.get("lastModified"),
-                    "body": entity.get("excerpt"),
-                    "type": entity.get("entityType"),
-                    "url": os.path.join(
-                        self.confluence_client.host_url, entity.get("url")[1:]
-                    ),
-                }
-                download_url = None
-                if document["type"] == "content":
+            document = {
+                "_id": entity_details.get("id"),
+                "title": entity.get("title"),
+                "_timestamp": entity.get("lastModified"),
+                "body": entity.get("excerpt"),
+                "type": entity.get("entityType"),
+                "url": os.path.join(
+                    self.confluence_client.host_url, entity.get("url")[1:]
+                ),
+            }
+            download_url = None
+            if document.get("type", "") == "content":
+                document.update(
+                    {
+                        "type": entity_details.get("type"),
+                        "space": entity_details.get("space", {}).get("name"),
+                    }
+                )
+
+                if document.get("type", "") == "attachment":
+                    container_type = entity_details.get("container", {}).get("type")
+                    container_title = entity_details.get("container", {}).get("title")
+                    file_size = entity_details.get("extensions", {}).get("fileSize")
                     document.update(
-                        {
-                            "type": entity_details.get("type"),
-                            "space": entity_details.get("space", {}).get("name"),
-                        }
+                        {"size": file_size, container_type: container_title}
                     )
+                    # Removing body as attachment will be downloaded lazily
+                    document.pop("body")
+                    download_url = entity_details.get("_links", {}).get("download")
 
-                    if document["type"] == "attachment":
-                        container_type = entity_details.get("container", {}).get("type")
-                        container_title = entity_details.get("container", {}).get(
-                            "title"
-                        )
-                        file_size = entity_details.get("extensions", {}).get("fileSize")
-                        document.update(
-                            {"size": file_size, container_type: container_title}
-                        )
-                        # Removing body as attachment will be downloaded lazily
-                        document.pop("body")
-                        download_url = entity_details.get("_links", {}).get("download")
-
-                yield document, download_url
+            yield document, download_url
 
     async def download_attachment(self, url, attachment, timestamp=None, doit=False):
         """Downloads the content of the given attachment in chunks using REST API call
@@ -879,6 +941,7 @@ class ConfluenceDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
+        self._logger.info(f"Downloading content for file: {filename}")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
         return await self.download_and_extract_file(
             document,
@@ -900,80 +963,63 @@ class ConfluenceDataSource(BaseDataSource):
             document (dict): Formatted document of page/blogpost
             access_control (list): List of identities which have access to document
         """
-        async for attachment, download_link in self.fetch_attachments(
-            content_id=document["_id"],
-            parent_name=document["title"],
-            parent_space=document["space"],
-            parent_type=document["type"],
-        ):
-            attachment = self._decorate_with_access_control(
-                document=attachment, access_control=access_control
-            )
-            await self.queue.put(
-                (  # pyright: ignore
-                    attachment,
-                    partial(
-                        self.download_attachment,
-                        download_link[1:],
-                        copy(attachment),
-                    ),
+        try:
+            async for attachment, download_link in self.fetch_attachments(
+                content_id=document.get("_id"),
+                parent_name=document.get("title"),
+                parent_space=document.get("space"),
+                parent_type=document.get("type"),
+            ):
+                attachment = self._decorate_with_access_control(
+                    document=attachment, access_control=access_control
                 )
+                await self.queue.put(
+                    (  # pyright: ignore
+                        attachment,
+                        partial(
+                            self.download_attachment,
+                            download_link[1:],
+                            copy(attachment),
+                        ),
+                    )
+                )
+        except Exception as exception:
+            self._logger.exception(
+                f"Error while fetching attachments of {document.get('title')} with id {document.get('_id')}, type: {document.get('type')} in space {document.get('space')}: {exception}"
             )
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
+            raise
+        finally:
+            await self.queue.put(END_SIGNAL)  # pyright: ignore
+
+    def format_space(self, space):
+        space_url = os.path.join(
+            self.confluence_client.host_url,
+            space.get("_links", {}).get("webui", "")[1:],
+        )
+        return {
+            "_id": space.get("id"),
+            "type": "Space",
+            "title": space.get("name"),
+            "_timestamp": iso_utc(),
+            "url": space_url,
+        }
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
-        async for space, permissions, key in self.fetch_spaces():
-            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-                access_control = list(
-                    self._get_access_control_from_permission(
-                        permissions=permissions, target_type=SPACE
-                    )
-                )
-            else:
-                permission = await self.fetch_server_space_permission(space_key=key)
-                access_control = list(
-                    self.get_permission(
-                        permission=permission.get("permissions", {}).get(
-                            "VIEWSPACE", {}
-                        )
-                    )
-                )
-            space = self._decorate_with_access_control(
-                document=space, access_control=access_control
-            )
-            await self.queue.put((space, None))  # pyright: ignore
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
-
-    async def _page_blog_coro(self, api_query, target_type):
-        """Coroutine to add pages/blogposts to Queue
-
-        Args:
-            api_query (str): API Query Parameters for fetching page/blogpost
-            target_type (str): Type of object to filter permission
-        """
-        async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
-            api_query
-        ):
-            # Pages and blog posts are open to viewing or editing by default,
-            # but you can restrict either viewing or editing to certain users or groups.
-            if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-                access_control = list(self._extract_identities(response=restrictions))
-                if len(access_control) == 0:
-                    # Every space has its own independent set of permissions, managed by the space admin(s),
-                    # which determine the access settings for different users and groups.
+        try:
+            self._logger.info("Fetching spaces and its permissions from Confluence")
+            async for space_metadata in self.confluence_client.fetch_spaces():
+                space = self.format_space(space=space_metadata)
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
                     access_control = list(
                         self._get_access_control_from_permission(
-                            permissions=permissions, target_type=target_type
+                            permissions=space_metadata.get("permissions", []),
+                            target_type=SPACE,
                         )
                     )
-            else:
-                access_control = list(
-                    self._extract_identities_for_datacenter(response=restrictions)
-                )
-                if len(access_control) == 0:
+                else:
                     permission = await self.fetch_server_space_permission(
-                        space_key=space_key
+                        space_key=space_metadata.get("key")
                     )
                     access_control = list(
                         self.get_permission(
@@ -982,16 +1028,75 @@ class ConfluenceDataSource(BaseDataSource):
                             )
                         )
                     )
-            document = self._decorate_with_access_control(
-                document=document, access_control=access_control
-            )
-            await self.queue.put((document, None))  # pyright: ignore
-            if attachment_count > 0:
-                await self.fetchers.put(
-                    partial(self._attachment_coro, copy(document), access_control)
+                space = self._decorate_with_access_control(
+                    document=space, access_control=access_control
                 )
-                self.fetcher_count += 1
-        await self.queue.put(END_SIGNAL)  # pyright: ignore
+                await self.queue.put((space, None))  # pyright: ignore
+        except Exception as exception:
+            self._logger.exception(f"Error while fetching spaces: {exception}")
+            raise
+        finally:
+            await self.queue.put(END_SIGNAL)  # pyright: ignore
+
+    async def _page_blog_coro(self, api_query, target_type):
+        """Coroutine to add pages/blogposts to Queue
+
+        Args:
+            api_query (str): API Query Parameters for fetching page/blogpost
+            target_type (str): Type of object to filter permission
+        """
+        try:
+            self._logger.info(
+                f"Fetching {target_type} and its permissions from Confluence"
+            )
+            async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
+                api_query
+            ):
+                # Pages and blog posts are open to viewing or editing by default,
+                # but you can restrict either viewing or editing to certain users or groups.
+                if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+                    access_control = list(
+                        self._extract_identities(response=restrictions)
+                    )
+                    if len(access_control) == 0:
+                        # Every space has its own independent set of permissions, managed by the space admin(s),
+                        # which determine the access settings for different users and groups.
+                        access_control = list(
+                            self._get_access_control_from_permission(
+                                permissions=permissions, target_type=target_type
+                            )
+                        )
+                else:
+                    access_control = list(
+                        self._extract_identities_for_datacenter(response=restrictions)
+                    )
+                    if len(access_control) == 0:
+                        permission = await self.fetch_server_space_permission(
+                            space_key=space_key
+                        )
+                        access_control = list(
+                            self.get_permission(
+                                permission=permission.get("permissions", {}).get(
+                                    "VIEWSPACE", {}
+                                )
+                            )
+                        )
+                document = self._decorate_with_access_control(
+                    document=document, access_control=access_control
+                )
+                await self.queue.put((document, None))  # pyright: ignore
+                if attachment_count > 0:
+                    await self.fetchers.put(
+                        partial(self._attachment_coro, copy(document), access_control)
+                    )
+                    self.fetcher_count += 1
+        except Exception as exception:
+            self._logger.exception(
+                f"Error while fetching pages and blogposts with query '{api_query}': {exception}"
+            )
+            raise
+        finally:
+            await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _consumer(self):
         """Async generator to process entries of the queue
