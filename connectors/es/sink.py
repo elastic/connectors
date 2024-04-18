@@ -55,7 +55,7 @@ from connectors.utils import (
 )
 
 __all__ = ["SyncOrchestrator"]
-FETCH_ERROR = "FETCH_ERROR"
+EXTRACTOR_ERROR = "EXTRACTOR_ERROR"
 END_DOCS = "END_DOCS"
 
 OP_INDEX = "index"
@@ -147,6 +147,7 @@ class Sink:
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
         self.max_retires = max_retries
         self.retry_interval = retry_interval
+        self.error = None
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
@@ -339,57 +340,65 @@ class Sink:
         """Creates batches of bulk calls given a queue of items.
 
         An item is a (size, object) tuple. Exits when the
-        item is the `END_DOCS` or `FETCH_ERROR` string.
+        item is the `END_DOCS` or `EXTRACTOR_ERROR` string.
 
         Bulk calls are executed concurrently with a maximum number of concurrent
         requests.
         """
-        batch = []
-        # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
-        stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
-        bulk_size = 0
-        overhead_size = None
+        try:
+            batch = []
+            # stats is a dictionary containing stats for 3 operations. In each sub-dictionary, it is a doc id to size map.
+            stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
+            bulk_size = 0
+            overhead_size = None
+            batch_num = 0
 
-        while True:
-            doc_size, doc = await self.fetch_doc()
-            if doc in (END_DOCS, FETCH_ERROR):
-                break
-            operation = doc["_op_type"]
-            doc_id = doc["_id"]
-            if operation == OP_DELETE:
-                stats[operation][doc_id] = 0
-            else:
-                # the doc_size also includes _op_type, _index and _id,
-                # which we want to exclude when calculating the size.
-                if overhead_size is None:
-                    overhead = {
-                        "_op_type": operation,
-                        "_index": doc["_index"],
-                        "_id": doc_id,
-                    }
-                    overhead_size = get_size(overhead)
-                stats[operation][doc_id] = max(doc_size - overhead_size, 0)
-            self.counters.increment(operation, namespace=BULK_OPERATIONS)
-            batch.extend(self._bulk_op(doc, operation))
+            while True:
+                batch_num += 1
+                doc_size, doc = await self.fetch_doc()
+                if doc in (END_DOCS, EXTRACTOR_ERROR):
+                    break
+                operation = doc["_op_type"]
+                doc_id = doc["_id"]
+                if operation == OP_DELETE:
+                    stats[operation][doc_id] = 0
+                else:
+                    # the doc_size also includes _op_type, _index and _id,
+                    # which we want to exclude when calculating the size.
+                    if overhead_size is None:
+                        overhead = {
+                            "_op_type": operation,
+                            "_index": doc["_index"],
+                            "_id": doc_id,
+                        }
+                        overhead_size = get_size(overhead)
+                    stats[operation][doc_id] = max(doc_size - overhead_size, 0)
+                self.counters.increment(operation, namespace=BULK_OPERATIONS)
+                batch.extend(self._bulk_op(doc, operation))
 
-            bulk_size += doc_size
-            if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
-                await self.bulk_tasks.put(
-                    functools.partial(
-                        self._batch_bulk,
-                        copy.copy(batch),
-                        copy.copy(stats),
+                bulk_size += doc_size
+                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
+                    await self.bulk_tasks.put(
+                        functools.partial(
+                            self._batch_bulk,
+                            copy.copy(batch),
+                            copy.copy(stats),
+                        ),
+                        name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
                     )
-                )
-                batch.clear()
-                stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
-                bulk_size = 0
+                    batch.clear()
+                    stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
+                    bulk_size = 0
 
-            await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                self.bulk_tasks.raise_any_exception()
 
-        await self.bulk_tasks.join()
-        if len(batch) > 0:
-            await self._batch_bulk(batch, stats)
+            await self.bulk_tasks.join(raise_on_error=True)
+            if len(batch) > 0:
+                await self._batch_bulk(batch, stats)
+        except Exception as e:
+            self.error = e
+            raise
 
 
 class Extractor:
@@ -428,7 +437,7 @@ class Extractor:
         self.index = index
         self.loop = asyncio.get_event_loop()
         self.counters = Counters()
-        self.fetch_error = None
+        self.error = None
         self.filter_ = filter_
         self.basic_rule_engine = (
             BasicRuleEngine(parse(filter_.basic_rules)) if sync_rules_enabled else None
@@ -491,8 +500,8 @@ class Extractor:
             # We clear the queue as we could not actually ingest anything.
             # After that we indicate that we've encountered an error
             self.queue.clear()
-            await self.put_doc(FETCH_ERROR)
-            self.fetch_error = ElasticsearchOverloadedError(e)
+            await self.put_doc(EXTRACTOR_ERROR)
+            self.error = ElasticsearchOverloadedError(e)
         except Exception as e:
             if isinstance(e, ForceCanceledError) or self._canceled:
                 self._logger.warning(
@@ -501,8 +510,8 @@ class Extractor:
                 return
 
             self._logger.critical("Document extractor failed", exc_info=True)
-            await self.put_doc(FETCH_ERROR)
-            self.fetch_error = e
+            await self.put_doc(EXTRACTOR_ERROR)
+            self.error = e
 
     @tracer.start_as_current_span("get_doc call", slow_log=1.0)
     async def _decorate_with_metrics_span(self, generator):
@@ -523,6 +532,7 @@ class Extractor:
 
         self._logger.info("Iterating on remote documents")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
+        download_num = 0
         try:
             async for count, doc in aenumerate(generator):
                 self.counters.increment(DOCS_EXTRACTED)
@@ -568,10 +578,12 @@ class Extractor:
 
                 # if we need to call lazy_download we push it in lazy_downloads
                 if self.content_extraction_enabled and lazy_download is not None:
+                    download_num += 1
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
-                        )
+                        ),
+                        name=f"Extractor download #{download_num}",
                     )
 
                 else:
@@ -626,6 +638,7 @@ class Extractor:
 
         self._logger.info("Iterating on remote documents incrementally when possible")
         lazy_downloads = ConcurrentTasks(self.concurrent_downloads)
+        num_downloads = 0
         try:
             async for count, doc in aenumerate(generator):
                 doc, lazy_download, operation = doc
@@ -655,10 +668,12 @@ class Extractor:
 
                 # if we need to call lazy_download we push it in lazy_downloads
                 if self.content_extraction_enabled and lazy_download is not None:
+                    num_downloads += 1
                     await lazy_downloads.put(
                         functools.partial(
                             self._deferred_index, lazy_download, doc_id, doc, operation
-                        )
+                        ),
+                        name=f"Extractor download #{num_downloads}",
                     )
 
                 else:
@@ -795,6 +810,8 @@ class SyncOrchestrator:
         self._extractor_task = None
         self._sink = None
         self._sink_task = None
+        self.error = None
+        self.canceled = False
 
     async def close(self):
         await self.es_management_client.close()
@@ -837,11 +854,23 @@ class SyncOrchestrator:
             self._logger.info(f"Content index successfully created:  {index_name}")
 
     def done(self):
-        if self._extractor_task is not None and not self._extractor_task.done():
-            return False
-        if self._sink_task is not None and not self._sink_task.done():
-            return False
-        return True
+        """
+        An async task (which this mimics) should be "done" if:
+         - it was canceled
+         - it errored
+         - it completed successfully
+        :return: True if the orchestrator is "done", else False
+        """
+        if self.get_error() is not None:
+            return True
+
+        extractor_done = (
+            True
+            if self._extractor_task is None or self._extractor_task.done()
+            else False
+        )
+        sink_done = True if self._sink_task is None or self._sink_task.done() else False
+        return extractor_done and sink_done
 
     def _sink_task_running(self):
         return self._sink_task is not None and not self._sink_task.done()
@@ -854,6 +883,7 @@ class SyncOrchestrator:
             self._sink_task.cancel()
         if self._extractor_task_running():
             self._extractor_task.cancel()
+        self.canceled = True
 
         cancelation_timeout = CANCELATION_TIMEOUT
         while cancelation_timeout > 0:
@@ -882,8 +912,12 @@ class SyncOrchestrator:
             )  # return indexed_document_volume in number of MiB
         return stats
 
-    def fetch_error(self):
-        return None if self._extractor is None else self._extractor.fetch_error
+    def get_error(self):
+        return (
+            None
+            if self._extractor is None
+            else (self._extractor.error or self._sink.error or self.error)
+        )
 
     async def async_bulk(
         self,
@@ -956,6 +990,9 @@ class SyncOrchestrator:
         self._extractor_task = asyncio.create_task(
             self._extractor.run(generator, job_type)
         )
+        self._extractor_task.add_done_callback(
+            functools.partial(self.extractor_task_callback)
+        )
 
         # start the bulker
         self._sink = Sink(
@@ -971,3 +1008,18 @@ class SyncOrchestrator:
             enable_bulk_operations_logging=enable_bulk_operations_logging,
         )
         self._sink_task = asyncio.create_task(self._sink.run())
+        self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
+
+    def sink_task_callback(self, task):
+        if task.exception():
+            self._logger.error(
+                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}: {task.exception()}",
+            )
+            self.error = task.exception()
+
+    def extractor_task_callback(self, task):
+        if task.exception():
+            self._logger.error(
+                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}: {task.exception()}",
+            )
+            self.error = task.exception()
