@@ -1,0 +1,87 @@
+{
+    "name": "opentext_documentum",
+    "service_type": "opentext_documentum",
+    "index_name": "search-opentext_documentum",
+    "sync_cursor": null,
+    "is_native": false,
+    "api_key_id": null,
+    "status": "configured",
+    "language": "en",
+    "last_access_control_sync_error": null,
+    "last_access_control_sync_status": null,
+    "last_sync_status": null,
+    "last_sync_error": null,
+    "last_synced": null,
+    "last_seen": null,
+    "created_at": null,
+    "updated_at": null,
+    "configuration": {
+        "host_url": {
+            "label": "Opentext Documentum host url",
+            "order": 1,
+            "type": "str",
+            "value": "http://127.0.0.1:2099"
+        },
+        "username": {
+            "label": "Opentext Documentum username",
+            "order": 2,
+            "type": "str",
+            "value": "elastic"
+        },
+        "password": {
+            "label": "Opentext Documentum password",
+            "sensitive": true,
+            "order": 3,
+            "type": "str",
+            "value": "changeme"
+        },
+        "repositories": {
+            "display": "textarea",
+            "label": "Opentext Documentum repositories",
+            "order": 4,
+            "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
+            "type": "list",
+            "value": "*"
+        },
+        "ssl_enabled": {
+            "display": "toggle",
+            "label": "Enable SSL",
+            "order": 5,
+            "type": "bool",
+            "value": false
+        },
+        "ssl_ca": {
+            "depends_on": [{"field": "ssl_enabled", "value": true}],
+            "label": "SSL certificate",
+            "order": 6,
+            "type": "str",
+            "value": ""
+        },
+        "retry_count": {
+            "default_value": 3,
+            "display": "numeric",
+            "label": "Retries for failed requests",
+            "order": 7,
+            "required": false,
+            "type": "int",
+            "ui_restrictions": ["advanced"],
+            "value": 3
+        },
+        "use_text_extraction_service": {
+            "display": "toggle",
+            "label": "Use text extraction service",
+            "order": 8,
+            "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
+            "type": "bool",
+            "ui_restrictions": ["advanced"],
+            "value": false
+        }
+    },
+    "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
+    "pipeline": {
+        "extract_binary_content": true,
+        "name": "ent-search-generic-ingestion",
+        "reduce_whitespace": true,
+        "run_ml_inference": true
+    }
+}
