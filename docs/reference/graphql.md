@@ -28,7 +28,7 @@ Provide base URL of the source with endpoint. Example:
 
 #### `http_method`  (required)
 
-Select method from GET and POST.
+Select method from `GET` and `POST`.
 
 #### `authentication_method`  (required)
 
@@ -67,7 +67,9 @@ Example: If the GraphQL query is `query getUser($id: ID!) { user(id: $id) { name
 
 #### `graphql_object_list` (required)
 
-Provides json of GraphQL object types to fetch data from. The connector will fetch data for each object type in this json. The GraphQL objects can be nested and the connector will recursively fetch data for nested objects. The connector will fetch all the fields for each object type. The value of each key in the json should be a name of unique field. Use '.' to provide full path of the object from the root of the response.  Example:
+A JSON mapping between GraphQL response objects to index and their ID fields. The connector will fetch data for each object (JSON key) and use the provided ID field (JSON value) to index the object into Elasticsearch. The connector will index all fields for each object specified in the mapping. Use a dot `(.)` notation to specify the full path from the root of the GraphQL response to the desired object.
+
+Example: 
 
 ```
 If the GraphQL query is `query getUser { organization { users{ user_id name email} } }` which is fetching all available users from the source and we want to index every user as separate document in that case configure this field as below.
