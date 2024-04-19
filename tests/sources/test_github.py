@@ -651,6 +651,50 @@ EXPECTED_ACCESS_CONTROL = [
         },
     }
 ]
+EXPECTED_ACCESS_CONTROL_GITHUB_APP = [
+    {
+        "_id": "#1",
+        "identity": {
+            "user_id": "user_id:#1",
+            "user_name": "username:user_1",
+            "email": "email:user_1@example.com",
+        },
+        "created_at": "2023-04-17T12:55:01Z",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "user_id:#1",
+                        "username:user_1",
+                        "email:user_1@example.com",
+                    ]
+                },
+                "source": DLS_QUERY,
+            }
+        },
+    },
+    {
+        "_id": "#2",
+        "identity": {
+            "user_id": "user_id:#2",
+            "user_name": "username:user_2",
+            "email": "email:user_2@example.com",
+        },
+        "created_at": "2023-04-17T12:55:01Z",
+        "query": {
+            "template": {
+                "params": {
+                    "access_control": [
+                        "user_id:#2",
+                        "username:user_2",
+                        "email:user_2@example.com",
+                    ]
+                },
+                "source": DLS_QUERY,
+            }
+        },
+    },
+]
 MOCK_CONTRIBUTOR = {
     "repository": {
         "collaborators": {
@@ -1608,7 +1652,7 @@ async def test_is_previous_repo():
 
 @pytest.mark.asyncio
 async def test_get_access_control():
-    async with create_github_source() as source:
+    async with create_github_source(repo_type="organization") as source:
         actual_response = []
         source._dls_enabled = Mock(return_value=True)
         with patch.object(
@@ -1625,6 +1669,53 @@ async def test_get_access_control():
         source._dls_enabled = Mock(return_value=False)
         async for access_control in source.get_access_control():
             assert access_control is None
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_github_app():
+    async with create_github_source(
+        auth_method=GITHUB_APP, repo_type="organization"
+    ) as source:
+        source._dls_enabled = Mock(return_value=True)
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        source.github_client._installation_access_token = "changeme"
+        source.github_client._fetch_all_members = Mock(
+            side_effect=(
+                lambda org_name: AsyncIterator(
+                    [
+                        {
+                            "id": "#1",
+                            "login": "user_1",
+                            "email": "user_1@example.com",
+                            "updatedAt": "2023-04-17T12:55:01Z",
+                        },
+                    ]
+                )
+                if org_name == "org_1"
+                else AsyncIterator(
+                    [
+                        {
+                            "id": "#2",
+                            "login": "user_2",
+                            "email": "user_2@example.com",
+                            "updatedAt": "2023-04-17T12:55:01Z",
+                        },
+                    ]
+                )
+            )
+        )
+
+        actual_response = []
+        jwt_response = {"token": "changeme"}
+        with patch(
+            "connectors.sources.github.get_installation_access_token",
+            return_value=jwt_response,
+        ):
+            async for access_control in source.get_access_control():
+                actual_response.append(access_control)
+        assert actual_response == EXPECTED_ACCESS_CONTROL_GITHUB_APP
 
 
 @pytest.mark.asyncio
@@ -1808,3 +1899,30 @@ async def test_fetch_installations(repo_type, expected_installations):
         await source._fetch_installations()
         assert source._installations == expected_installations
         source.github_client.get_installations.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "auth_method, repo_type, expected_owners",
+    [
+        (PERSONAL_ACCESS_TOKEN, "organization", ["demo_org"]),
+        (PERSONAL_ACCESS_TOKEN, "other", ["demo_user"]),
+        (GITHUB_APP, "organization", ["org_1", "org_2"]),
+        (GITHUB_APP, "other", ["user_1", "user_2"]),
+    ],
+)
+async def test_get_owners(auth_method, repo_type, expected_owners):
+    async with create_github_source(
+        auth_method=auth_method, repo_type=repo_type, org_name="demo_org"
+    ) as source:
+        source.github_client.get_logged_in_user = AsyncMock(return_value="demo_user")
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        jwt_response = {"token": "changeme"}
+        with patch(
+            "connectors.sources.github.get_installation_access_token",
+            return_value=jwt_response,
+        ):
+            actual_owners = [owner async for owner in source._get_owners()]
+            assert actual_owners == expected_owners
