@@ -201,6 +201,8 @@ class NotionClient:
                 self._logger.warning(
                     f"Encountered external object with id: {block_id}. Skipping : {error}"
                 )
+            elif error.code == "object_not_found":
+                self._logger.warning(f"Object not found: {error}")
             else:
                 raise
 
