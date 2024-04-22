@@ -70,6 +70,9 @@ class BaseService(metaclass=_Registry):
 
     def __init__(self, config, service_name):
         self.config = config
+        self.logger = DocumentLogger(
+            f"[{service_name}]", {"service_name": service_name}
+        )
         self.service_config = self.config["service"]
         self.es_config = self.config["elasticsearch"]
         self.connectors = self._parse_connectors()
@@ -78,7 +81,6 @@ class BaseService(metaclass=_Registry):
         self.running = False
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
-        self.logger = DocumentLogger(f"[{service_name}]", { 'service_name': service_name })
 
     def stop(self):
         self.running = False

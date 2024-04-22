@@ -9,7 +9,6 @@ A task periodically clean up orphaned and idle jobs.
 
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.management_client import ESManagementClient
-from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
 
@@ -114,7 +113,9 @@ class JobCleanUpService(BaseService):
                         job = None
                     await connector.sync_done(job=job)
                 except Exception as e:
-                    self.logger.error(f"Failed to mark idle job #{job_id} as error: {e}")
+                    self.logger.error(
+                        f"Failed to mark idle job #{job_id} as error: {e}"
+                    )
                 finally:
                     total_count += 1
 

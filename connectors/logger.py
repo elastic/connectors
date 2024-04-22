@@ -10,7 +10,6 @@ import contextlib
 import inspect
 import logging
 import time
-from datetime import datetime
 from functools import cached_property, wraps
 from typing import AsyncGenerator
 
@@ -68,7 +67,6 @@ class ColorFormatter(logging.Formatter):
     def format(self, record):  # noqa: A003
         formatter = getattr(self, f"{record.levelname.lower()}_formatter")
         return formatter.format(record)
-
 
 
 class DocumentLogger:
@@ -142,7 +140,6 @@ class DocumentLogger:
             extra=self._extra,
             **kwargs,
         )
-
 
 
 class ExtraLogger(logging.Logger):

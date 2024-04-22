@@ -8,7 +8,6 @@ from functools import cached_property
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.license import requires_platinum_license
-from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
     DataSourceError,
@@ -107,7 +106,9 @@ class JobExecutionService(BaseService):
                 f"Native support for {self.display_name} for {', '.join(native_service_types)}"
             )
         else:
-            self.logger.debug(f"No native service types configured for {self.display_name}")
+            self.logger.debug(
+                f"No native service types configured for {self.display_name}"
+            )
 
         connector_ids = list(self.connectors.keys())
 

@@ -378,7 +378,7 @@ class SyncJob(ESDocument):
             "labels.sync_job_id": self.id,
             "labels.connector_id": self.connector_id,
             "labels.index_name": self.index_name,
-            "labels.service_type": self.service_type
+            "labels.service_type": self.service_type,
         }
 
 
@@ -961,7 +961,7 @@ class Connector(ESDocument):
         return {
             "labels.connector_id": self.id,
             "labels.index_name": self.index_name,
-            "labels.service_type": self.service_type
+            "labels.service_type": self.service_type,
         }
 
 

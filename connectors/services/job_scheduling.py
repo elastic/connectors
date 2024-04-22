@@ -14,7 +14,6 @@ from datetime import datetime
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
     DataSourceError,
