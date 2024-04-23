@@ -201,11 +201,9 @@ class SyncJobRunner:
             while not self.sync_orchestrator.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
-            fetch_error = self.sync_orchestrator.fetch_error()
-            sync_status = (
-                JobStatus.COMPLETED if fetch_error is None else JobStatus.ERROR
-            )
-            await self._sync_done(sync_status=sync_status, sync_error=fetch_error)
+            sync_error = self.sync_orchestrator.get_error()
+            sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
+            await self._sync_done(sync_status=sync_status, sync_error=sync_error)
         except asyncio.CancelledError:
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
@@ -338,14 +336,18 @@ class SyncJobRunner:
         )
 
     async def _sync_done(self, sync_status, sync_error=None):
-        if self.sync_orchestrator is not None and not self.sync_orchestrator.done():
-            await self.sync_orchestrator.cancel()
         if self.job_reporting_task is not None and not self.job_reporting_task.done():
             self.job_reporting_task.cancel()
             try:
                 await self.job_reporting_task
             except asyncio.CancelledError:
                 self.sync_job.log_debug("Job reporting task is stopped.")
+        if (
+            self.sync_orchestrator is not None
+            and not self.sync_orchestrator.canceled
+            and sync_error is not None
+        ):
+            await self.sync_orchestrator.cancel()
 
         ingestion_stats = (
             {}
