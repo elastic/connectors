@@ -1305,7 +1305,7 @@ async def test_fetch_pull_requests_with_deleted_users():
                             "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
                             "nodes": [
                                 {
-                                    "author": None, # author will return None in this situation
+                                    "author": None,  # author will return None in this situation
                                     "state": "APPROVED",
                                     "body": "LGTM",
                                     "comments": {
@@ -1332,7 +1332,7 @@ async def test_fetch_pull_requests_with_deleted_users():
                 "comments": [{"body": "nice!!!"}],
             },
             {
-                "author": None, # deleted author
+                "author": None,  # deleted author
                 "body": "LGTM",
                 "state": "APPROVED",
                 "comments": [{"body": "LGTM"}],
