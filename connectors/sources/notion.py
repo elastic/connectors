@@ -5,7 +5,9 @@
 #
 """Notion source module responsible to fetch documents from the Notion Platform."""
 import asyncio
+import json
 import os
+import re
 from copy import copy
 from functools import cached_property, partial
 from typing import Any, Awaitable, Callable
@@ -176,17 +178,33 @@ class NotionClient:
                     ):  # pyright: ignore
                         yield grandchild
 
-        async for block in self.async_iterate_paginated_api(
-            self._get_client.blocks.children.list, block_id=block_id
-        ):
-            if block.get("type") not in ["child_database", "child_page", "unsupported"]:
-                yield block
-                if block.get("has_children") is True:
-                    async for child in fetch_children_recursively(block):
-                        yield child
-            if block.get("type") == "child_database":
-                async for record in self.query_database(block.get("id")):
-                    yield record
+        try:
+            async for block in self.async_iterate_paginated_api(
+                self._get_client.blocks.children.list, block_id=block_id
+            ):
+                if block.get("type") not in [
+                    "child_database",
+                    "child_page",
+                    "unsupported",
+                ]:
+                    yield block
+                    if block.get("has_children") is True:
+                        async for child in fetch_children_recursively(block):
+                            yield child
+                if block.get("type") == "child_database":
+                    async for record in self.query_database(block.get("id")):
+                        yield record
+        except APIResponseError as error:
+            if error.code == "validation_error" and "external_object" in json.loads(
+                error.body
+            ).get("message"):
+                self._logger.warning(
+                    f"Encountered external object with id: {block_id}. Skipping : {error}"
+                )
+            elif error.code == "object_not_found":
+                self._logger.warning(f"Object not found: {error}")
+            else:
+                raise
 
     async def fetch_by_query(self, query):
         async for document in self.async_iterate_paginated_api(
@@ -567,6 +585,16 @@ class NotionDataSource(BaseDataSource):
                     "filter": {"value": "database", "property": "object"},
                 }
 
+    def is_connected_property_block(self, page_database):
+        properties = page_database.get("properties")
+        if properties is None:
+            return False
+        for field in properties.keys():
+            if re.match(r"^Related to.*\(.*\)$", field):
+                return True
+
+        return False
+
     async def retrieve_and_process_blocks(self, query):
         block_ids_store = []
         async for page_database in self.notion_client.fetch_by_query(query=query):
@@ -576,6 +604,12 @@ class NotionDataSource(BaseDataSource):
 
             yield self._format_doc(page_database), None
             self._logger.info(f"Fetching child blocks for block {block_id}")
+
+            if self.is_connected_property_block(page_database):
+                self._logger.debug(
+                    f"Skipping children of block with id: {block_id} as not supported by API"
+                )
+                continue
 
             async for child_block in self.notion_client.fetch_child_blocks(
                 block_id=block_id
