@@ -51,12 +51,14 @@ EXPECTED_PROJECT = [
     {
         "_id": "project-1",
         "_timestamp": "2023-01-24T09:37:19+05:30",
+        "Key": "DP",
         "Type": "Project",
         "Project": {"id": "1", "name": "dummy_project", "key": "DP"},
     },
     {
         "_id": "project-2",
         "_timestamp": "2023-01-24T09:37:19+05:30",
+        "Key": "TP",
         "Type": "Project",
         "Project": {"id": "2", "name": "test_project", "key": "TP"},
     },
@@ -85,6 +87,7 @@ MOCK_ISSUE = {
 EXPECTED_ISSUE = {
     "_id": "test_project-TP-1",
     "_timestamp": "2023-02-01T01:02:20",
+    "Key": "TP-1",
     "Type": "Task",
     "Issue": {
         "project": {"name": "test_project", "key": "TP"},
@@ -129,6 +132,7 @@ MOCK_ISSUE_TYPE_BUG = {
 EXPECTED_ISSUE_TYPE_BUG = {
     "_id": "test_project-TP-2",
     "_timestamp": "2023-02-01T01:02:20",
+    "Key": "TP-2",
     "Type": "Bug",
     "Issue": {
         "project": {"name": "test_project", "key": "TP"},
