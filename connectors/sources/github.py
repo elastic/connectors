@@ -1075,7 +1075,7 @@ class GitHubDataSource(BaseDataSource):
         self.org_repos = {}
         self.foreign_repos = {}
         self.prev_repos = []
-        self.members = set()
+        self.members = {}
         self._user = None
         # A dict caches GitHub App installation info, where the key is the org name/user login,
         # and the value is the installation id
@@ -1947,11 +1947,11 @@ class GitHubDataSource(BaseDataSource):
             "cursor": None,
         }
         access_control = []
-        if len(self.members) <= 0:
-            async for user in self.github_client._fetch_all_members(
-                self.configuration["org_name"]
-            ):
-                self.members.add(user.get("id"))
+        if owner not in self.members:
+            members = set()
+            async for user in self.github_client._fetch_all_members(owner):
+                members.add(user.get("id"))
+            self.members[owner] = members
         async for response in self.github_client.paginated_api_call(
             query=GithubQuery.COLLABORATORS_QUERY.value,
             variables=collaborator_variables,
@@ -1963,7 +1963,7 @@ class GitHubDataSource(BaseDataSource):
                 user_id = user.get("node", {}).get("id")
                 user_name = user.get("node", {}).get("login")
                 user_email = user.get("node", {}).get("email")
-                if user_id in self.members:
+                if user_id in self.members[owner]:
                     access_control.append(_prefix_user_id(user_id=user_id))
                     if user_name:
                         access_control.append(_prefix_username(user=user_name))
