@@ -6,6 +6,7 @@
 """SharePoint source module responsible to fetch documents from SharePoint Server.
 """
 import os
+import re
 from functools import partial
 from urllib.parse import quote
 
@@ -13,13 +14,12 @@ import httpx
 from httpx_ntlm import HttpNtlmAuth
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError, CHUNK_SIZE
+from connectors.source import CHUNK_SIZE, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
     ssl_context,
 )
-import re
 
 BASIC_AUTH = "Basic"
 NTLM_AUTH = "NTLM"
@@ -39,7 +39,7 @@ DOCUMENT_LIBRARY = "document_library"
 SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 
 URLS = {
-    PING: "{site_collections}/_api/web/webs",
+    PING: "{site_url}/_api/web/webs",
     SITE: "{parent_site_url}/_api/web",
     SITES: "{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
     LISTS: "{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
@@ -99,7 +99,11 @@ class SharepointServerClient:
         self.retry_count = self.configuration["retry_count"]
         self.site_collections = []
         for collection in self.configuration["site_collections"]:
-            collection_url = collection if re.match(r"^https?://", collection) else f"{self.host_url}/sites/{collection}"
+            collection_url = (
+                collection
+                if re.match(r"^https?://", collection)
+                else f"{self.host_url}/sites/{collection}"
+            )
             self.site_collections.append(collection_url)
 
         self.session = None
@@ -117,7 +121,7 @@ class SharepointServerClient:
         Returns:
             ClientSession: Base client session.
         """
-        if self.session and self.session.is_closed == False:
+        if self.session and self.session.is_closed is False:
             return self.session
         self._logger.info("Generating httpx Client Session...")
         request_headers = {
@@ -127,15 +131,21 @@ class SharepointServerClient:
         timeout = httpx.Timeout(timeout=None)  # pyright: ignore
 
         auth_type = (
-            httpx.BasicAuth(username=self.configuration["username"],password=self.configuration["password"])
+            httpx.BasicAuth(
+                username=self.configuration["username"],
+                password=self.configuration["password"],
+            )
             if self.configuration["authentication"] == BASIC_AUTH
-            else HttpNtlmAuth(username=self.configuration["username"],password=self.configuration["password"])
+            else HttpNtlmAuth(
+                username=self.configuration["username"],
+                password=self.configuration["password"],
+            )
         )
         self.session = httpx.AsyncClient(
             auth=auth_type,
             verify=self.ssl_ctx,
             headers=request_headers,
-            timeout=timeout
+            timeout=timeout,
         )
         return self.session
 
@@ -192,13 +202,14 @@ class SharepointServerClient:
 
         while True:
             try:
-                self._get_session()                
+                self._get_session()
                 result = await self.session.get(  # pyright: ignore
                     url=url,
                     headers=headers,
                 )
-                if result.is_success == False:
-                    raise Exception(f"Error accessing {url}: {result.reason_phrase}")
+                if result.is_success is False:
+                    msg = f"Error accessing {url}: {result.reason_phrase}"
+                    raise Exception(msg)
                 if url_name == ATTACHMENT:
                     yield result
                 else:
@@ -241,7 +252,7 @@ class SharepointServerClient:
                 ):
                     yield response.get("value", [])  # pyright: ignore
 
-                    next_url = response.get("odata.nextLink", "")
+                    next_url = response.get("odata.nextLink", "")  # pyright: ignore
             else:
                 async for response in self._api_call(
                     url_name=param_name,
@@ -253,7 +264,7 @@ class SharepointServerClient:
                 ):
                     yield response.get("value", [])  # pyright: ignore
 
-                    next_url = response.get("odata.nextLink", "")
+                    next_url = response.get("odata.nextLink", "")  # pyright: ignore
             if next_url == "":
                 break
 
@@ -300,7 +311,7 @@ class SharepointServerClient:
                 ):
                     yield sub_site
                 yield data
-    
+
     async def get_site(self, site_url):
         """Get sites from SharePoint Server
 
@@ -310,11 +321,11 @@ class SharepointServerClient:
             site_server_url(string): Site path.
         """
         async for response in self._api_call(
-                url_name=SITE,
-                parent_site_url=site_url,
-                host_url=self.host_url,
-            ):
-                yield response
+            url_name=SITE,
+            parent_site_url=site_url,
+            host_url=self.host_url,
+        ):
+            yield response
 
     async def get_lists(self, site_url):
         """Get site lists from SharePoint Server
@@ -360,7 +371,9 @@ class SharepointServerClient:
             return
         return relative_url
 
-    async def get_list_items(self, list_id, site_url, site_relative_url, list_relative_url, **kwargs):
+    async def get_list_items(
+        self, list_id, site_url, site_relative_url, list_relative_url, **kwargs
+    ):
         """This method fetches items from all the lists in a collection.
 
         Args:
@@ -402,7 +415,7 @@ class SharepointServerClient:
                     result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
                     result["url"] = self.format_url(
                         site_url=site_url,
-                        relative_url=attachment_file.get("ServerRelativeUrl")
+                        relative_url=self.fix_relative_url(site_relative_url,attachment_file.get("ServerRelativeUrl")),
                     )
                     result["file_name"] = attachment_file.get("FileName")
                     result["server_relative_url"] = attachment_file["ServerRelativeUrl"]
@@ -414,7 +427,9 @@ class SharepointServerClient:
 
                     yield result, file_relative_url
 
-    async def get_drive_items(self, list_id, site_url, site_relative_url, list_relative_url, **kwargs):
+    async def get_drive_items(
+        self, list_id, site_url, site_relative_url, list_relative_url, **kwargs
+    ):
         """This method fetches items from all the drives in a collection.
 
         Args:
@@ -452,13 +467,27 @@ class SharepointServerClient:
 
     async def ping(self):
         """Executes the ping call in async manner"""
+        site_url = ""
+        if len(self.site_collections) > 0:
+            site_url = self.site_collections[0]
+        else:
+            site_url = self.host_url
         await anext(
             self._api_call(
                 url_name=PING,
-                site_collections=self.site_collections[0],
+                site_url=site_url,
                 host_url=self.host_url,
             )
         )
+
+    def fix_relative_url(self, site_relative_url, item_relative_url):
+        if item_relative_url is not None:
+            item_relative_url = (
+                item_relative_url
+                if site_relative_url == "/"
+                else item_relative_url.replace(site_relative_url, "")
+            )
+        return item_relative_url
 
 
 class SharepointServerDataSource(BaseDataSource):
@@ -489,7 +518,7 @@ class SharepointServerDataSource(BaseDataSource):
             dictionary: Default configuration.
         """
         return {
-            "authentication":{
+            "authentication": {
                 "label": "Authentication mode",
                 "order": 1,
                 "type": "str",
@@ -497,6 +526,7 @@ class SharepointServerDataSource(BaseDataSource):
                     {"label": "Basic", "value": BASIC_AUTH},
                     {"label": "NTLM", "value": NTLM_AUTH},
                 ],
+                "display": "dropdown",
                 "value": BASIC_AUTH,
             },
             "username": {
@@ -520,7 +550,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "label": "Comma-separated list of SharePoint site collections to index",
                 "order": 5,
                 "type": "list",
-                "required": True
+                "required": True,
             },
             "ssl_enabled": {
                 "display": "toggle",
@@ -638,8 +668,7 @@ class SharepointServerDataSource(BaseDataSource):
         document = {"type": document_type}
 
         document["url"] = self.sharepoint_client.format_url(
-            site_url=site_url,
-            relative_url=list_relative_url
+            site_url=site_url, relative_url=list_relative_url
         )
         document["server_relative_url"] = item["RootFolder"]["ServerRelativeUrl"]
 
@@ -679,14 +708,15 @@ class SharepointServerDataSource(BaseDataSource):
         document = {"type": DRIVE_ITEM}
         item_type = item["item_type"]
 
-        item_relative_url = self.fix_relative_url(site_relative_url, item[item_type]["ServerRelativeUrl"])
+        item_relative_url = self.sharepoint_client.fix_relative_url(
+            site_relative_url, item[item_type]["ServerRelativeUrl"]
+        )
         document.update(
             {  # pyright: ignore
                 "_id": item["GUID"],
                 "size": int(item.get("File", {}).get("Length", 0)),
                 "url": self.sharepoint_client.format_url(
-                    site_url=site_url,
-                    relative_url=item_relative_url
+                    site_url=site_url, relative_url=item_relative_url
                 ),
                 "server_relative_url": item[item_type]["ServerRelativeUrl"],
                 "type": item_type,
@@ -739,10 +769,8 @@ class SharepointServerDataSource(BaseDataSource):
         """
         sites = []
 
-        for collection in self.sharepoint_client.site_collections:            
-            async for site_data in self.sharepoint_client.get_site(
-                site_url=collection
-            ):
+        for collection in self.sharepoint_client.site_collections:
+            async for site_data in self.sharepoint_client.get_site(site_url=collection):
                 sites.append(site_data)
                 yield self.format_sites(item=site_data), None
             async for site_data in self.sharepoint_client.get_sites(
@@ -758,8 +786,8 @@ class SharepointServerDataSource(BaseDataSource):
                 for result in list_data:
                     is_site_page = False
                     selected_field = ""
-                    list_relative_url = self.fix_relative_url(
-                        site_relative_url, 
+                    list_relative_url = self.sharepoint_client.fix_relative_url(
+                        site_relative_url,
                         result["RootFolder"]["ServerRelativeUrl"],
                     )
                     # if BaseType value is 1 then it's document library else it's a list
@@ -768,14 +796,20 @@ class SharepointServerDataSource(BaseDataSource):
                             is_site_page = True
                             selected_field = SELECTED_FIELDS
                         yield self.format_lists(
-                            site_url=site_url, list_relative_url=list_relative_url, item=result, document_type=DOCUMENT_LIBRARY
+                            site_url=site_url,
+                            list_relative_url=list_relative_url,
+                            item=result,
+                            document_type=DOCUMENT_LIBRARY,
                         ), None
                         list_relative_url = None
                         func = self.sharepoint_client.get_drive_items
                         format_document = self.format_drive_item
                     else:
                         yield self.format_lists(
-                            site_url=site_url, list_relative_url=list_relative_url, item=result, document_type=LISTS
+                            site_url=site_url,
+                            list_relative_url=list_relative_url,
+                            item=result,
+                            document_type=LISTS,
                         ), None
                         func = self.sharepoint_client.get_list_items
                         format_document = self.format_list_item
@@ -787,7 +821,11 @@ class SharepointServerDataSource(BaseDataSource):
                         list_relative_url=list_relative_url,
                         selected_field=selected_field,
                     ):
-                        document = format_document(site_url=site_url, site_relative_url=site_relative_url, item=item)
+                        document = format_document(
+                            site_url=site_url,
+                            site_relative_url=site_relative_url,
+                            item=item,
+                        )
 
                         if file_relative_url is None:
                             yield document, None
@@ -805,11 +843,6 @@ class SharepointServerDataSource(BaseDataSource):
                                     file_relative_url,
                                     site_url,
                                 )
-
-    def fix_relative_url(self, site_relative_url, item_relative_url):
-        if item_relative_url != None:
-            item_relative_url = item_relative_url if site_relative_url == "/" else item_relative_url.replace(site_relative_url, "")
-        return item_relative_url
 
     async def get_content(
         self, document, file_relative_url, site_url, timestamp=None, doit=False
