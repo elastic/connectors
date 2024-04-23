@@ -1,10 +1,11 @@
 # GraphQL Connector
 
-The [Elastic GraphQL connector](../connectors/sources/graphql.py) is built with the Elastic connectors Python framework and is available as a self-managed [connector client](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The Elastic GraphQL connector connector is written in Python using the [Elastic connector framework](https://github.com/elastic/connectors/tree/main). View the [source code for this connector](https://github.com/elastic/connectors/blob/main/connectors/sources/graphql.py).
 
 ## Availability and prerequisites
 
-This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+This connector is available as a self-managed connector client.
+To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
 This connector is in **technical preview** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Technical preview features are not subject to the support SLA of official GA features.
 
@@ -128,6 +129,11 @@ The `connection_timeout` specifies the maximum time in seconds to wait for a res
 ## Documents and syncs
 
 The connector syncs the objects and entities based on GraphQL Query and GraphQL Object List.
+
+### Sync types
+[Full syncs](https://www.elastic.co/guide/en/enterprise-search/current/connectors-sync-types.html#connectors-sync-types-full) are supported by default for all connectors.
+
+This connector currently does not support [incremental syncs](https://www.elastic.co/guide/en/enterprise-search/current/connectors-sync-types.html#connectors-sync-types-incremental).
 
 ## Sync rules
 
