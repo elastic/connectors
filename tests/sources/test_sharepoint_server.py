@@ -467,19 +467,17 @@ async def test_get_drive_items():
 async def test_get_docs_list_items():
     """Test get docs method for list items"""
 
-    item_content_response = [
-        {
-            "RootFolder": {
-                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-            },
-            "Created": "2023-03-19T05:02:52Z",
-            "BaseType": 0,
-            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-            "ParentWebUrl": "/sites/enterprise/ctest/_api",
-            "Title": "HelloWorld",
-        }
-    ]
+    item_content_response = {
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 0,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "HelloWorld",
+    }
     list_content_response = {
         "AttachmentFiles": {},
         "Id": 1,
@@ -499,9 +497,14 @@ async def test_get_docs_list_items():
         source.sharepoint_client._fetch_data_with_query = Mock(
             return_value=AsyncIterator([])
         )
-        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+        source.get_lists = AsyncIterator([(item_content_response, [])])
         source.sharepoint_client.get_list_items = AsyncIterator(
-            [(list_content_response, None)]
+            [
+                (
+                    list_content_response,
+                    None,
+                )
+            ]
         )
         async for document, _ in source.get_docs():
             actual_response.append(document)
@@ -512,19 +515,17 @@ async def test_get_docs_list_items():
 async def test_get_docs_list_items_when_relativeurl_is_not_none():
     """Test get docs method for list items"""
 
-    item_content_response = [
-        {
-            "RootFolder": {
-                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-            },
-            "Created": "2023-03-19T05:02:52Z",
-            "BaseType": 0,
-            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-            "ParentWebUrl": "/sites/enterprise/ctest/_api",
-            "Title": "HelloWorld",
-        }
-    ]
+    item_content_response = {
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 0,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "HelloWorld",
+    }
     list_content_response = {
         "AttachmentFiles": {},
         "Id": 1,
@@ -542,9 +543,14 @@ async def test_get_docs_list_items_when_relativeurl_is_not_none():
     actual_response = []
     async with create_sps_source() as source:
         source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
-        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+        source.get_lists = AsyncIterator([(item_content_response, [])])
         source.sharepoint_client.get_list_items = AsyncIterator(
-            [(list_content_response, "/sites/enterprise/ctest/_api")]
+            [
+                (
+                    list_content_response,
+                    None,
+                )
+            ]
         )
 
         async for document, _ in source.get_docs():
@@ -556,19 +562,18 @@ async def test_get_docs_list_items_when_relativeurl_is_not_none():
 async def test_get_docs_drive_items():
     """Test get docs method for drive items"""
 
-    item_content_response = [
-        {
-            "RootFolder": {
-                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-            },
-            "Created": "2023-03-19T05:02:52Z",
-            "BaseType": 1,
-            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-            "ParentWebUrl": "/sites/enterprise/ctest/_api",
-            "Title": "HelloWorld",
-        }
-    ]
+    item_content_response = {
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 1,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "HelloWorld",
+    }
+
     drive_content_response = {
         "File": {
             "Length": "3356",
@@ -587,7 +592,7 @@ async def test_get_docs_drive_items():
     actual_response = []
     async with create_sps_source() as source:
         source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
-        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+        source.get_lists = AsyncIterator([(item_content_response, [])])
         source.sharepoint_client.get_drive_items = AsyncIterator(
             [(drive_content_response, None)]
         )
@@ -599,19 +604,18 @@ async def test_get_docs_drive_items():
 
 @pytest.mark.asyncio
 async def test_get_docs_drive_items_for_web_pages():
-    item_content_response = [
-        {
-            "RootFolder": {
-                "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
-            },
-            "Created": "2023-03-19T05:02:52Z",
-            "BaseType": 1,
-            "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
-            "LastItemModifiedDate": "2023-03-19T05:02:52Z",
-            "ParentWebUrl": "/sites/enterprise/ctest/_api",
-            "Title": "Site Pages",
-        }
-    ]
+    item_content_response = {
+        "RootFolder": {
+            "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
+        },
+        "Created": "2023-03-19T05:02:52Z",
+        "BaseType": 1,
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "ParentWebUrl": "/sites/enterprise/ctest/_api",
+        "Title": "Site Pages",
+    }
+
     drive_content_response = {
         "File": {
             "Length": "3356",
@@ -630,7 +634,7 @@ async def test_get_docs_drive_items_for_web_pages():
     actual_response = []
     async with create_sps_source() as source:
         source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
-        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
+        source.get_lists = AsyncIterator([(item_content_response, [])])
         source.sharepoint_client.get_drive_items = AsyncIterator(
             [(drive_content_response, None)]
         )
@@ -1225,3 +1229,348 @@ async def test_get_list_items_with_extension_only():
         ):
             expected_response.append(item)
         assert expected_response == target_response
+
+
+async def create_fake_coroutine(data):
+    """create a method for returning fake coroutine value"""
+    return data
+
+
+@pytest.mark.asyncio
+async def test_get_access_control():
+    async with create_sps_source() as source:
+        source._dls_enabled = Mock(return_value=True)
+        source.sharepoint_client.site_collections_path = ["collection1"]
+        get_response = {
+            "value": [
+                {
+                    "Id": 1,
+                    "LoginName": "user1",
+                    "Title": "user1",
+                    "PrincipalType": 1,
+                    "Email": "",
+                    "IsSiteAdmin": False,
+                    "UserId": {"NameIdIssuer": "urn:office:idp:activedirectory"},
+                },
+                {
+                    "Id": 2,
+                    "LoginName": "user1",
+                    "Title": "user2",
+                    "PrincipalType": 1,
+                    "Email": "",
+                    "IsSiteAdmin": False,
+                    "UserId": {"NameIdIssuer": "urn:office:idp:activedirectory"},
+                },
+                {
+                    "Id": 3,
+                    "LoginName": "user3",
+                    "Title": "user3",
+                    "PrincipalType": 1,
+                    "Email": "",
+                    "IsSiteAdmin": False,
+                    "UserId": {"NameIdIssuer": "urn:office:idp:activedirectory"},
+                },
+                {
+                    "Id": 4,
+                    "LoginName": "user4",
+                    "Title": "user4",
+                    "PrincipalType": 8,
+                    "Email": "",
+                    "IsSiteAdmin": False,
+                    "UserId": {"NameIdIssuer": "urn:office:idp:activedirectory"},
+                },
+            ]
+        }
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(get_response)
+        )
+        expected_users = []
+        async for user in source.get_access_control():
+            expected_users.append(user)
+        assert len(expected_users) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_with_dls_disabled():
+    async with create_sps_source() as source:
+        source._dls_enabled = Mock(return_value=False)
+        access_control = []
+
+        async for doc in source.get_access_control():
+            access_control.append(doc)
+
+        assert len(access_control) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_dls_enabled():
+    async with create_sps_source() as source:
+        source.sharepoint_client.site_collections_path = ["collection1"]
+        source.sharepoint_client.get_sites = AsyncIterator(
+            [
+                {
+                    "ServerRelativeUrl": None,
+                    "Title": "demo",
+                    "Url": "/abc",
+                    "Id": 1,
+                    "LastItemModifiedDate": "2022-06-20T10:04:03Z",
+                    "Created": "2022-06-20T10:04:03Z",
+                }
+            ]
+        )
+        source._dls_enabled = Mock(return_value=True)
+
+        source.sharepoint_client.site_role_assignments = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.Group",
+                        "Id": 1,
+                        "LoginName": "i:0#.w|\\administrator",
+                        "Title": "administrator",
+                        "PrincipalType": 1,
+                        "Email": "",
+                        "IsSiteAdmin": True,
+                        "UserId": {
+                            "NameId": "1",
+                        },
+                    },
+                    "RoleDefinitionBindings": [
+                        {
+                            "BasePermissions": {
+                                "High": "2147483647",
+                                "Low": "4294967295",
+                            },
+                            "Id": 123,
+                            "Name": "Full Control",
+                            "RoleTypeKind": 5,
+                        },
+                    ],
+                    "PrincipalId": 1,
+                },
+                {
+                    "Member": {
+                        "odata.type": "SP.Group",
+                        "Id": 2,
+                        "LoginName": "i:0#.w|\\user1",
+                        "Title": "user1",
+                        "PrincipalType": 1,
+                        "Email": "",
+                        "IsSiteAdmin": True,
+                        "UserId": {
+                            "NameId": "1",
+                        },
+                    },
+                    "PrincipalId": 1,
+                },
+            ]
+        )
+        source.sharepoint_client.site_admins = AsyncIterator(
+            [
+                {
+                    "odata.type": "SP.User",
+                    "Id": 123,
+                    "LoginName": "administrator",
+                    "Title": "user1",
+                    "PrincipalType": 1,
+                    "Email": "",
+                    "IsSiteAdmin": True,
+                }
+            ]
+        )
+        source.sharepoint_client.get_lists = AsyncIterator(
+            [
+                {
+                    "RootFolder": {
+                        "ServerRelativeUrl": "/abc",
+                    },
+                    "BaseType": 1,
+                    "Created": "2024-04-15T09:29:21Z",
+                    "Description": "",
+                    "Id": "4eba2cd0-46d2-4b5e-8918-b8de89c90ecc",
+                    "LastItemModifiedDate": "2024-04-15T09:29:21Z",
+                    "LastItemUserModifiedDate": "2024-04-15T09:29:21Z",
+                    "ParentWebUrl": "/abc",
+                    "Title": "list",
+                }
+            ]
+        )
+        source.sharepoint_client.site_list_has_unique_role_assignments = Mock(
+            return_value=create_fake_coroutine(True)
+        )
+        source.sharepoint_client.site_list_item_has_unique_role_assignments = Mock(
+            return_value=create_fake_coroutine(True)
+        )
+        source.sharepoint_client.site_role_assignments_using_title = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "Id": 1,
+                        "LoginName": "i:0#.w|administrator",
+                        "Title": "administrator",
+                        "PrincipalType": 1,
+                        "Email": "",
+                        "IsSiteAdmin": True,
+                        "UserId": {"NameIdIssuer": "directory"},
+                    },
+                    "RoleDefinitionBindings": [
+                        {
+                            "odata.type": "SP.RoleDefinition",
+                            "BasePermissions": {
+                                "High": "2147483647",
+                                "Low": "4294967295",
+                            },
+                            "Description": "Has full control.",
+                            "Id": 123,
+                            "Name": "Full Control",
+                            "RoleTypeKind": 5,
+                        },
+                    ],
+                    "PrincipalId": 1,
+                }
+            ]
+        )
+        source.sharepoint_client.site_list_item_role_assignments = AsyncIterator(
+            [
+                {
+                    "Member": {
+                        "odata.type": "SP.Group",
+                        "Id": 1,
+                        "LoginName": "i:0#.w|administrator",
+                        "Title": "administrator",
+                        "PrincipalType": 1,
+                        "Users": [
+                            {
+                                "odata.type": "SP.User",
+                                "Id": 13,
+                                "LoginName": "group1",
+                                "Title": "group1",
+                                "PrincipalType": 8,
+                                "Email": "",
+                                "IsSiteAdmin": False,
+                                "UserId": {
+                                    "NameIdIssuer": "urn:office:idp:activedirectory"
+                                },
+                            }
+                        ],
+                        "Email": "",
+                        "IsSiteAdmin": True,
+                        "UserId": {"NameIdIssuer": "directory"},
+                    },
+                    "RoleDefinitionBindings": [
+                        {
+                            "odata.type": "SP.RoleDefinition",
+                            "BasePermissions": {
+                                "High": "2147483647",
+                                "Low": "4294967295",
+                            },
+                            "Description": "Has full control.",
+                            "Id": 123,
+                            "Name": "Full Control",
+                            "RoleTypeKind": 5,
+                        },
+                    ],
+                    "PrincipalId": 1,
+                }
+            ]
+        )
+        source.sharepoint_client.get_drive_items = AsyncIterator(
+            [
+                (
+                    {
+                        "File": {},
+                        "Folder": {
+                            "Length": "3356",
+                            "Name": "Home.txt",
+                            "ServerRelativeUrl": "/sites/enterprise/ctest/SitePages/Home.aspx",
+                            "TimeCreated": "2022-05-02T07:20:33Z",
+                            "TimeLastModified": "2022-05-02T07:20:34Z",
+                            "Title": "Home.txt",
+                        },
+                        "Modified": "2022-05-02T07:20:35Z",
+                        "GUID": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
+                        "Length": "3356",
+                        "Id": 2,
+                        "item_type": "Folder",
+                    },
+                    None,
+                )
+            ]
+        )
+        async for site_document, _ in source.get_docs():
+            assert site_document is not None
+
+
+@pytest.mark.asyncio
+async def test_site_list_item_role_assignments():
+    api_response = {"value": [{"verifying_calls_only": True}]}
+    async with create_sps_source() as source:
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(api_response)
+        )
+        async for _ in source.sharepoint_client.site_list_item_role_assignments(
+            site_url="/abc", site_list_name="list1", list_item_id=1
+        ):
+            source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_site_role_assignments_using_title():
+    api_response = {"value": [{"verifying_calls_only": True}]}
+    async with create_sps_source() as source:
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(api_response)
+        )
+        async for _ in source.sharepoint_client.site_role_assignments_using_title(
+            site_url="/abc", site_list_name="list1"
+        ):
+            source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_site_admins():
+    api_response = {"value": [{"verifying_calls_only": True}]}
+    async with create_sps_source() as source:
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(api_response)
+        )
+        async for _ in source.sharepoint_client.site_admins(site_url="/abc"):
+            source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_site_role_assignments():
+    api_response = {"value": [{"verifying_calls_only": True}]}
+    async with create_sps_source() as source:
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(api_response)
+        )
+        async for _ in source.sharepoint_client.site_role_assignments(site_url="/abc"):
+            source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_site_list_has_unique_role_assignments():
+    api_response = {"value": True}
+    async with create_sps_source() as source:
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(api_response)
+        )
+        await source.sharepoint_client.site_list_has_unique_role_assignments(
+            site_list_name="list1", site_url="/abc"
+        )
+        source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_site_list_item_has_unique_role_assignments():
+    api_response = {"value": True}
+    async with create_sps_source() as source:
+        source.sharepoint_client._api_call = Mock(
+            return_value=async_native_coroutine_generator(api_response)
+        )
+        await source.sharepoint_client.site_list_item_has_unique_role_assignments(
+            site_url="/abc", site_list_name="list1", list_item_id=1
+        )
+        source.sharepoint_client._api_call.assert_called_once()
