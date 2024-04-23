@@ -29,13 +29,20 @@ from exchangelib import (
 from exchangelib.protocol import BaseProtocol, NoVerifyHTTPAdapter
 from ldap3 import SAFE_SYNC, Connection, Server
 
+from connectors.access_control import (
+    ACCESS_CONTROL,
+    es_access_control_query,
+    prefix_identity,
+)
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     get_pem_format,
+    hash_id,
     html_to_text,
+    iso_utc,
     retryable,
 )
 
@@ -157,6 +164,22 @@ def ews_format_to_datetime(source_datetime, timezone):
         return source_datetime.strftime("%Y-%m-%d")
     else:
         return source_datetime
+
+
+def _prefix_email(email):
+    return prefix_identity("email", email)
+
+
+def _prefix_display_name(user):
+    return prefix_identity("name", user)
+
+
+def _prefix_user_id(user_id):
+    return prefix_identity("user_id", user_id)
+
+
+def _prefix_job(job_title):
+    return prefix_identity("job_title", job_title)
 
 
 class TokenFetchFailed(Exception):
@@ -539,7 +562,7 @@ class OutlookDocFormatter:
             ],
             "contact_numbers": [
                 number.phone_number
-                for number in (contact.phone_numbers)
+                for number in contact.phone_numbers or []
                 if number.phone_number
             ],
             "company_name": contact.company_name,
@@ -598,6 +621,11 @@ class OutlookClient:
             ssl_ca=self.ssl_ca,
         )
 
+    async def _fetch_all_users(self):
+        self._logger.debug("Fetching all users.")
+        async for user in self._get_user_instance.get_users():
+            yield user
+
     async def ping(self):
         await anext(self._get_user_instance.get_users())
 
@@ -649,6 +677,7 @@ class OutlookDataSource(BaseDataSource):
     name = "Outlook"
     service_type = "outlook"
     incremental_sync_enabled = True
+    dls_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Outlook
@@ -766,7 +795,92 @@ class OutlookDataSource(BaseDataSource):
                 "ui_restrictions": ["advanced"],
                 "value": False,
             },
+            "use_document_level_security": {
+                "display": "toggle",
+                "label": "Enable document level security",
+                "order": 13,
+                "tooltip": "Document level security ensures identities and permissions set in Outlook are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "type": "bool",
+                "value": False,
+            },
         }
+
+    def _dls_enabled(self):
+        """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
+
+        Returns:
+            bool: True if document level security is enabled, False otherwise.
+        """
+        if (
+            self._features is None
+            or not self._features.document_level_security_enabled()
+        ):
+            return False
+
+        return self.configuration["use_document_level_security"]
+
+    async def get_access_control(self):
+        if not self._dls_enabled():
+            self._logger.warning("DLS is not enabled. Skipping")
+            return
+
+        async for users in self.client._fetch_all_users():
+            if self.configuration["data_source"] == OUTLOOK_CLOUD:
+                for user in users.get("value", []):
+                    yield await self._user_access_control_doc(user=user)
+            elif users.get("attributes", {}).get("mail"):
+                yield await self._user_access_control_doc_for_server(users=users)
+
+    async def _user_access_control_doc(self, user):
+        user_id = user.get("id", "")
+        display_name = user.get("displayName", "")
+        user_email = user.get("mail", "")
+        job_title = user.get("jobTitle", "")
+
+        _prefixed_user_id = _prefix_user_id(user_id=user_id)
+        _prefixed_display_name = _prefix_display_name(user=display_name)
+        _prefixed_email = _prefix_email(email=user_email)
+        _prefixed_job = _prefix_job(job_title=job_title)
+        return {
+            "_id": user_id,
+            "identity": {
+                "user_id": _prefixed_user_id,
+                "display_name": _prefixed_display_name,
+                "email": _prefixed_email,
+                "job_title": _prefixed_job,
+            },
+            "created_at": iso_utc(),
+        } | es_access_control_query(
+            access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
+        )
+
+    async def _user_access_control_doc_for_server(self, users):
+        name_metadata = users.get("dn", "").split("=", 1)[1]
+        display_name = name_metadata.split(",", 1)[0]
+        user_email = users.get("attributes", {}).get("mail")
+        user_id = hash_id(user_email)
+
+        _prefixed_user_id = _prefix_user_id(user_id=user_id)
+        _prefixed_display_name = _prefix_display_name(user=display_name)
+        _prefixed_email = _prefix_email(email=user_email)
+        return {
+            "_id": user_id,
+            "identity": {
+                "user_id": _prefixed_user_id,
+                "display_name": _prefixed_display_name,
+                "email": _prefixed_email,
+            },
+            "created_at": iso_utc(),
+        } | es_access_control_query(
+            access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
+        )
+
+    def _decorate_with_access_control(self, document, access_control):
+        if self._dls_enabled():
+            document[ACCESS_CONTROL] = list(
+                set(document.get(ACCESS_CONTROL, []) + access_control)
+            )
+        return document
 
     async def close(self):
         await self.client._get_user_instance.close()
@@ -818,20 +932,28 @@ class OutlookDataSource(BaseDataSource):
         """
         yield content
 
-    async def _fetch_attachments(self, attachment_type, outlook_object, timezone):
+    async def _fetch_attachments(
+        self, attachment_type, outlook_object, timezone, account
+    ):
         for attachment in outlook_object.attachments:
-            yield self.doc_formatter.attachment_doc_formatter(
+            document = self.doc_formatter.attachment_doc_formatter(
                 attachment=attachment,
                 attachment_type=attachment_type,
                 timezone=timezone,
+            )
+            yield self._decorate_with_access_control(
+                document, [account.primary_smtp_address]
             ), partial(self.get_content, attachment=copy(attachment), timezone=timezone)
 
     async def _fetch_mails(self, account, timezone):
         async for mail, mail_type in self.client.get_mails(account=account):
-            yield self.doc_formatter.mails_doc_formatter(
+            document = self.doc_formatter.mails_doc_formatter(
                 mail=mail,
                 mail_type=mail_type,
                 timezone=timezone,
+            )
+            yield self._decorate_with_access_control(
+                document, [account.primary_smtp_address]
             ), None
 
             if mail.has_attachments:
@@ -839,22 +961,29 @@ class OutlookDataSource(BaseDataSource):
                     attachment_type=MAIL_ATTACHMENT,
                     outlook_object=mail,
                     timezone=timezone,
+                    account=account,
                 ):
                     yield doc
 
     async def _fetch_contacts(self, account, timezone):
         self._logger.debug(f"Fetching contacts for {account.primary_smtp_address}")
         async for contact in self.client.get_contacts(account=account):
-            yield self.doc_formatter.contact_doc_formatter(
+            document = self.doc_formatter.contact_doc_formatter(
                 contact=contact,
                 timezone=timezone,
+            )
+            yield self._decorate_with_access_control(
+                document, [account.primary_smtp_address]
             ), None
 
     async def _fetch_tasks(self, account, timezone):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
         async for task in self.client.get_tasks(account=account):
-            yield self.doc_formatter.task_doc_formatter(
+            document = self.doc_formatter.task_doc_formatter(
                 task=task, timezone=timezone
+            )
+            yield self._decorate_with_access_control(
+                document, [account.primary_smtp_address]
             ), None
 
             if task.has_attachments:
@@ -862,6 +991,7 @@ class OutlookDataSource(BaseDataSource):
                     attachment_type=TASK_ATTACHMENT,
                     outlook_object=task,
                     timezone=timezone,
+                    account=account,
                 ):
                     yield doc
 
@@ -869,7 +999,10 @@ class OutlookDataSource(BaseDataSource):
         self._logger.debug(f"Fetching calendars for {account.primary_smtp_address}")
         async for calendar in self.client.get_calendars(account=account):
             async for doc in self._enqueue_calendars(
-                calendar=calendar, child_calendar=calendar, timezone=timezone
+                calendar=calendar,
+                child_calendar=calendar,
+                timezone=timezone,
+                account=account,
             ):
                 yield doc
 
@@ -881,15 +1014,21 @@ class OutlookDataSource(BaseDataSource):
             account=account
         ):
             async for doc in self._enqueue_calendars(
-                calendar=calendar, child_calendar=child_calendar, timezone=timezone
+                calendar=calendar,
+                child_calendar=child_calendar,
+                timezone=timezone,
+                account=account,
             ):
                 yield doc
 
-    async def _enqueue_calendars(self, calendar, child_calendar, timezone):
-        yield self.doc_formatter.calendar_doc_formatter(
+    async def _enqueue_calendars(self, calendar, child_calendar, timezone, account):
+        document = self.doc_formatter.calendar_doc_formatter(
             calendar=calendar,
             child_calendar=str(child_calendar),
             timezone=timezone,
+        )
+        yield self._decorate_with_access_control(
+            document, [account.primary_smtp_address]
         ), None
 
         if calendar.has_attachments:
@@ -897,6 +1036,7 @@ class OutlookDataSource(BaseDataSource):
                 attachment_type=CALENDAR_ATTACHMENT,
                 outlook_object=calendar,
                 timezone=timezone,
+                account=account,
             ):
                 yield doc
 
