@@ -13,7 +13,7 @@ class AccessControlSyncJobExecutionService(JobExecutionService):
     name = "sync_access_control"
 
     def __init__(self, config):
-        super().__init__(config, "Access Control Sync Job Execution Service")
+        super().__init__(config, "access_control_sync_job_execution_service")
 
     @cached_property
     def display_name(self):

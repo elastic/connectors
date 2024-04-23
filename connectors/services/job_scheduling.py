@@ -32,7 +32,7 @@ class JobSchedulingService(BaseService):
     name = "schedule"
 
     def __init__(self, config):
-        super().__init__(config, "Job Scheduling Service")
+        super().__init__(config, "job_scheduling_service")
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
