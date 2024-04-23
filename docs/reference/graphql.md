@@ -71,14 +71,13 @@ A JSON mapping between GraphQL response objects to index and their ID fields. Th
 
 Example: 
 
-```
 If the GraphQL query is `query getUser { organization { users{ user_id name email} } }` which is fetching all available users from the source and we want to index every user as separate document in that case configure this field as below.
+```
 {
     "organization.users": "user_id"
 }
-
-Here user_id is unique in all the user document so configure user_id as a value to `organization.users`.
 ```
+Here user_id is unique in all the user document so configure user_id as a value to `organization.users`.
 
 Note: The path provided in this field should only contain Json Objects and not lists.
 
@@ -96,9 +95,8 @@ Json of custom headers to be sent with each GraphQL request. Example:
 
 This field specifies the pagination model to be used by the connector. The connector supports `No pagination` and `Cursor-based pagination` pagination models. For cursor-based pagination, add `pageInfo {endCursor hasNextPage}` and an `after` argument variable in your query at the desired node (`Pagination key`). Use `after` query argument with a variable to iterate through pages. Detailed examples and setup instructions are available in the docs. The default value for this field is `No pagination`. Example:
 
-```
 For `Cursor-based pagination`, the query should look like below example:
-
+```
 query getUsers($cursor: String!) {
     sampleData { 
         users(after: $cursor) {
@@ -114,13 +112,14 @@ query getUsers($cursor: String!) {
         } 
     } 
 }
+```
 and the value of `pagination_key` is `sampleData.users` so, it must contain `pageInfo {endCursor hasNextPage}` and `after` argument with a variable in case of `Cursor-based pagination`.
 
 #### `pagination_key` (required)
 
-Specifies which GraphQL object is used for pagination. Use '.' to provide full path of the object from the root of the response. Example:
+Specifies which GraphQL object is used for pagination. Use `.` to provide full path of the object from the root of the response. Example:
 
-- 'organization.users'
+- `organization.users`
 
 #### `connection_timeout`
 
