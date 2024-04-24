@@ -1242,8 +1242,7 @@ async def test_fetch_pull_requests_with_deleted_users():
             ],
         ):
             async for pull in source._fetch_pull_requests(
-                repo_name="demo_user/demo_repo",
-                response_key=[REPOSITORY_OBJECT, "pullRequests"],
+                repo_name="demo_user/demo_repo"
             ):
                 assert pull == expected_pull_response_deleted_user
 
