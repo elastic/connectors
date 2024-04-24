@@ -1268,11 +1268,14 @@ class GitHubDataSource(BaseDataSource):
         }
 
     def _prepare_review_doc(self, review):
+        # review.author can be None if the user was deleted, so need to be extra null-safe
+        author = review.get("author", {}) or {}
+
         return {
-            "author": review.get("author").get("login"),
+            "author": author.get("login"),
             "body": review.get("body"),
             "state": review.get("state"),
-            "comments": review.get("comments").get("nodes"),
+            "comments": review.get("comments", {}).get("nodes"),
         }
 
     async def _get_personal_repos(self):
