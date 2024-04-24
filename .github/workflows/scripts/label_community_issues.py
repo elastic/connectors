@@ -26,10 +26,10 @@ async def main():
         try:
             # this API returns a None response, but will raise if the user isn't a collaborator
             await gh.getitem(f"/repos/{REPO}/collaborators/{ACTOR}")
-            print(f"User is a collaborator, not applying labels.")
+            print("User is a collaborator, not applying labels.")
         except BadRequest as e:
             # if this fails we want it to be noisy, so no try/except
-            print(f"User is not a collaborator, applying labels...")
+            print("User is not a collaborator, applying labels...")
             await gh.post(f"/repos/{REPO}/issues/{NUMBER}/labels", data={"labels": LABELS})
 
 if __name__ == "__main__":
