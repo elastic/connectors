@@ -10,7 +10,6 @@ import contextlib
 import inspect
 import logging
 import time
-from datetime import datetime
 from functools import cached_property, wraps
 from typing import AsyncGenerator
 
@@ -70,6 +69,79 @@ class ColorFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+class DocumentLogger:
+    def __init__(self, prefix, extra):
+        self._prefix = prefix
+        self._extra = extra
+
+    def isEnabledFor(self, level):
+        return logger.isEnabledFor(level)
+
+    def debug(self, msg, *args, **kwargs):
+        logger.debug(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def info(self, msg, *args, **kwargs):
+        logger.info(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def warning(self, msg, *args, **kwargs):
+        logger.warning(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def error(self, msg, *args, **kwargs):
+        logger.error(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def exception(self, msg, *args, exc_info=True, **kwargs):
+        logger.exception(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            exc_info=exc_info,
+            **kwargs,
+        )
+
+    def critical(self, msg, *args, **kwargs):
+        logger.critical(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+    def fatal(self, msg, *args, **kwargs):
+        logger.fatal(
+            msg,
+            *args,
+            prefix=self._prefix,  # pyright: ignore
+            extra=self._extra,
+            **kwargs,
+        )
+
+
 class ExtraLogger(logging.Logger):
     def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None):
         if (
@@ -84,7 +156,6 @@ class ExtraLogger(logging.Logger):
             {
                 "service.type": "connectors-python",
                 "service.version": __version__,
-                "labels.index_date": datetime.now().strftime("%Y.%m.%d"),
             }
         )
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)

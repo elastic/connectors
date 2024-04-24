@@ -81,9 +81,13 @@ def catch_stdout():
 
 @pytest.fixture
 def patch_logger(silent=True):
-    new_logger = Logger(silent)
+    class PatchedLogger(Logger):
+        def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
+            super(PatchedLogger, self).info(msg, *args)
 
     from connectors.logger import logger
+
+    new_logger = PatchedLogger(silent)
 
     methods = ("exception", "error", "critical", "info", "debug", "warning")
     for method in methods:
