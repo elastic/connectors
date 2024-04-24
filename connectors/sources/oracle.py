@@ -27,6 +27,8 @@ from connectors.utils import iso_utc
 
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_ORACLE_HOME = ""
+SID = "sid"
+SERVICE_NAME = "service_name"
 
 
 class OracleQueries(Queries):
@@ -70,7 +72,9 @@ class OracleClient:
         port,
         user,
         password,
-        database,
+        connection_source,
+        sid,
+        service_name,
         tables,
         protocol,
         oracle_home,
@@ -83,7 +87,9 @@ class OracleClient:
         self.port = port
         self.user = user
         self.password = password
-        self.database = database
+        self.connection_source = connection_source
+        self.sid = sid
+        self.service_name = service_name
         self.tables = tables
         self.protocol = protocol
         self.oracle_home = oracle_home
@@ -105,7 +111,10 @@ class OracleClient:
     @cached_property
     def engine(self):
         """Create sync engine for oracle"""
-        dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(SID={self.database})))"
+        if self.connection_source == SID:
+            dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(SID={self.sid})))"
+        else:
+            dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL={self.protocol})(HOST={self.host})(PORT={self.port}))(CONNECT_DATA=(service_name={self.service_name})))"
         connection_string = (
             f"oracle+oracledb://{self.user}:{quote(self.password)}@{dsn}"
         )
@@ -260,13 +269,19 @@ class OracleDataSource(BaseDataSource):
             configuration (DataSourceConfiguration): Instance of DataSourceConfiguration class.
         """
         super().__init__(configuration=configuration)
-        self.database = self.configuration["database"]
+        self.database = (
+            self.configuration["sid"]
+            if self.configuration["connection_source"] == SID
+            else self.configuration["service_name"]
+        )
         self.oracle_client = OracleClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
             user=self.configuration["username"],
             password=self.configuration["password"],
-            database=self.configuration["database"],
+            connection_source=self.configuration["connection_source"],
+            sid=self.configuration["sid"],
+            service_name=self.configuration["service_name"],
             tables=self.configuration["tables"],
             protocol=self.configuration["oracle_protocol"],
             oracle_home=self.configuration["oracle_home"],
@@ -304,23 +319,42 @@ class OracleDataSource(BaseDataSource):
                 "sensitive": True,
                 "type": "str",
             },
-            "database": {
-                "label": "Database",
+            "connection_source": {
+                "display": "dropdown",
+                "label": "Connection Source",
+                "options": [
+                    {"label": "SID", "value": SID},
+                    {"label": "Service Name", "value": SERVICE_NAME},
+                ],
                 "order": 5,
+                "type": "str",
+                "value": SID,
+                "tooltip": "Select 'Service Name' option if connecting to a pluggable database",
+            },
+            "sid": {
+                "depends_on": [{"field": "connection_source", "value": SID}],
+                "label": "SID",
+                "order": 6,
+                "type": "str",
+            },
+            "service_name": {
+                "depends_on": [{"field": "connection_source", "value": SERVICE_NAME}],
+                "label": "Service Name",
+                "order": 7,
                 "type": "str",
             },
             "tables": {
                 "display": "textarea",
                 "label": "Comma-separated list of tables",
                 "options": [],
-                "order": 6,
+                "order": 8,
                 "type": "list",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
                 "display": "numeric",
                 "label": "Rows fetched per request",
-                "order": 7,
+                "order": 9,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -329,7 +363,7 @@ class OracleDataSource(BaseDataSource):
                 "default_value": DEFAULT_RETRY_COUNT,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 8,
+                "order": 10,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -342,7 +376,7 @@ class OracleDataSource(BaseDataSource):
                     {"label": "TCP", "value": "TCP"},
                     {"label": "TCPS", "value": "TCPS"},
                 ],
-                "order": 9,
+                "order": 11,
                 "type": "str",
                 "value": DEFAULT_PROTOCOL,
                 "ui_restrictions": ["advanced"],
@@ -350,7 +384,7 @@ class OracleDataSource(BaseDataSource):
             "oracle_home": {
                 "default_value": DEFAULT_ORACLE_HOME,
                 "label": "Path to Oracle Home",
-                "order": 10,
+                "order": 12,
                 "required": False,
                 "type": "str",
                 "value": DEFAULT_ORACLE_HOME,
@@ -359,7 +393,7 @@ class OracleDataSource(BaseDataSource):
             "wallet_configuration_path": {
                 "default_value": "",
                 "label": "Path to SSL Wallet configuration files",
-                "order": 11,
+                "order": 13,
                 "required": False,
                 "type": "str",
                 "ui_restrictions": ["advanced"],
