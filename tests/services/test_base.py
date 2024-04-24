@@ -141,8 +141,14 @@ async def test_registry():
     class SomeService(TestService):
         name = "kool"
 
+        def __init__(self, config):
+            super().__init__(config, "some_service")
+
     class SomeOtherService(TestService):
         name = "beans"
+
+        def __init__(self, config):
+            super().__init__(config, "some_other_service")
 
     # and make it available when we call get_services()
     multiservice = get_services(["kool", "beans"], config=defaultdict(dict))
@@ -181,7 +187,7 @@ config = {
 
 def test_parse_connectors_with_no_connectors():
     local_config = deepcopy(config)
-    service = BaseService(local_config)
+    service = BaseService(local_config, "mock_service")
     assert not service.connectors
 
 
@@ -192,7 +198,7 @@ def test_parse_connectors():
         {"connector_id": "baz", "service_type": "qux"},
     ]
 
-    service = BaseService(local_config)
+    service = BaseService(local_config, "mock_service")
     assert service.connectors["foo"]["connector_id"] == "foo"
     assert service.connectors["foo"]["service_type"] == "bar"
     assert service.connectors["baz"]["connector_id"] == "baz"
@@ -206,7 +212,7 @@ def test_parse_connectors_with_duplicate_connectors():
         {"connector_id": "foo", "service_type": "baz"},
     ]
 
-    service = BaseService(local_config)
+    service = BaseService(local_config, "mock_service")
     assert len(service.connectors) == 1
     assert service.connectors["foo"]["connector_id"] == "foo"
     assert service.connectors["foo"]["service_type"] == "baz"
@@ -219,7 +225,7 @@ def test_parse_connectors_with_incomplete_connector():
         {"service_type": "qux"},
     ]
 
-    service = BaseService(local_config)
+    service = BaseService(local_config, "mock_service")
     assert len(service.connectors) == 1
     assert service.connectors["foo"]["connector_id"] == "foo"
     assert service.connectors["foo"]["service_type"] == "bar"
@@ -231,7 +237,7 @@ def test_parse_connectors_with_deprecated_config_and_new_config():
     local_config["connector_id"] = "deprecated"
     local_config["service_type"] = "deprecated"
 
-    service = BaseService(local_config)
+    service = BaseService(local_config, "mock_service")
     assert len(service.connectors) == 1
     assert service.connectors["foo"]["connector_id"] == "foo"
     assert service.connectors["foo"]["service_type"] == "bar"
@@ -243,7 +249,7 @@ def test_parse_connectors_with_deprecated_config():
     local_config["connector_id"] = "deprecated"
     local_config["service_type"] = "deprecated"
 
-    service = BaseService(local_config)
+    service = BaseService(local_config, "mock_service")
     assert len(service.connectors) == 1
     assert service.connectors["deprecated"]["connector_id"] == "deprecated"
     assert service.connectors["deprecated"]["service_type"] == "deprecated"
@@ -268,7 +274,7 @@ def test_override_es_config():
         ],
     }
 
-    service = BaseService(config)
+    service = BaseService(config, "mock_service")
     connector = Mock()
     connector.id = "foo"
     override_config = service._override_es_config(connector)
