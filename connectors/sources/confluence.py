@@ -461,6 +461,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 11,
                 "type": "str",
+                "required": False,
+                "display": "textarea",
+                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Confluence server.",
             },
             "retry_count": {
                 "default_value": 3,

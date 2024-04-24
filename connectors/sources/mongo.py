@@ -154,9 +154,10 @@ class MongoDataSource(BaseDataSource):
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "Certificate Authority (.pem)",
                 "order": 8,
-                "required": False,
-                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the MongoDB instance.",
                 "type": "str",
+                "required": False,
+                "display": "textarea",
+                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Mongo server.",
             },
             "tls_insecure": {
                 "display": "toggle",
