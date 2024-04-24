@@ -1280,7 +1280,13 @@ async def test_fetch_repos_with_unauthorized_exception():
         ("organization", "*", [MOCK_REPO_1_DOC, MOCK_REPO_2_DOC]),
         ("other", "*", [MOCK_REPO_3_DOC, MOCK_REPO_4_DOC]),
         ("organization", "org_1/repo_1", [MOCK_REPO_1_DOC]),
+        (
+            "organization",
+            "org_1/repo_1, org_2/repo_2",
+            [MOCK_REPO_1_DOC, MOCK_REPO_2_DOC],
+        ),
         ("other", "user_1/repo_3", [MOCK_REPO_3_DOC]),
+        ("other", "user_1/repo_3, user_2/repo_4", [MOCK_REPO_3_DOC, MOCK_REPO_4_DOC]),
     ],
 )
 async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
