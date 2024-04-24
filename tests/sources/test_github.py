@@ -5,6 +5,7 @@
 #
 """Tests the Github source class methods"""
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import aiohttp
@@ -1058,10 +1059,7 @@ async def test_fetch_pull_requests_with_deleted_users():
                 AsyncIterator([mock_review_deleted_user]),
             ],
         ):
-            async for pull in source._fetch_pull_requests(
-                repo_name="demo_user/demo_repo",
-                response_key=[REPOSITORY_OBJECT, "pullRequests"],
-            ):
+            async for pull in source._fetch_pull_requests("demo_user/demo_repo"):
                 assert pull == expected_pull_response_deleted_user
 
 
