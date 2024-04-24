@@ -42,14 +42,14 @@ async def create_graphql_source(
     headers=None,
     graphql_variables=None,
     graphql_query="{users {name {firstName } } }",
-    graphql_object_list='{"users": "id"}',
+    graphql_object_to_id_map='{"users": "id"}',
 ):
     async with create_source(
         GraphQLDataSource,
         http_endpoint="http://127.0.0.1:1234",
         authentication_method="none",
         graphql_query=graphql_query,
-        graphql_object_list=graphql_object_list,
+        graphql_object_to_id_map=graphql_object_to_id_map,
         headers=headers,
         graphql_variables=graphql_variables,
     ) as source:
@@ -88,7 +88,7 @@ async def create_graphql_source(
 async def test_extract_graphql_data_items(object_list, data, expected_result):
     actual_response = []
     async with create_graphql_source() as source:
-        source.graphql_client.graphql_object_list = object_list
+        source.graphql_client.graphql_object_to_id_map = object_list
         for doc in source.graphql_client.extract_graphql_data_items(data):
             actual_response.append(doc)
         assert actual_response == expected_result
@@ -244,7 +244,7 @@ async def test_fetch_data():
     actual_response = []
     async with create_graphql_source() as source:
         source.graphql_client.pagination_model = "no_pagination"
-        source.graphql_client.graphql_object_list = {"users": "id"}
+        source.graphql_client.graphql_object_to_id_map = {"users": "id"}
         source.graphql_client.post = AsyncMock(
             return_value={
                 "users": [{"id": "1", "name": {"firstName": "xyz"}, "_id": "1"}]
@@ -274,7 +274,7 @@ async def test_fetch_data_with_pagination():
     actual_response = []
     async with create_graphql_source() as source:
         source.graphql_client.pagination_model = "cursor_pagination"
-        source.graphql_client.graphql_object_list = {"users": "id"}
+        source.graphql_client.graphql_object_to_id_map = {"users": "id"}
         source.graphql_client.pagination_key = "users"
         source.graphql_client.post = AsyncMock(
             side_effect=[
@@ -307,7 +307,7 @@ async def test_fetch_data_with_pagination():
 async def test_fetch_data_without_pageinfo():
     async with create_graphql_source() as source:
         source.graphql_client.pagination_model = "cursor_pagination"
-        source.graphql_client.graphql_object_list = {"users": id}
+        source.graphql_client.graphql_object_to_id_map = {"users": id}
         source.graphql_client.post = AsyncMock(
             side_effect=[{"users": {"id": "123", "name": {"firstName": "xyz"}}}]
         )
@@ -372,7 +372,7 @@ async def test_get_docs_with_dict_id():
 @pytest.mark.asyncio
 async def test_extract_graphql_data_items_with_invalid_key():
     async with create_graphql_source() as source:
-        source.graphql_client.graphql_object_list = {"user": "id"}
+        source.graphql_client.graphql_object_to_id_map = {"user": "id"}
         data = {"users": {"namexyzid": "123"}}
         with pytest.raises(ConfigurableFieldValueError):
             for _ in source.graphql_client.extract_graphql_data_items(data):
@@ -411,7 +411,7 @@ async def test_validate_config_with_invalid_objects():
         source.graphql_client.graphql_query = (
             "query {organization {repository { issues {name}}}}"
         )
-        source.graphql_client.graphql_object_list = {
+        source.graphql_client.graphql_object_to_id_map = {
             "organization.repository.pullRequest": "id"
         }
         with pytest.raises(ConfigurableFieldValueError):
@@ -421,7 +421,7 @@ async def test_validate_config_with_invalid_objects():
 @pytest.mark.asyncio
 async def test_validate_config_with_invalid_pagination_key():
     async with create_graphql_source(
-        graphql_object_list='{"organization.repository.issues": "id"}'
+        graphql_object_to_id_map='{"organization.repository.issues": "id"}'
     ) as source:
         source.graphql_client.graphql_query = (
             "query {organization {repository { issues {id name}}}}"
@@ -435,7 +435,7 @@ async def test_validate_config_with_invalid_pagination_key():
 @pytest.mark.asyncio
 async def test_validate_config_with_missing_config_field():
     async with create_graphql_source(
-        graphql_object_list='{"organization.repository.issues": "id"}'
+        graphql_object_to_id_map='{"organization.repository.issues": "id"}'
     ) as source:
         source.graphql_client.graphql_query = (
             "query {organization {repository { issues {name}}}}"
@@ -447,7 +447,7 @@ async def test_validate_config_with_missing_config_field():
 @pytest.mark.asyncio
 async def test_validate_config_with_invalid_json():
     async with create_graphql_source(
-        graphql_object_list='{"organization.repository.issues": "id"'
+        graphql_object_to_id_map='{"organization.repository.issues": "id"'
     ) as source:
         source.graphql_client.graphql_query = (
             "query {organization {repository { issues {name}}}}"
