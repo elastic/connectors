@@ -42,17 +42,36 @@
                         "type": "str",
                         "value": "Password_123"
                 },
-                "database": {
-                        "label": "Database",
+                "connection_source": {
+                        "display": "dropdown",
+                        "label": "Connection Source",
+                        "options": [
+                            {"label": "SID", "value": "sid"},
+                            {"label": "Service Name", "value": "service_name"}
+                        ],
                         "order": 5,
                         "type": "str",
-                        "value": "FREE"
+                        "value": "sid"
                 },
+                "sid": {
+                        "depends_on": [{"field": "connection_source", "value": "sid"}],
+                        "label": "SID",
+                        "order": 6,
+                        "type": "str",
+                        "value": "FREE"
+                    },
+                "service_name": {
+                        "depends_on": [{"field": "connection_source", "value": "service_name"}],
+                        "label": "Service Name",
+                        "order": 7,
+                        "type": "str",
+                        "value": "FREE"
+                    },
                 "tables": {
                         "display": "textarea",
                         "label": "Comma-separated list of tables",
                         "options": [],
-                        "order": 6,
+                        "order": 8,
                         "type": "list",
                         "value": "*"
                 },
@@ -60,7 +79,7 @@
                         "default_value": 50,
                         "display": "numeric",
                         "label": "Rows fetched per request",
-                        "order": 7,
+                        "order": 9,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -70,7 +89,7 @@
                         "default_value": 3,
                         "display": "numeric",
                         "label": "Retries per request",
-                        "order": 8,
+                        "order": 10,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -83,7 +102,7 @@
                                 {"label": "TCP", "value": "TCP"},
                                 {"label": "TCPS", "value": "TCPS"}
                         ],
-                        "order": 9,
+                        "order": 11,
                         "type": "str",
                         "value": "TCP",
                         "ui_restrictions": ["advanced"]
@@ -91,7 +110,7 @@
                 "oracle_home": {
                         "default_value": "",
                         "label": "Path to Oracle Home",
-                        "order": 10,
+                        "order": 12,
                         "required": false,
                         "type": "str",
                         "value": "",
@@ -100,7 +119,7 @@
                 "wallet_configuration_path": {
                         "default_value": "",
                         "label": "Path to SSL Wallet configuration files",
-                        "order": 11,
+                        "order": 13,
                         "required": false,
                         "type": "str",
                         "value": "",
