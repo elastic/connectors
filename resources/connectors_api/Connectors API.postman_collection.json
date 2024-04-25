@@ -1,6 +1,6 @@
 {
 	"info": {
-		"_postman_id": "727062b9-850d-4c47-a02c-7142cd97d082",
+		"_postman_id": "17c1d05c-d303-496b-9ca0-1ff1e119778c",
 		"name": "Connectors API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "31631400"
@@ -85,6 +85,32 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Post Connector Detached Index",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -104,6 +130,30 @@
 							"path": [
 								"_connector",
 								"{{CONNECTOR_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Connector and Sync Jobs",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}?delete_sync_jobs=true",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}"
+							],
+							"query": [
+								{
+									"key": "delete_sync_jobs",
+									"value": "true"
+								}
 							]
 						}
 					},
@@ -1154,13 +1204,13 @@
 			"name": "Update Filtering",
 			"item": [
 				{
-					"name": "Update Filtering",
+					"name": "Update Draft Filtering",
 					"request": {
 						"method": "PUT",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"filtering\": [\n        {\n            \"active\": {\n                \"advanced_snippet\": {\n                    \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"value\": {}\n                },\n                \"rules\": [\n                    {\n                        \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"field\": \"_\",\n                        \"id\": \"DEFAULT\",\n                        \"order\": 0,\n                        \"policy\": \"include\",\n                        \"rule\": \"regex\",\n                        \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"value\": \".*\"\n                    }\n                ],\n                \"validation\": {\n                    \"errors\": [],\n                    \"state\": \"valid\"\n                }\n            },\n            \"domain\": \"DEFAULT\",\n            \"draft\": {\n                \"advanced_snippet\": {\n                    \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                    \"value\": {}\n                },\n                \"rules\": [\n                    {\n                        \"created_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"field\": \"_\",\n                        \"id\": \"DEFAULT\",\n                        \"order\": 0,\n                        \"policy\": \"include\",\n                        \"rule\": \"regex\",\n                        \"updated_at\": \"2023-11-09T15:13:08.231Z\",\n                        \"value\": \".*\"\n                    }\n                ],\n                \"validation\": {\n                    \"errors\": [],\n                    \"state\": \"valid\"\n                }\n            }\n        }\n    ]\n}",
+							"raw": "{\n    \"advanced_snippet\": {\n        \"value\": {\"my\": \"advanced_snippet\"}\n    },\n    \"rules\": [\n         {\n            \"field\": \"name\",\n            \"id\": \"MY-RULE\",\n            \"order\": 0,\n            \"policy\": \"include\",\n            \"rule\": \"regex\",\n            \"value\": \"test-.*\"\n        },\n        {\n            \"field\": \"_\",\n            \"id\": \"DEFAULT\",\n            \"order\": 1,\n            \"policy\": \"include\",\n            \"rule\": \"regex\",\n            \"value\": \".*\"\n        }\n    ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -1176,6 +1226,26 @@
 								"_connector",
 								"{{CONNECTOR_ID}}",
 								"_filtering"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Activate Draft Filtering",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{ES_HOST_PORT}}/_connector/{{CONNECTOR_ID}}/_filtering/_activate",
+							"host": [
+								"{{ES_HOST_PORT}}"
+							],
+							"path": [
+								"_connector",
+								"{{CONNECTOR_ID}}",
+								"_filtering",
+								"_activate"
 							]
 						}
 					},
