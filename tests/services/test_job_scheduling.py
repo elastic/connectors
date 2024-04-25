@@ -20,7 +20,7 @@ from connectors.protocol import (
     Status,
 )
 from connectors.services.job_scheduling import JobSchedulingService
-from connectors.source import DataSourceConfiguration, ConfigurableFieldValueError
+from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
 
@@ -438,4 +438,3 @@ async def test_run_when_connector_validate_config_fails(
     data_source_mock.close.assert_awaited_once()
 
     connector.error.assert_awaited_with(error)
-
