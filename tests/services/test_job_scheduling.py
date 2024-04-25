@@ -20,7 +20,7 @@ from connectors.protocol import (
     Status,
 )
 from connectors.services.job_scheduling import JobSchedulingService
-from connectors.source import DataSourceConfiguration
+from connectors.source import DataSourceConfiguration, ConfigurableFieldValueError
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
 
@@ -372,6 +372,7 @@ async def test_run_when_connector_fields_are_invalid(
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited_once()
     data_source_mock.ping.assert_not_awaited()
+    data_source_mock.close.assert_awaited_once()
 
     connector.error.assert_awaited_with(actual_error)
 
@@ -403,5 +404,38 @@ async def test_run_when_connector_ping_fails(
     data_source_mock.validate_config_fields.assert_called()
     data_source_mock.validate_config.assert_awaited_once()
     data_source_mock.ping.assert_awaited_once()
+    data_source_mock.close.assert_awaited_once()
 
     connector.error.assert_awaited_with(actual_error)
+
+
+@pytest.mark.asyncio
+@patch("connectors.services.job_scheduling.get_source_klass")
+async def test_run_when_connector_validate_config_fails(
+    get_source_klass_mock, connector_index_mock, set_env
+):
+    data_source_mock = Mock()
+    error = ConfigurableFieldValueError()
+
+    def _source_klass(config):
+        return data_source_mock
+
+    get_source_klass_mock.return_value = _source_klass
+
+    data_source_mock.validate_config_fields = Mock()
+    data_source_mock.validate_config = AsyncMock(side_effect=error)
+    data_source_mock.ping = AsyncMock()
+    data_source_mock.close = AsyncMock()
+
+    connector = mock_connector(next_sync=datetime.utcnow())
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+
+    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+
+    data_source_mock.validate_config_fields.assert_called()
+    data_source_mock.validate_config.assert_awaited_once()
+    data_source_mock.ping.assert_not_awaited()
+    data_source_mock.close.assert_awaited_once()
+
+    connector.error.assert_awaited_with(error)
+
