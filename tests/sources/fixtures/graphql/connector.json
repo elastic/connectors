@@ -65,7 +65,7 @@
             "type": "str",
             "required": false
         },
-        "graphql_object_list": {
+        "graphql_object_to_id_map": {
             "label": "GraphQL Objects to ID mapping",
             "order": 9,
             "type": "str",
