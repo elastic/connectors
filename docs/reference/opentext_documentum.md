@@ -41,7 +41,7 @@ The username of the account to connect with Opentext Documentum.
 
 The password of the account to connect with Opentext Documentum.
 
-#### `Repositories`
+#### `Repositories` (optional)
 
 Comma-separated list of repositories to fetch data from Opentext Documentum. If the value is `*` the connector will fetch data from all repositories present in the configured user’s account.
 
@@ -52,11 +52,11 @@ Examples:
 - `elastic`, `kibana`
 - `*`
 
-#### `Enable SSL`
+#### `Enable SSL` (optional)
 
 Enable SSL for the Opentext Documentum instance.
 
-#### `SSL Certificate`
+#### `SSL Certificate` (Required if SSL is enabled)
 
 SSL certificate for the Opentext Documentum instance. Example:
 
