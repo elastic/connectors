@@ -58,6 +58,7 @@ fi
 if [ "${no_connectors:-}" == false ]; then
   echo "Starting Elastic Connectors..."
 
+  source ./copy-config.sh
   config_dir="$PROJECT_ROOT/scripts/stack/connectors-config"
   script_config="$config_dir/config.yml"
   if [ ! -f "$script_config" ]; then
