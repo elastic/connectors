@@ -35,11 +35,11 @@ The domain where Opentext Documentum is hosted. Example:
 
 #### `Username`  (required)
 
-The username of the account to connect with Opentext Documentum.
+The username of the account to connect to Opentext Documentum.
 
 #### `Password`  (required)
 
-The password of the account to connect with Opentext Documentum.
+The password of the account to connect to Opentext Documentum.
 
 #### `Repositories`
 
