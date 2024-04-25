@@ -71,7 +71,7 @@ class ColorFormatter(logging.Formatter):
 
 
 class ExtraLogger(logging.Logger):
-    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None):
+    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None, stack_info=False):
         if (
             not (hasattr(self, "filebeat") and self.filebeat)  # pyright: ignore
             and prefix
@@ -87,7 +87,7 @@ class ExtraLogger(logging.Logger):
                 "labels.index_date": datetime.now().strftime("%Y.%m.%d"),
             }
         )
-        super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
+        super(ExtraLogger, self)._log(level, msg, args, exc_info, extra, stack_info)
 
 
 def set_logger(log_level=logging.INFO, filebeat=False):

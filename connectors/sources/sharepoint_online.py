@@ -507,7 +507,7 @@ class MicrosoftAPISession:
         elif e.status == 500:
             raise InternalServerError from e
         elif e.status == 400:
-            self._logger.warning(f"Received 400 response from {absolute_url}")
+            self._logger.warning(f"Received 400 response from [{absolute_url}]. Exception: [{e}]. Retry count: [{retry_count}]")
             raise BadRequestError from e
         else:
             raise
