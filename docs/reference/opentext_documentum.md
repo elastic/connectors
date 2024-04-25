@@ -7,7 +7,7 @@ The Elastic Opentext Documentum connector is written in Python using the [Elasti
 This connector is available as a self-managed connector client.
 To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
 
-This connector is an **tech preview connector** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties.
+This connector is a **tech preview connector** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties.
 
 ## Usage
 
