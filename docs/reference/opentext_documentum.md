@@ -92,6 +92,10 @@ This connector currently does not support [incremental syncs](https://www.elasti
 
 [Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
 
+## Advanced Sync Rules
+
+Advanced sync rules are not available for this connector in the present version.
+
 ## Connector Client operations
 
 ### End-to-end Testing
