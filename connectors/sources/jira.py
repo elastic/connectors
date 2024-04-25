@@ -61,6 +61,7 @@ PERMISSIONS_BY_KEY = "permissions_by_key"
 ISSUE_SECURITY_LEVEL = "issue_security_level"
 SECURITY_LEVEL_MEMBERS = "issue_security_members"
 PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
+ALL_FIELDS = "all_fields"
 URLS = {
     PING: "rest/api/2/myself",
     PROJECT: "rest/api/2/project?expand=description,lead,url",
@@ -75,6 +76,7 @@ URLS = {
     PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "rest/api/3/project/{project_key}/role/{role_id}",
     ISSUE_SECURITY_LEVEL: "rest/api/2/issue/{issue_key}?fields=security",
     SECURITY_LEVEL_MEMBERS: "rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
+    ALL_FIELDS: "rest/api/2/field",
 }
 
 JIRA_CLOUD = "jira_cloud"
@@ -413,6 +415,15 @@ class JiraClient:
     async def ping(self):
         await anext(self.api_call(url_name=PING))
 
+    async def get_jira_fields(self):
+        response = await anext(self.api_call(url_name=ALL_FIELDS))
+        jira_fields = await response.json()
+        return {
+            field["id"]: field["name"]
+            for field in jira_fields
+            if field["custom"] is True
+        }
+
 
 class JiraDataSource(BaseDataSource):
     """Jira"""
@@ -440,6 +451,7 @@ class JiraDataSource(BaseDataSource):
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
 
         self.project_permission_cache = {}
+        self.custom_fields = {}
 
     def _set_internal_logger(self):
         self.jira_client.set_logger(self._logger)
@@ -875,7 +887,10 @@ class JiraDataSource(BaseDataSource):
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
         ):
-            response_fields = issue_metadata.get("fields")
+            response_fields = {
+                self.custom_fields.get(k, k): v
+                for k, v in issue_metadata.get("fields").items()
+            }
             document = {
                 "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
                 "_timestamp": response_fields.get("updated"),
@@ -934,6 +949,9 @@ class JiraDataSource(BaseDataSource):
             if self.jira_client.projects == [WILDCARD]
             else projects_query
         )
+
+        self.custom_fields = await self.jira_client.get_jira_fields()
+
         async for issue in self.jira_client.get_issues_for_jql(jql=jql):
             await self.fetchers.put(partial(self._put_issue, issue))
             self.tasks += 1
