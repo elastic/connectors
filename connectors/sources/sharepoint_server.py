@@ -48,6 +48,7 @@ DOCUMENT_LIBRARY = "document_library"
 SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
 VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
 VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
+IS_USER = 1  # To verify principal type value for user or group
 
 READER = 2
 CONTRIBUTOR = 3
@@ -119,37 +120,6 @@ SCHEMA = {
         "_timestamp": "TimeLastModified",
     },
 }
-
-
-def _prefix_user(user):
-    return prefix_identity("user", user)
-
-
-def _prefix_user_id(user_id):
-    return prefix_identity("user_id", user_id)
-
-
-def _prefix_email(email):
-    return prefix_identity("email", email)
-
-
-def _prefix_login_name(name):
-    return prefix_identity("login_name", name)
-
-
-def _prefix_group(group):
-    return prefix_identity("group", group)
-
-
-def _prefix_group_name(group_name):
-    return prefix_identity("group_name", group_name)
-
-
-def _get_login_name(raw_login_name):
-    if raw_login_name:
-        parts = raw_login_name.split("|")
-        return parts[-1]
-    return None
 
 
 class SharepointServerClient:
@@ -596,6 +566,30 @@ class SharepointServerDataSource(BaseDataSource):
     def _set_internal_logger(self):
         self.sharepoint_client.set_logger(self._logger)
 
+    def _prefix_user(self, user):
+        return prefix_identity("user", user)
+
+    def _prefix_user_id(self, user_id):
+        return prefix_identity("user_id", user_id)
+
+    def _prefix_email(self, email):
+        return prefix_identity("email", email)
+
+    def _prefix_login_name(self, name):
+        return prefix_identity("login_name", name)
+
+    def _prefix_group(self, group):
+        return prefix_identity("group", group)
+
+    def _prefix_group_name(self, group_name):
+        return prefix_identity("group_name", group_name)
+
+    def _get_login_name(self, raw_login_name):
+        if raw_login_name:
+            parts = raw_login_name.split("|")
+            return parts[-1]
+        return None
+
     @classmethod
     def get_default_configuration(cls):
         """Get the default configuration for SharePoint
@@ -707,10 +701,10 @@ class SharepointServerDataSource(BaseDataSource):
 
     async def _user_access_control_doc(self, user):
         login_name = user.get("LoginName")
-        prefixed_mail = _prefix_email(user.get("Email"))
-        prefixed_title = _prefix_user(user.get("Title"))
-        prefixed_user_id = _prefix_user_id(user.get("Id"))
-        prefixed_login_name = _prefix_login_name(login_name)
+        prefixed_mail = self._prefix_email(user.get("Email"))
+        prefixed_title = self._prefix_user(user.get("Title"))
+        prefixed_user_id = self._prefix_user_id(user.get("Id"))
+        prefixed_login_name = self._prefix_login_name(login_name)
 
         access_control = [
             prefixed_mail,
@@ -732,29 +726,35 @@ class SharepointServerDataSource(BaseDataSource):
 
     async def _access_control_for_member(self, member):
         principal_type = member.get("PrincipalType")
-        is_group = principal_type != 1 if principal_type else False
+        is_group = principal_type != IS_USER if principal_type else False
         user_access_control = []
 
         if is_group:
             group_name = member.get("Title")
-            self._logger.debug(f"Detected group '{group_name}'.")
-            group_id = _get_login_name(member.get("LoginName"))
+            group_id = self._get_login_name(member.get("LoginName"))
+            self._logger.debug(
+                f"Detected member '{group_id}' with name '{group_name}' and principal type '{principal_type}', processing as group."
+            )
 
             if group_id:
-                user_access_control.append(_prefix_group(group_id))
+                user_access_control.append(self._prefix_group(group_id))
             if group_name:
-                user_access_control.append(_prefix_group_name(group_name))
+                user_access_control.append(self._prefix_group_name(group_name))
 
         else:
-            login_name = _get_login_name(member.get("LoginName"))
+            login_name = self._get_login_name(member.get("LoginName"))
             email = member.get("Email")
-            user_access_control.append(_prefix_user_id(member.get("Id")))
+            _id = member.get("Id")
+            self._logger.debug(
+                f"Detected member '{_id}' with login '{login_name}:{email}' and principal type '{principal_type}', processing as individual."
+            )
+            user_access_control.append(self._prefix_user_id(_id))
 
             if login_name:
-                user_access_control.append(_prefix_login_name(login_name))
+                user_access_control.append(self._prefix_login_name(login_name))
 
             if email:
-                user_access_control.append(_prefix_email(email))
+                user_access_control.append(self._prefix_email(email))
         return user_access_control
 
     async def get_access_control(self):
@@ -773,7 +773,9 @@ class SharepointServerDataSource(BaseDataSource):
 
         def _already_seen(login_name):
             if login_name in already_seen_ids:
-                self._logger.debug(f"Already encountered login {login_name} during this sync, skipping access control doc generation.")
+                self._logger.debug(
+                    f"Already encountered login {login_name} during this sync, skipping access control doc generation."
+                )
                 return True
 
             return False
@@ -785,13 +787,15 @@ class SharepointServerDataSource(BaseDataSource):
 
         async def process_user(user):
             login_name = user.get("LoginName")
-            self._logger.debug(f"Encountered login '{login_name}', generating access control doc...")
+            self._logger.debug(
+                f"Encountered login '{login_name}', generating access control doc..."
+            )
 
             if _already_seen(login_name):
                 return None
 
             update_already_seen(login_name)
-            if user.get("PrincipalType") == 1:
+            if user.get("PrincipalType") == IS_USER:
                 person_access_control_doc = await self._user_access_control_doc(user)
                 if person_access_control_doc:
                     return person_access_control_doc

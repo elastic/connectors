@@ -1498,8 +1498,44 @@ async def test_get_docs_with_dls_enabled():
                 )
             ]
         )
+        expected_response = []
+        target_response = [
+            {
+                "type": "sites",
+                "title": "demo",
+                "url": "/abc",
+                "_id": 1,
+                "server_relative_url": None,
+                "_timestamp": "2022-06-20T10:04:03Z",
+                "creation_time": "2022-06-20T10:04:03Z",
+                "_allow_access_control": [],
+            },
+            {
+                "type": "document_library",
+                "url": "http://127.0.0.1:8491/abc",
+                "server_relative_url": "/abc",
+                "title": "list",
+                "parent_web_url": "/abc",
+                "_id": "4eba2cd0-46d2-4b5e-8918-b8de89c90ecc",
+                "_timestamp": "2024-04-15T09:29:21Z",
+                "creation_time": "2024-04-15T09:29:21Z",
+                "_allow_access_control": ["user_id:1", "login_name:administrator"],
+            },
+            {
+                "type": "Folder",
+                "_id": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
+                "size": 0,
+                "url": "http://127.0.0.1:8491/sites/enterprise/ctest/SitePages/Home.aspx",
+                "server_relative_url": "/sites/enterprise/ctest/SitePages/Home.aspx",
+                "title": "Home.txt",
+                "creation_time": "2022-05-02T07:20:33Z",
+                "_timestamp": "2022-05-02T07:20:34Z",
+                "_allow_access_control": ["group:group1", "group_name:group1"],
+            },
+        ]
         async for site_document, _ in source.get_docs():
-            assert site_document is not None
+            expected_response.append(site_document)
+        assert expected_response == target_response
 
 
 @pytest.mark.asyncio
