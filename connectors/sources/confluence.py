@@ -179,7 +179,7 @@ class ConfluenceClient:
                     exception,
                     ServerDisconnectedError,
                 ):
-                    await self.session.close()  # pyright: ignore
+                    await self.close_session()
                 retry_counter += 1
                 if retry_counter > self.retry_count:
                     raise exception
