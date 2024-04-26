@@ -1692,10 +1692,7 @@ class GitHubDataSource(BaseDataSource):
                             self._prepare_review_doc(review=review)
                         )
                 else:
-                    if response is not None:
-                        type_obj[sample_dict[field_type]["es_field"]].extend(response)
-                    else:
-                        self._logger.info("Response was None!")
+                    type_obj[sample_dict[field_type]["es_field"]].extend(response)
 
     async def _extract_pull_request(self, pull_request, owner, repo):
         reviews = [
