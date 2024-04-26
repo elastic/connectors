@@ -773,7 +773,7 @@ class SharepointServerDataSource(BaseDataSource):
 
         def _already_seen(login_name):
             if login_name in already_seen_ids:
-                self._logger.debug(f"We've already seen {login_name}")
+                self._logger.debug(f"Already encountered login {login_name} during this sync, skipping access control doc generation.")
                 return True
 
             return False
