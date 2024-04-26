@@ -69,6 +69,7 @@ def pull_request():
                             "body": "test pull request",
                             "state": "OPEN",
                             "mergedAt": "None",
+                            "author": "author-authorson",
                             "assignees": {
                                 "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
                                 "nodes": [{"login": "test_user"}],
@@ -275,46 +276,47 @@ MOCK_RESPONSE_REPO = [
 ]
 
 MOCK_RESPONSE_ISSUE = {
-    "data": {
-        "repository": {
-            "issues": {
-                "nodes": [
-                    {
-                        "number": 1,
-                        "url": "https://github.com/demo_user/demo_repo/issues/1",
-                        "createdAt": "2023-04-18T10:12:21Z",
-                        "closedAt": None,
-                        "title": "demo issues",
-                        "body": "demo issues test",
-                        "state": "OPEN",
-                        "id": "I_kwDOJXuc8M5jtMsK",
-                        "type": "Issue",
-                        "updatedAt": "2023-04-19T08:56:23Z",
-                        "comments": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                            "nodes": [
-                                {
-                                    "author": {"login": "demo_user"},
-                                    "body": "demo comments updated!!",
-                                }
-                            ],
-                        },
-                        "labels": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                            "nodes": [
-                                {
-                                    "name": "enhancement",
-                                    "description": "New feature or request",
-                                }
-                            ],
-                        },
-                        "assignees": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                            "nodes": [{"login": "demo_user"}],
-                        },
-                    }
-                ]
-            }
+    "repository": {
+        "issues": {
+            "nodes": [
+                {
+                    "number": 1,
+                    "url": "https://github.com/demo_user/demo_repo/issues/1",
+                    "createdAt": "2023-04-18T10:12:21Z",
+                    "closedAt": None,
+                    "title": "demo issues",
+                    "body": "demo issues test",
+                    "state": "OPEN",
+                    "id": "I_kwDOJXuc8M5jtMsK",
+                    "type": "Issue",
+                    "updatedAt": "2023-04-19T08:56:23Z",
+                    "author": {
+                        "login": "I'm a real user!",
+                    },
+                    "comments": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                        "nodes": [
+                            {
+                                "author": {"login": "demo_user"},
+                                "body": "demo comments updated!!",
+                            }
+                        ],
+                    },
+                    "labels": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                        "nodes": [
+                            {
+                                "name": "enhancement",
+                                "description": "New feature or request",
+                            }
+                        ],
+                    },
+                    "assignees": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                        "nodes": [{"login": "demo_user"}],
+                    },
+                }
+            ]
         }
     }
 }
@@ -329,6 +331,7 @@ EXPECTED_ISSUE = {
     "type": "Issue",
     "_id": "I_kwDOJXuc8M5jtMsK",
     "_timestamp": "2023-04-19T08:56:23Z",
+    "author": "I'm a real user!",
     "issue_comments": [
         {"author": {"login": "demo_user"}, "body": "demo comments updated!!"}
     ],
@@ -336,70 +339,69 @@ EXPECTED_ISSUE = {
     "assignees_list": [{"login": "demo_user"}],
 }
 MOCK_RESPONSE_PULL = {
-    "data": {
-        "repository": {
-            "pullRequests": {
-                "nodes": [
-                    {
-                        "id": "1",
-                        "updatedAt": "2023-07-03T12:24:16Z",
-                        "number": 2,
-                        "url": "https://github.com/demo_repo/demo_repo/pull/2",
-                        "createdAt": "2023-04-19T09:06:01Z",
-                        "closedAt": "None",
-                        "title": "test pull request",
-                        "body": "test pull request",
-                        "state": "OPEN",
-                        "mergedAt": "None",
-                        "assignees": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
-                            "nodes": [{"login": "test_user"}],
-                        },
-                        "labels": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
-                            "nodes": [
-                                {
-                                    "name": "bug",
-                                    "description": "Something isn't working",
-                                },
-                            ],
-                        },
-                        "reviewRequests": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
-                            "nodes": [{"requestedReviewer": {"login": "test_user"}}],
-                        },
-                        "comments": {
-                            "pageInfo": {
-                                "hasNextPage": True,
-                                "endCursor": "Y3Vyc29yOnYyOpHOXmz8gA==",
+    "repository": {
+        "pullRequests": {
+            "nodes": [
+                {
+                    "id": "1",
+                    "updatedAt": "2023-07-03T12:24:16Z",
+                    "number": 2,
+                    "url": "https://github.com/demo_repo/demo_repo/pull/2",
+                    "createdAt": "2023-04-19T09:06:01Z",
+                    "closedAt": "None",
+                    "title": "test pull request",
+                    "body": "test pull request",
+                    "state": "OPEN",
+                    "mergedAt": "None",
+                    "author": {"login": "author-authorson"},
+                    "assignees": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                        "nodes": [{"login": "test_user"}],
+                    },
+                    "labels": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                        "nodes": [
+                            {
+                                "name": "bug",
+                                "description": "Something isn't working",
                             },
-                            "nodes": [
-                                {
-                                    "author": {"login": "test_user"},
-                                    "body": "issues comments",
-                                },
-                            ],
+                        ],
+                    },
+                    "reviewRequests": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
+                        "nodes": [{"requestedReviewer": {"login": "test_user"}}],
+                    },
+                    "comments": {
+                        "pageInfo": {
+                            "hasNextPage": True,
+                            "endCursor": "Y3Vyc29yOnYyOpHOXmz8gA==",
                         },
-                        "reviews": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
-                            "nodes": [
-                                {
-                                    "author": {"login": "test_user"},
-                                    "state": "COMMENTED",
-                                    "body": "add some comments",
-                                    "comments": {
-                                        "pageInfo": {
-                                            "hasNextPage": False,
-                                            "endCursor": "abcd",
-                                        },
-                                        "nodes": [{"body": "nice!!!"}],
+                        "nodes": [
+                            {
+                                "author": {"login": "test_user"},
+                                "body": "issues comments",
+                            },
+                        ],
+                    },
+                    "reviews": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                        "nodes": [
+                            {
+                                "author": {"login": "test_user"},
+                                "state": "COMMENTED",
+                                "body": "add some comments",
+                                "comments": {
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": "abcd",
                                     },
+                                    "nodes": [{"body": "nice!!!"}],
                                 },
-                            ],
-                        },
-                    }
-                ]
-            }
+                            },
+                        ],
+                    },
+                }
+            ]
         }
     }
 }
@@ -415,6 +417,7 @@ EXPECTED_PULL_RESPONSE = {
     "_id": "1",
     "_timestamp": "2023-07-03T12:24:16Z",
     "type": "Pull request",
+    "author": "author-authorson",
     "issue_comments": [
         {"author": {"login": "test_user"}, "body": "issues comments"},
         {"author": {"login": "test_user"}, "body": "more_comments"},
@@ -444,86 +447,76 @@ EXPECTED_PULL_RESPONSE = {
     ],
 }
 MOCK_REVIEWS_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "reviews": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {
-                            "author": {"login": "test_user"},
-                            "state": "APPROVED",
-                            "body": "LGTM",
-                            "comments": {
-                                "pageInfo": {
-                                    "hasNextPage": False,
-                                    "endCursor": "abcd",
-                                },
-                                "nodes": [{"body": "LGTM"}],
+    "repository": {
+        "pullRequest": {
+            "reviews": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {
+                        "author": {"login": "test_user"},
+                        "state": "APPROVED",
+                        "body": "LGTM",
+                        "comments": {
+                            "pageInfo": {
+                                "hasNextPage": False,
+                                "endCursor": "abcd",
                             },
+                            "nodes": [{"body": "LGTM"}],
                         },
-                    ],
-                }
+                    },
+                ],
             }
         }
     }
 }
 MOCK_REVIEW_REQUESTED_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "reviewRequests": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd1234"},
-                    "nodes": [{"requestedReviewer": {"login": "other_user"}}],
-                }
+    "repository": {
+        "pullRequest": {
+            "reviewRequests": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd1234"},
+                "nodes": [{"requestedReviewer": {"login": "other_user"}}],
             }
         }
     }
 }
 MOCK_COMMENTS_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "comments": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {
-                            "author": {"login": "test_user"},
-                            "body": "more_comments",
-                        },
-                    ],
-                }
+    "repository": {
+        "pullRequest": {
+            "comments": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {
+                        "author": {"login": "test_user"},
+                        "body": "more_comments",
+                    },
+                ],
             }
         }
     }
 }
 MOCK_LABELS_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "labels": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {
-                            "name": "8.8.0",
-                            "description": "8.8 Version",
-                        },
-                    ],
-                }
+    "repository": {
+        "pullRequest": {
+            "labels": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {
+                        "name": "8.8.0",
+                        "description": "8.8 Version",
+                    },
+                ],
             }
         }
     }
 }
 MOCK_ASSIGNEE_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "assignees": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {"login": "test_user"},
-                    ],
-                }
+    "repository": {
+        "pullRequest": {
+            "assignees": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {"login": "test_user"},
+                ],
             }
         }
     }
@@ -1219,25 +1212,16 @@ async def test_fetch_repos():
 @pytest.mark.asyncio
 async def test_fetch_repos_organization():
     async with create_github_source(
-        repo_type="organization", org_name="org1"
+        repo_type="organization", org_name="org_1"
     ) as source:
         source.github_client.graphql = AsyncMock(
             return_value={"data": {"viewer": {"login": "owner1"}}}
         )
-        source.org_repos = {
-            "org1/repo1": {
-                "id": "123",
-                "nameWithOwner": "org1/repo1",
-                "updatedAt": "2023-04-17T12:55:01Z",
-            }
-        }
+        source.github_client.get_org_repos = Mock(
+            side_effect=AsyncIterator([MOCK_REPO_1])
+        )
         async for repo in source._fetch_repos():
-            assert repo == {
-                "nameWithOwner": "org1/repo1",
-                "_id": "123",
-                "_timestamp": "2023-04-17T12:55:01Z",
-                "type": "Repository",
-            }
+            assert repo == MOCK_REPO_1_DOC
 
 
 @pytest.mark.asyncio
@@ -1383,26 +1367,24 @@ async def test_fetch_pull_requests_with_unauthorized_exception():
 async def test_fetch_pull_requests_with_deleted_users():
     async with create_github_source() as source:
         mock_review_deleted_user = {
-            "data": {
-                "repository": {
-                    "pullRequest": {
-                        "reviews": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                            "nodes": [
-                                {
-                                    "author": None,  # author will return None in this situation
-                                    "state": "APPROVED",
-                                    "body": "LGTM",
-                                    "comments": {
-                                        "pageInfo": {
-                                            "hasNextPage": False,
-                                            "endCursor": "abcd",
-                                        },
-                                        "nodes": [{"body": "LGTM"}],
+            "repository": {
+                "pullRequest": {
+                    "reviews": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                        "nodes": [
+                            {
+                                "author": None,  # author will return None in this situation
+                                "state": "APPROVED",
+                                "body": "LGTM",
+                                "comments": {
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": "abcd",
                                     },
+                                    "nodes": [{"body": "LGTM"}],
                                 },
-                            ],
-                        }
+                            },
+                        ],
                     }
                 }
             }
