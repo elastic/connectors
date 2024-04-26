@@ -1473,7 +1473,6 @@ class GitHubDataSource(BaseDataSource):
         }
 
     def _prepare_pull_request_doc(self, pull_request, reviews):
-        author = pull_request.get("author", {}) or {}
         return {
             "_id": pull_request.pop("id"),
             "_timestamp": pull_request.pop("updatedAt"),
@@ -1483,11 +1482,9 @@ class GitHubDataSource(BaseDataSource):
             "labels_field": pull_request.get("labels", {}).get("nodes"),
             "assignees_list": pull_request.get("assignees", {}).get("nodes"),
             "requested_reviewers": pull_request.get("reviewRequests", {}).get("nodes"),
-            "author": author.get("login"),
         }
 
     def _prepare_issue_doc(self, issue):
-        author = issue.get("author", {}) or {}
         return {
             "_id": issue.pop("id"),
             "type": ObjectType.ISSUE.value,
@@ -1495,7 +1492,6 @@ class GitHubDataSource(BaseDataSource):
             "issue_comments": issue.get("comments", {}).get("nodes"),
             "labels_field": issue.get("labels", {}).get("nodes"),
             "assignees_list": issue.get("assignees", {}).get("nodes"),
-            "author": author.get("login"),
         }
 
     def _prepare_review_doc(self, review):
@@ -1763,7 +1759,6 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _extract_issues(self, response, owner, repo, response_key):
-        self._logger.warning(response)
         for issue in nested_get_from_dict(  # pyright: ignore
             response, response_key + ["nodes"], default=[]
         ):
@@ -1806,11 +1801,9 @@ class GitHubDataSource(BaseDataSource):
                 variables=issue_variables,
                 keys=response_key,
             ):
-                self._logger.warning(response)
                 async for issue in self._extract_issues(
                     response=response, owner=owner, repo=repo, response_key=response_key
                 ):
-                    self._logger.warning(issue)
                     yield issue
         except UnauthorizedException:
             raise

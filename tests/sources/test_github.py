@@ -69,7 +69,9 @@ def pull_request():
                             "body": "test pull request",
                             "state": "OPEN",
                             "mergedAt": "None",
-                            "author": "author-authorson",
+                            "author": {
+                                "login": "author-authorson",
+                            },
                             "assignees": {
                                 "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
                                 "nodes": [{"login": "test_user"}],
@@ -291,7 +293,7 @@ MOCK_RESPONSE_ISSUE = {
                     "type": "Issue",
                     "updatedAt": "2023-04-19T08:56:23Z",
                     "author": {
-                        "login": "I'm a real user!",
+                        "login": "author-mac-author",
                     },
                     "comments": {
                         "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
@@ -331,7 +333,7 @@ EXPECTED_ISSUE = {
     "type": "Issue",
     "_id": "I_kwDOJXuc8M5jtMsK",
     "_timestamp": "2023-04-19T08:56:23Z",
-    "author": "I'm a real user!",
+    "author": {"login": "author-mac-author"},
     "issue_comments": [
         {"author": {"login": "demo_user"}, "body": "demo comments updated!!"}
     ],
@@ -417,7 +419,9 @@ EXPECTED_PULL_RESPONSE = {
     "_id": "1",
     "_timestamp": "2023-07-03T12:24:16Z",
     "type": "Pull request",
-    "author": "author-authorson",
+    "author": {
+        "login": "author-authorson",
+    },
     "issue_comments": [
         {"author": {"login": "test_user"}, "body": "issues comments"},
         {"author": {"login": "test_user"}, "body": "more_comments"},
