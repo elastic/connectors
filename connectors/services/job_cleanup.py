@@ -9,7 +9,6 @@ A task periodically clean up orphaned and idle jobs.
 
 from connectors.es.index import DocumentNotFoundError
 from connectors.es.management_client import ESManagementClient
-from connectors.logger import logger
 from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
 
@@ -20,13 +19,13 @@ class JobCleanUpService(BaseService):
     name = "cleanup"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config, "job_cleanup_service")
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())
 
     async def _run(self):
-        logger.debug("Successfully started Job cleanup task...")
+        self.logger.debug("Successfully started Job cleanup task...")
         self.connector_index = ConnectorIndex(self.es_config)
         self.es_management_client = ESManagementClient(self.es_config)
         self.sync_job_index = SyncJobIndex(self.es_config)
@@ -47,7 +46,7 @@ class JobCleanUpService(BaseService):
 
     async def _process_orphaned_idle_jobs(self):
         try:
-            logger.debug("Cleaning up orphaned idle jobs")
+            self.logger.debug("Cleaning up orphaned idle jobs")
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.all_connectors()
@@ -61,25 +60,25 @@ class JobCleanUpService(BaseService):
                     await job.fail(IDLE_JOB_ERROR)
                     marked_count += 1
                 except Exception as e:
-                    logger.error(
+                    self.logger.error(
                         f"Failed to mark orphaned idle job #{job.id} as error: {e}"
                     )
                 finally:
                     total_count += 1
 
             if total_count == 0:
-                logger.debug("No orphaned idle jobs found. Skipping...")
+                self.logger.debug("No orphaned idle jobs found. Skipping...")
             else:
-                logger.info(
+                self.logger.info(
                     f"Successfully marked #{marked_count} out of #{total_count} orphaned idle jobs as error."
                 )
         except Exception as e:
-            logger.critical(e, exc_info=True)
+            self.logger.critical(e, exc_info=True)
             self.raise_if_spurious(e)
 
     async def _process_idle_jobs(self):
         try:
-            logger.debug("Start cleaning up idle jobs...")
+            self.logger.debug("Start cleaning up idle jobs...")
             connector_ids = [
                 connector.id
                 async for connector in self.connector_index.supported_connectors(
@@ -102,7 +101,7 @@ class JobCleanUpService(BaseService):
                             doc_id=connector_id
                         )
                     except DocumentNotFoundError:
-                        logger.warning(
+                        self.logger.warning(
                             f"Could not found connector by id #{connector_id}"
                         )
                         continue
@@ -110,20 +109,22 @@ class JobCleanUpService(BaseService):
                     try:
                         await job.reload()
                     except DocumentNotFoundError:
-                        logger.warning(f"Could not reload sync job #{job_id}")
+                        self.logger.warning(f"Could not reload sync job #{job_id}")
                         job = None
                     await connector.sync_done(job=job)
                 except Exception as e:
-                    logger.error(f"Failed to mark idle job #{job_id} as error: {e}")
+                    self.logger.error(
+                        f"Failed to mark idle job #{job_id} as error: {e}"
+                    )
                 finally:
                     total_count += 1
 
             if total_count == 0:
-                logger.debug("No idle jobs found. Skipping...")
+                self.logger.debug("No idle jobs found. Skipping...")
             else:
-                logger.info(
+                self.logger.info(
                     f"Successfully marked #{marked_count} out of #{total_count} idle jobs as error."
                 )
         except Exception as e:
-            logger.critical(e, exc_info=True)
+            self.logger.critical(e, exc_info=True)
             self.raise_if_spurious(e)
