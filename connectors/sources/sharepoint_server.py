@@ -785,7 +785,7 @@ class SharepointServerDataSource(BaseDataSource):
 
         async def process_user(user):
             login_name = user.get("LoginName")
-            self._logger.debug(f"Detected a person: {login_name}")
+            self._logger.debug(f"Encountered login '{login_name}', generating access control doc...")
 
             if _already_seen(login_name):
                 return None
