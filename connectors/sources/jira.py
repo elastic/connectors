@@ -950,8 +950,6 @@ class JiraDataSource(BaseDataSource):
             else projects_query
         )
 
-        self.custom_fields = await self.jira_client.get_jira_fields()
-
         async for issue in self.jira_client.get_issues_for_jql(jql=jql):
             await self.fetchers.put(partial(self._put_issue, issue))
             self.tasks += 1
@@ -1010,6 +1008,8 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        self.custom_fields = await self.jira_client.get_jira_fields()
+
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
