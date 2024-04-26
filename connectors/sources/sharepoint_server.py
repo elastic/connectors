@@ -661,7 +661,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enable document level security",
                 "order": 9,
-                "tooltip": "Document level security ensures identities and permissions set in your sharepoint server are mirrored in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
+                "tooltip": "Document level security ensures identities and permissions set in your SharePoint Server are mirrored in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
             },
