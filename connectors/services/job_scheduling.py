@@ -202,7 +202,7 @@ class JobSchedulingService(BaseService):
 
             if (
                 last_sync_scheduled_at is not None
-                and last_sync_scheduled_at > this_wake_up_time
+                and last_sync_scheduled_at > last_wake_up_time
             ):
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
