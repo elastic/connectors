@@ -14,7 +14,12 @@ import fastjsonschema
 import smbclient
 import winrm
 from requests.exceptions import ConnectionError
-from smbprotocol.exceptions import SMBConnectionClosed, SMBException, SMBOSError
+from smbprotocol.exceptions import (
+    SMBConnectionClosed,
+    SMBException,
+    SMBOSError,
+    SMBResponseException,
+)
 from smbprotocol.file_info import (
     InfoType,
 )
@@ -38,6 +43,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
+from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     RetryStrategy,
@@ -53,6 +59,11 @@ GET_USERS_COMMAND = "Get-LocalUser | Select Name, SID"
 GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
 GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
 SECURITY_INFO_DACL = 0x00000004
+STATUS_NO_LOGON_SERVERS = 3221225566
+STATUS_INVALID_LOGON_HOURS = 3221225583
+STATUS_INVALID_WORKSTATION = 3221225584
+STATUS_ACCOUNT_DISABLED = 3221225586
+STATUS_PASSWORD_MUST_CHANGE = 3221226020
 
 MAX_CHUNK_SIZE = 65536 * 2
 RETRIES = 3
@@ -60,6 +71,26 @@ RETRY_INTERVAL = 2
 
 WINDOWS = "windows"
 LINUX = "linux"
+
+
+class UserAccountDisabledException(Exception):
+    pass
+
+
+class ClientPermissionException(Exception):
+    pass
+
+
+class InvalidLogonHoursException(Exception):
+    pass
+
+
+class PasswordChangeRequiredException(Exception):
+    pass
+
+
+class NoLogonServerException(Exception):
+    pass
 
 
 def _prefix_user(user):
@@ -238,15 +269,49 @@ class SMBSession:
         self.password = password
         self.port = port
         self.session = None
+        self._logger = logger
 
     def create_connection(self):
         """Creates an SMB session to the shared drive."""
-        self.session = smbclient.register_session(
-            server=self.server_ip,
-            username=self.username,
-            password=self.password,
-            port=self.port,
-        )
+        try:
+            self.session = smbclient.register_session(
+                server=self.server_ip,
+                username=self.username,
+                password=self.password,
+                port=self.port,
+            )
+        except SMBResponseException as exception:
+            self.handle_smb_response_errors(exception=exception)
+
+    def handle_smb_response_errors(self, exception):
+        msg = ""
+        if exception.status == STATUS_INVALID_WORKSTATION:
+            msg = f"Client does not have permission to access server: ({self.server_ip}:{self.port})."
+            self._logger.debug(msg=msg)
+            raise ClientPermissionException(msg) from exception
+        elif exception.status == STATUS_PASSWORD_MUST_CHANGE:
+            msg = f"The password for User: {self.username} must be changed before logging on for the first time."
+            self._logger.debug(msg=msg)
+            raise PasswordChangeRequiredException(msg) from exception
+        elif exception.status == STATUS_NO_LOGON_SERVERS:
+            msg = f"No logon servers available for connecting to server: ({self.server_ip}:{self.port})."
+            self._logger.debug(msg=msg)
+            raise NoLogonServerException(msg) from exception
+        elif exception.status == STATUS_ACCOUNT_DISABLED:
+            msg = f"Account with Username: {self.username} is disabled."
+            self._logger.debug(msg=msg)
+            raise UserAccountDisabledException(msg) from exception
+        elif exception.status == STATUS_INVALID_LOGON_HOURS:
+            msg = (
+                f"User: {self.username} cannot logon outside the specified logon hours."
+            )
+            self._logger.debug(msg=msg)
+            raise InvalidLogonHoursException(msg) from exception
+        else:
+            self._logger.debug(
+                f"Error occurred while creating SMB session. Error: {exception}"
+            )
+            raise
 
 
 class NASDataSource(BaseDataSource):
