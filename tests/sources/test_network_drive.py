@@ -13,17 +13,27 @@ from unittest.mock import ANY, MagicMock
 
 import pytest
 import smbclient
-from smbprotocol.exceptions import LogonFailure, SMBConnectionClosed, SMBOSError
+from smbprotocol.exceptions import (
+    SMBConnectionClosed,
+    SMBOSError,
+    SMBResponseException,
+    Unsuccessful,
+)
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.network_drive import (
+    ClientPermissionException,
+    InvalidLogonHoursException,
     NASDataSource,
     NetworkDriveAdvancedRulesValidator,
+    NoLogonServerException,
+    PasswordChangeRequiredException,
     SecurityInfo,
     SMBSession,
+    UserAccountDisabledException,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -34,6 +44,26 @@ ADVANCED_SNIPPET = "advanced_snippet"
 
 WINDOWS = "windows"
 LINUX = "linux"
+
+
+class InvalidLogonHours(SMBResponseException):
+    _STATUS_CODE = 3221225583
+
+
+class UserAccountDisabled(SMBResponseException):
+    _STATUS_CODE = 3221225586
+
+
+class InvalidWorkstation(SMBResponseException):
+    _STATUS_CODE = 3221225584
+
+
+class NoLogonServer(SMBResponseException):
+    _STATUS_CODE = 3221225566
+
+
+class PasswordMustChange(SMBResponseException):
+    _STATUS_CODE = 3221226020
 
 
 def mock_file(name):
@@ -157,18 +187,49 @@ async def test_ping_for_failed_connection(session_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.register_session")
-async def test_create_connection_with_invalid_credentials(session_mock):
-    """Tests the create_connection fails with invalid credentials
+@pytest.mark.parametrize(
+    "side_effect",
+    [
+        {
+            "side_effect_name": InvalidWorkstation,
+            "raises": ClientPermissionException,
+        },
+        {
+            "side_effect_name": PasswordMustChange,
+            "raises": PasswordChangeRequiredException,
+        },
+        {
+            "side_effect_name": NoLogonServer,
+            "raises": NoLogonServerException,
+        },
+        {
+            "side_effect_name": UserAccountDisabled,
+            "raises": UserAccountDisabledException,
+        },
+        {
+            "side_effect_name": InvalidLogonHours,
+            "raises": InvalidLogonHoursException,
+        },
+        {
+            "side_effect_name": Unsuccessful,
+            "raises": SMBResponseException,
+        },
+    ],
+)
+async def test_create_connection_when_error_occurs(session_mock, side_effect):
+    """Tests the create_connection function when an error occurs
 
     Args:
         session_mock (patch): The patch of register_session method
     """
     # Setup
     async with create_source(NASDataSource) as source:
-        session_mock.side_effect = LogonFailure
+        session_mock.side_effect = side_effect.get("side_effect_name")
 
         # Execute
-        with pytest.raises(LogonFailure):
+        with pytest.raises(
+            side_effect.get("raises"),
+        ):
             source.smb_connection.create_connection()
 
 
