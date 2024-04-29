@@ -1185,6 +1185,69 @@ async def test_fetch_pull_requests_with_unauthorized_exception():
 
 
 @pytest.mark.asyncio
+async def test_fetch_pull_requests_with_deleted_users():
+    async with create_github_source() as source:
+        mock_review_deleted_user = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviews": {
+                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                            "nodes": [
+                                {
+                                    "author": None,  # author will return None in this situation
+                                    "state": "APPROVED",
+                                    "body": "LGTM",
+                                    "comments": {
+                                        "pageInfo": {
+                                            "hasNextPage": False,
+                                            "endCursor": "abcd",
+                                        },
+                                        "nodes": [{"body": "LGTM"}],
+                                    },
+                                },
+                            ],
+                        }
+                    }
+                }
+            }
+        }
+
+        expected_pull_response_deleted_user = deepcopy(EXPECTED_PULL_RESPONSE)
+        expected_pull_response_deleted_user["reviews_comments"] = [
+            {
+                "author": "test_user",
+                "body": "add some comments",
+                "state": "COMMENTED",
+                "comments": [{"body": "nice!!!"}],
+            },
+            {
+                "author": None,  # deleted author
+                "body": "LGTM",
+                "state": "APPROVED",
+                "comments": [{"body": "LGTM"}],
+            },
+        ]
+
+        with patch.object(
+            source.github_client,
+            "paginated_api_call",
+            side_effect=[
+                AsyncIterator([MOCK_RESPONSE_PULL]),
+                AsyncIterator([MOCK_COMMENTS_RESPONSE]),
+                AsyncIterator([MOCK_REVIEW_REQUESTED_RESPONSE]),
+                AsyncIterator([MOCK_LABELS_RESPONSE]),
+                AsyncIterator([MOCK_ASSIGNEE_RESPONSE]),
+                AsyncIterator([mock_review_deleted_user]),
+            ],
+        ):
+            async for pull in source._fetch_pull_requests(
+                repo_name="demo_user/demo_repo"
+            ):
+                assert pull == expected_pull_response_deleted_user
+
+
+@pytest.mark.asyncio
 async def test_fetch_files():
     expected_response = (
         {

@@ -59,19 +59,19 @@ ISSUE_SECURITY_LEVEL = "issue_security_level"
 SECURITY_LEVEL_MEMBERS = "issue_security_members"
 PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
 URLS = {
-    PING: "/rest/api/2/myself",
-    PROJECT: "/rest/api/2/project?expand=description,lead,url",
-    PROJECT_BY_KEY: "/rest/api/2/project/{key}",
-    ISSUES: "/rest/api/2/search?jql={jql}&maxResults={max_results}&startAt={start_at}",
-    ISSUE_DATA: "/rest/api/2/issue/{id}",
-    ATTACHMENT_CLOUD: "/rest/api/2/attachment/content/{attachment_id}",
-    ATTACHMENT_SERVER: "/secure/attachment/{attachment_id}/{attachment_name}",
-    USERS: "/rest/api/3/users/search",
-    USERS_FOR_DATA_CENTER: "/rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
-    PERMISSIONS_BY_KEY: "/rest/api/2/user/permission/search?{key}&permissions=BROWSE&maxResults={max_results}&startAt={start_at}",
-    PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "/rest/api/3/project/{project_key}/role/{role_id}",
-    ISSUE_SECURITY_LEVEL: "/rest/api/2/issue/{issue_key}?fields=security",
-    SECURITY_LEVEL_MEMBERS: "/rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
+    PING: "rest/api/2/myself",
+    PROJECT: "rest/api/2/project?expand=description,lead,url",
+    PROJECT_BY_KEY: "rest/api/2/project/{key}",
+    ISSUES: "rest/api/2/search?jql={jql}&maxResults={max_results}&startAt={start_at}",
+    ISSUE_DATA: "rest/api/2/issue/{id}",
+    ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
+    ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
+    USERS: "rest/api/3/users/search",
+    USERS_FOR_DATA_CENTER: "rest/api/latest/user/search?username=''&startAt={start_at}&maxResults={max_results}",  # we can fetch only 1000 users for jira data center. Refer this doc see the limitations: https://auth0.com/docs/manage-users/user-search/retrieve-users-with-get-users-endpoint#limitations
+    PERMISSIONS_BY_KEY: "rest/api/2/user/permission/search?{key}&permissions=BROWSE&maxResults={max_results}&startAt={start_at}",
+    PROJECT_ROLE_MEMBERS_BY_ROLE_ID: "rest/api/3/project/{project_key}/role/{role_id}",
+    ISSUE_SECURITY_LEVEL: "rest/api/2/issue/{issue_key}?fields=security",
+    SECURITY_LEVEL_MEMBERS: "rest/api/3/issuesecurityschemes/level/member?maxResults={max_results}&startAt={start_at}&levelId={level_id}&expand=user,group,projectRole",
 }
 
 JIRA_CLOUD = "jira_cloud"
@@ -104,7 +104,10 @@ class JiraClient:
         self.configuration = configuration
         self._logger = logger
         self.data_source_type = self.configuration["data_source"]
-        self.host_url = self.configuration["jira_url"]
+
+        jira_url = self.configuration["jira_url"]
+        self.host_url = jira_url if jira_url[-1] == "/" else jira_url + "/"
+
         self.projects = self.configuration["projects"]
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
@@ -628,7 +631,7 @@ class JiraDataSource(BaseDataSource):
             if self.jira_client.data_source_type == JIRA_CLOUD
             else URLS[USERS_FOR_DATA_CENTER]
         )
-        url = parse.urljoin(self.configuration["jira_url"], users_endpoint)
+        url = parse.urljoin(self.jira_client.host_url, users_endpoint)
         async for users in self.atlassian_access_control.fetch_all_users(url=url):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
