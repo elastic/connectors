@@ -17,7 +17,8 @@ fi
 
 is_example_config=false
 if [[ "${CONFIG_PATH:-}" == "" ]]; then
-    CONFIG_PATH="$PROJECT_ROOT/config.yml.example"
+    cp -n "$PROJECT_ROOT/config.yml.example" "$PROJECT_ROOT/config.yml"
+    CONFIG_PATH="$PROJECT_ROOT/config.yml"
     is_example_config=true
 fi
 

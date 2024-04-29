@@ -39,6 +39,8 @@ if [[ "${connectors_only}" != true ]]; then
   source $CURDIR/update-kibana-user-password.sh
 fi
 
+source ./copy-config.sh
+
 run_configurator="no"
 if [[ "${bypass_config:-}" == false ]]; then
   while true; do
@@ -50,7 +52,6 @@ if [[ "${bypass_config:-}" == false ]]; then
     esac
   done
   if [ $run_configurator == "yes" ]; then
-    source ./copy-config.sh
     source ./configure-connectors.sh
   fi
 fi
@@ -58,7 +59,6 @@ fi
 if [ "${no_connectors:-}" == false ]; then
   echo "Starting Elastic Connectors..."
 
-  source ./copy-config.sh
   config_dir="$PROJECT_ROOT/scripts/stack/connectors-config"
   script_config="$config_dir/config.yml"
   if [ ! -f "$script_config" ]; then
