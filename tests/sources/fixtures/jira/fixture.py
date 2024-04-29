@@ -149,5 +149,44 @@ def get_attachment_content(attachment_id):
     return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 
+@app.route("/rest/api/2/field", methods=["GET"])
+def get_fields():
+    """Function to get all fields including default and custom fields from Jira"""
+    return [
+        {
+            "clauseNames": ["description"],
+            "custom": False,
+            "id": "description",
+            "name": "Description",
+            "navigable": True,
+            "orderable": True,
+            "schema": {"system": "description", "type": "string"},
+            "searchable": True,
+        },
+        {
+            "clauseNames": ["summary"],
+            "custom": True,
+            "id": "customfield_001",
+            "key": "summary",
+            "name": "Summary",
+            "navigable": True,
+            "orderable": True,
+            "schema": {"system": "summary", "type": "string"},
+            "searchable": True,
+        },
+        {
+            "clauseNames": ["author"],
+            "custom": True,
+            "id": "customfield_002",
+            "key": "author",
+            "name": "Author",
+            "navigable": True,
+            "orderable": True,
+            "schema": {"system": "author", "type": "string"},
+            "searchable": True,
+        },
+    ]
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

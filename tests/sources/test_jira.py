@@ -82,6 +82,7 @@ MOCK_ISSUE = {
         "issuerestriction": {
             "issuerestrictions": {},
         },
+        "customfield_001": "custom value",
     },
 }
 EXPECTED_ISSUE = {
@@ -102,6 +103,7 @@ EXPECTED_ISSUE = {
             }
         ],
         "issuerestriction": {"issuerestrictions": {}},
+        "Author": "custom value",
     },
 }
 
@@ -306,6 +308,19 @@ MOCK_PROJECT_ROLE_MEMBERS = {
     ],
 }
 
+MOCK_JIRA_FIELDS = [
+    {
+        "id": "summary",
+        "name": "Summary",
+        "custom": False,
+    },
+    {
+        "id": "customfield_001",
+        "name": "Author",
+        "custom": True,
+    },
+]
+
 ACCESS_CONTROL = "_allow_access_control"
 
 
@@ -373,6 +388,8 @@ def side_effect_function(url, ssl):
     if url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=0":
         mocked_issue_response = {"issues": [MOCK_ISSUE], "total": 101}
         return get_json_mock(mock_response=mocked_issue_response)
+    elif url == f"{HOST_URL}/rest/api/2/field":
+        return get_json_mock(mock_response=MOCK_JIRA_FIELDS)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1":
         return get_json_mock(mock_response=MOCK_ISSUE)
     elif url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=100":
