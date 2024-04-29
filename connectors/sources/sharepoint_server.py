@@ -415,7 +415,9 @@ class SharepointServerClient:
                     result["_id"] = attachment_data["UniqueId"]  # pyright: ignore
                     result["url"] = self.format_url(
                         site_url=site_url,
-                        relative_url=self.fix_relative_url(site_relative_url,attachment_file.get("ServerRelativeUrl")),
+                        relative_url=self.fix_relative_url(
+                            site_relative_url, attachment_file.get("ServerRelativeUrl")
+                        ),
                     )
                     result["file_name"] = attachment_file.get("FileName")
                     result["server_relative_url"] = attachment_file["ServerRelativeUrl"]
@@ -600,6 +602,7 @@ class SharepointServerDataSource(BaseDataSource):
             async for _ in self.sharepoint_client._api_call(
                 url_name=PING,
                 site_collections=collection,
+                site_url=collection,
                 host_url=self.sharepoint_client.host_url,
             ):
                 is_invalid = False

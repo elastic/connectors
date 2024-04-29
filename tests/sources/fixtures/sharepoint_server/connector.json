@@ -1,6 +1,17 @@
 {
     "api_key_id": "clvIfIgBFjJwEZQV7bda",
     "configuration": {
+      "authentication": {
+        "label": "Authentication mode",
+        "order": 1,
+        "type": "str",
+        "options": [
+            {"label": "Basic", "value": "Basic"},
+            {"label": "NTLM", "value": "NTLM"}
+        ],
+        "display": "dropdown",
+        "value": "Basic"
+      },
       "username": {
         "label": "SharePoint Server username",
         "order": 1,

@@ -11,11 +11,8 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import httpx
-from httpx import ByteStream
-
-import aiohttp
 import pytest
-from aiohttp import StreamReader
+from httpx import ByteStream
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
@@ -205,7 +202,9 @@ async def test_prepare_drive_items_doc():
             "server_relative_url": "/site",
         }
 
-        target_response = source.format_drive_item(item=list_items,site_url=f"{HOST_URL}/site",site_relative_url="/site")
+        target_response = source.format_drive_item(
+            item=list_items, site_url=f"{HOST_URL}/site", site_relative_url="/site"
+        )
         assert target_response == expected_response
 
 
