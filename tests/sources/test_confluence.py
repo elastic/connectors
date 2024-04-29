@@ -8,11 +8,12 @@ import ssl
 from contextlib import asynccontextmanager
 from copy import copy
 from unittest import mock
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
 from aiohttp import StreamReader
+from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
@@ -24,6 +25,8 @@ from connectors.sources.confluence import (
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
+    InternalServerError,
+    NotFound,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -664,6 +667,91 @@ async def test_validate_configuration_for_ssl_enabled():
         # Execute
         with pytest.raises(Exception):
             source._validate_configuration()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_429_status():
+    initial_response = ClientResponseError(None, None)
+    initial_response.status = 429
+    initial_response.message = "rate-limited"
+    initial_response.headers = {"Retry-After": 0.1}
+
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=[initial_response, retried_response],
+        ):
+            async for response in source.confluence_client.api_call(
+                url="http://localhost:1000/sample"
+            ):
+                result = await response.json()
+
+    assert result == payload
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_429_status_without_retry_after_header():
+    initial_response = ClientResponseError(None, None)
+    initial_response.status = 429
+    initial_response.message = "rate-limited"
+
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    with patch("connectors.sources.confluence.DEFAULT_RETRY_SECONDS", 0):
+        async with create_confluence_source() as source:
+            with patch(
+                "aiohttp.ClientSession.get",
+                side_effect=[initial_response, retried_response],
+            ):
+                async for response in source.confluence_client.api_call(
+                    url="http://localhost:1000/sample"
+                ):
+                    result = await response.json()
+
+        assert result == payload
+
+
+@pytest.mark.asyncio
+async def test_get_with_404_status():
+    error = ClientResponseError(None, None)
+    error.status = 404
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(NotFound):
+                async for response in source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                ):
+                    await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_500_status():
+    error = ClientResponseError(None, None)
+    error.status = 500
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(InternalServerError):
+                async for response in source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                ):
+                    await response.json()
 
 
 @freeze_time("2023-01-24T04:07:19")
