@@ -218,19 +218,17 @@ class ConfluenceClient:
             response: Client response
         """
         self._logger.debug(f"Making a GET call for url: {url}")
-        while True:
-            try:
-                async with self._get_session().get(
-                    url=url,
-                    ssl=self.ssl_ctx,
-                ) as response:
-                    yield response
-                    break
-            except ServerDisconnectedError:
-                await self.close_session()
-                raise
-            except ClientResponseError as exception:
-                await self._handle_client_errors(url=url, exception=exception)
+        try:
+            async with self._get_session().get(
+                url=url,
+                ssl=self.ssl_ctx,
+            ) as response:
+                yield response
+        except ServerDisconnectedError:
+            await self.close_session()
+            raise
+        except ClientResponseError as exception:
+            await self._handle_client_errors(url=url, exception=exception)
 
     async def paginated_api_call(self, url_name, **url_kwargs):
         """Make a paginated API call for Confluence objects using the passed url_name.
