@@ -66,20 +66,20 @@ ask if you want to set up the connectors configuration. If you enter "y" to run
 the configurator, it will take you through a set of prompts using the
 [Connectors CLI](../../connectors/connectors_cli.py) to create a new index and connector.
 
-The resulting configuration will be saved to the [scripts/stack/connectors-config/config.yml](./connectors-config/config.yml)
+The resulting configuration will be saved to the `scripts/stack/connectors-config/config.yml`
 file that is used to start the Connectors container. Note that using the configurator,
-it will modify the [connectors config.yml](./connectors-config/config.yml) file. You can restore it
+it will modify the `scripts/stack/connectors-config/config.yml` file. You can restore it
 by copying over the [example config.yml.example](./connectors-config/config.yml.example) file
 to `config.yml` in the directory.
 
 If you configured a new connector, you will need to go into Kibana to start or schedule a sync.
 Running the scripts, you can log in at http://localhost:5601/ with the username `elastic` and your password (`changeme` is the default, unless you specified a different `ELASTIC_PASSWORD` earlier).
 Then, to complete this in Kibana:
-* From the main menu, choose "Content" under the "Search" heading
-* Click on your index name
+* From the main menu, click _Search_ > _Content_ > _Connectors_
+* Click on your connector
+* Optionally, change the name or add a description
 * Click on the "Configuration" tab
   * Note, the API key will be already pre-configured, and you do not need to generate a new one
-  * Optionally, change the name or add a description
   * Ensure your connector settings are the way you want, if not edit them to their correct values
   * Finally, set your schedule and sync
 
@@ -88,23 +88,23 @@ To see which connectors require a higher license tier, see the [Connectors refer
 
 ## Manual Configuration
 
-Instead of using the CLI based configurator while running the `run-stack.sh`
+Instead of using the CLI-based configurator while running the `run-stack.sh`
 script, you can choose to manually provide your connectors configurations and
 use those instead. To do this and still use the `run-stack.sh` script:
 
 1. Run the stack without the connectors service:
     1. Run `./scripts/stack/run-stack.sh --no-connectors` to run the full stack without the Connectors service
-    2. From the main menu, go to "Content", "Indices", and create a new index for your connector
+    2. From the main menu of Kibana, go to "Content", "Indices", and create a new index for your connector
     3. Choose the "Connector" index type
     4. Select the connector type
     5. Set the index name
     6. Generate a new API Key, and copy it somewhere safe
     7. Set Connector name and description (optional)
-    8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `./scripts/stack/connectors-config/config.yml` file
-    9. Repeat as necessary for all the connectors you wish too create
+    8. Copy the resulting connector_id, service_type, and api_key into a new entry in the `scripts/stack/connectors-config/config.yml` file
+    9. Repeat as necessary for all the connectors you wish to create
 3. run `./scripts/stack/run-stack.sh --no-configuration --connectors-only` again to run the Connectors service without prompting for configuration. Once running:
-    1. From the main menu, choose "Content" under the "Search" heading
-    2. Click on your index name
+    1. From the main menu of Kibana, click _Search_ > _Content_ > _Connectors_
+    2. Click on your connector
     3. Click on the "Configuration" tab
     4. Complete the configuration and optionally start your sync
     5. Repeat these steps for all the connectors you created
@@ -124,7 +124,7 @@ to configure the connectors, and finally start the connectors service.
 
 Command line options:
 * `-u | --update-images`: perform a fresh pull on the docker images
-* `-n | --no-connectors`: do not run the connectors service or the connectors configuration
+* `-n | --no-connectors`: do not run the connectors service
 * `-x | --no-configuration`: do not ask to run the connectors configuration, but still run the service
 * `-c | --connectors-only`: only start the connectors service. Useful if Elasticsearch and Kibana are already running
 * `-s | --no-snapshot`: by default, the scripts will use `SNAPSHOT` versions of the Docker images. Specify this to not use a SNAPSHOT.

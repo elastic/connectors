@@ -97,16 +97,15 @@ class JobSchedulingService(BaseService):
 
             connector.log_debug("Pinging the backend")
             await data_source.ping()
+
+            if connector.features.sync_rules_enabled():
+                await connector.validate_filtering(validator=data_source)
         except Exception as e:
             connector.log_error(e, exc_info=True)
             await connector.error(e)
             return
-
-        if connector.features.sync_rules_enabled():
-            try:
-                await connector.validate_filtering(validator=data_source)
-            finally:
-                await data_source.close()
+        finally:
+            await data_source.close()
 
         if connector.features.document_level_security_enabled():
             (
