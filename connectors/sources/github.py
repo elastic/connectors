@@ -204,6 +204,9 @@ class GithubQuery(Enum):
             body
             state
             mergedAt
+            author {{
+            login
+            }}
             assignees(first: {NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
@@ -294,6 +297,9 @@ class GithubQuery(Enum):
             title
             body
             state
+            author {{
+            login
+            }}
             assignees(first: {NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
