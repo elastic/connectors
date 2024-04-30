@@ -255,6 +255,12 @@ class MSSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
+            msg = (
+                "Fetching all tables as the configuration field 'tables' is set to '*'"
+                if not is_filtering
+                else "Fetching all tables as the advanced sync rules are enabled."
+            )
+            self._logger.info(msg)
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -268,6 +274,7 @@ class MSSQLClient:
             ):
                 yield row[0]
         else:
+            self._logger.info(f"Fetching user configured tables: {tables}")
             for table in tables:
                 yield table
 
@@ -302,9 +309,13 @@ class MSSQLClient:
                 retry_count=self.retry_count,
             )
         ]
+
+        self._logger.debug(f"Found primary keys for '{table}' table")
+
         return primary_keys
 
     async def get_table_last_update_time(self, table):
+        self._logger.debug(f"Fetching last updated time for table: {table}")
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
@@ -332,15 +343,20 @@ class MSSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        if query is not None:
+            cursor_query = query
+            msg = f"Streaming records from database for using query: {query}"
+        else:
+            cursor_query = self.queries.table_data(
+                schema=self.schema,
+                table=table,
+            )
+            msg = f"Streaming records from database for table: {table}"
+        self._logger.debug(msg)
         async for data in fetch(
             cursor_func=partial(
                 self.get_cursor,
-                self.queries.table_data(
-                    schema=self.schema,
-                    table=table,
-                )
-                if query is None
-                else query,
+                cursor_query,
             ),
             fetch_columns=True,
             fetch_size=self.fetch_size,
@@ -496,6 +512,7 @@ class MSSQLDataSource(BaseDataSource):
         return row
 
     async def get_primary_key(self, tables):
+        self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
             primary_key_columns.extend(
@@ -534,6 +551,7 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(f"Fetching records for the table: {table}")
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
@@ -553,6 +571,9 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(
+            f"Fetching records for {tables} tables using the custom query: {query}"
+        )
         try:
             docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
             async for doc in docs_generator:
@@ -597,6 +618,7 @@ class MSSQLDataSource(BaseDataSource):
     async def _yield_all_docs_from_tables(self, table):
         row_count = await self.mssql_client.get_table_row_count(table=table)
         if row_count > 0:
+            self._logger.debug(f"Total '{row_count}' rows found in '{table}' table")
             # Query to get the table's primary key
             keys = await self.get_primary_key(tables=[table])
             if keys:
@@ -641,6 +663,9 @@ class MSSQLDataSource(BaseDataSource):
         """
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
+            self._logger.info(
+                f"Fetching records from the database using advanced sync rules: {advanced_rules}"
+            )
             for rule in advanced_rules:
                 query = rule.get("query")
                 tables = rule.get("tables")
@@ -661,9 +686,6 @@ class MSSQLDataSource(BaseDataSource):
                     )
                     continue
 
-                self._logger.debug(
-                    f"Found table: {table} in database: {self.database}."
-                )
                 table_count += 1
                 async for row in self.fetch_documents_from_table(table=table):
                     yield row, None

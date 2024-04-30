@@ -185,6 +185,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
+        self._logger.debug(f"Downloading content for file: {filename}")
         document = {"_id": blob["id"], "_timestamp": blob["_timestamp"]}
         return await self.download_and_extract_file(
             document,
@@ -194,6 +195,9 @@ class AzureBlobStorageDataSource(BaseDataSource):
         )
 
     async def blob_download_func(self, blob_name, container_name):
+        self._logger.debug(
+            f"Downloading content for blob: {blob_name} from {container_name} container"
+        )
         async with BlobClient.from_connection_string(
             conn_str=self.connection_string,
             container_name=container_name,
@@ -212,6 +216,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Container document with name & metadata
         """
+        self._logger.debug("Fetching containers")
         container_set = set(container_list)
         async with BlobServiceClient.from_connection_string(
             conn_str=self.connection_string, retry_total=self.retry_count
@@ -247,6 +252,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Formatted blob document
         """
+        self._logger.info(f"Fetching blobs for '{container['name']}' container")
         async with ContainerClient.from_connection_string(
             conn_str=self.connection_string,
             container_name=container["name"],
