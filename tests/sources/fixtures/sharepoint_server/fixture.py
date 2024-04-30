@@ -87,7 +87,27 @@ def before_request():
     time.sleep(PRE_REQUEST_SLEEP)
 
 
-@app.route("/sites/<string:site_collections>/_api/web/webs", methods=["GET"])
+@app.route("/sites/<path:site_collections>/_api/web", methods=["get"])
+def get_site(site_collections):
+    site = {
+        "Created": "2023-10-24T00:24:36",
+        "Description": site_collections,
+        "Id": "cc594a12-3ded-451a-b868-40ccec07d354",
+        "Language": 1033,
+        "LastItemModifiedDate": "2024-04-24T13:40:24Z",
+        "NoCrawl": False,
+        "ServerRelativeUrl": "/",
+        "Title": "Portal Home",
+        "Url": f"http://127.0.0.1:8491/sites/{site_collections}",
+        "WebTemplate": "STS",
+        "WelcomePage": "SitePages/Home.aspx",
+        "HasUniqueRoleAssignments": False,
+    }
+
+    return site
+
+
+@app.route("/sites/<path:site_collections>/_api/web/webs", methods=["get"])
 def get_sites(site_collections):
     """Function to handle get sites calls with the site_collection passed as an argument
     Args:
@@ -108,14 +128,19 @@ def get_sites(site_collections):
         else:
             skip_end = skip_start + top
         for site in range(skip_start, skip_end):
+            if site_collections == "collection1":
+                url_part = f"site1_{site}"
+            else:
+                url_part = ""
+
             sites["value"].append(
                 {
                     "Created": "2023-01-30T10:02:39",
                     "Id": adjust_document_id_size(f"sites-{site}"),
                     "LastItemModifiedDate": "2023-02-16T06:48:30Z",
-                    "ServerRelativeUrl": f"/sites/site1_{site}",
+                    "ServerRelativeUrl": f"/{url_part}",
                     "Title": f"site1_{site}",
-                    "Url": f"http://127.0.0.1:8000/sites/{site_collections}/site1_{site}",
+                    "Url": f"http://127.0.0.1:8491/sites/{url_part}"
                 }
             )
     else:
@@ -127,19 +152,18 @@ def get_sites(site_collections):
                     "LastItemModifiedDate": "2023-02-16T06:48:30Z",
                     "ServerRelativeUrl": "/sites/collection1/site1",
                     "Title": "site1",
-                    "Url": f"http://127.0.0.1:8000/sites/{site_collections}/site1",
+                    "Url": f"http://127.0.0.1:8491/sites/{site_collections}/site1",
                 },
             ]
         }
     return sites
 
 
-@app.route("/<string:parent_site_url>/<string:site>/_api/web/lists", methods=["GET"])
-def get_lists(parent_site_url, site):
+@app.route("/<path:site>/_api/web/lists", methods=["GET"])
+def get_lists(site):
     """Function to handle get lists calls with the serversiteurl passed as an argument
     Args:
-        parent_site_url (str): Path of parent site
-        site (str): Site name
+        site (str): Site url
 
     Returns:
         lists (dict): Dictionary of lists
@@ -155,13 +179,13 @@ def get_lists(parent_site_url, site):
                 {
                     "BaseType": 0,
                     "Created": "2023-01-30T10:02:39Z",
-                    "Id": adjust_document_id_size(f"lists-{site}-{lists_count}"),
+                    "Id": adjust_document_id_size(f"lists-{site.replace('/', '-')}-{lists_count}"),
                     "LastItemModifiedDate": "2023-01-30T10:02:40Z",
-                    "ParentWebUrl": f"/{parent_site_url}",
+                    "ParentWebUrl": f"/{site}",
                     "Title": f"{site}-List1",
                     "RootFolder": {
                         "Name": "Shared Documents",
-                        "ServerRelativeUrl": f"/{parent_site_url}/{site}/{lists_count}",
+                        "ServerRelativeUrl": f"{site}/{lists_count}",
                         "TimeCreated": "2023-02-08T06:03:10Z",
                         "TimeLastModified": "2023-02-16T06:48:36Z",
                         "UniqueId": "52e62bcf-de67-4bbc-b399-b8b28bc97449",
@@ -174,7 +198,7 @@ def get_lists(parent_site_url, site):
 
 
 @app.route(
-    "/<string:parent_site_url>/_api/web/lists(guid'<string:list_id>')/items",
+    "/<path:parent_site_url>/_api/web/lists(guid'<string:list_id>')/items",
     methods=["GET"],
 )
 def get_list_and_items(parent_site_url, list_id):
@@ -187,6 +211,7 @@ def get_list_and_items(parent_site_url, list_id):
         item (dict): Dictionary of list item or drive item
     """
     args = request.args
+    parent_site_id = parent_site_url.replace('/', '-')
     if args.get("$expand", "") == "AttachmentFiles":
         item = {
             "value": [
@@ -194,7 +219,7 @@ def get_list_and_items(parent_site_url, list_id):
                     "Attachments": True,
                     "AttachmentFiles": [],
                     "Created": "2023-01-30T10:02:39Z",
-                    "GUID": f"list-item-att-{parent_site_url}-{list_id}",
+                    "GUID": f"list-item-att-{parent_site_id}-{list_id}",
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
@@ -208,7 +233,7 @@ def get_list_and_items(parent_site_url, list_id):
                 {
                     "Something": "Something",
                     "FileName": f"dummy{list_id}-{item_id}.html",
-                    "ServerRelativeUrl": f"{parent_site_url}-dummy{list_id}-{item_id}.html",
+                    "ServerRelativeUrl": f"{parent_site_id}-dummy{list_id}-{item_id}.html",
                 }
             )
     else:
@@ -218,14 +243,14 @@ def get_list_and_items(parent_site_url, list_id):
                     "Attachments": False,
                     "Created": "2023-01-30T10:02:39Z",
                     "GUID": adjust_document_id_size(
-                        f"list-item-{parent_site_url}-{list_id}"
+                        f"list-item-{parent_site_id}-{list_id}"
                     ),
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
                     "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
                     "Id": adjust_document_id_size(
-                        f"{parent_site_url}-list-id1-{list_id}"
+                        f"{parent_site_id}-list-id1-{list_id}"
                     ),
                     "ContentTypeId": f"123-{list_id}",
                 },
@@ -233,7 +258,7 @@ def get_list_and_items(parent_site_url, list_id):
                     "Attachments": False,
                     "Created": "2023-01-30T10:02:39Z",
                     "GUID": adjust_document_id_size(
-                        f"{parent_site_url}-list-item-{list_id}"
+                        f"{parent_site_id}-list-item-{list_id}"
                     ),
                     "FileRef": parent_site_url,
                     "Modified": "2023-01-30T10:02:40Z",
@@ -241,7 +266,7 @@ def get_list_and_items(parent_site_url, list_id):
                     "EditorId": 12345,
                     "Title": f"list-item-{list_id}",
                     "Id": adjust_document_id_size(
-                        f"{parent_site_url}-list-id2-{list_id}"
+                        f"{parent_site_id}-list-id2-{list_id}"
                     ),
                     "ContentTypeId": f"456-{list_id}",
                 },
@@ -252,7 +277,7 @@ def get_list_and_items(parent_site_url, list_id):
 
 
 @app.route(
-    "/<string:parent_site_url>/_api/web/getfilebyserverrelativeurl('<string:file_relative_url>')",
+    "/<path:parent_site_url>/_api/web/getfilebyserverrelativeurl('<string:file_relative_url>')",
     methods=["GET"],
 )
 def get_attachment_data(parent_site_url, file_relative_url):
@@ -264,22 +289,23 @@ def get_attachment_data(parent_site_url, file_relative_url):
     Returns:
         data (dict): Dictionary of attachment metadata
     """
+    parent_site_id = parent_site_url.replace('/', '-')
     return {
         "Length": 12345,
-        "Name": f"attachment-{parent_site_url}-{file_relative_url}",
+        "Name": f"attachment-{parent_site_id}-{file_relative_url}",
         "ServerRelativeUrl": f"{parent_site_url}/dummy",
         "TimeCreated": "2023-01-30T10:02:40Z",
         "TimeLastModified": "2023-01-30T10:02:40Z",
-        "Id": f"attachment-{parent_site_url}-{file_relative_url}",
-        "UniqueId": f"attachment-{parent_site_url}-{file_relative_url}",
+        "Id": f"attachment-{parent_site_id}-{file_relative_url}",
+        "UniqueId": f"attachment-{parent_site_id}-{file_relative_url}",
     }
 
 
 @app.route(
-    "/<string:parent_url>/<string:site>/_api/web/GetFileByServerRelativeUrl('<string:server_url>')/$value",
+    "/<path:site>/_api/web/GetFileByServerRelativeUrl('<string:server_url>')/$value",
     methods=["GET"],
 )
-def download(parent_url, site, server_url):
+def download(site, server_url):
     """Function to extract content of a attachment on the sharepoint
     Args:
         parent_url (str): Path of parent site
