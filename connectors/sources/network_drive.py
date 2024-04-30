@@ -16,7 +16,12 @@ import fastjsonschema
 import smbclient
 import winrm
 from requests.exceptions import ConnectionError
-from smbprotocol.exceptions import SMBConnectionClosed, SMBException, SMBOSError
+from smbprotocol.exceptions import (
+    SMBConnectionClosed,
+    SMBException,
+    SMBOSError,
+    SMBResponseException,
+)
 from smbprotocol.file_info import (
     InfoType,
 )
@@ -40,6 +45,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
+from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
@@ -57,6 +63,11 @@ GET_USERS_COMMAND = "Get-LocalUser | Select Name, SID"
 GET_GROUPS_COMMAND = "Get-LocalGroup | Select-Object Name, SID"
 GET_GROUP_MEMBERS = 'Get-LocalGroupMember -Name "{name}" | Select-Object Name, SID'
 SECURITY_INFO_DACL = 0x00000004
+STATUS_NO_LOGON_SERVERS = 3221225566
+STATUS_INVALID_LOGON_HOURS = 3221225583
+STATUS_INVALID_WORKSTATION = 3221225584
+STATUS_ACCOUNT_DISABLED = 3221225586
+STATUS_PASSWORD_MUST_CHANGE = 3221226020
 
 MAX_CHUNK_SIZE = 65536
 RETRIES = 3
@@ -64,6 +75,26 @@ RETRY_INTERVAL = 2
 
 WINDOWS = "windows"
 LINUX = "linux"
+
+
+class UserAccountDisabledException(Exception):
+    pass
+
+
+class ClientPermissionException(Exception):
+    pass
+
+
+class InvalidLogonHoursException(Exception):
+    pass
+
+
+class PasswordChangeRequiredException(Exception):
+    pass
+
+
+class NoLogonServerException(Exception):
+    pass
 
 
 def _prefix_user(user):
@@ -113,7 +144,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
             )
         start_with_slash = set()
 
-        await asyncio.to_thread(self.source.create_connection)
+        await asyncio.to_thread(self.source.smb_connection.create_connection)
         for rule in advanced_rules:
             pattern = rule["pattern"]
             if pattern.startswith("/"):
@@ -232,6 +263,60 @@ class SecurityInfo:
         return self.parse_output(members)
 
 
+class SMBSession:
+    _connection = None
+
+    def __init__(self, server_ip, username, password, port):
+        self.server_ip = server_ip
+        self.username = username
+        self.password = password
+        self.port = port
+        self.session = None
+        self._logger = logger
+
+    def create_connection(self):
+        """Creates an SMB session to the shared drive."""
+        try:
+            self.session = smbclient.register_session(
+                server=self.server_ip,
+                username=self.username,
+                password=self.password,
+                port=self.port,
+            )
+        except SMBResponseException as exception:
+            self.handle_smb_response_errors(exception=exception)
+
+    def handle_smb_response_errors(self, exception):
+        msg = ""
+        if exception.status == STATUS_INVALID_WORKSTATION:
+            msg = f"Client does not have permission to access server: ({self.server_ip}:{self.port})."
+            self._logger.debug(msg=msg)
+            raise ClientPermissionException(msg) from exception
+        elif exception.status == STATUS_PASSWORD_MUST_CHANGE:
+            msg = f"The password for User: {self.username} must be changed before logging on for the first time."
+            self._logger.debug(msg=msg)
+            raise PasswordChangeRequiredException(msg) from exception
+        elif exception.status == STATUS_NO_LOGON_SERVERS:
+            msg = f"No logon servers available for connecting to server: ({self.server_ip}:{self.port})."
+            self._logger.debug(msg=msg)
+            raise NoLogonServerException(msg) from exception
+        elif exception.status == STATUS_ACCOUNT_DISABLED:
+            msg = f"Account with Username: {self.username} is disabled."
+            self._logger.debug(msg=msg)
+            raise UserAccountDisabledException(msg) from exception
+        elif exception.status == STATUS_INVALID_LOGON_HOURS:
+            msg = (
+                f"User: {self.username} cannot logon outside the specified logon hours."
+            )
+            self._logger.debug(msg=msg)
+            raise InvalidLogonHoursException(msg) from exception
+        else:
+            self._logger.debug(
+                f"Error occurred while creating SMB session. Error: {exception}"
+            )
+            raise
+
+
 class NASDataSource(BaseDataSource):
     """Network Drive"""
 
@@ -255,7 +340,6 @@ class NASDataSource(BaseDataSource):
         self.drive_path = self.configuration["drive_path"]
         self.drive_type = self.configuration["drive_type"]
         self.identity_mappings = self.configuration["identity_mappings"]
-        self.session = None
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
 
     def advanced_rules_validators(self):
@@ -332,14 +416,9 @@ class NASDataSource(BaseDataSource):
             },
         }
 
-    def create_connection(self):
-        """Creates an SMB session to the shared drive."""
-        self.session = smbclient.register_session(
-            server=self.server_ip,
-            username=self.username,
-            password=self.password,
-            port=self.port,
-        )
+    @cached_property
+    def smb_connection(self):
+        return SMBSession(self.server_ip, self.username, self.password, self.port)
 
     def format_document(self, file):
         file_details = file._dir_info.fields
@@ -392,7 +471,7 @@ class NASDataSource(BaseDataSource):
                 self._logger.exception(
                     f"Connection got closed. Error {exception}. Registering new session"
                 )
-                await asyncio.to_thread(self.create_connection)
+                await asyncio.to_thread(self.smb_connection.create_connection)
                 raise
             except (SMBOSError, SMBException) as exception:
                 self._logger.exception(
@@ -455,7 +534,7 @@ class NASDataSource(BaseDataSource):
                 self._logger.exception(
                     f"Connection got closed. Error {exception}. Registering new session"
                 )
-                await asyncio.to_thread(self.create_connection)
+                await asyncio.to_thread(self.smb_connection.create_connection)
                 raise
             except (SMBOSError, SMBException) as exception:
                 self._logger.exception(
@@ -516,12 +595,14 @@ class NASDataSource(BaseDataSource):
     async def ping(self):
         """Verify the connection with Network Drive"""
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(executor=None, func=self.create_connection)
+        await loop.run_in_executor(
+            executor=None, func=self.smb_connection.create_connection
+        )
         self._logger.info("Successfully connected to the Network Drive")
 
     async def close(self):
         """Close all the open smb sessions"""
-        if self.session is None:
+        if self.smb_connection.session is None:
             return
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
@@ -554,7 +635,9 @@ class NASDataSource(BaseDataSource):
             self._logger.exception(
                 f"Connection got closed. Error {exception}. Registering new session"
             )
-            await loop.run_in_executor(executor=None, func=self.create_connection)
+            await loop.run_in_executor(
+                executor=None, func=self.smb_connection.create_connection
+            )
             raise
         except (SMBOSError, SMBException) as exception:
             self._logger.exception(
