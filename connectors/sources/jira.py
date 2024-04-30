@@ -942,7 +942,8 @@ class JiraDataSource(BaseDataSource):
             issue (dict): Issue response to fetch the attachments
         """
         wildcard_query = ""
-        projects_query = f"project in ({','.join(self.jira_client.projects)})"
+        comma_seperated_projects = '"' + '","'.join(self.jira_client.projects) + '"'
+        projects_query = f"project in ({comma_seperated_projects})"
 
         jql = custom_query or (
             wildcard_query
