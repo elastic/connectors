@@ -200,6 +200,8 @@ class JobSchedulingService(BaseService):
                 job_type
             )
 
+            self.logger.debug(f"Last sync was scheduled at {last_sync_scheduled_at}")
+
             if (
                 last_sync_scheduled_at is not None
                 and last_sync_scheduled_at > last_wake_up_time
