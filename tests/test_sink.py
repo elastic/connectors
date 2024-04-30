@@ -1178,6 +1178,40 @@ async def test_batch_bulk_with_retry():
         assert client.client.bulk.await_count == 2
 
 
+@pytest.mark.asyncio
+async def test_batch_bulk_with_errors(patch_logger):
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    with mock.patch.object(asyncio, "sleep"):
+        error = {
+            "type": "illegal_argument_exception",
+            "reason": "if _id is specified it must not be empty",
+        }
+        mock_result = {
+            "errors": True,
+            "items": [{"index": {"_id": "1", "error": error}}],
+        }
+        client.client.bulk = AsyncMock(return_value=mock_result)
+        await sink._batch_bulk([], {OP_INDEX: {"1": 20}, OP_UPDATE: {}, OP_DELETE: {}})
+        patch_logger.assert_present(f"operation index failed, {error}")
+
+
 @pytest.mark.parametrize(
     "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [
