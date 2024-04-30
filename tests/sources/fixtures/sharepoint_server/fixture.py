@@ -140,7 +140,7 @@ def get_sites(site_collections):
                     "LastItemModifiedDate": "2023-02-16T06:48:30Z",
                     "ServerRelativeUrl": f"/{url_part}",
                     "Title": f"site1_{site}",
-                    "Url": f"http://127.0.0.1:8491/sites/{url_part}"
+                    "Url": f"http://127.0.0.1:8491/sites/{url_part}",
                 }
             )
     else:
@@ -179,7 +179,9 @@ def get_lists(site):
                 {
                     "BaseType": 0,
                     "Created": "2023-01-30T10:02:39Z",
-                    "Id": adjust_document_id_size(f"lists-{site.replace('/', '-')}-{lists_count}"),
+                    "Id": adjust_document_id_size(
+                        f"lists-{site.replace('/', '-')}-{lists_count}"
+                    ),
                     "LastItemModifiedDate": "2023-01-30T10:02:40Z",
                     "ParentWebUrl": f"/{site}",
                     "Title": f"{site}-List1",
@@ -211,7 +213,7 @@ def get_list_and_items(parent_site_url, list_id):
         item (dict): Dictionary of list item or drive item
     """
     args = request.args
-    parent_site_id = parent_site_url.replace('/', '-')
+    parent_site_id = parent_site_url.replace("/", "-")
     if args.get("$expand", "") == "AttachmentFiles":
         item = {
             "value": [
@@ -289,7 +291,7 @@ def get_attachment_data(parent_site_url, file_relative_url):
     Returns:
         data (dict): Dictionary of attachment metadata
     """
-    parent_site_id = parent_site_url.replace('/', '-')
+    parent_site_id = parent_site_url.replace("/", "-")
     return {
         "Length": 12345,
         "Name": f"attachment-{parent_site_id}-{file_relative_url}",
