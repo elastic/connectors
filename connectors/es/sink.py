@@ -198,7 +198,6 @@ class Sink:
                 for op, data in item.items():
                     if "error" in data:
                         self._logger.error(f"operation {op} failed, {data['error']}")
-                        raise Exception(data["error"]["reason"])
 
         self._populate_stats(stats, res)
 
@@ -360,6 +359,9 @@ class Sink:
                     break
                 operation = doc["_op_type"]
                 doc_id = doc["_id"]
+                if not doc_id:
+                    self._logger.warning(f"Skip document {doc} as '_id' is missing.")
+                    continue
                 if operation == OP_DELETE:
                     stats[operation][doc_id] = 0
                 else:

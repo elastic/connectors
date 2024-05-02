@@ -39,6 +39,8 @@ if [[ "${connectors_only}" != true ]]; then
   source $CURDIR/update-kibana-user-password.sh
 fi
 
+source ./copy-config.sh
+
 run_configurator="no"
 if [[ "${bypass_config:-}" == false ]]; then
   while true; do
@@ -50,7 +52,6 @@ if [[ "${bypass_config:-}" == false ]]; then
     esac
   done
   if [ $run_configurator == "yes" ]; then
-    source ./copy-config.sh
     source ./configure-connectors.sh
   fi
 fi

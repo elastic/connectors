@@ -31,11 +31,16 @@ from connectors.utils import (
     CancellableSleeps,
     ConcurrentTasks,
     MemQueue,
+    RetryStrategy,
     iso_utc,
+    retryable,
     ssl_context,
 )
 
+RETRIES = 3
 RETRY_INTERVAL = 2
+DEFAULT_RETRY_SECONDS = 30
+
 LIMIT = 100
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
@@ -79,6 +84,20 @@ CONFLUENCE_CLOUD = "confluence_cloud"
 CONFLUENCE_SERVER = "confluence_server"
 CONFLUENCE_DATA_CENTER = "confluence_data_center"
 WILDCARD = "*"
+
+
+class ThrottledError(Exception):
+    """Internal exception class to indicate that request was throttled by the API"""
+
+    pass
+
+
+class InternalServerError(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
 
 
 class ConfluenceClient:
@@ -152,6 +171,40 @@ class ConfluenceClient:
         await self.session.close()
         self.session = None
 
+    async def _handle_client_errors(self, url, exception):
+        if exception.status == 429:
+            response_headers = exception.headers or {}
+            retry_seconds = DEFAULT_RETRY_SECONDS
+            if "Retry-After" in response_headers:
+                try:
+                    retry_seconds = int(response_headers["Retry-After"])
+                except (TypeError, ValueError) as exception:
+                    self._logger.error(
+                        f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    )
+            else:
+                self._logger.warning(
+                    f"Rate Limited but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+            self._logger.debug(f"Rate Limit reached: retry in {retry_seconds} seconds")
+
+            await self._sleeps.sleep(retry_seconds)
+            raise ThrottledError
+        elif exception.status == 404:
+            self._logger.error(f"Getting Not Found Error for url: {url}")
+            raise NotFound
+        elif exception.status == 500:
+            self._logger.error("Internal Server Error occurred")
+            raise InternalServerError
+        else:
+            raise
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=NotFound,
+    )
     async def api_call(self, url):
         """Make a GET call for Atlassian API using the passed url with retry for the failed API calls.
 
@@ -165,28 +218,17 @@ class ConfluenceClient:
             response: Client response
         """
         self._logger.debug(f"Making a GET call for url: {url}")
-        retry_counter = 0
-        while True:
-            try:
-                async with self._get_session().get(
-                    url=url,
-                    ssl=self.ssl_ctx,
-                ) as response:
-                    yield response
-                    break
-            except Exception as exception:
-                if isinstance(
-                    exception,
-                    ServerDisconnectedError,
-                ):
-                    await self.session.close()  # pyright: ignore
-                retry_counter += 1
-                if retry_counter > self.retry_count:
-                    raise exception
-                self._logger.warning(
-                    f"Retry count: {retry_counter} out of {self.retry_count}. Exception: {exception}"
-                )
-                await self._sleeps.sleep(RETRY_INTERVAL**retry_counter)
+        try:
+            async with self._get_session().get(
+                url=url,
+                ssl=self.ssl_ctx,
+            ) as response:
+                yield response
+        except ServerDisconnectedError:
+            await self.close_session()
+            raise
+        except ClientResponseError as exception:
+            await self._handle_client_errors(url=url, exception=exception)
 
     async def paginated_api_call(self, url_name, **url_kwargs):
         """Make a paginated API call for Confluence objects using the passed url_name.

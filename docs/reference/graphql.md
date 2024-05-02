@@ -66,7 +66,7 @@ A json of key value pairs of variables used in the GraphQL query. The connector 
 
 Example: If the GraphQL query is `query getUser($id: ID!) { user(id: $id) { name } }` and the value of `graphql_variables` is `{"id": "123"}`, the final query will be `query getUser { user(id: "123") { name } }` and the connector will make a GraphQL query to the source with the modified query.
 
-#### `graphql_object_list` (required)
+#### `graphql_object_to_id_map` (required)
 
 A JSON mapping between GraphQL response objects to index and their ID fields. The connector will fetch data for each object (JSON key) and use the provided ID field (JSON value) to index the object into Elasticsearch. The connector will index all fields for each object specified in the mapping. Use a dot `(.)` notation to specify the full path from the root of the GraphQL response to the desired object.
 

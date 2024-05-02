@@ -79,7 +79,7 @@ class GraphQLClient:
         self.authentication_method = self.configuration["authentication_method"]
         self.pagination_model = self.configuration["pagination_model"]
         self.pagination_key = self.configuration["pagination_key"]
-        self.graphql_object_list = {}
+        self.graphql_object_to_id_map = {}
         self.valid_objects = []
         self.variables = {}
         self.headers = {}
@@ -120,7 +120,7 @@ class GraphQLClient:
             )
 
     def extract_graphql_data_items(self, data):
-        """Returns sub objects from the response based on graphql_object_list
+        """Returns sub objects from the response based on graphql_object_to_id_map
 
         Args:
             data (dict): data to extract
@@ -128,7 +128,7 @@ class GraphQLClient:
         Yields:
             dictionary/list: Documents from the response
         """
-        for keys, field_id in self.graphql_object_list.items():
+        for keys, field_id in self.graphql_object_to_id_map.items():
             current_level_data = data
             key_list = keys.split(".")
 
@@ -375,7 +375,7 @@ class GraphQLDataSource(BaseDataSource):
                 "type": "str",
                 "required": False,
             },
-            "graphql_object_list": {
+            "graphql_object_to_id_map": {
                 "display": "textarea",
                 "label": "GraphQL Objects to ID mapping",
                 "order": 9,
@@ -481,7 +481,9 @@ class GraphQLDataSource(BaseDataSource):
 
         headers = self.graphql_client.configuration["headers"]
         graphql_variables = self.graphql_client.configuration["graphql_variables"]
-        graphql_object_list = self.graphql_client.configuration["graphql_object_list"]
+        graphql_object_to_id_map = self.graphql_client.configuration[
+            "graphql_object_to_id_map"
+        ]
         invalid_json_msg = (
             "GraphQL {field} must be in valid JSON format. Exception: {exception}"
         )
@@ -500,10 +502,10 @@ class GraphQLDataSource(BaseDataSource):
                 msg = invalid_json_msg.format(field="Variables", exception=exception)
                 raise ConfigurableFieldValueError(msg) from exception
 
-        if graphql_object_list:
+        if graphql_object_to_id_map:
             try:
-                self.graphql_client.graphql_object_list = json.loads(
-                    graphql_object_list
+                self.graphql_client.graphql_object_to_id_map = json.loads(
+                    graphql_object_to_id_map
                 )
             except Exception as exception:
                 msg = invalid_json_msg.format(
@@ -517,7 +519,7 @@ class GraphQLDataSource(BaseDataSource):
         for (
             graphql_object,
             graphql_field_id,
-        ) in self.graphql_client.graphql_object_list.items():
+        ) in self.graphql_client.graphql_object_to_id_map.items():
             object_present, id_present = self.check_field_existence(
                 ast=ast,
                 field_path=graphql_object,
