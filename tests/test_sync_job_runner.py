@@ -1091,3 +1091,57 @@ async def test_native_acl_connector_sync_fails_when_api_key_invalid(
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=None
     )
+
+
+@pytest.mark.parametrize(
+    "sync_job_config,pipeline_config,expected_enabled,expected_log",
+    [
+        (
+            {"use_text_extraction_service": True},
+            {"extract_binary_content": True},
+            True,
+            "Binary content extraction via local extraction service is enabled for",
+        ),
+        (
+            {"use_text_extraction_service": True},
+            {"extract_binary_content": False},
+            True,
+            "Binary content extraction via local extraction service is enabled for",
+        ),
+        (
+            {"use_text_extraction_service": False},
+            {"extract_binary_content": True},
+            True,
+            "Binary content extraction via pipelines is enabled for",
+        ),
+        (
+            {"use_text_extraction_service": False},
+            {"extract_binary_content": False},
+            False,
+            "Binary content extraction is disabled for",
+        ),
+        (
+            {"foo": "bar"},
+            {"faa": "bor"},
+            False,
+            "Binary content extraction is disabled for",
+        ),
+    ],
+)
+def test_content_extraction_enabled(
+    sync_job_config, pipeline_config, expected_enabled, expected_log, patch_logger
+):
+    sync_job_runner = create_runner()
+
+    class MockDataSource(BaseDataSource):
+        def __init__(self, config):
+            pass
+
+    assert (
+        sync_job_runner._content_extraction_enabled(
+            sync_job_config=sync_job_config,
+            pipeline_config=pipeline_config,
+        )
+        is expected_enabled
+    )
+    patch_logger.assert_present(expected_log)
