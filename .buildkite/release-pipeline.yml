@@ -16,9 +16,10 @@ steps:
           imagePrefix: ci-amazonlinux-2
         env:
           ARCHITECTURE: "amd64"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-debian"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_amd64"
-        artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
+        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
       - label: "Testing amd64 Docker image"
         agents:
           provider: aws
@@ -47,9 +48,10 @@ steps:
           diskName: '/dev/xvda'
         env:
           ARCHITECTURE: "arm64"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-debian"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_arm64"
-        artifact_paths: ".artifacts/elastic-connectors-docker-*.tar.gz"
+        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
       - label: "Testing arm64 Docker image"
         agents:
           provider: aws
@@ -77,6 +79,7 @@ steps:
         key: "push_amd64_docker_image"
         env:
           ARCHITECTURE: "amd64"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-debian"
         agents:
           provider: aws
           instanceType: m6i.xlarge
@@ -89,6 +92,7 @@ steps:
         key: "push_arm64_docker_image"
         env:
           ARCHITECTURE: "arm64"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-debian"
         agents:
           provider: aws
           instanceType: m6g.xlarge
@@ -108,3 +112,128 @@ steps:
         depends_on:
           - "push_amd64_docker_image"
           - "push_arm64_docker_image"
+
+  # ----
+  # Docker builds for amd64 - Chainguard
+  # ----
+  - group: ":package: amd64 Build and Test - Chainguard"
+    key: "build_and_test_amd64_wolfi"
+    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    steps:
+      - label: "Building amd64 Docker image based on Wolfi"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_docker_image_amd64_wolfi"
+        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
+      - label: "Testing amd64 Docker image based on Wolfi"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
+        depends_on: "build_docker_image_amd64_wolfi"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_amd64_wolfi
+          - ".buildkite/publish/test-docker.sh"
+  # ----
+  # Docker builds for arm64 - Chainguard
+  # ----
+  - group: ":package: arm64 Build and Test - Chainguard"
+    key: "build_and_test_arm64_wolfi"
+    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    steps:
+      - label: "Building arm64 Docker image based on Wolfi"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_docker_image_arm64_wolfi"
+        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
+      - label: "Testing arm64 Docker image based on Wolfi"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
+        depends_on: "build_docker_image_arm64_wolfi"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64_wolfi
+          - ".buildkite/publish/test-docker.sh"
+  # ----
+  # Multiarch Docker image build and push - Chainguard
+  # ----
+  - group: ":truck: Publish images - Chainguard"
+    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    depends_on:
+      - "build_and_test_amd64_wolfi"
+      - "build_and_test_arm64_wolfi"
+    steps:
+      - label: "Push amd64 Docker image based on Wolfi"
+        key: "push_amd64_docker_image_wolfi"
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_amd64_wolfi
+          - ".buildkite/publish/push-docker.sh"
+      - label: "Push arm64 Docker image based on Wolfi"
+        key: "push_arm64_docker_image_wolfi"
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64_wolfi
+          - ".buildkite/publish/push-docker.sh"
+      - label: "Build and push multiarch Docker image based on Wolfi"
+        agents:
+          image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
+          ephemeralStorage: "20G"
+          memory: "4G"
+        env:
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+        command: ".buildkite/publish/build-multiarch-docker.sh"
+        depends_on:
+          - "push_amd64_docker_image_wolfi"
+          - "push_arm64_docker_image_wolfi"

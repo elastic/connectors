@@ -6,11 +6,14 @@ PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
 
+DOCKER_IMAGE_NAME?=docker.elastic.co/enterprise-search/elastic-connectors
+DOCKERFILE_PATH?=Dockerfile
+DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
 
-config:
+config.yml:
 	- cp -n config.yml.example config.yml
 
-bin/python: config
+bin/python: config.yml
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
 
@@ -55,16 +58,16 @@ autoformat: bin/python bin/black bin/elastic-ingest
 	bin/ruff setup.py --fix
 	bin/ruff scripts --fix
 
-test:	bin/pytest bin/elastic-ingest
+test: bin/pytest bin/elastic-ingest
 	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 release: install
 	bin/python setup.py sdist
 
-ftest: bin/pytest bin/elastic-ingest
+ftest: bin/pytest bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	tests/ftest.sh $(NAME) $(PERF8)
 
-ftrace: bin/pytest bin/elastic-ingest
+ftrace: bin/pytest bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
@@ -73,11 +76,11 @@ run: install
 default-config: install
 	bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
-docker-build:
-	docker build -t docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT .
+docker-build: $(DOCKERFILE_PATH)
+	docker build -f $(DOCKERFILE_PATH) -t $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT .
 
 docker-run:
-	docker run -v $(PWD):/config docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
+	docker run -v $(PWD):/config $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
 
 docker-push:
-	docker push docker.elastic.co/enterprise-search/elastic-connectors:$(VERSION)-SNAPSHOT
+	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT

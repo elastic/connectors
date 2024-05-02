@@ -6,7 +6,6 @@ set -euo pipefail
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install ca-certificates curl gnupg lsb-release -y
 
-echo "Starting test task"
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
