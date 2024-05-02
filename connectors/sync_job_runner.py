@@ -315,11 +315,6 @@ class SyncJobRunner:
             index_name=self.sync_job.index_name, language_code=self.sync_job.language
         )
 
-        content_extraction_enabled = (
-            self.sync_job.configuration.get("use_text_extraction_service")
-            or self.sync_job.pipeline["extract_binary_content"]
-        )
-
         await self.sync_orchestrator.async_bulk(
             self.sync_job.index_name,
             self.prepare_docs(),
@@ -327,7 +322,9 @@ class SyncJobRunner:
             job_type,
             filter_=self.sync_job.filtering,
             sync_rules_enabled=sync_rules_enabled,
-            content_extraction_enabled=content_extraction_enabled,
+            content_extraction_enabled=self._content_extraction_enabled(
+                self.sync_job.configuration, self.sync_job.pipeline
+            ),
             options=bulk_options,
             skip_unchanged_documents=self._skip_unchanged_documents_enabled(
                 job_type, self.data_provider
@@ -554,3 +551,19 @@ class SyncJobRunner:
         except DocumentNotFoundError:
             self.connector.log_error("Couldn't reload connector")
             return False
+
+    def _content_extraction_enabled(self, sync_job_config, pipeline_config):
+        if sync_job_config.get("use_text_extraction_service"):
+            logger.debug(
+                "Binary content extraction via local extraction service is enabled for this connector."
+            )
+            return True
+
+        if pipeline_config.get("extract_binary_content"):
+            logger.debug(
+                "Binary content extraction via pipelines is enabled for this connector."
+            )
+            return True
+
+        logger.debug("Binary content extraction is disabled for this connector.")
+        return False
