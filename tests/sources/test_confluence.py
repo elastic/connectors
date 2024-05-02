@@ -91,6 +91,7 @@ RESPONSE_PAGE = {
             "_links": {
                 "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
             },
+            "ancestors": [{"title": "parent_title"}],
         }
     ],
     "start": 0,
@@ -104,6 +105,7 @@ EXPECTED_PAGE = {
     "type": "page",
     "_timestamp": "2023-01-24T04:07:19.672Z",
     "title": "ES-scrum",
+    "title_ancestors": "parent_title",
     "body": "This is a test page",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
@@ -213,6 +215,7 @@ RESPONSE_SEARCH_RESULT = {
             "url": "/spaces/SD/pages/983046/Product+Details",
             "lastModified": "2022-12-19T13:06:18.000Z",
             "entityType": "content",
+            "ancestors": [{"title": "page1"}],
         },
         {
             "content": {
@@ -231,10 +234,11 @@ RESPONSE_SEARCH_RESULT = {
             "url": "/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
             "lastModified": "2023-01-24T03:34:38.000Z",
             "entityType": "content",
+            "ancestors": [],
         },
         {
             "space": {
-                "id": 196612,
+                "id": "196612",
                 "key": "SD",
                 "type": "global",
             },
@@ -243,14 +247,17 @@ RESPONSE_SEARCH_RESULT = {
             "url": "/spaces/SD",
             "lastModified": "2022-12-13T09:49:01.000Z",
             "entityType": "space",
+            "ancestors": [],
         },
     ]
 }
 
-EXPECTED_SEARCH_RESULT = [
+
+EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
     {
         "_id": "983046",
         "title": "Product Details",
+        "title_ancestors": "",
         "_timestamp": "2022-12-19T13:06:18.000Z",
         "body": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
         "type": "page",
@@ -260,6 +267,7 @@ EXPECTED_SEARCH_RESULT = [
     {
         "_id": "att4587521",
         "title": "Potential.pdf",
+        "title_ancestors": "",
         "_timestamp": "2023-01-24T03:34:38.000Z",
         "type": "attachment",
         "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
@@ -268,8 +276,9 @@ EXPECTED_SEARCH_RESULT = [
         "page": "Product Details",
     },
     {
-        "_id": 196612,
+        "_id": "196612",
         "title": "Software Development",
+        "title_ancestors": "",
         "_timestamp": "2022-12-13T09:49:01.000Z",
         "body": "",
         "type": "space",
@@ -815,7 +824,7 @@ async def test_search_by_query():
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING
 
 
 @pytest.mark.asyncio
@@ -832,7 +841,7 @@ async def test_search_by_query_for_datacenter():
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING
 
 
 @pytest.mark.asyncio

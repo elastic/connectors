@@ -50,13 +50,14 @@ ATTACHMENT = "attachment"
 CONTENT = "content"
 DOWNLOAD = "download"
 SEARCH = "search"
+FETCH_ANCESTORS = "fetch_ancestors"
 USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
-CONTENT_QUERY = "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
 USER_QUERY = "expand=groups,applicationRoles"
 
@@ -66,6 +67,7 @@ URLS = {
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
+    FETCH_ANCESTORS: "rest/api/content/{id}?expand=ancestors",
     SEARCH_FOR_DATA_CENTER: "rest/api/search?cql={query}&start={start}",
     USER: "rest/api/3/users/search",
     USERS_FOR_DATA_CENTER: "rest/api/user/list?limit={limit}&start={start}",
@@ -307,6 +309,21 @@ class ConfluenceClient:
         async for response in search_documents:
             for entity in response.get("results", []):
                 yield entity
+
+    async def fetch_ancestors(self, page_id):
+        try:
+            async for ancestors_data in self.api_call(
+                url=os.path.join(
+                    self.host_url, URLS[FETCH_ANCESTORS].format(id=page_id)
+                )
+            ):
+                ancestors = await ancestors_data.json()
+                return ancestors
+        except Exception as exception:
+            self._logger.warning(
+                f"Something went wrong while fetching ancestors for id: {page_id}. Exception: {exception}."
+            )
+            return {}
 
     async def fetch_spaces(self):
         async for response in self.paginated_api_call(
@@ -861,6 +878,10 @@ class ConfluenceDataSource(BaseDataSource):
                 self.confluence_client.host_url,
                 document.get("_links", {}).get("webui", "")[1:],
             )
+            ancestor_title = " ".join(
+                ancestor["title"] for ancestor in document.get("ancestors", [])
+            )
+
             yield {
                 "_id": document.get("id"),
                 "type": document.get("type", ""),
@@ -868,6 +889,7 @@ class ConfluenceDataSource(BaseDataSource):
                 .get("lastUpdated", {})
                 .get("when", iso_utc()),
                 "title": document.get("title", ""),
+                "title_ancestors": ancestor_title if ancestor_title else "",
                 "space": document.get("space", {}).get("name", ""),
                 "body": document.get("body", {}).get("storage", {}).get("value", ""),
                 "url": document_url,
@@ -929,10 +951,20 @@ class ConfluenceDataSource(BaseDataSource):
                 and entity_details.get("container", {}).get("title") is None
             ):
                 continue
+            ancestor_title = ""
+            if entity.get("entityType") != "space":
+                ancestors = await self.confluence_client.fetch_ancestors(
+                    page_id=entity_details.get("id")
+                )
+                ancestor_title = " ".join(
+                    ancestor.get("title", "")
+                    for ancestor in ancestors.get("ancestors", [])
+                )
 
             document = {
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
+                "title_ancestors": ancestor_title,
                 "_timestamp": entity.get("lastModified"),
                 "body": entity.get("excerpt"),
                 "type": entity.get("entityType"),
