@@ -1128,7 +1128,9 @@ async def test_native_acl_connector_sync_fails_when_api_key_invalid(
         ),
     ],
 )
-def test_content_extraction_enabled(sync_job_config, pipeline_config, expected_enabled, expected_log, patch_logger):
+def test_content_extraction_enabled(
+    sync_job_config, pipeline_config, expected_enabled, expected_log, patch_logger
+):
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
