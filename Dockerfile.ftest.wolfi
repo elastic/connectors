@@ -1,0 +1,7 @@
+FROM docker.elastic.co/wolfi/python:3.10-dev
+USER root
+COPY . /connectors
+WORKDIR /connectors
+RUN make clean install
+RUN bin/pip install -r requirements/ftest.txt
+ENTRYPOINT []
