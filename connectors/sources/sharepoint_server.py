@@ -22,6 +22,7 @@ from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
+    hash_id,
     iso_utc,
     ssl_context,
 )
@@ -45,7 +46,7 @@ ROLES_BY_TITLE_FOR_LIST = "roles_by_title_for_list"
 ROLES_BY_TITLE_FOR_ITEM = "roles_by_title_for_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
-SELECTED_FIELDS = "WikiField, Modified,Id,GUID,File,Folder"
+SELECTED_FIELDS = "WikiField,CanvasContent1,Modified,Id,GUID,File,Folder"
 VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
 VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
 IS_USER = 1  # To verify principal type value for user or group
@@ -72,7 +73,7 @@ URLS = {
     PING: "{host_url}{parent_site_url}_api/web/webs",
     SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
-    ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
+    ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativePath(decodedurl='{file_relative_url}')/$value",
     DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
     LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
@@ -88,7 +89,6 @@ SCHEMA = {
     SITES: {
         "title": "Title",
         "url": "Url",
-        "_id": "Id",
         "server_relative_url": "ServerRelativeUrl",
         "_timestamp": "LastItemModifiedDate",
         "creation_time": "Created",
@@ -96,14 +96,12 @@ SCHEMA = {
     LISTS: {
         "title": "Title",
         "parent_web_url": "ParentWebUrl",
-        "_id": "Id",
         "_timestamp": "LastItemModifiedDate",
         "creation_time": "Created",
     },
     DOCUMENT_LIBRARY: {
         "title": "Title",
         "parent_web_url": "ParentWebUrl",
-        "_id": "Id",
         "_timestamp": "LastItemModifiedDate",
         "creation_time": "Created",
     },
@@ -982,7 +980,10 @@ class SharepointServerDataSource(BaseDataSource):
         Returns:
             dictionary: Modified document with the help of adapter schema.
         """
-        document = {"type": document_type}
+        document = {
+            "type": document_type,
+            "_id": hash_id(f'{item.get("Id","")}/{item.get("ParentWebUrl","")}'),
+        }
 
         document["url"] = self.sharepoint_client.format_url(
             relative_url=item["RootFolder"]["ServerRelativeUrl"]
@@ -1004,7 +1005,10 @@ class SharepointServerDataSource(BaseDataSource):
         Returns:
             dictionary: Modified document with the help of adapter schema.
         """
-        document = {"type": SITES}
+        document = {
+            "type": SITES,
+            "_id": hash_id(f'{item.get("Id","")}/{item.get("Url","")}'),
+        }
 
         self.map_document_with_schema(document=document, item=item, document_type=SITES)
         return document
@@ -1020,10 +1024,11 @@ class SharepointServerDataSource(BaseDataSource):
         """
         document = {"type": DRIVE_ITEM}
         item_type = item["item_type"]
-
         document.update(
             {  # pyright: ignore
-                "_id": item["GUID"],
+                "_id": hash_id(
+                    f'{item["GUID"]}/{item[item_type]["ServerRelativeUrl"]}'
+                ),
                 "size": int(item.get("File", {}).get("Length", 0)),
                 "url": self.sharepoint_client.format_url(
                     relative_url=item[item_type]["ServerRelativeUrl"]
@@ -1051,7 +1056,9 @@ class SharepointServerDataSource(BaseDataSource):
 
         document.update(
             {  # pyright: ignore
-                "_id": item["_id"] if "_id" in item.keys() else item["GUID"],
+                "_id": hash_id(
+                    f'{item["_id"] if "_id" in item.keys() else item["GUID"]}/{item["url"]}'
+                ),
                 "file_name": item.get("file_name", ""),
                 "size": int(item.get("Length", 0)),
                 "url": item["url"],
@@ -1298,7 +1305,9 @@ class SharepointServerDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
-        response_data = list_response["WikiField"]
+        response_data = list_response.get("CanvasContent1") or list_response.get(
+            "WikiField"
+        )
         if response_data is None:
             return
 
