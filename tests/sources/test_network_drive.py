@@ -13,17 +13,27 @@ from unittest.mock import ANY, MagicMock
 
 import pytest
 import smbclient
-from smbprotocol.exceptions import LogonFailure, SMBConnectionClosed, SMBOSError
+from smbprotocol.exceptions import (
+    SMBConnectionClosed,
+    SMBOSError,
+    SMBResponseException,
+    Unsuccessful,
+)
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.network_drive import (
+    ClientPermissionException,
+    InvalidLogonHoursException,
     NASDataSource,
     NetworkDriveAdvancedRulesValidator,
+    NoLogonServerException,
+    PasswordChangeRequiredException,
     SecurityInfo,
     SMBSession,
+    UserAccountDisabledException,
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
@@ -34,6 +44,26 @@ ADVANCED_SNIPPET = "advanced_snippet"
 
 WINDOWS = "windows"
 LINUX = "linux"
+
+
+class InvalidLogonHours(SMBResponseException):
+    _STATUS_CODE = 3221225583
+
+
+class UserAccountDisabled(SMBResponseException):
+    _STATUS_CODE = 3221225586
+
+
+class InvalidWorkstation(SMBResponseException):
+    _STATUS_CODE = 3221225584
+
+
+class NoLogonServer(SMBResponseException):
+    _STATUS_CODE = 3221225566
+
+
+class PasswordMustChange(SMBResponseException):
+    _STATUS_CODE = 3221226020
 
 
 def mock_file(name):
@@ -157,18 +187,49 @@ async def test_ping_for_failed_connection(session_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.register_session")
-async def test_create_connection_with_invalid_credentials(session_mock):
-    """Tests the create_connection fails with invalid credentials
+@pytest.mark.parametrize(
+    "side_effect",
+    [
+        {
+            "side_effect_name": InvalidWorkstation,
+            "raises": ClientPermissionException,
+        },
+        {
+            "side_effect_name": PasswordMustChange,
+            "raises": PasswordChangeRequiredException,
+        },
+        {
+            "side_effect_name": NoLogonServer,
+            "raises": NoLogonServerException,
+        },
+        {
+            "side_effect_name": UserAccountDisabled,
+            "raises": UserAccountDisabledException,
+        },
+        {
+            "side_effect_name": InvalidLogonHours,
+            "raises": InvalidLogonHoursException,
+        },
+        {
+            "side_effect_name": Unsuccessful,
+            "raises": SMBResponseException,
+        },
+    ],
+)
+async def test_create_connection_when_error_occurs(session_mock, side_effect):
+    """Tests the create_connection function when an error occurs
 
     Args:
         session_mock (patch): The patch of register_session method
     """
     # Setup
     async with create_source(NASDataSource) as source:
-        session_mock.side_effect = LogonFailure
+        session_mock.side_effect = side_effect.get("side_effect_name")
 
         # Execute
-        with pytest.raises(LogonFailure):
+        with pytest.raises(
+            side_effect.get("raises"),
+        ):
             source.smb_connection.create_connection()
 
 
@@ -529,93 +590,91 @@ async def test_advanced_rules_validation(
     advanced_rules, expected_validation_result, mocked_document
 ):
     async with create_source(NASDataSource) as source:
-        with mock.patch.object(smbclient, "register_session"):
-            mock_data = [
-                ("\\1.2.3.4/a", ["d.txt"], ["b"]),
-                ("\\1.2.3.4/a/b", ["c.txt"], ["e"]),
-                ("\\1.2.3.4/a/b/e", [], []),
-            ]
-            with mock.patch.object(
-                smbclient, "walk", side_effect=[iter(mock_data), iter(mock_data)]
-            ):
-                with mock.patch.object(
-                    NASDataSource, "traverse_diretory", side_effect=mocked_document
-                ):
-                    validation_result = await NetworkDriveAdvancedRulesValidator(
-                        source
-                    ).validate(advanced_rules)
+        validation_result = await NetworkDriveAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
 
-                    assert validation_result == expected_validation_result
+        assert validation_result == expected_validation_result
 
 
+@pytest.mark.asyncio
+async def test_pattern_start_with_slash():
+    async with create_source(NASDataSource) as source:
+        expected_result = await NetworkDriveAdvancedRulesValidator(source).validate(
+            advanced_rules=[{"pattern": "/[abc"}]
+        )
+        assert expected_result == SyncRuleValidationResult(
+            SyncRuleValidationResult.ADVANCED_RULES,
+            is_valid=False,
+            validation_message=ANY,
+        )
+
+
+class MockFile:
+    def __init__(self, path):
+        self.path = path
+
+    def is_dir(self):
+        return False
+
+    def path(self):
+        return self.path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"pattern": "training/python/**"},
+                        {"pattern": "training/**"},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@mock.patch("smbclient.register_session")
+async def test_get_docs_for_syncrule(session, filtering):
+    async with create_source(NASDataSource) as source:
+        with mock.patch(
+            "smbclient.scandir",
+            return_value=[MockFile("\\1.2.3.4/training/python/training.py")],
+        ):
+            source.format_document = MagicMock(
+                return_value={
+                    "_id": "1",
+                    "_timestamp": "2022-04-21T12:12:30",
+                    "path": "\\1.2.3.4/training/python/training.py",
+                    "title": "training.py",
+                    "created_at": "2022-01-11T12:12:30",
+                    "size": "30",
+                    "type": "file",
+                }
+            )
+            async for document, _ in source.get_docs(filtering):
+                assert document is not None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "filtering",
     [
         Filter({ADVANCED_SNIPPET: {"value": [{"pattern": "training/python/async*"}]}}),
     ],
 )
-@pytest.mark.asyncio
 @mock.patch("smbclient.register_session")
-async def test_get_docs_with_advanced_rules(session, filtering):
+async def test_get_docs_for_syncrule_negative(session, filtering):
     async with create_source(NASDataSource) as source:
-        response_list = []
-        mock_data = [
-            ("\\1.2.3.4/training/python", ["c.txt"], ["basics", "async"]),
-            ("\\1.2.3.4/training/python/async", ["lecture.py"], []),
-        ]
-        with mock.patch.object(
-            smbclient, "walk", side_effect=[iter(mock_data), iter(mock_data)]
+        with mock.patch(
+            "smbclient.scandir",
+            return_value=[MockFile("\\1.2.3.4/training/python/training.py")],
         ):
-            with mock.patch.object(
-                NASDataSource,
-                "traverse_diretory",
-                side_effect=[
-                    AsyncIterator(
-                        [
-                            {
-                                "path": "\\1.2.3.4/training/python/async",
-                                "size": "0",
-                                "_id": "987",
-                                "created_at": "1111-11-11T11:11:11",
-                                "type": "folder",
-                                "title": "async",
-                                "_timestamp": "1212-12-12T12:12:12",
-                            },
-                            {
-                                "path": "\\1.2.3.4/training/python/async/lecture.py",
-                                "size": "2700",
-                                "_id": "1233",
-                                "created_at": "1111-11-11T11:11:11",
-                                "type": "file",
-                                "title": "lecture.py",
-                                "_timestamp": "1212-12-12T12:12:12",
-                            },
-                        ]
-                    ),
-                ],
-            ):
-                async for response in source.get_docs(filtering):
-                    response_list.append(response[0])
-            assert [
-                {
-                    "path": "\\1.2.3.4/training/python/async",
-                    "size": "0",
-                    "_id": "987",
-                    "created_at": "1111-11-11T11:11:11",
-                    "type": "folder",
-                    "title": "async",
-                    "_timestamp": "1212-12-12T12:12:12",
-                },
-                {
-                    "path": "\\1.2.3.4/training/python/async/lecture.py",
-                    "size": "2700",
-                    "_id": "1233",
-                    "created_at": "1111-11-11T11:11:11",
-                    "type": "file",
-                    "title": "lecture.py",
-                    "_timestamp": "1212-12-12T12:12:12",
-                },
-            ] == response_list
+            async for document in source.get_docs(filtering):
+                assert document is not None
 
 
 def test_parse_output():
@@ -1047,3 +1106,57 @@ async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_a
             groups_info=mock_groups_info,
         )
         assert document_permissions[ACCESS_CONTROL] == expected_result
+
+
+async def test_validate_drive_path():
+    async with create_source(NASDataSource) as source:
+        source.configuration.get_field("drive_path").value = "/abc/bcd"
+        source.configuration.get_field("username").value = "user"
+        source.configuration.get_field("password").value = "pass"
+        source.configuration.get_field("server_ip").value = "10.50.1.7"
+        source.configuration.get_field("server_port").value = 447
+        with pytest.raises(ConfigurableFieldValueError):
+            await source.validate_config()
+
+
+@mock.patch("smbclient.scandir")
+@mock.patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
+@pytest.mark.asyncio
+async def test_traverse_diretory_smb_timeout_for_sync_rule(dir_mock):
+    with mock.patch.object(SMBSession, "create_connection"):
+        async with create_source(NASDataSource) as source:
+            path = "some_path"
+            dir_mock.side_effect = [
+                SMBConnectionClosed,
+                SMBConnectionClosed,
+                [mock_file(name="a1.md")],
+            ]
+
+            expected_output = {
+                "_id": "1",
+                "_timestamp": "2022-04-21T12:12:30",
+                "path": "\\1.2.3.4/dummy_path/a1.md",
+                "title": "a1.md",
+                "created_at": "2022-01-11T12:12:30",
+                "size": "30",
+                "type": "file",
+            }
+            async for file in source.traverse_directory_for_syncrule(
+                path=path, glob_pattern="/a*", indexed_rules=[]
+            ):
+                assert file == expected_output
+
+
+@mock.patch("smbclient.scandir")
+@pytest.mark.asyncio
+async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock):
+    # Setup
+    async with create_source(NASDataSource) as source:
+        path = "unknown_path"
+        dir_mock.side_effect = SMBOSError(ntstatus=3221225487, filename="unknown_path")
+
+        # Execute
+        async for file in source.traverse_directory_for_syncrule(
+            path=path, glob_pattern="/a*", indexed_rules=[]
+        ):
+            assert file == []

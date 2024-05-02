@@ -97,16 +97,15 @@ class JobSchedulingService(BaseService):
 
             connector.log_debug("Pinging the backend")
             await data_source.ping()
+
+            if connector.features.sync_rules_enabled():
+                await connector.validate_filtering(validator=data_source)
         except Exception as e:
             connector.log_error(e, exc_info=True)
             await connector.error(e)
             return
-
-        if connector.features.sync_rules_enabled():
-            try:
-                await connector.validate_filtering(validator=data_source)
-            finally:
-                await data_source.close()
+        finally:
+            await data_source.close()
 
         if connector.features.document_level_security_enabled():
             (
@@ -201,9 +200,11 @@ class JobSchedulingService(BaseService):
                 job_type
             )
 
+            self.logger.debug(f"Last sync was scheduled at {last_sync_scheduled_at}")
+
             if (
                 last_sync_scheduled_at is not None
-                and last_sync_scheduled_at > this_wake_up_time
+                and last_sync_scheduled_at > last_wake_up_time
             ):
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
