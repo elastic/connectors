@@ -35,7 +35,7 @@ esac
 
 # Load the image from the artifact created in build-docker.sh
 echo "Loading image from archive file..."
-docker load < "$PROJECT_ROOT/.artifacts/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.tar.gz"
+docker load < "$PROJECT_ROOT/.artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-${ARCHITECTURE}.tar.gz"
 
 # Ensure we have container-structure-test installed
 echo "Ensuring test environment is set up"
