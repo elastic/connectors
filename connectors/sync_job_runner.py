@@ -555,17 +555,17 @@ class SyncJobRunner:
     def _content_extraction_enabled(self, sync_job_config, pipeline_config):
         if sync_job_config.get("use_text_extraction_service"):
             logger.debug(
-                f"Binary content extraction via local extraction service is enabled for connector #{self.connector.id} during sync job #{self.sync_job.id}."
+                f"Binary content extraction via local extraction service is enabled for connector {self.connector.id} during sync job {self.sync_job.id}."
             )
             return True
 
         if pipeline_config.get("extract_binary_content"):
             logger.debug(
-                f"Binary content extraction via pipelines is enabled for connector #{self.connector.id} during sync job #{self.sync_job.id}."
+                f"Binary content extraction via pipelines is enabled for connector {self.connector.id} during sync job {self.sync_job.id}."
             )
             return True
 
         logger.debug(
-            f"Binary content extraction is disabled for connector #{self.connector.id} during sync job #{self.sync_job.id}."
+            f"Binary content extraction is disabled for connector {self.connector.id} during sync job {self.sync_job.id}."
         )
         return False
