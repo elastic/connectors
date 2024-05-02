@@ -605,6 +605,45 @@ async def test_get_users_for_cloud():
 
 
 @pytest.mark.asyncio
+@patch("connectors.sources.outlook.Connection")
+async def test_fetch_admin_users_negative(mock_connection):
+    async with create_outlook_source() as source:
+        mock_connection_instance = mock_connection.return_value
+        mock_connection_instance.search.return_value = (
+            False,
+            None,
+            [],
+            None,
+        )
+        source.client.is_cloud = False
+        with pytest.raises(Exception):
+            for _response in source.client._get_user_instance._fetch_admin_users(
+                search_query="search_query"
+            ):
+                pass
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.outlook.Connection")
+async def test_fetch_admin_users(mock_connection):
+    async with create_outlook_source() as source:
+        users = []
+        mock_connection_instance = mock_connection.return_value
+        mock_connection_instance.search.return_value = (
+            True,
+            None,
+            ["test.user@gmail.com", "dummy.user@gmail.com"],
+            None,
+        )
+        source.client.is_cloud = False
+        for response in source.client._get_user_instance._fetch_admin_users(
+            search_query="search_query"
+        ):
+            users.append(response)
+        assert users == ["test.user@gmail.com", "dummy.user@gmail.com"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "attachment, expected_content",
     [
@@ -669,3 +708,44 @@ async def test_get_docs():
         )
         async for document, _ in source.get_docs():
             assert document in EXPECTED_RESPONSE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "is_cloud, user_response",
+    [(True, {"value": [{"mail": "dummy.user@gmail.com"}]})],
+)
+async def test_get_access_control(is_cloud, user_response):
+    async with create_outlook_source() as source:
+        source.client.is_cloud = is_cloud
+        source.client._get_user_instance.get_users = AsyncIterator([user_response])
+        source._dls_enabled = MagicMock(return_value=True)
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+        assert len(acl) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "user_response",
+    [
+        {
+            "attributes": {"mail": "dummy@es.local"},
+            "dn": "CN=Dummy,CN=Users,DC=es,DC=local",
+        },
+        {
+            "attributes": {"mail": "dummy2@es.local"},
+            "dn": "CN=Dummy2,CN=Users,DC=es,DC=local",
+        },
+    ],
+)
+async def test_get_access_control_for_server(user_response):
+    async with create_outlook_source() as source:
+        source.configuration.get_field("data_source").value = "outlook_server"
+        source.client._get_user_instance.get_users = AsyncIterator([user_response])
+        source._dls_enabled = MagicMock(return_value=True)
+        acl = []
+        async for access_control in source.get_access_control():
+            acl.append(access_control)
+        assert len(acl) == 1
