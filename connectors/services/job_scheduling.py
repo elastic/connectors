@@ -14,7 +14,6 @@ from datetime import datetime
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
     DataSourceError,
@@ -33,7 +32,7 @@ class JobSchedulingService(BaseService):
     name = "schedule"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config, "job_scheduling_service")
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
@@ -136,21 +135,21 @@ class JobSchedulingService(BaseService):
 
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
-            logger.debug(
+            self.logger.debug(
                 f"Native support for job scheduling for {', '.join(native_service_types)}"
             )
         else:
-            logger.debug("No native service types configured for job scheduling")
+            self.logger.debug("No native service types configured for job scheduling")
         connector_ids = list(self.connectors.keys())
 
-        logger.info(
+        self.logger.info(
             f"Job Scheduling Service started, listening to events from {self.es_config['host']}"
         )
 
         try:
             while self.running:
                 try:
-                    logger.debug(
+                    self.logger.debug(
                         f"Polling every {self.idling} seconds for Job Scheduling"
                     )
                     async for connector in self.connector_index.supported_connectors(
@@ -160,7 +159,7 @@ class JobSchedulingService(BaseService):
                         await self._schedule(connector)
 
                 except Exception as e:
-                    logger.critical(e, exc_info=True)
+                    self.logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
@@ -181,7 +180,7 @@ class JobSchedulingService(BaseService):
         this_wake_up_time = datetime.utcnow()
         last_wake_up_time = self.last_wake_up_time
 
-        logger.debug(
+        self.logger.debug(
             f"Scheduler woke up at {this_wake_up_time}. Previously woke up at {last_wake_up_time}."
         )
 
