@@ -14,7 +14,6 @@ from datetime import datetime
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
-from connectors.logger import logger
 from connectors.protocol import (
     ConnectorIndex,
     DataSourceError,
@@ -33,7 +32,7 @@ class JobSchedulingService(BaseService):
     name = "schedule"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config, "job_scheduling_service")
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
@@ -98,16 +97,15 @@ class JobSchedulingService(BaseService):
 
             connector.log_debug("Pinging the backend")
             await data_source.ping()
+
+            if connector.features.sync_rules_enabled():
+                await connector.validate_filtering(validator=data_source)
         except Exception as e:
             connector.log_error(e, exc_info=True)
             await connector.error(e)
             return
-
-        if connector.features.sync_rules_enabled():
-            try:
-                await connector.validate_filtering(validator=data_source)
-            finally:
-                await data_source.close()
+        finally:
+            await data_source.close()
 
         if connector.features.document_level_security_enabled():
             (
@@ -139,21 +137,21 @@ class JobSchedulingService(BaseService):
 
         native_service_types = self.config.get("native_service_types", []) or []
         if len(native_service_types) > 0:
-            logger.debug(
+            self.logger.debug(
                 f"Native support for job scheduling for {', '.join(native_service_types)}"
             )
         else:
-            logger.debug("No native service types configured for job scheduling")
+            self.logger.debug("No native service types configured for job scheduling")
         connector_ids = list(self.connectors.keys())
 
-        logger.info(
+        self.logger.info(
             f"Job Scheduling Service started, listening to events from {self.es_config['host']}"
         )
 
         try:
             while self.running:
                 try:
-                    logger.debug(
+                    self.logger.debug(
                         f"Polling every {self.idling} seconds for Job Scheduling"
                     )
                     async for connector in self.connector_index.supported_connectors(
@@ -163,7 +161,7 @@ class JobSchedulingService(BaseService):
                         await self._schedule(connector)
 
                 except Exception as e:
-                    logger.critical(e, exc_info=True)
+                    self.logger.critical(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
@@ -184,7 +182,7 @@ class JobSchedulingService(BaseService):
         this_wake_up_time = datetime.utcnow()
         last_wake_up_time = self.last_wake_up_time
 
-        logger.debug(
+        self.logger.debug(
             f"Scheduler woke up at {this_wake_up_time}. Previously woke up at {last_wake_up_time}."
         )
 
@@ -202,9 +200,11 @@ class JobSchedulingService(BaseService):
                 job_type
             )
 
+            self.logger.debug(f"Last sync was scheduled at {last_sync_scheduled_at}")
+
             if (
                 last_sync_scheduled_at is not None
-                and last_sync_scheduled_at > this_wake_up_time
+                and last_sync_scheduled_at > last_wake_up_time
             ):
                 connector.log_debug(
                     f"A scheduled '{job_type_value}' sync is created by another connector instance, skipping..."
