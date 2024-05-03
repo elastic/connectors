@@ -6,7 +6,7 @@ Connectors CLI is a command-line interface to Elastic Connectors for use in your
 Connectors CLI is in tech preview.
 
 **Note:**
-Connectors CLI helps with Elastic Connectors management but you need to run [Connector Service](https://github.com/elastic/connectors/tree/main/scripts/stack) manually. 
+Connectors CLI helps with Elastic Connectors managing connectors and running sync jobs. To pick up and execute sync jobs you need to run [Connector Service](https://github.com/elastic/connectors/tree/main/scripts/stack) manually.
 
 - [Installation](#installation)
 - [Configuration](#configuration)
