@@ -105,7 +105,7 @@ EXPECTED_PAGE = {
     "type": "page",
     "_timestamp": "2023-01-24T04:07:19.672Z",
     "title": "ES-scrum",
-    "title_ancestors": "parent_title",
+    "ancestors": "parent_title",
     "body": "This is a test page",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
@@ -257,7 +257,7 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
     {
         "_id": "983046",
         "title": "Product Details",
-        "title_ancestors": "",
+        "ancestors": "",
         "_timestamp": "2022-12-19T13:06:18.000Z",
         "body": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
         "type": "page",
@@ -267,7 +267,7 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
     {
         "_id": "att4587521",
         "title": "Potential.pdf",
-        "title_ancestors": "",
+        "ancestors": "",
         "_timestamp": "2023-01-24T03:34:38.000Z",
         "type": "attachment",
         "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
@@ -278,7 +278,7 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
     {
         "_id": "196612",
         "title": "Software Development",
-        "title_ancestors": "",
+        "ancestors": "",
         "_timestamp": "2022-12-13T09:49:01.000Z",
         "body": "",
         "type": "space",
@@ -359,6 +359,18 @@ PAGE_RESTRICTION_RESPONSE = {
         "size": 2,
     },
     "group": {"results": [], "size": 0},
+}
+
+EXPECTED_QUERY_RESPONSE = {
+    "content": {
+        "id": "983041",
+        "type": "page",
+    },
+    "title": "page 3",
+    "excerpt": "page 3 excerpt",
+    "url": "/spaces/space1/pages/983041/page+3",
+    "entityType": "content",
+    "lastModified": "2024-04-24T08:43:17.000Z",
 }
 
 
@@ -1486,3 +1498,36 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
             with pytest.raises(Exception):
                 await source._attachment_coro(document=EXPECTED_PAGE, access_control=[])
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+async def create_fake_coroutine(data):
+    """create a method for returning fake coroutine value"""
+    return data
+
+
+@pytest.mark.asyncio
+@mock.patch.object(
+    ConfluenceClient,
+    "search_by_query",
+    return_value=AsyncIterator([EXPECTED_QUERY_RESPONSE]),
+)
+async def test_search_by_query_with_ancestors(search_by_query_response):
+    async with create_confluence_source() as source:
+        source.confluence_client.fetch_ancestors = Mock(
+            return_value=create_fake_coroutine(
+                {"ancestors": [{"title": "parent1"}, {"title": "parent2"}]}
+            )
+        )
+        async for expected_response, _ in source.search_by_query(
+            query="space.key='space1'"
+        ):
+            assert expected_response == {
+                "_id": "983041",
+                "title": "page 3",
+                "ancestors": "parent1 parent2",
+                "_timestamp": "2024-04-24T08:43:17.000Z",
+                "body": "page 3 excerpt",
+                "type": "page",
+                "url": "http://127.0.0.1:9696/spaces/space1/pages/983041/page+3",
+                "space": None,
+            }

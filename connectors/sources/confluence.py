@@ -320,7 +320,7 @@ class ConfluenceClient:
                 ancestors = await ancestors_data.json()
                 return ancestors
         except Exception as exception:
-            self._logger.warning(
+            self._logger.error(
                 f"Something went wrong while fetching ancestors for id: {page_id}. Exception: {exception}."
             )
             return {}
@@ -889,7 +889,7 @@ class ConfluenceDataSource(BaseDataSource):
                 .get("lastUpdated", {})
                 .get("when", iso_utc()),
                 "title": document.get("title", ""),
-                "title_ancestors": ancestor_title if ancestor_title else "",
+                "ancestors": ancestor_title,
                 "space": document.get("space", {}).get("name", ""),
                 "body": document.get("body", {}).get("storage", {}).get("value", ""),
                 "url": document_url,
@@ -964,7 +964,7 @@ class ConfluenceDataSource(BaseDataSource):
             document = {
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
-                "title_ancestors": ancestor_title,
+                "ancestors": ancestor_title,
                 "_timestamp": entity.get("lastModified"),
                 "body": entity.get("excerpt"),
                 "type": entity.get("entityType"),
