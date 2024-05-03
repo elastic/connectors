@@ -5,6 +5,9 @@ Connectors CLI is a command-line interface to Elastic Connectors for use in your
 **Warning:**
 Connectors CLI is in tech preview.
 
+**Note:**
+Connectors CLI helps with Elastic Connectors management but you need to run [Connector Service](https://github.com/elastic/connectors/tree/main/scripts/stack) manually. 
+
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Available commands](#available-commands)
@@ -140,10 +143,3 @@ Examples:
 ```
 
 This will display information about the job including job id, connector id, indexed document counts and index data value.
-
-## Known bugs and limitations
-
-Currently Connectors CLI does not support:
-
-* Elasticsearch API keys for authentication
-* all Kibana UI functionality
