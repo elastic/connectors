@@ -416,13 +416,13 @@ class JiraClient:
         await anext(self.api_call(url_name=PING))
 
     async def get_jira_fields(self):
-        response = await anext(self.api_call(url_name=ALL_FIELDS))
-        jira_fields = await response.json()
-        return {
-            field["id"]: field["name"]
-            for field in jira_fields
-            if field["custom"] is True
-        }
+        async for response in self.api_call(url_name=ALL_FIELDS):
+            jira_fields = await response.json()
+            yield {
+                field["id"]: field["name"]
+                for field in jira_fields
+                if field["custom"] is True
+            }
 
 
 class JiraDataSource(BaseDataSource):
@@ -1009,7 +1009,7 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        self.custom_fields = await self.jira_client.get_jira_fields()
+        self.custom_fields = await anext(self.jira_client.get_jira_fields())
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
