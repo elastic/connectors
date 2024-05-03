@@ -1,0 +1,6 @@
+FROM docker.elastic.co/wolfi/python:3.10-dev
+USER root
+COPY . /app
+WORKDIR /app
+RUN make clean install
+ENTRYPOINT []
