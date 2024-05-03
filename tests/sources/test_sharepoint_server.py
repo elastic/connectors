@@ -1630,3 +1630,56 @@ async def test_site_list_item_has_unique_role_assignments():
             site_url="/abc", site_list_name="list1", list_item_id=1
         )
         source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "site_doc, expected_response",
+    [
+        (
+            {
+                "ServerRelativeUrl": None,
+                "Title": "demo",
+                "Url": "/collection1",
+                "Id": 1,
+                "LastItemModifiedDate": "2022-06-20T10:04:03Z",
+                "Created": "2022-06-20T10:04:03Z",
+            },
+            {
+                "type": "sites",
+                "_id": "af47718472cafa7b3c8446f0bacddde7",
+                "title": "demo",
+                "url": "/collection1",
+                "server_relative_url": None,
+                "_timestamp": "2022-06-20T10:04:03Z",
+                "creation_time": "2022-06-20T10:04:03Z",
+            },
+        ),
+        (
+            {
+                "ServerRelativeUrl": None,
+                "Title": "demo",
+                "Url": "/collection2",
+                "Id": 1,
+                "LastItemModifiedDate": "2022-06-20T10:04:03Z",
+                "Created": "2022-06-20T10:04:03Z",
+            },
+            {
+                "type": "sites",
+                "_id": "1437771250e098f566bace60e4d07b7a",
+                "title": "demo",
+                "url": "/collection2",
+                "server_relative_url": None,
+                "_timestamp": "2022-06-20T10:04:03Z",
+                "creation_time": "2022-06-20T10:04:03Z",
+            },
+        ),
+    ],
+)
+async def test_get_docs_having_same_site_ids(site_doc, expected_response):
+    async with create_sps_source() as source:
+        source.sharepoint_client.site_collections_path = ["collection1", "collection2"]
+        source.sharepoint_client.get_sites = AsyncIterator([site_doc])
+        source.sharepoint_client.get_lists = AsyncIterator([])
+        async for item, _ in source.get_docs():
+            assert item == expected_response
