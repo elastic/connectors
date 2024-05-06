@@ -187,7 +187,7 @@ def get_list_and_items(parent_site_url, list_id):
         item (dict): Dictionary of list item or drive item
     """
     args = request.args
-    if args.get("$expand", "") == "AttachmentFiles":
+    if args.get("$expand", "") == "AttachmentFiles,Author,Editor":
         item = {
             "value": [
                 {
