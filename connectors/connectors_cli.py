@@ -406,7 +406,7 @@ def list_indices(obj):
     for index in indices:
         formatted_index = [
             click.style(index, fg="white"),
-            click.style(indices[index]["primaries"]["docs"]["count"]),
+            click.style(indices[index]["docs_count"], fg="white"),
         ]
         table_rows.append(formatted_index)
 

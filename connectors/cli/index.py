@@ -17,7 +17,7 @@ class Index:
         self.connectors_index = ConnectorIndex(self.elastic_config)
 
     def list_indices(self):
-        return asyncio.run(self.__list_indices())["indices"]
+        return asyncio.run(self.__list_indices())
 
     def clean(self, index_name):
         return asyncio.run(self.__clean_index(index_name))

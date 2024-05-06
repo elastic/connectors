@@ -14,6 +14,7 @@ from elasticsearch.helpers import async_scan
 from connectors.es.client import ESClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings, Settings
 from connectors.logger import logger
+from elasticsearch import ApiError
 
 
 class ESManagementClient(ESClient):
@@ -185,10 +186,27 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self, index=None):
-        return await self._retrier.execute_with_retry(
-            partial(self.client.indices.stats, index=index)
-        )
+    async def list_indices(self, index="*"):
+        indices = {}
+        try:
+            response = await self._retrier.execute_with_retry(
+                partial(self.client.indices.stats, index=index)
+            )
+
+            for index in response["indices"].items():
+                indices[index[0]] = { "docs_count": index[1]["primaries"]["docs"]["count"] }
+
+        except ApiError as e:
+            # If the API is not available, we can still list indices using get
+            if e.error == "api_not_available_exception":
+                response = await self._retrier.execute_with_retry(
+                   partial(self.client.indices.get, index=index)
+                )
+
+                for index in response.items():
+                    indices[index[0]] = { "docs_count": 'unknown' }
+
+        return indices
 
     async def index_exists(self, index_name):
         return await self._retrier.execute_with_retry(
