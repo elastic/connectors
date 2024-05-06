@@ -220,6 +220,8 @@ async def test_prepare_list_items_doc():
             "url": f"{HOST_URL}/site%5E",
             "file_name": "filename",
             "server_relative_url": "/site^",
+            "Editor": {"Title": "system"},
+            "Author": {"Title": "system"},
         }
         expected_response = {
             "type": "list_item",
@@ -227,8 +229,8 @@ async def test_prepare_list_items_doc():
             "file_name": "filename",
             "size": 0,
             "title": "dummy",
-            "author_id": 123,
-            "editor_id": 123,
+            "author": "system",
+            "editor": "system",
             "creation_time": "2023-01-30T12:48:31Z",
             "_timestamp": "2023-01-30T12:48:31Z",
             "url": f"{HOST_URL}/site%5E",

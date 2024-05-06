@@ -74,7 +74,7 @@ URLS = {
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativeUrl('{file_relative_url}')/$value",
     DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
-    LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
+    LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles,Author,Editor&$select=*,FileRef,Author/Title,Editor/Title",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
     USERS: "{host_url}{parent_site_url}/_api/web/siteusers?$skip={skip}&$top={top}",
     ADMIN_USERS: "{host_url}{parent_site_url}/_api/web/siteusers?$skip={skip}&$top={top}&$filter=IsSiteAdmin eq true",
@@ -109,8 +109,6 @@ SCHEMA = {
     },
     LIST_ITEM: {
         "title": "Title",
-        "author_id": "AuthorId",
-        "editor_id": "EditorId",
         "creation_time": "Created",
         "_timestamp": "Modified",
     },
@@ -1055,6 +1053,8 @@ class SharepointServerDataSource(BaseDataSource):
                 "file_name": item.get("file_name", ""),
                 "size": int(item.get("Length", 0)),
                 "url": item["url"],
+                "author": item.get("Author", {}).get("Title", ""),
+                "editor": item.get("Editor", {}).get("Title", ""),
             }
         )
         server_url = item.get("server_relative_url")
