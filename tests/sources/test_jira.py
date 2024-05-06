@@ -512,9 +512,7 @@ async def test_api_call_with_empty_response():
         empty_response_mock.__aenter__.return_value.content_length = 0
 
         with patch.object(
-            aiohttp.ClientSession,
-            "get",
-            return_value=empty_response_mock
+            aiohttp.ClientSession, "get", return_value=empty_response_mock
         ):
             with pytest.raises(EmptyResponseError):
                 await anext(source.jira_client.api_call(url_name="ping"))
