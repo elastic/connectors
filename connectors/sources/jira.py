@@ -896,7 +896,6 @@ class JiraDataSource(BaseDataSource):
             for k in self.custom_fields.keys():
                 if k in response_fields:
                     del response_fields[k]
-            
 
             document = {
                 "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
@@ -904,9 +903,9 @@ class JiraDataSource(BaseDataSource):
                 "Key": issue_metadata.get("key"),
                 "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
-                "Custom Fields": response_custom_fields
+                "Custom Fields": response_custom_fields,
             }
-            
+
             if restrictions := [
                 restriction.get("restrictionValue")
                 for restriction in response_fields.get("issuerestriction", {})
