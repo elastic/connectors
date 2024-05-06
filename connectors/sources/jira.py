@@ -887,17 +887,26 @@ class JiraDataSource(BaseDataSource):
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
         ):
-            response_fields = {
-                self.custom_fields.get(k, k): v
-                for k, v in issue_metadata.get("fields").items()
-            }
+            response_custom_fields = {}
+            response_fields = copy(issue_metadata.get("fields"))
+            for k, v in response_fields.items():
+                if self.custom_fields.get(k):
+                    response_custom_fields[self.custom_fields[k]] = v
+
+            for k in self.custom_fields.keys():
+                if k in response_fields:
+                    del response_fields[k]
+            
+
             document = {
                 "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
                 "_timestamp": response_fields.get("updated"),
                 "Key": issue_metadata.get("key"),
                 "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
+                "Custom Fields": response_custom_fields
             }
+            
             if restrictions := [
                 restriction.get("restrictionValue")
                 for restriction in response_fields.get("issuerestriction", {})

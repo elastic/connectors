@@ -103,8 +103,8 @@ EXPECTED_ISSUE = {
             }
         ],
         "issuerestriction": {"issuerestrictions": {}},
-        "Author": "custom value",
     },
+    "Custom Fields": {"Author": "custom value"}
 }
 
 MOCK_ISSUE_TYPE_BUG = {
@@ -156,6 +156,7 @@ EXPECTED_ISSUE_TYPE_BUG = {
             }
         },
     },
+    "Custom Fields": {}
 }
 
 EXPECTED_ATTACHMENT_TYPE_BUG = {
