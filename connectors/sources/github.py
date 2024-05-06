@@ -633,6 +633,10 @@ class NoInstallationAccessTokenException(Exception):
     pass
 
 
+class ForbiddenException(Exception):
+    pass
+
+
 class GitHubClient:
     def __init__(
         self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca
@@ -787,6 +791,9 @@ class GitHubClient:
         except BadGraphQLRequest as exception:
             if self.get_rate_limit_encountered(exception.status_code, exception):
                 await self._put_to_sleep(resource_type="graphql")
+            elif exception.status == FORBIDDEN:
+                msg = "Provided GitHub token does not have the necessary permissions to perform the request."
+                raise ForbiddenException(msg) from exception
         except Exception:
             raise
 
@@ -821,6 +828,9 @@ class GitHubClient:
                     raise
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
+            elif exception.status == FORBIDDEN:
+                msg = "Provided GitHub token does not have the necessary permissions to perform the request."
+                raise ForbiddenException(msg) from exception
             else:
                 raise
         except RateLimitExceeded:
@@ -1613,6 +1623,8 @@ class GitHubDataSource(BaseDataSource):
                     yield repo_object
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the repository. Exception: {exception}",
@@ -1749,6 +1761,8 @@ class GitHubDataSource(BaseDataSource):
                         yield pull_request_doc
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the pull requests. Exception: {exception}",
@@ -1804,6 +1818,8 @@ class GitHubDataSource(BaseDataSource):
                     yield issue
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the issues. Exception: {exception}",
@@ -1857,6 +1873,8 @@ class GitHubDataSource(BaseDataSource):
                         document["_id"] = f"{repo_name}/{repo_object['path']}"
                         yield document, repo_object
         except UnauthorizedException:
+            raise
+        except ForbiddenException:
             raise
         except Exception as exception:
             self._logger.warning(
