@@ -1500,11 +1500,6 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
                 assert source.queue.get_nowait() == END_SIGNAL
 
 
-async def create_fake_coroutine(data):
-    """create a method for returning fake coroutine value"""
-    return data
-
-
 @pytest.mark.asyncio
 @mock.patch.object(
     ConfluenceClient,
@@ -1513,10 +1508,8 @@ async def create_fake_coroutine(data):
 )
 async def test_search_by_query_with_ancestors(search_by_query_response):
     async with create_confluence_source() as source:
-        source.confluence_client.fetch_ancestors = Mock(
-            return_value=create_fake_coroutine(
-                {"ancestors": [{"title": "parent1"}, {"title": "parent2"}]}
-            )
+        source.confluence_client.fetch_ancestors = AsyncMock(
+            return_value={"ancestors": [{"title": "parent1"}, {"title": "parent2"}]}
         )
         async for expected_response, _ in source.search_by_query(
             query="space.key='space1'"
