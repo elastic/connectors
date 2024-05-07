@@ -542,7 +542,7 @@ def test_index_list_no_indexes():
 
 def test_index_list_one_index():
     runner = CliRunner()
-    indices = {"indices": {"test_index": {"primaries": {"docs": {"count": 10}}}}}
+    indices = {"test_index": {"docs_count": 10}}
 
     with patch(
         "connectors.es.cli_client.CLIClient.list_indices",
