@@ -36,6 +36,9 @@ class Index:
         try:
             return await self.cli_client.list_indices()
         except ApiError as e:
+            # If the API is not available, we are in serverless mode
+            if e.error == "api_not_available_exception":
+                return await self.cli_client.list_indices_serverless()
             raise e
         finally:
             await self.__close()
