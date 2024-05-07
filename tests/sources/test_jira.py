@@ -322,7 +322,7 @@ MOCK_JIRA_FIELDS = [
     },
 ]
 
-EXPECTED_CUSTOM_FIELDS = {'customfield_001': 'Author'}
+EXPECTED_CUSTOM_FIELDS = {"customfield_001": "Author"}
 
 ACCESS_CONTROL = "_allow_access_control"
 
