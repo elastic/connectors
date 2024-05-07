@@ -829,7 +829,7 @@ class GitHubClient:
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
             elif exception.status == FORBIDDEN:
-                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {url} and query: {query}."
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {resource}."
                 raise ForbiddenException(msg) from exception
             else:
                 raise
