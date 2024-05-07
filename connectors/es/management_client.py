@@ -6,6 +6,7 @@
 
 from functools import partial
 
+from elasticsearch import ApiError
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
@@ -14,7 +15,6 @@ from elasticsearch.helpers import async_scan
 from connectors.es.client import ESClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings, Settings
 from connectors.logger import logger
-from elasticsearch import ApiError
 
 
 class ESManagementClient(ESClient):
@@ -196,7 +196,7 @@ class ESManagementClient(ESClient):
         )
 
         for index in response["indices"].items():
-            indices[index[0]] = { "docs_count": index[1]["primaries"]["docs"]["count"] }
+            indices[index[0]] = {"docs_count": index[1]["primaries"]["docs"]["count"]}
 
         return indices
 
