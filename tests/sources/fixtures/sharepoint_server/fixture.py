@@ -282,7 +282,7 @@ def get_attachment_data(parent_site_url, file_relative_url):
 
 
 @app.route(
-    "/<string:parent_url>/<string:site>/_api/web/GetFileByServerRelativeUrl('<string:server_url>')/$value",
+    "/<string:parent_url>/<string:site>/_api/web/GetFileByServerRelativePath(decodedurl='<string:server_url>')/$value",
     methods=["GET"],
 )
 def download(parent_url, site, server_url):

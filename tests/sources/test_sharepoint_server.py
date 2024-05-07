@@ -191,7 +191,7 @@ async def test_prepare_drive_items_doc():
             "item_type": "File",
         }
         expected_response = {
-            "_id": 1,
+            "_id": "b87b3146776b01cd1ab33893eefe70fe",
             "type": "File",
             "size": 12,
             "title": "dummy",
@@ -225,7 +225,7 @@ async def test_prepare_list_items_doc():
         }
         expected_response = {
             "type": "list_item",
-            "_id": 1,
+            "_id": "2c797bdb5655fa7140cd48afcba26894",
             "file_name": "filename",
             "size": 0,
             "title": "dummy",
@@ -258,7 +258,7 @@ async def test_prepare_sites_doc():
             "ServerRelativeUrl": "/site",
         }
         expected_response = {
-            "_id": 1,
+            "_id": "440d5fb060e33969ac4f5425a4d56c75",
             "type": "sites",
             "title": "dummy",
             "creation_time": "2023-01-30T12:48:31Z",
@@ -1507,7 +1507,7 @@ async def test_get_docs_with_dls_enabled():
                 "type": "sites",
                 "title": "demo",
                 "url": "/abc",
-                "_id": 1,
+                "_id": "13668493c4be87c4f860df21a85f9518",
                 "server_relative_url": None,
                 "_timestamp": "2022-06-20T10:04:03Z",
                 "creation_time": "2022-06-20T10:04:03Z",
@@ -1519,14 +1519,14 @@ async def test_get_docs_with_dls_enabled():
                 "server_relative_url": "/abc",
                 "title": "list",
                 "parent_web_url": "/abc",
-                "_id": "4eba2cd0-46d2-4b5e-8918-b8de89c90ecc",
+                "_id": "0765c44868b32715e234dbf5a7217e77",
                 "_timestamp": "2024-04-15T09:29:21Z",
                 "creation_time": "2024-04-15T09:29:21Z",
                 "_allow_access_control": ["user_id:1", "login_name:administrator"],
             },
             {
                 "type": "Folder",
-                "_id": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
+                "_id": "08d31a7880eae84cb8ae4b874a786ef6",
                 "size": 0,
                 "url": "http://127.0.0.1:8491/sites/enterprise/ctest/SitePages/Home.aspx",
                 "server_relative_url": "/sites/enterprise/ctest/SitePages/Home.aspx",
@@ -1541,14 +1541,14 @@ async def test_get_docs_with_dls_enabled():
                 "server_relative_url": "/abc",
                 "title": "list",
                 "parent_web_url": "/abc",
-                "_id": "4eba2cd0-46d2-4b5e-8918-b8de89c90ecc",
+                "_id": "0765c44868b32715e234dbf5a7217e77",
                 "_timestamp": "2024-04-15T09:29:21Z",
                 "creation_time": "2024-04-15T09:29:21Z",
                 "_allow_access_control": ["login_name:administrator", "user_id:1"],
             },
             {
                 "type": "Folder",
-                "_id": "111111122222222-c77f-4ed3-084ef-8a4dd87c80d0",
+                "_id": "08d31a7880eae84cb8ae4b874a786ef6",
                 "size": 0,
                 "url": "http://127.0.0.1:8491/sites/enterprise/ctest/SitePages/Home.aspx",
                 "server_relative_url": "/sites/enterprise/ctest/SitePages/Home.aspx",
@@ -1634,3 +1634,56 @@ async def test_site_list_item_has_unique_role_assignments():
             site_url="/abc", site_list_name="list1", list_item_id=1
         )
         source.sharepoint_client._api_call.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "site_doc, expected_response",
+    [
+        (
+            {
+                "ServerRelativeUrl": None,
+                "Title": "demo",
+                "Url": "/collection1",
+                "Id": 1,
+                "LastItemModifiedDate": "2022-06-20T10:04:03Z",
+                "Created": "2022-06-20T10:04:03Z",
+            },
+            {
+                "type": "sites",
+                "_id": "af47718472cafa7b3c8446f0bacddde7",
+                "title": "demo",
+                "url": "/collection1",
+                "server_relative_url": None,
+                "_timestamp": "2022-06-20T10:04:03Z",
+                "creation_time": "2022-06-20T10:04:03Z",
+            },
+        ),
+        (
+            {
+                "ServerRelativeUrl": None,
+                "Title": "demo",
+                "Url": "/collection2",
+                "Id": 1,
+                "LastItemModifiedDate": "2022-06-20T10:04:03Z",
+                "Created": "2022-06-20T10:04:03Z",
+            },
+            {
+                "type": "sites",
+                "_id": "1437771250e098f566bace60e4d07b7a",
+                "title": "demo",
+                "url": "/collection2",
+                "server_relative_url": None,
+                "_timestamp": "2022-06-20T10:04:03Z",
+                "creation_time": "2022-06-20T10:04:03Z",
+            },
+        ),
+    ],
+)
+async def test_get_docs_having_same_site_ids(site_doc, expected_response):
+    async with create_sps_source() as source:
+        source.sharepoint_client.site_collections_path = ["collection1", "collection2"]
+        source.sharepoint_client.get_sites = AsyncIterator([site_doc])
+        source.sharepoint_client.get_lists = AsyncIterator([])
+        async for item, _ in source.get_docs():
+            assert item == expected_response
