@@ -249,7 +249,7 @@ class JiraClient:
                     ssl=self.ssl_ctx,
                 ) as response:
                     if response.content_length == 0:
-                        msg = "The response body is empty"
+                        msg = f"The response body is empty for url: {url}"
                         raise EmptyResponseError(msg)
                     yield response
                     break
