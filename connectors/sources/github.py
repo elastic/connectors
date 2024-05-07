@@ -792,7 +792,7 @@ class GitHubClient:
             if self.get_rate_limit_encountered(exception.status_code, exception):
                 await self._put_to_sleep(resource_type="graphql")
             elif exception.status == FORBIDDEN:
-                msg = "Provided GitHub token does not have the necessary permissions to perform the request."
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {url} and query: {query}."
                 raise ForbiddenException(msg) from exception
         except Exception:
             raise
@@ -829,7 +829,7 @@ class GitHubClient:
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
             elif exception.status == FORBIDDEN:
-                msg = "Provided GitHub token does not have the necessary permissions to perform the request."
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {url} and query: {query}."
                 raise ForbiddenException(msg) from exception
             else:
                 raise
