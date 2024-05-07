@@ -104,7 +104,7 @@ EXPECTED_ISSUE = {
         ],
         "issuerestriction": {"issuerestrictions": {}},
     },
-    "Custom Fields": {"Author": "custom value"},
+    "Custom_Fields": {"Author": "custom value"},
 }
 
 MOCK_ISSUE_TYPE_BUG = {
@@ -156,7 +156,7 @@ EXPECTED_ISSUE_TYPE_BUG = {
             }
         },
     },
-    "Custom Fields": {},
+    "Custom_Fields": {},
 }
 
 EXPECTED_ATTACHMENT_TYPE_BUG = {
@@ -321,6 +321,8 @@ MOCK_JIRA_FIELDS = [
         "custom": True,
     },
 ]
+
+EXPECTED_CUSTOM_FIELDS = {'customfield_001': 'Author'}
 
 ACCESS_CONTROL = "_allow_access_control"
 
@@ -804,6 +806,14 @@ async def test_put_issue():
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
             await source._put_issue(issue=MOCK_ISSUE)
             assert source.queue.qsize() == 3
+
+
+@pytest.mark.asyncio
+async def test_get_custom_fields():
+    async with create_jira_source() as source:
+        with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
+            custom_fields = await anext(source.jira_client.get_jira_fields())
+            assert custom_fields == EXPECTED_CUSTOM_FIELDS
 
 
 @pytest.mark.asyncio

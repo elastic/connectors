@@ -903,7 +903,7 @@ class JiraDataSource(BaseDataSource):
                 "Key": issue_metadata.get("key"),
                 "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
-                "Custom Fields": response_custom_fields,
+                "Custom_Fields": response_custom_fields,
             }
 
             if restrictions := [
