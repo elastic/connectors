@@ -1,4 +1,4 @@
-aiohttp==3.9.1
+aiohttp==3.9.5
 aiofiles==23.2.1
 elasticsearch[async]==8.12.0
 elastic-transport==8.12.0
@@ -19,7 +19,7 @@ oracledb==1.2.2
 asyncpg==0.27.0
 python-tds==1.12.0
 sqlalchemy-pytds==0.3.5
-pyOpenSSL==23.1.1
+pyOpenSSL==24.1.0
 dropbox==11.36.2
 beautifulsoup4==4.12.2
 gidgethub==5.2.1
