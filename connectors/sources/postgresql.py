@@ -196,6 +196,7 @@ class PostgreSQLClient:
         Returns:
             cursor: Asynchronous cursor
         """
+        self._logger.debug(f"Retrieving the cursor for query: {query}")
         try:
             async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
@@ -218,6 +219,12 @@ class PostgreSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
+            msg = (
+                "Fetching all tables as the configuration field 'tables' is set to '*'"
+                if not is_filtering
+                else "Fetching all tables as the advanced sync rules are enabled."
+            )
+            self._logger.info(msg)
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -231,6 +238,7 @@ class PostgreSQLClient:
             ):
                 yield row[0]
         else:
+            self._logger.info(f"Fetching user configured tables: {tables}")
             for table in tables:
                 yield table
 
@@ -266,9 +274,12 @@ class PostgreSQLClient:
             )
         ]
 
+        self._logger.debug(f"Found primary keys for '{table}' table")
+
         return primary_keys
 
     async def get_table_last_update_time(self, table):
+        self._logger.debug(f"Fetching last updated time for table: {table}")
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
@@ -300,6 +311,7 @@ class PostgreSQLClient:
             list: It will first yield the column names, then data in each row
         """
         if query is None and row_count is not None and order_by_columns is not None:
+            self._logger.debug(f"Streaming records from database using query: {query}")
             order_by_columns_list = ",".join(order_by_columns)
             offset = 0
             fetch_columns = True
@@ -328,6 +340,7 @@ class PostgreSQLClient:
                 if row_count <= offset:
                     return
         else:
+            self._logger.debug(f"Streaming records from database for table: {table}")
             async for data in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -496,6 +509,7 @@ class PostgreSQLDataSource(BaseDataSource):
         return row
 
     async def get_primary_key(self, tables):
+        self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
             primary_key_columns.extend(
@@ -518,6 +532,7 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(f"Fetching records for the table: {table}")
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
@@ -537,6 +552,9 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(
+            f"Fetching records for {tables} tables using the custom query: {query}"
+        )
         try:
             docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
             async for doc in docs_generator:
@@ -582,6 +600,7 @@ class PostgreSQLDataSource(BaseDataSource):
         row_count = await self.postgresql_client.get_table_row_count(table=table)
         if row_count > 0:
             # Query to get the table's primary key
+            self._logger.debug(f"Total '{row_count}' rows found in '{table}' table")
             keys, order_by_columns = await self.get_primary_key(tables=[table])
             if keys:
                 try:
@@ -655,6 +674,9 @@ class PostgreSQLDataSource(BaseDataSource):
         """
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
+            self._logger.info(
+                f"Fetching records from the database using advanced sync rules: {advanced_rules}"
+            )
             for rule in advanced_rules:
                 query = rule.get("query")
                 tables = rule.get("tables")
@@ -668,9 +690,6 @@ class PostgreSQLDataSource(BaseDataSource):
             table_count = 0
 
             async for table in self.postgresql_client.get_tables_to_fetch():
-                self._logger.debug(
-                    f"Found table: {table} in database: {self.database}."
-                )
                 table_count += 1
                 async for row in self.fetch_documents_from_table(
                     table=table,
