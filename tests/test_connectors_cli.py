@@ -542,13 +542,33 @@ def test_index_list_no_indexes():
 
 def test_index_list_one_index():
     runner = CliRunner()
-    indices = {"indices": {"test_index": {"primaries": {"docs": {"count": 10}}}}}
+    indices = {"test_index": {"docs_count": 10}}
 
     with patch(
         "connectors.es.cli_client.CLIClient.list_indices",
         AsyncMock(return_value=indices),
     ):
         result = runner.invoke(cli, ["index", "list"])
+
+    assert result.exit_code == 0
+    assert "test_index" in result.output
+
+
+def test_index_list_one_index_in_serverless():
+    runner = CliRunner()
+    indices = {"test_index": {"docs_count": 10}}
+
+    with patch(
+        "connectors.es.cli_client.CLIClient.list_indices"
+    ) as mocked_list_indices:
+        mocked_list_indices.side_effect = ApiError(
+            "api_not_available_exception", meta="meta", body="error"
+        )
+        with patch(
+            "connectors.es.cli_client.CLIClient.list_indices_serverless",
+            AsyncMock(return_value=indices),
+        ):
+            result = runner.invoke(cli, ["index", "list"])
 
     assert result.exit_code == 0
     assert "test_index" in result.output
