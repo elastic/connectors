@@ -187,7 +187,7 @@ def get_list_and_items(parent_site_url, list_id):
         item (dict): Dictionary of list item or drive item
     """
     args = request.args
-    if args.get("$expand", "") == "AttachmentFiles":
+    if args.get("$expand", "") == "AttachmentFiles,Author,Editor":
         item = {
             "value": [
                 {
@@ -199,6 +199,8 @@ def get_list_and_items(parent_site_url, list_id):
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
                     "EditorId": 12345,
+                    "Editor": {"Name": "system"},
+                    "Author": {"Name": "system"},
                     "Title": f"list-item-{list_id}",
                 }
             ]
@@ -223,6 +225,8 @@ def get_list_and_items(parent_site_url, list_id):
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
                     "EditorId": 12345,
+                    "Editor": {"Name": "system"},
+                    "Author": {"Name": "system"},
                     "Title": f"list-item-{list_id}",
                     "Id": adjust_document_id_size(
                         f"{parent_site_url}-list-id1-{list_id}"
@@ -239,6 +243,8 @@ def get_list_and_items(parent_site_url, list_id):
                     "Modified": "2023-01-30T10:02:40Z",
                     "AuthorId": 12345,
                     "EditorId": 12345,
+                    "Editor": {"Name": "system"},
+                    "Author": {"Name": "system"},
                     "Title": f"list-item-{list_id}",
                     "Id": adjust_document_id_size(
                         f"{parent_site_url}-list-id2-{list_id}"

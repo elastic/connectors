@@ -75,7 +75,7 @@ URLS = {
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativePath(decodedurl='{file_relative_url}')/$value",
     DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
-    LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles&$select=*,FileRef",
+    LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles,Author,Editor&$select=*,FileRef,Author/Name,Editor/Name",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
     USERS: "{host_url}{parent_site_url}/_api/web/siteusers?$skip={skip}&$top={top}",
     ADMIN_USERS: "{host_url}{parent_site_url}/_api/web/siteusers?$skip={skip}&$top={top}&$filter=IsSiteAdmin eq true",
@@ -1062,6 +1062,8 @@ class SharepointServerDataSource(BaseDataSource):
                 "file_name": item.get("file_name", ""),
                 "size": int(item.get("Length", 0)),
                 "url": item["url"],
+                "author": item.get("Author", {}).get("Name", ""),
+                "editor": item.get("Editor", {}).get("Name", ""),
             }
         )
         server_url = item.get("server_relative_url")
