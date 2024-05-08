@@ -50,7 +50,6 @@ ATTACHMENT = "attachment"
 CONTENT = "content"
 DOWNLOAD = "download"
 SEARCH = "search"
-FETCH_ANCESTORS = "fetch_ancestors"
 USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
@@ -67,7 +66,6 @@ URLS = {
     CONTENT: "rest/api/content/search?{api_query}",
     ATTACHMENT: "rest/api/content/{id}/child/attachment?{api_query}",
     SEARCH: "rest/api/search?cql={query}",
-    FETCH_ANCESTORS: "rest/api/content/{id}?expand=ancestors",
     SEARCH_FOR_DATA_CENTER: "rest/api/search?cql={query}&start={start}",
     USER: "rest/api/3/users/search",
     USERS_FOR_DATA_CENTER: "rest/api/user/list?limit={limit}&start={start}",
@@ -309,21 +307,6 @@ class ConfluenceClient:
         async for response in search_documents:
             for entity in response.get("results", []):
                 yield entity
-
-    async def fetch_ancestors(self, page_id):
-        try:
-            async for ancestors_data in self.api_call(
-                url=os.path.join(
-                    self.host_url, URLS[FETCH_ANCESTORS].format(id=page_id)
-                )
-            ):
-                ancestors = await ancestors_data.json()
-                return ancestors
-        except Exception as exception:
-            self._logger.error(
-                f"Something went wrong while fetching ancestors for id: {page_id}. Exception: {exception}."
-            )
-            return {}
 
     async def fetch_spaces(self):
         async for response in self.paginated_api_call(
@@ -878,9 +861,10 @@ class ConfluenceDataSource(BaseDataSource):
                 self.confluence_client.host_url,
                 document.get("_links", {}).get("webui", "")[1:],
             )
-            ancestor_title = " ".join(
-                ancestor["title"] for ancestor in document.get("ancestors", [])
-            )
+            ancestor_title = [
+                {"title": ancestor["title"]}
+                for ancestor in document.get("ancestors", [])
+            ]
 
             yield {
                 "_id": document.get("id"),
@@ -951,20 +935,10 @@ class ConfluenceDataSource(BaseDataSource):
                 and entity_details.get("container", {}).get("title") is None
             ):
                 continue
-            ancestor_title = ""
-            if entity.get("entityType") != "space":
-                ancestors = await self.confluence_client.fetch_ancestors(
-                    page_id=entity_details.get("id")
-                )
-                ancestor_title = " ".join(
-                    ancestor.get("title", "")
-                    for ancestor in ancestors.get("ancestors", [])
-                )
 
             document = {
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
-                "ancestors": ancestor_title,
                 "_timestamp": entity.get("lastModified"),
                 "body": entity.get("excerpt"),
                 "type": entity.get("entityType"),
