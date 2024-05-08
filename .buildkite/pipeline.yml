@@ -30,6 +30,7 @@ steps:
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 MySQL"
               command:
@@ -42,6 +43,7 @@ steps:
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Network Drive"
               command:
@@ -54,6 +56,7 @@ steps:
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Amazon S3"
               command:
@@ -66,6 +69,7 @@ steps:
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
               command:
@@ -78,6 +82,7 @@ steps:
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
               command:
@@ -90,6 +95,7 @@ steps:
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Postgresql"
               command:
@@ -102,6 +108,7 @@ steps:
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 System Directory"
               command:
@@ -114,6 +121,7 @@ steps:
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Oracle Database"
               command:
@@ -126,6 +134,7 @@ steps:
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
               command:
@@ -138,6 +147,7 @@ steps:
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
               command:
@@ -150,6 +160,7 @@ steps:
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
               command:
@@ -163,6 +174,7 @@ steps:
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Jira"
               command:
@@ -176,6 +188,7 @@ steps:
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Confluence"
               command:
@@ -188,6 +201,7 @@ steps:
             - "tests/sources/fixtures/servicenow/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 ServiceNow"
               command:
@@ -200,6 +214,7 @@ steps:
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 MongoDB"
               command:
@@ -212,6 +227,7 @@ steps:
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 GitHub"
               command:
@@ -224,6 +240,7 @@ steps:
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Google Drive"
               command:
@@ -236,6 +253,7 @@ steps:
             - "tests/sources/fixtures/dropbox/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Dropbox"
               command:
@@ -248,6 +266,7 @@ steps:
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 OneDrive"
               command:
@@ -260,6 +279,7 @@ steps:
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Salesforce"
               command:
@@ -272,6 +292,7 @@ steps:
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Zoom"
               command:
@@ -284,6 +305,7 @@ steps:
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Box"
               command:
@@ -296,6 +318,7 @@ steps:
             - "tests/sources/fixtures/microsoft_teams/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
               command:
@@ -308,6 +331,7 @@ steps:
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Notion"
               command:
@@ -318,6 +342,7 @@ steps:
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Redis"
               command:
@@ -330,6 +355,7 @@ steps:
             - "tests/sources/fixtures/graphql/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 GraphQL"
               command:
@@ -342,6 +368,7 @@ steps:
             - "tests/sources/fixtures/opentext_documentum/**"
             - "tests/sources/fixtures/fixture.py"
             - "Dockerfile.ftest"
+            - "requirements/**"
             config:
               label: "🔨 Opentext Documentum"
               command:
