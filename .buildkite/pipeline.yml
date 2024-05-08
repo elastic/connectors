@@ -29,6 +29,7 @@ steps:
             - "connectors/sources/mysql.py"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
+            - "Dockerfile.ftest"
             - "requirements/**"
             config:
               label: "🔨 MySQL"
