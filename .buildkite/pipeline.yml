@@ -4,6 +4,9 @@ agents:
   useVault: true
   image: family/enterprise-search-ubuntu-2204-connectors-py
 
+env:
+  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+
 steps:
   - label: ":face_with_peeking_eye: Lint"
     command: "make lint"
@@ -29,7 +32,8 @@ steps:
             - "connectors/sources/mysql.py"
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 MySQL"
               command:
@@ -41,7 +45,8 @@ steps:
             - "connectors/sources/network_drive.py"
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Network Drive"
               command:
@@ -53,7 +58,8 @@ steps:
             - "connectors/sources/s3.py"
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Amazon S3"
               command:
@@ -65,7 +71,8 @@ steps:
             - "connectors/sources/google_cloud_storage.py"
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
               command:
@@ -77,7 +84,8 @@ steps:
             - "connectors/sources/azure_blob_storage.py"
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
               command:
@@ -89,7 +97,8 @@ steps:
             - "connectors/sources/postgresql.py"
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Postgresql"
               command:
@@ -101,7 +110,8 @@ steps:
             - "connectors/sources/directory.py"
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 System Directory"
               command:
@@ -113,7 +123,8 @@ steps:
             - "connectors/sources/oracle.py"
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Oracle Database"
               command:
@@ -125,7 +136,8 @@ steps:
             - "connectors/sources/sharepoint_server.py"
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
               command:
@@ -137,7 +149,8 @@ steps:
             - "connectors/sources/sharepoint_online.py"
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
               command:
@@ -149,7 +162,8 @@ steps:
             - "connectors/sources/mssql.py"
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
               command:
@@ -162,7 +176,8 @@ steps:
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Jira"
               command:
@@ -175,7 +190,8 @@ steps:
             - "connectors/sources/atlassian.py"
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Confluence"
               command:
@@ -187,7 +203,8 @@ steps:
             - "connectors/sources/servicenow.py"
             - "tests/sources/fixtures/servicenow/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 ServiceNow"
               command:
@@ -199,7 +216,8 @@ steps:
             - "connectors/sources/mongo.py"
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 MongoDB"
               command:
@@ -211,7 +229,8 @@ steps:
             - "connectors/sources/github.py"
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 GitHub"
               command:
@@ -223,7 +242,8 @@ steps:
             - "connectors/sources/google_drive.py"
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Google Drive"
               command:
@@ -235,7 +255,8 @@ steps:
             - "connectors/sources/dropbox.py"
             - "tests/sources/fixtures/dropbox/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Dropbox"
               command:
@@ -247,7 +268,8 @@ steps:
             - "connectors/sources/onedrive.py"
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 OneDrive"
               command:
@@ -259,7 +281,8 @@ steps:
             - "connectors/sources/salesforce.py"
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Salesforce"
               command:
@@ -271,7 +294,8 @@ steps:
             - "connectors/sources/zoom.py"
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Zoom"
               command:
@@ -283,7 +307,8 @@ steps:
             - "connectors/sources/box.py"
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Box"
               command:
@@ -295,7 +320,8 @@ steps:
             - "connectors/sources/microsoft_teams.py"
             - "tests/sources/fixtures/microsoft_teams/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
               command:
@@ -307,7 +333,8 @@ steps:
             - "connectors/sources/notion.py"
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Notion"
               command:
@@ -317,7 +344,8 @@ steps:
             - "connectors/sources/redis.py"
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Redis"
               command:
@@ -329,7 +357,8 @@ steps:
             - "connectors/sources/graphql.py"
             - "tests/sources/fixtures/graphql/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 GraphQL"
               command:
@@ -341,7 +370,8 @@ steps:
             - "connectors/sources/opentext_documentum.py"
             - "tests/sources/fixtures/opentext_documentum/**"
             - "tests/sources/fixtures/fixture.py"
-            - "Dockerfile.ftest"
+            - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Opentext Documentum"
               command:

@@ -14,7 +14,10 @@ from connectors.sources.oracle import OracleClient, OracleDataSource, OracleQuer
 from tests.sources.support import create_source
 from tests.sources.test_generic_database import ConnectionSync
 
-DSN = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
+DSN_SID = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
+DSN_SERVICE_NAME = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(service_name=xe)))"
+SID = "sid"
+SERVICE_NAME = "service_name"
 
 
 @contextmanager
@@ -24,7 +27,9 @@ def oracle_client(**extras):
         "port": 9090,
         "user": "admin",
         "password": "Password_123",
-        "database": "xe",
+        "connection_source": SID,
+        "sid": "xe",
+        "service_name": "xe",
         "tables": "*",
         "protocol": "TCP",
         "oracle_home": "",
@@ -40,11 +45,19 @@ def oracle_client(**extras):
 
 
 @patch("connectors.sources.oracle.create_engine")
-def test_engine_in_thin_mode(mock_fun):
+@pytest.mark.parametrize(
+    "connection_source, DSN",
+    [
+        (SID, DSN_SID),
+        (SERVICE_NAME, DSN_SERVICE_NAME),
+    ],
+)
+def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
     """Test engine method of OracleClient class in thin mode"""
     # Setup
     with oracle_client() as client:
         # Execute
+        client.connection_source = connection_source
         _ = client.engine
 
         # Assert
@@ -52,13 +65,21 @@ def test_engine_in_thin_mode(mock_fun):
 
 
 @patch("connectors.sources.oracle.create_engine")
-def test_engine_in_thick_mode(mock_fun):
+@pytest.mark.parametrize(
+    "connection_source, DSN",
+    [
+        (SID, DSN_SID),
+        (SERVICE_NAME, DSN_SERVICE_NAME),
+    ],
+)
+def test_engine_in_thick_mode(mock_fun, connection_source, DSN):
     """Test engine method of OracleClient class in thick mode"""
     oracle_home = "/home/devuser"
     config_file_path = {"lib_dir": f"{oracle_home}/lib", "config_dir": ""}
 
     # Setup
     with oracle_client(oracle_home="/home/devuser") as client:
+        client.connection_source = connection_source
         mock_fun.return_value = "Mock Response"
 
         # Execute
@@ -84,7 +105,8 @@ async def test_get_docs():
         OracleDataSource,
         username="admin",
         password="changeme",
-        database="xe",
+        data_source=SID,
+        sid="xe",
         tables="*",
     ) as source:
         with patch.object(

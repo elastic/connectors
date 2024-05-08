@@ -179,10 +179,14 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_12:
-          branch: '8.12'
+        Daily 8_13:
+          branch: '8.13'
           cronline: '@daily'
-          message: "Builds and pushes daily `8.12` docker images"
+          message: "Builds and pushes daily `8.13` docker images"
+        Daily 8_14:
+          branch: '8.14'
+          cronline: '@daily'
+          message: "Builds and pushes daily `8.14` docker images"
         Daily main:
           branch: main
           cronline: '@daily'
