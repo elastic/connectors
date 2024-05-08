@@ -483,6 +483,7 @@ class ServiceNowDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "List of services is ignored when Advanced Sync Rules are used.",
                 "type": "list",
+                "value": "*",
             },
             "retry_count": {
                 "default_value": RETRIES,
