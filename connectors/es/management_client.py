@@ -6,6 +6,7 @@
 
 from functools import partial
 
+from elasticsearch import ApiError
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
@@ -185,10 +186,39 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self, index=None):
-        return await self._retrier.execute_with_retry(
+    async def list_indices(self, index="*"):
+        """
+        List indices using Elasticsearch.stats API. Includes the number of documents in each index.
+        """
+        indices = {}
+        response = await self._retrier.execute_with_retry(
             partial(self.client.indices.stats, index=index)
         )
+
+        for index in response["indices"].items():
+            indices[index[0]] = {"docs_count": index[1]["primaries"]["docs"]["count"]}
+
+        return indices
+
+    async def list_indices_serverless(self, index="*"):
+        """
+        List indices in a serverless environment. This method is a workaround to the fact that
+        the `indices.stats` API is not available in serverless environments.
+        """
+
+        indices = {}
+        try:
+            response = await self._retrier.execute_with_retry(
+                partial(self.client.indices.get, index=index)
+            )
+
+            for index in response.items():
+                indices[index[0]] = {}
+
+        except ApiError as e:
+            logger.error(f"Error listing indices: {e}")
+
+        return indices
 
     async def index_exists(self, index_name):
         return await self._retrier.execute_with_retry(
