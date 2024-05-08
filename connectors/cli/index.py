@@ -17,7 +17,7 @@ class Index:
         self.connectors_index = ConnectorIndex(self.elastic_config)
 
     def list_indices(self):
-        return asyncio.run(self.__list_indices())["indices"]
+        return asyncio.run(self.__list_indices())
 
     def clean(self, index_name):
         return asyncio.run(self.__clean_index(index_name))
@@ -36,6 +36,9 @@ class Index:
         try:
             return await self.cli_client.list_indices()
         except ApiError as e:
+            # If the API is not available, we are in serverless mode
+            if e.error == "api_not_available_exception":
+                return await self.cli_client.list_indices_serverless()
             raise e
         finally:
             await self.__close()
