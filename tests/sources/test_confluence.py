@@ -25,8 +25,8 @@ from connectors.sources.confluence import (
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
-    InvalidConfluenceDataSourceTypeError,
     InternalServerError,
+    InvalidConfluenceDataSourceTypeError,
     NotFound,
 )
 from connectors.utils import ssl_context
