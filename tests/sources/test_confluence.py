@@ -25,6 +25,7 @@ from connectors.sources.confluence import (
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
+    InvalidConfluenceDataSourceTypeError,
     InternalServerError,
     NotFound,
 )
@@ -354,10 +355,12 @@ PAGE_RESTRICTION_RESPONSE = {
 
 
 @asynccontextmanager
-async def create_confluence_source(use_text_extraction_service=False):
+async def create_confluence_source(
+    use_text_extraction_service=False, data_source=CONFLUENCE_SERVER
+):
     async with create_source(
         ConfluenceDataSource,
-        data_source=CONFLUENCE_SERVER,
+        data_source=data_source,
         username="admin",
         password="changeme",
         confluence_url=HOST_URL,
@@ -1012,12 +1015,32 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
 
 
 @pytest.mark.asyncio
-async def test_get_session():
-    """Test that the instance of session returned is always the same for the datasource class."""
+@pytest.mark.parametrize(
+    "data_source_type", [CONFLUENCE_CLOUD, CONFLUENCE_DATA_CENTER, CONFLUENCE_SERVER]
+)
+async def test_get_session(data_source_type):
+    async with create_confluence_source(data_source=data_source_type) as source:
+        try:
+            source.confluence_client._get_session()
+        except Exception as e:
+            pytest.fail(
+                f"Should not raise for valid data source type '{data_source_type}'. Exception: {e}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_session_multiple_calls_return_same_instance():
     async with create_confluence_source() as source:
         first_instance = source.confluence_client._get_session()
         second_instance = source.confluence_client._get_session()
         assert first_instance is second_instance
+
+
+@pytest.mark.asyncio
+async def test_get_session_raise_on_invalid_data_source_type():
+    async with create_confluence_source(data_source="invalid") as source:
+        with pytest.raises(InvalidConfluenceDataSourceTypeError):
+            source.confluence_client._get_session()
 
 
 @pytest.mark.asyncio
