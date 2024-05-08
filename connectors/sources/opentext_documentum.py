@@ -276,6 +276,9 @@ class OpentextDocumentumDataSource(BaseDataSource):
                 "label": "SSL certificate",
                 "order": 6,
                 "type": "str",
+                "required": False,
+                "display": "textarea",
+                "tooltip": "Specifies the root certificate from the Certificate Authority. The value of the certificate is used to validate the certificate presented by the Opentext Documentum server.",
             },
             "use_text_extraction_service": {
                 "display": "toggle",
