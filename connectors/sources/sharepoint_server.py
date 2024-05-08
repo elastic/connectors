@@ -619,6 +619,7 @@ class SharepointServerDataSource(BaseDataSource):
                 "label": "Comma-separated list of SharePoint site collections to index",
                 "order": 4,
                 "type": "list",
+                "value": "*"
             },
             "ssl_enabled": {
                 "display": "toggle",

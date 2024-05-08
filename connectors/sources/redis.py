@@ -293,6 +293,7 @@ class RedisDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "Databases are ignored when Advanced Sync Rules are used.",
                 "type": "list",
+                "value": "*"
             },
             "ssl_enabled": {
                 "display": "toggle",

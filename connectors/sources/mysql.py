@@ -373,6 +373,7 @@ class MySqlDataSource(BaseDataSource):
                 "label": "Comma-separated list of tables",
                 "order": 6,
                 "type": "list",
+                "value": "*"
             },
             "ssl_enabled": {
                 "display": "toggle",
