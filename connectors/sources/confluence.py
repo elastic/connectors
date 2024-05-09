@@ -56,7 +56,7 @@ SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
-CONTENT_QUERY = "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
 USER_QUERY = "expand=groups,applicationRoles"
 
@@ -861,6 +861,11 @@ class ConfluenceDataSource(BaseDataSource):
                 self.confluence_client.host_url,
                 document.get("_links", {}).get("webui", "")[1:],
             )
+            ancestor_title = [
+                {"title": ancestor["title"]}
+                for ancestor in document.get("ancestors", [])
+            ]
+
             yield {
                 "_id": document.get("id"),
                 "type": document.get("type", ""),
@@ -868,6 +873,7 @@ class ConfluenceDataSource(BaseDataSource):
                 .get("lastUpdated", {})
                 .get("when", iso_utc()),
                 "title": document.get("title", ""),
+                "ancestors": ancestor_title,
                 "space": document.get("space", {}).get("name", ""),
                 "body": document.get("body", {}).get("storage", {}).get("value", ""),
                 "url": document_url,
