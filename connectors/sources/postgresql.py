@@ -56,21 +56,21 @@ class PostgreSQLQueries(Queries):
         """Query to get the primary key"""
         return (
             f"SELECT a.attname AS c FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
-            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{kwargs['schema']}.{kwargs['table']}'::regclass "
+            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '\"{kwargs['schema']}\".\"{kwargs['table']}\"'::regclass "
             f"AND i.indisprimary"
         )
 
     def table_data(self, **kwargs):
         """Query to get the table data"""
-        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
+        return f'SELECT * FROM "{kwargs["schema"]}"."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
 
     def table_last_update_time(self, **kwargs):
         """Query to get the last update time of the table"""
-        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
     def table_data_count(self, **kwargs):
         """Query to get the number of rows in the table"""
-        return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT COUNT(*) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
     def all_schemas(self):
         """Query to get all schemas of database"""
@@ -300,7 +300,9 @@ class PostgreSQLClient:
             list: It will first yield the column names, then data in each row
         """
         if query is None and row_count is not None and order_by_columns is not None:
-            order_by_columns_list = ",".join(order_by_columns)
+            order_by_columns_list = ",".join(
+                [f'"{column}"' for column in order_by_columns]
+            )
             offset = 0
             fetch_columns = True
             while True:
@@ -436,6 +438,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
+                "value": "*",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
