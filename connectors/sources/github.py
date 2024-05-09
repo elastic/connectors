@@ -614,6 +614,10 @@ class UnauthorizedException(Exception):
     pass
 
 
+class ForbiddenException(Exception):
+    pass
+
+
 class GitHubClient:
     def __init__(self, configuration):
         self._sleeps = CancellableSleeps()
@@ -740,6 +744,9 @@ class GitHubClient:
             if exception.status == 401:
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
+            elif exception.status == FORBIDDEN:
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {url} and query: {query_data}."
+                raise ForbiddenException(msg) from exception
             else:
                 raise
         except Exception:
@@ -769,6 +776,9 @@ class GitHubClient:
                 raise UnauthorizedException(msg) from exception
             elif self.get_rate_limit_encountered(exception.status, exception):
                 await self._put_to_sleep("core")
+            elif exception.status == FORBIDDEN:
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {resource}."
+                raise ForbiddenException(msg) from exception
             else:
                 raise
         except Exception:
@@ -776,7 +786,6 @@ class GitHubClient:
 
     def get_data_by_keys(self, response, keys, endKey):
         """Retrieve data from a nested dictionary using a list of keys and an end key.
-
         Args:
             response (dict): The nested dictionary from which data will be extracted.
             keys (list): A list of strings representing the keys to navigate the nested dictionary.
@@ -1373,6 +1382,8 @@ class GitHubDataSource(BaseDataSource):
                     yield repo_object
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the repository. Exception: {exception}",
@@ -1498,6 +1509,8 @@ class GitHubDataSource(BaseDataSource):
                         yield pull_request_doc
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the pull requests. Exception: {exception}",
@@ -1553,6 +1566,8 @@ class GitHubDataSource(BaseDataSource):
                     yield issue
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the issues. Exception: {exception}",
@@ -1606,6 +1621,8 @@ class GitHubDataSource(BaseDataSource):
                         document["_id"] = f"{repo_name}/{repo_object['path']}"
                         yield document, repo_object
         except UnauthorizedException:
+            raise
+        except ForbiddenException:
             raise
         except Exception as exception:
             self._logger.warning(

@@ -17,6 +17,7 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.github import (
+    ForbiddenException,
     GitHubAdvancedRulesValidator,
     GitHubDataSource,
     UnauthorizedException,
@@ -1124,10 +1125,14 @@ async def test_fetch_repos_when_user_repos_is_available():
 
 
 @pytest.mark.asyncio
-async def test_fetch_repos_with_unauthorized_exception():
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_repos_with_client_exception(exception):
     async with create_github_source() as source:
-        source.github_client.post = Mock(side_effect=UnauthorizedException())
-        with pytest.raises(UnauthorizedException):
+        source.github_client.post = Mock(side_effect=exception())
+        with pytest.raises(exception):
             async for _ in source._fetch_repos():
                 pass
 
@@ -1148,11 +1153,17 @@ async def test_fetch_issues():
 
 
 @pytest.mark.asyncio
-async def test_fetch_issues_with_unauthorized_exception():
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_issues_with_client_exception(exception):
     async with create_github_source() as source:
-        source.github_client.post = Mock(side_effect=UnauthorizedException())
-        with pytest.raises(UnauthorizedException):
-            async for _ in source._fetch_issues("demo_user/demo_repo"):
+        source.github_client.post = Mock(side_effect=exception())
+        with pytest.raises(exception):
+            async for _ in source._fetch_issues(
+                repo_name="demo_user/demo_repo",
+            ):
                 pass
 
 
@@ -1176,11 +1187,17 @@ async def test_fetch_pull_requests():
 
 
 @pytest.mark.asyncio
-async def test_fetch_pull_requests_with_unauthorized_exception():
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_pull_requests_with_client_exception(exception):
     async with create_github_source() as source:
-        source.github_client.post = Mock(side_effect=UnauthorizedException())
-        with pytest.raises(UnauthorizedException):
-            async for _ in source._fetch_pull_requests("demo_user/demo_repo"):
+        source.github_client.post = Mock(side_effect=exception())
+        with pytest.raises(exception):
+            async for _ in source._fetch_pull_requests(
+                repo_name="demo_user/demo_repo",
+            ):
                 pass
 
 
