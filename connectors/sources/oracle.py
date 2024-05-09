@@ -349,6 +349,7 @@ class OracleDataSource(BaseDataSource):
                 "options": [],
                 "order": 8,
                 "type": "list",
+                "value": "*",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,

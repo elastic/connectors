@@ -421,6 +421,7 @@ class MSSQLDataSource(BaseDataSource):
                 "order": 6,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
+                "value": "*",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
