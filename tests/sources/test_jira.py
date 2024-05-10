@@ -20,6 +20,7 @@ from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.jira import (
+    EmptyResponseError,
     InternalServerError,
     JiraClient,
     JiraDataSource,
@@ -473,6 +474,22 @@ async def test_api_call_when_server_is_down():
             side_effect=aiohttp.ServerDisconnectedError("Something went wrong"),
         ):
             with pytest.raises(aiohttp.ServerDisconnectedError):
+                await anext(source.jira_client.api_call(url_name="ping"))
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_api_call_with_empty_response():
+    """Tests the api_call function when response is empty."""
+
+    async with create_jira_source() as source:
+        empty_response_mock = AsyncMock()
+        empty_response_mock.__aenter__.return_value.content_length = 0
+
+        with patch.object(
+            aiohttp.ClientSession, "get", return_value=empty_response_mock
+        ):
+            with pytest.raises(EmptyResponseError):
                 await anext(source.jira_client.api_call(url_name="ping"))
 
 

@@ -96,6 +96,12 @@ class NotFound(Exception):
     pass
 
 
+class EmptyResponseError(Exception):
+    """Exception raised when the API response is empty."""
+
+    pass
+
+
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
@@ -223,6 +229,9 @@ class JiraClient:
                     url=url,
                     ssl=self.ssl_ctx,
                 ) as response:
+                    if response.content_length == 0:
+                        msg = f"The response body is empty for url: {url}"
+                        raise EmptyResponseError(msg)
                     yield response
                     break
             except ServerConnectionError:
