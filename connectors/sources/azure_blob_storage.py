@@ -6,7 +6,7 @@
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
 from functools import partial
 
-from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
+from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
 from connectors.source import BaseDataSource
 
@@ -40,6 +40,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.retry_count = self.configuration["retry_count"]
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
         self.containers = self.configuration["containers"]
+        self.container_clients = {}
 
     def tweak_bulk_options(self, options):
         """Tweak bulk options as per concurrent downloads support by azure blob storage
@@ -190,19 +191,38 @@ class AzureBlobStorageDataSource(BaseDataSource):
             document,
             filename,
             file_extension,
-            partial(self.blob_download_func, filename, blob["container"]),
+            partial(self.blob_download_func, filename, blob["container"], file_size),
         )
 
-    async def blob_download_func(self, blob_name, container_name):
-        async with BlobClient.from_connection_string(
-            conn_str=self.connection_string,
-            container_name=container_name,
-            blob_name=blob_name,
-            retry_total=self.retry_count,
-        ) as blob_client:
-            data = await blob_client.download_blob()
-            async for content in data.chunks():
-                yield content
+    def _get_container_client(self, container_name):
+        if self.container_clients.get(container_name) is None:
+            self.container_clients[
+                container_name
+            ] = ContainerClient.from_connection_string(
+                conn_str=self.connection_string,
+                container_name=container_name,
+                retry_total=self.retry_count,
+            )
+            return self.container_clients[container_name]
+        else:
+            return self.container_clients[container_name]
+
+    async def blob_download_func(self, blob_name, container_name, file_size):
+        container_client = self._get_container_client(container_name=container_name)
+        offset = 0
+        length = 100000
+        while file_size > 0:
+            data = await container_client.download_blob(
+                blob=blob_name,
+                offset=offset,
+                length=length,
+                max_concurrency=MAX_CONCURRENT_DOWNLOADS,
+            )
+            content = await data.read()
+            length = data.size
+            offset = offset + length
+            file_size = file_size - length
+            yield content
 
     async def get_container(self, container_list):
         """Get containers from Azure Blob Storage via azure base client
@@ -247,20 +267,16 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Formatted blob document
         """
-        async with ContainerClient.from_connection_string(
-            conn_str=self.connection_string,
-            container_name=container["name"],
-            retry_total=self.retry_count,
-        ) as container_client:
-            try:
-                async for blob in container_client.list_blobs(include=["metadata"]):
-                    yield self.prepare_blob_doc(
-                        blob=blob, container_metadata=container["metadata"]
-                    )
-            except Exception as exception:
-                self._logger.warning(
-                    f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
+        container_client = self._get_container_client(container["name"])
+        try:
+            async for blob in container_client.list_blobs(include=["metadata"]):
+                yield self.prepare_blob_doc(
+                    blob=blob, container_metadata=container["metadata"]
                 )
+        except Exception as exception:
+            self._logger.warning(
+                f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
+            )
 
     async def get_docs(self, filtering=None):
         """Get documents from Azure Blob Storage
