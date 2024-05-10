@@ -13,6 +13,7 @@ config:
 bin/python: config
 	$(PYTHON) -m venv .
 	bin/pip install --upgrade pip
+	bin/pip install --upgrade setuptools
 
 install: bin/python bin/elastic-ingest
 
