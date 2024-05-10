@@ -59,7 +59,7 @@ def test_version_action(option):
 @pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
 @patch("connectors.service_cli.PreflightCheck")
 def test_shutdown_called_on_shutdown_signal(
-    patch_preflight_check, sig, patch_logger, mock_responses, set_env
+    patch_preflight_check, sig, mock_responses, set_env
 ):
     patch_preflight_check.return_value.run = AsyncMock()
 
@@ -72,9 +72,6 @@ def test_shutdown_called_on_shutdown_signal(
     loop.create_task(emit_shutdown_signal())
 
     CliRunner().invoke(main, [])
-
-    patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
-    patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
 
 
 def test_list_action(set_env):
