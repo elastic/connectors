@@ -425,6 +425,7 @@ class ServiceNowDataSource(BaseDataSource):
 
     name = "ServiceNow"
     service_type = "servicenow"
+    advanced_rules_enabled = True
     dls_enabled = True
     incremental_sync_enabled = True
 
@@ -483,7 +484,6 @@ class ServiceNowDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "List of services is ignored when Advanced Sync Rules are used.",
                 "type": "list",
-                "value": "*",
             },
             "retry_count": {
                 "default_value": RETRIES,
@@ -671,28 +671,38 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
-
-        await self.queue.put(EndSignal.ATTACHMENT)
+        finally:
+            await self.queue.put(EndSignal.ATTACHMENT)
 
     async def _attachment_metadata_producer(self, record_ids, table_access_control):
-        attachment_apis = self.servicenow_client.get_attachment_apis(
-            url=ENDPOINTS["ATTACHMENT"], ids=record_ids
-        )
-
-        for batched_apis_index in range(0, len(attachment_apis), ATTACHMENT_BATCH_SIZE):
-            batched_apis = attachment_apis[
-                batched_apis_index : (  # noqa
-                    batched_apis_index + ATTACHMENT_BATCH_SIZE
-                )
-            ]
-            await self.fetchers.put(
-                partial(
-                    self._fetch_attachment_metadata, batched_apis, table_access_control
-                )
+        attachment_apis = None
+        try:
+            attachment_apis = self.servicenow_client.get_attachment_apis(
+                url=ENDPOINTS["ATTACHMENT"], ids=record_ids
             )
-            self.task_count += 1
 
-        await self.queue.put(EndSignal.RECORD)
+            for batched_apis_index in range(
+                0, len(attachment_apis), ATTACHMENT_BATCH_SIZE
+            ):
+                batched_apis = attachment_apis[
+                    batched_apis_index : (  # noqa
+                        batched_apis_index + ATTACHMENT_BATCH_SIZE
+                    )
+                ]
+                await self.fetchers.put(
+                    partial(
+                        self._fetch_attachment_metadata,
+                        batched_apis,
+                        table_access_control,
+                    )
+                )
+                self.task_count += 1
+        except Exception as exception:
+            self._logger.warning(
+                f"Skipping attachment metadata for {attachment_apis}. Exception: {exception}."
+            )
+        finally:
+            await self.queue.put(EndSignal.RECORD)
 
     async def _yield_table_data(self, batched_apis):
         try:
@@ -741,8 +751,8 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
-
-        await self.queue.put(EndSignal.RECORD)
+        finally:
+            await self.queue.put(EndSignal.RECORD)
 
     async def _fetch_access_controls(self, table_name):
         access_control, user_roles, roles = [], [], {}
@@ -831,8 +841,8 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
-
-        await self.queue.put(EndSignal.SERVICE)
+        finally:
+            await self.queue.put(EndSignal.SERVICE)
 
     async def _consumer(self):
         """Consume the queue for the documents.
