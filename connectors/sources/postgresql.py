@@ -288,7 +288,9 @@ class PostgreSQLClient:
                 retry_count=self.retry_count,
             )
         )
-        self._logger.debug(f"Last updated time for table: {table} is {last_update_time}")
+        self._logger.debug(
+            f"Last updated time for table: {table} is {last_update_time}"
+        )
         return last_update_time
 
     async def data_streamer(
