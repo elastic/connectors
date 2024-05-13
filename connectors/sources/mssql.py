@@ -310,7 +310,7 @@ class MSSQLClient:
             )
         ]
 
-        self._logger.debug(f"Found primary keys for '{table}' table")
+        self._logger.debug(f"Found primary keys for '{table}' table: {primary_keys}")
 
         return primary_keys
 
@@ -329,6 +329,9 @@ class MSSQLClient:
                 retry_count=self.retry_count,
             )
         )
+        self._logger.debug(
+            f"Last updated time for table: {table} is {last_update_time}"
+        )
         return last_update_time
 
     async def data_streamer(self, table=None, query=None):
@@ -343,6 +346,7 @@ class MSSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        record_count = 0
         if query is not None:
             cursor_query = query
             msg = f"Streaming records from database for using query: {query}"
@@ -362,7 +366,10 @@ class MSSQLClient:
             fetch_size=self.fetch_size,
             retry_count=self.retry_count,
         ):
+            record_count += 1
             yield data
+
+        self._logger.info(f"Found {record_count} records for '{cursor_query}' query")
 
 
 class MSSQLDataSource(BaseDataSource):
