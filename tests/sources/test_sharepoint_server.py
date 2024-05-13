@@ -189,6 +189,8 @@ async def test_prepare_drive_items_doc():
             },
             "GUID": 1,
             "item_type": "File",
+            "Editor": {"Name": "system", "Id": 1},
+            "Author": {"Name": "system", "Id": 1},
         }
         expected_response = {
             "_id": "b87b3146776b01cd1ab33893eefe70fe",
@@ -199,6 +201,10 @@ async def test_prepare_drive_items_doc():
             "_timestamp": "2023-01-30T12:48:31Z",
             "url": f"{HOST_URL}/site",
             "server_relative_url": "/site",
+            "author": "system",
+            "editor": "system",
+            "author_id": 1,
+            "editor_id": 1,
         }
 
         target_response = source.format_drive_item(item=list_items)
@@ -256,6 +262,7 @@ async def test_prepare_sites_doc():
             "Id": 1,
             "Url": "sharepoint.com",
             "ServerRelativeUrl": "/site",
+            "Author": {"LoginName": "system", "Id": 1},
         }
         expected_response = {
             "_id": "440d5fb060e33969ac4f5425a4d56c75",
@@ -265,6 +272,8 @@ async def test_prepare_sites_doc():
             "_timestamp": "2023-01-30T12:48:31Z",
             "url": "sharepoint.com",
             "server_relative_url": "/site",
+            "author": "system",
+            "author_id": 1,
         }
 
         target_response = source.format_sites(item=list_items)
@@ -1319,6 +1328,7 @@ async def test_get_docs_with_dls_enabled():
                     "Id": 1,
                     "LastItemModifiedDate": "2022-06-20T10:04:03Z",
                     "Created": "2022-06-20T10:04:03Z",
+                    "Author": {"LoginName": "system", "Id": 1},
                 }
             ]
         )
@@ -1497,6 +1507,8 @@ async def test_get_docs_with_dls_enabled():
                         "Length": "3356",
                         "Id": 2,
                         "item_type": "Folder",
+                        "Editor": {"Name": "system", "Id": 1},
+                        "Author": {"Name": "system", "Id": 1},
                     },
                     None,
                 )
@@ -1512,6 +1524,8 @@ async def test_get_docs_with_dls_enabled():
                 "_timestamp": "2022-06-20T10:04:03Z",
                 "creation_time": "2022-06-20T10:04:03Z",
                 "_allow_access_control": [],
+                "author": "system",
+                "author_id": 1,
             },
             {
                 "type": "document_library",
@@ -1530,6 +1544,10 @@ async def test_get_docs_with_dls_enabled():
                 "size": 0,
                 "url": "http://127.0.0.1:8491/sites/enterprise/ctest/SitePages/Home.aspx",
                 "server_relative_url": "/sites/enterprise/ctest/SitePages/Home.aspx",
+                "author": "system",
+                "author_id": 1,
+                "editor": "system",
+                "editor_id": 1,
                 "title": "Home.txt",
                 "creation_time": "2022-05-02T07:20:33Z",
                 "_timestamp": "2022-05-02T07:20:34Z",
@@ -1648,6 +1666,7 @@ async def test_site_list_item_has_unique_role_assignments():
                 "Id": 1,
                 "LastItemModifiedDate": "2022-06-20T10:04:03Z",
                 "Created": "2022-06-20T10:04:03Z",
+                "Author": {"LoginName": "system", "Id": 1},
             },
             {
                 "type": "sites",
@@ -1657,6 +1676,8 @@ async def test_site_list_item_has_unique_role_assignments():
                 "server_relative_url": None,
                 "_timestamp": "2022-06-20T10:04:03Z",
                 "creation_time": "2022-06-20T10:04:03Z",
+                "author": "system",
+                "author_id": 1,
             },
         ),
         (
@@ -1667,6 +1688,7 @@ async def test_site_list_item_has_unique_role_assignments():
                 "Id": 1,
                 "LastItemModifiedDate": "2022-06-20T10:04:03Z",
                 "Created": "2022-06-20T10:04:03Z",
+                "Author": {"LoginName": "system", "Id": 1},
             },
             {
                 "type": "sites",
@@ -1676,6 +1698,8 @@ async def test_site_list_item_has_unique_role_assignments():
                 "server_relative_url": None,
                 "_timestamp": "2022-06-20T10:04:03Z",
                 "creation_time": "2022-06-20T10:04:03Z",
+                "author": "system",
+                "author_id": 1,
             },
         ),
     ],
