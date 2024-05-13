@@ -203,9 +203,10 @@ class ConfluenceClient:
             self._logger.error(f"Getting Not Found Error for url: {url}")
             raise NotFound
         elif exception.status == 500:
-            self._logger.error("Internal Server Error occurred")
+            self._logger.error(f"Internal Server Error occurred for URL: {url}")
             raise InternalServerError
         else:
+            self._logger.error(f"Error while making a GET call for URL: {url}")
             raise
 
     @retryable(
@@ -234,6 +235,9 @@ class ConfluenceClient:
             ) as response:
                 yield response
         except ServerDisconnectedError:
+            self._logger.error(
+                f"Server Disconnected Error occurred for URL: {url}. Closing the session"
+            )
             await self.close_session()
             raise
         except ClientResponseError as exception:
@@ -246,12 +250,10 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url}"
-        )
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
+                self._logger.debug(f"Started paginating throught the API: {url}")
                 async for response in self.api_call(
                     url=url,
                 ):
@@ -277,7 +279,7 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.info(
+        self._logger.debug(
             f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> start: 0, limit: {LIMIT}"
         )
         while True:
