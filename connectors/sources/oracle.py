@@ -251,6 +251,7 @@ class OracleClient:
             list: It will first yield the column names, then data in each row
         """
         self._logger.debug(f"Streaming records from database for table: {table}")
+        record_count = 0
         async for data in fetch(
             cursor_func=partial(
                 self.get_cursor,
@@ -262,7 +263,9 @@ class OracleClient:
             fetch_size=self.fetch_size,
             retry_count=self.retry_count,
         ):
+            record_count += 1
             yield data
+        self._logger.info(f"Found {record_count} records from table: {table}")
 
 
 class OracleDataSource(BaseDataSource):
