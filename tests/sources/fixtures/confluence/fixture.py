@@ -57,6 +57,9 @@ class ConfluenceAPI:
         self.attachments = {}
 
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
+        self.app.route("/rest/api/content/<string:id>/label", methods=["GET"])(
+            self.get_label
+        )
         self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
         self.app.route(
             "/rest/api/content/<string:content_id>/child/attachment", methods=["GET"]
@@ -119,6 +122,21 @@ class ConfluenceAPI:
                 spaces["_links"]["next"] = None
             self.space_page_limit = self.space_page_limit + spaces["limit"]
         return spaces
+
+    def get_label(self, label_id):
+        return {
+            "results": [
+                {
+                    "prefix": "global",
+                    "name": "label-xyz",
+                    "id": f"{label_id}",
+                    "label": "label-xyz",
+                }
+            ],
+            "start": 0,
+            "limit": 5,
+            "size": 1,
+        }
 
     def get_content(self):
         """Function to handle get content calls
