@@ -308,6 +308,7 @@ class PostgreSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        record_count = 0
         if query is None and row_count is not None and order_by_columns is not None:
             self._logger.debug(f"Streaming records from database for table: {table}")
             order_by_columns_list = ",".join(
@@ -333,11 +334,13 @@ class PostgreSQLClient:
                     fetch_size=self.fetch_size,
                     retry_count=self.retry_count,
                 ):
+                    record_count += 1
                     yield data
                 fetch_columns = False
                 offset += FETCH_LIMIT
 
                 if row_count <= offset:
+                    self._logger.info(f"Found {record_count} records from '{table}' table")
                     return
         else:
             self._logger.debug(f"Streaming records from database using query: {query}")
@@ -355,7 +358,10 @@ class PostgreSQLClient:
                 fetch_size=self.fetch_size,
                 retry_count=self.retry_count,
             ):
+                record_count += 1
                 yield data
+            
+            self._logger.info(f"Found {record_count} records for '{query}' query")
 
     def _get_connect_args(self):
         """Convert string to pem format and create an SSL context
