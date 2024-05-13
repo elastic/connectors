@@ -340,7 +340,9 @@ class PostgreSQLClient:
                 offset += FETCH_LIMIT
 
                 if row_count <= offset:
-                    self._logger.info(f"Found {record_count} records from '{table}' table")
+                    self._logger.info(
+                        f"Found {record_count} records from '{table}' table"
+                    )
                     return
         else:
             self._logger.debug(f"Streaming records from database using query: {query}")
@@ -360,7 +362,7 @@ class PostgreSQLClient:
             ):
                 record_count += 1
                 yield data
-            
+
             self._logger.info(f"Found {record_count} records for '{query}' query")
 
     def _get_connect_args(self):
