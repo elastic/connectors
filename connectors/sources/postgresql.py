@@ -56,21 +56,21 @@ class PostgreSQLQueries(Queries):
         """Query to get the primary key"""
         return (
             f"SELECT a.attname AS c FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
-            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{kwargs['schema']}.{kwargs['table']}'::regclass "
+            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '\"{kwargs['schema']}\".\"{kwargs['table']}\"'::regclass "
             f"AND i.indisprimary"
         )
 
     def table_data(self, **kwargs):
         """Query to get the table data"""
-        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
+        return f'SELECT * FROM "{kwargs["schema"]}"."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
 
     def table_last_update_time(self, **kwargs):
         """Query to get the last update time of the table"""
-        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
     def table_data_count(self, **kwargs):
         """Query to get the number of rows in the table"""
-        return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT COUNT(*) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
     def all_schemas(self):
         """Query to get all schemas of database"""
@@ -219,12 +219,7 @@ class PostgreSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
-            msg = (
-                "Fetching all tables as the configuration field 'tables' is set to '*'"
-                if not is_filtering
-                else "Fetching all tables as the advanced sync rules are enabled."
-            )
-            self._logger.info(msg)
+            self._logger.info("Fetching all tables")
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -274,7 +269,7 @@ class PostgreSQLClient:
             )
         ]
 
-        self._logger.debug(f"Found primary keys for '{table}' table")
+        self._logger.debug(f"Found primary keys for '{table}' table: {primary_keys}")
 
         return primary_keys
 
@@ -293,6 +288,7 @@ class PostgreSQLClient:
                 retry_count=self.retry_count,
             )
         )
+        self._logger.debug(f"Last updated time for table: {table} is {last_update_time}")
         return last_update_time
 
     async def data_streamer(
@@ -311,8 +307,10 @@ class PostgreSQLClient:
             list: It will first yield the column names, then data in each row
         """
         if query is None and row_count is not None and order_by_columns is not None:
-            self._logger.debug(f"Streaming records from database using query: {query}")
-            order_by_columns_list = ",".join(order_by_columns)
+            self._logger.debug(f"Streaming records from database for table: {table}")
+            order_by_columns_list = ",".join(
+                [f'"{column}"' for column in order_by_columns]
+            )
             offset = 0
             fetch_columns = True
             while True:
@@ -340,7 +338,7 @@ class PostgreSQLClient:
                 if row_count <= offset:
                     return
         else:
-            self._logger.debug(f"Streaming records from database for table: {table}")
+            self._logger.debug(f"Streaming records from database using query: {query}")
             async for data in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -449,6 +447,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
+                "value": "*",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,

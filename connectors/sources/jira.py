@@ -425,13 +425,13 @@ class JiraClient:
         await anext(self.api_call(url_name=PING))
 
     async def get_jira_fields(self):
-        response = await anext(self.api_call(url_name=ALL_FIELDS))
-        jira_fields = await response.json()
-        return {
-            field["id"]: field["name"]
-            for field in jira_fields
-            if field["custom"] is True
-        }
+        async for response in self.api_call(url_name=ALL_FIELDS):
+            jira_fields = await response.json()
+            yield {
+                field["id"]: field["name"]
+                for field in jira_fields
+                if field["custom"] is True
+            }
 
 
 class JiraDataSource(BaseDataSource):
@@ -896,17 +896,25 @@ class JiraDataSource(BaseDataSource):
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
         ):
-            response_fields = {
-                self.custom_fields.get(k, k): v
-                for k, v in issue_metadata.get("fields").items()
-            }
+            response_custom_fields = {}
+            response_fields = copy(issue_metadata.get("fields"))
+            for k, v in response_fields.items():
+                if self.custom_fields.get(k):
+                    response_custom_fields[self.custom_fields[k]] = v
+
+            for k in self.custom_fields.keys():
+                if k in response_fields:
+                    del response_fields[k]
+
             document = {
                 "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
                 "_timestamp": response_fields.get("updated"),
                 "Key": issue_metadata.get("key"),
                 "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
+                "Custom_Fields": response_custom_fields,
             }
+
             if restrictions := [
                 restriction.get("restrictionValue")
                 for restriction in response_fields.get("issuerestriction", {})
@@ -1018,7 +1026,7 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        self.custom_fields = await self.jira_client.get_jira_fields()
+        self.custom_fields = await anext(self.jira_client.get_jira_fields())
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
