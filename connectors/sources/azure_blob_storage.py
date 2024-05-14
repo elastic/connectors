@@ -20,6 +20,7 @@ DEFAULT_RETRY_COUNT = 3
 MAX_CONCURRENT_DOWNLOADS = (
     100  # Max concurrent download supported by Azure Blob Storage
 )
+INITIAL_DOWNLOAD_SIZE = 100000
 
 
 class AzureBlobStorageDataSource(BaseDataSource):
@@ -137,6 +138,13 @@ class AzureBlobStorageDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the Azure Blob Storage.")
             raise
 
+    async def close(self):
+        if not self.container_clients:
+            return
+        for container_client in self.container_clients.values():
+            await container_client.close()
+        self.container_clients = {}
+
     def prepare_blob_doc(self, blob, container_metadata):
         """Prepare key mappings to blob document
 
@@ -196,21 +204,26 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
     def _get_container_client(self, container_name):
         if self.container_clients.get(container_name) is None:
-            self.container_clients[
-                container_name
-            ] = ContainerClient.from_connection_string(
-                conn_str=self.connection_string,
-                container_name=container_name,
-                retry_total=self.retry_count,
-            )
-            return self.container_clients[container_name]
+            try:
+                self.container_clients[
+                    container_name
+                ] = ContainerClient.from_connection_string(
+                    conn_str=self.connection_string,
+                    container_name=container_name,
+                    retry_total=self.retry_count,
+                )
+                return self.container_clients[container_name]
+            except Exception as exception:
+                self._logger.error(
+                    f"Error while creating container client for {container_name}. Error: {exception}"
+                )
         else:
             return self.container_clients[container_name]
 
     async def blob_download_func(self, blob_name, container_name, file_size):
         container_client = self._get_container_client(container_name=container_name)
         offset = 0
-        length = 100000
+        length = INITIAL_DOWNLOAD_SIZE
         while file_size > 0:
             data = await container_client.download_blob(
                 blob=blob_name,

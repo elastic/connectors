@@ -719,3 +719,22 @@ async def test_get_container_client_when_client_does_not_exist():
         )
         container_client = source._get_container_client("container1")
         assert isinstance(container_client, ContainerClient)
+
+
+@pytest.mark.asyncio
+async def test_close_with_connector_clients():
+    async with create_abs_source() as source:
+
+        class ContainerClientMock:
+            """Mock class for ContainerClient"""
+
+            async def close(self):
+                """Closes the client connection."""
+                return "Client closed"
+
+        source.container_clients = {
+            "container1": ContainerClientMock(),
+            "container2": ContainerClientMock(),
+        }
+
+    assert source.container_clients == {}
