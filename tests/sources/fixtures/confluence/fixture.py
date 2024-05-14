@@ -57,7 +57,7 @@ class ConfluenceAPI:
         self.attachments = {}
 
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
-        self.app.route("/rest/api/content/<string:id>/label", methods=["GET"])(
+        self.app.route("/rest/api/content/<string:label_id>/label", methods=["GET"])(
             self.get_label
         )
         self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
