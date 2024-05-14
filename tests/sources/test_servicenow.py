@@ -998,6 +998,7 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
             side_effect=Exception("Error fetching attachments"),
         ):
             with pytest.raises(Exception):
-                await source._attachment_metadata_producer(records_ids=[
-                    "record_1", "record_2"], access_control=[])
+                await source._attachment_metadata_producer(
+                    records_ids=["record_1", "record_2"], access_control=[]
+                )
                 assert source.queue.get_nowait() == END_SIGNAL
