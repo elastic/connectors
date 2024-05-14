@@ -986,3 +986,18 @@ async def test_fetch_access_control_for_public():
             assert sorted(access_control) == sorted(
                 ["user_id:user_id_1", "user_id:user_id_2"]
             )
+
+
+@pytest.mark.asyncio
+async def test_end_signal_is_added_to_queue_in_case_of_exception():
+    END_SIGNAL = "RECORD_TASK_FINISHED"
+    async with create_service_now_source() as source:
+        with patch.object(
+            source,
+            "_fetch_attachment_metadata",
+            side_effect=Exception("Error fetching attachments"),
+        ):
+            with pytest.raises(Exception):
+                await source._attachment_metadata_producer(records_ids=[
+                    "record_1", "record_2"], access_control=[])
+                assert source.queue.get_nowait() == END_SIGNAL
