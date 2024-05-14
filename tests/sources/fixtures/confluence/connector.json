@@ -43,7 +43,7 @@
                         "type": "str",
                         "value": "abc@123"
                 },
-"data_center_username": {
+                "data_center_username": {
                         "depends_on": [
                                 {"field": "data_source", "value": "confluence_data_center"}
                         ],
@@ -135,7 +135,6 @@
                         "value": 50
                 },
                 "use_document_level_security": {
-                        "depends_on": [{"field": "data_source", "value": "confluence_cloud"}],
                         "display": "toggle",
                         "label": "Enable document level security",
                         "order": 15,
