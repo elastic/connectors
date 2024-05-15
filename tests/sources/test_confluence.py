@@ -101,7 +101,7 @@ RESPONSE_PAGE = {
 }
 
 EXPECTED_PAGE = {
-    "_id": 4779,
+    "_id": "4779",
     "type": "page",
     "_timestamp": "2023-01-24T04:07:19.672Z",
     "title": "ES-scrum",
@@ -109,6 +109,7 @@ EXPECTED_PAGE = {
     "body": "This is a test page",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
+    "labels": [None],
 }
 
 EXPECTED_SPACE = {
@@ -794,7 +795,7 @@ async def test_fetch_documents():
     async with create_confluence_source() as source:
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
-
+        source.confluence_client.index_labels = True
         # Execute
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response, _, _, _, _ in source.fetch_documents(api_query=""):
@@ -1496,3 +1497,33 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
             with pytest.raises(Exception):
                 await source._attachment_coro(document=EXPECTED_PAGE, access_control=[])
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_blog_documents_with_labels():
+    async with create_confluence_source() as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
+        with mock.patch(
+            "aiohttp.ClientSession.get", return_value=async_response
+        ), patch.object(
+            ConfluenceClient, "fetch_label", return_value=["label1", "label2"]
+        ):
+            source.confluence_client.index_labels = True
+            async for response, _ in source.confluence_client.fetch_page_blog_documents(
+                api_query="type in ('blogpost', 'page')"
+            ):
+                assert response == {
+                    "id": 4779,
+                    "title": "ES-scrum",
+                    "type": "page",
+                    "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+                    "children": {"attachment": {"size": 2}},
+                    "body": {"storage": {"value": "This is a test page"}},
+                    "space": {"name": "DEMO"},
+                    "_links": {
+                        "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
+                    },
+                    "ancestors": [{"title": "parent_title"}],
+                    "labels": ["label1", "label2"],
+                }
