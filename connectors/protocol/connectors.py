@@ -37,6 +37,7 @@ from connectors.utils import (
     iso_utc,
     nested_get_from_dict,
     next_run,
+    parse_datetime_string,
 )
 
 __all__ = [
@@ -146,9 +147,15 @@ class ConnectorIndex(ESIndex):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
+        self.feature_use_connectors_api = elastic_config.get(
+            "feature_use_connectors_api"
+        )
 
     async def heartbeat(self, doc_id):
-        await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
+        if self.feature_use_connectors_api:
+            await self.api.connector_check_in(doc_id)
+        else:
+            await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
     async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
@@ -535,10 +542,7 @@ class Connector(ESDocument):
 
     @property
     def last_seen(self):
-        last_seen = self.get("last_seen")
-        if last_seen is not None:
-            last_seen = datetime.fromisoformat(last_seen)  # pyright: ignore
-        return last_seen
+        return self._property_as_datetime("last_seen")
 
     @property
     def native(self):
@@ -591,7 +595,7 @@ class Connector(ESDocument):
     def _property_as_datetime(self, key):
         value = self.get(key)
         if value is not None:
-            value = datetime.fromisoformat(value)  # pyright: ignore
+            value = parse_datetime_string(value)  # pyright: ignore
         return value
 
     @property

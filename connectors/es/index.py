@@ -17,6 +17,35 @@ class DocumentNotFoundError(Exception):
     pass
 
 
+class TemporaryConnectorApiWrapper(ESClient):
+    """Temporary class to wrap calls to Connectors API.
+
+    When connectors API becomes part of official client
+    this class will be removed.
+    """
+
+    def __init__(self, elastic_config):
+        super().__init__(elastic_config)
+
+    async def connector_check_in(self, connector_id):
+        await self.client.perform_request(
+            "PUT",
+            f"/_connector/{connector_id}/_check_in",
+            headers={"accept": "application/json"},
+        )
+
+
+class ESApi(ESClient):
+    def __init__(self, elastic_config):
+        super().__init__(elastic_config)
+        self._api_wrapper = TemporaryConnectorApiWrapper(elastic_config)
+
+    async def connector_check_in(self, connector_id):
+        await self._retrier.execute_with_retry(
+            partial(self._api_wrapper.connector_check_in, connector_id)
+        )
+
+
 class ESIndex(ESClient):
     """
     Encapsulates the work with Elasticsearch index.
@@ -32,6 +61,7 @@ class ESIndex(ESClient):
     def __init__(self, index_name, elastic_config):
         # initialize elasticsearch client
         super().__init__(elastic_config)
+        self.api = ESApi(elastic_config)
         self.index_name = index_name
         self.elastic_config = elastic_config
 
