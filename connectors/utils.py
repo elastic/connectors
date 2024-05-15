@@ -18,10 +18,10 @@ import time
 import urllib.parse
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-import dateutil.parser as parser
 from enum import Enum
 from time import strftime
 
+import dateutil.parser as parser
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -82,8 +82,10 @@ class Format(Enum):
     VERBOSE = "verbose"
     SHORT = "short"
 
+
 def parse_datetime_string(datetime):
     return parser.parse(datetime)
+
 
 def iso_utc(when=None):
     if when is None:

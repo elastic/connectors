@@ -16,12 +16,14 @@ DEFAULT_PAGE_SIZE = 100
 class DocumentNotFoundError(Exception):
     pass
 
+
 class TemporaryConnectorApiWrapper(ESClient):
     """Temporary class to wrap calls to Connectors API.
 
     When connectors API becomes part of official client
     this class will be removed.
     """
+
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
 
@@ -29,8 +31,9 @@ class TemporaryConnectorApiWrapper(ESClient):
         await self.client.perform_request(
             "PUT",
             f"/_connector/{connector_id}/_check_in",
-            headers = {"accept": "application/json"}
+            headers={"accept": "application/json"},
         )
+
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -41,6 +44,7 @@ class ESApi(ESClient):
         await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_check_in, connector_id)
         )
+
 
 class ESIndex(ESClient):
     """

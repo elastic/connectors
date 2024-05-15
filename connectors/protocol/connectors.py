@@ -37,7 +37,7 @@ from connectors.utils import (
     iso_utc,
     nested_get_from_dict,
     next_run,
-    parse_datetime_string
+    parse_datetime_string,
 )
 
 __all__ = [
@@ -147,7 +147,9 @@ class ConnectorIndex(ESIndex):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
-        self.feature_use_connectors_api = elastic_config.get("feature_use_connectors_api")
+        self.feature_use_connectors_api = elastic_config.get(
+            "feature_use_connectors_api"
+        )
 
     async def heartbeat(self, doc_id):
         if self.feature_use_connectors_api:
