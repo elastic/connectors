@@ -700,6 +700,7 @@ async def test_get_with_429_status():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
     async with create_confluence_source() as source:
         with patch(
             "aiohttp.ClientSession.get",
