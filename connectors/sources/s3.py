@@ -112,6 +112,7 @@ class S3Client:
             s3 = await self.client()
             bucket_list = await s3.list_buckets()
             buckets = [bucket["Name"] for bucket in bucket_list["Buckets"]]
+            self._logger.debug(f"Retrieved buckets from S3: {buckets}")
         else:
             buckets = self.configuration["buckets"]
             self._logger.info(f"Fetching configured buckets: {buckets}")
@@ -125,10 +126,11 @@ class S3Client:
             obj_summary: Bucket objects metadata
             s3_client: S3 client object
         """
-        self._logger.info("Fetching buckets from S3")
+        self._logger.info(f"Fetching documents for '{bucket}' bucket")
         page_size = self.configuration["page_size"]
         region_name = await self.get_bucket_region(bucket)
         s3_client = await self.client(region=region_name)
+        document_count = 0
         async with self.session.resource(
             service_name="s3",
             config=self.config,
@@ -147,11 +149,14 @@ class S3Client:
                     objects = bucket_obj.objects.page_size(page_size)
 
                 async for obj_summary in objects:
+                    document_count += 1
                     yield obj_summary, s3_client
             except Exception as exception:
                 self._logger.warning(
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
+
+        self._logger.info(f"Total {document_count} documents fetched for '{bucket}' bucket")
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -237,9 +242,9 @@ class S3DataSource(BaseDataSource):
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
-            self._logger.info("Successfully connected to AWS.")
+            self._logger.debug("Successfully connected to AWS.")
         except Exception:
-            self._logger.exception("Error while connecting to AWS.")
+            self._logger.warning("Error while connecting to AWS. Please check the configurations")
             raise
 
     async def format_document(self, bucket_name, bucket_object):
