@@ -78,6 +78,7 @@ def _default_config():
             "initial_backoff_duration": 1,
             "backoff_multiplier": 2,
             "log_level": "info",
+            "feature_use_connectors_api": False
         },
         "service": {
             "idling": 30,
