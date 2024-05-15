@@ -15,11 +15,11 @@ import string
 import tempfile
 import time
 import timeit
-from datetime import datetime, timezone
-from dateutil.tz import tzutc
+from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
+from dateutil.tz import tzutc
 from freezegun import freeze_time
 from pympler import asizeof
 
@@ -47,6 +47,7 @@ from connectors.utils import (
     iterable_batches_generator,
     nested_get_from_dict,
     next_run,
+    parse_datetime_string,
     retryable,
     shorten_str,
     ssl_context,
@@ -55,7 +56,6 @@ from connectors.utils import (
     url_encode,
     validate_email_address,
     validate_index_name,
-    parse_datetime_string
 )
 
 
@@ -1147,11 +1147,19 @@ def test_nested_get_from_dict(dictionary, default, expected):
 
     assert nested_get_from_dict(dictionary, keys, default=default) == expected
 
-@pytest.mark.parametrize("string, parsed_datetime",
-     [
-         ("2024-05-15T12:37:52.429924009Z", datetime(2024, 5, 15, 12, 37, 52, 429924, tzutc())),
-         ("2024-05-15T12:37:52.429Z", datetime(2024, 5, 15, 12, 37, 52, 429000, tzutc())),
-     ]
- )
+
+@pytest.mark.parametrize(
+    "string, parsed_datetime",
+    [
+        (
+            "2024-05-15T12:37:52.429924009Z",
+            datetime(2024, 5, 15, 12, 37, 52, 429924, tzutc()),
+        ),
+        (
+            "2024-05-15T12:37:52.429Z",
+            datetime(2024, 5, 15, 12, 37, 52, 429000, tzutc()),
+        ),
+    ],
+)
 def test_parse_datetime_string_compatibility(string, parsed_datetime):
     assert parse_datetime_string(string) == parsed_datetime
