@@ -156,7 +156,9 @@ class S3Client:
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
 
-        self._logger.info(f"Total {document_count} documents fetched for '{bucket}' bucket")
+        self._logger.info(
+            f"Total {document_count} documents fetched for '{bucket}' bucket"
+        )
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -244,7 +246,9 @@ class S3DataSource(BaseDataSource):
             await self.s3_client.fetch_buckets()
             self._logger.debug("Successfully connected to AWS.")
         except Exception:
-            self._logger.warning("Error while connecting to AWS. Please check the configurations")
+            self._logger.warning(
+                "Error while connecting to AWS. Please check the configurations"
+            )
             raise
 
     async def format_document(self, bucket_name, bucket_object):
