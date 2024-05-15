@@ -723,6 +723,7 @@ async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
     with patch("connectors.sources.confluence.DEFAULT_RETRY_SECONDS", 0):
         async with create_confluence_source() as source:
             with patch(
