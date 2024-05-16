@@ -538,7 +538,9 @@ class OneDriveDataSource(BaseDataSource):
             url = parse.urljoin(BASE_URL, ENDPOINTS[PING])
             await anext(self.client.get(url=url))
         except Exception:
-            self._logger.warning("Error while connecting to OneDrive. Please check the configurations")
+            self._logger.warning(
+                "Error while connecting to OneDrive. Please check the configurations"
+            )
             raise
 
     async def get_content(self, file, download_url, timestamp=None, doit=False):
