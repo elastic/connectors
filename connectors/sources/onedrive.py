@@ -271,7 +271,7 @@ class OneDriveClient:
         skipped_exceptions=NotFound,
     )
     async def get(self, url, header=None):
-        self._logger.debug(f"Making a GET call to url: {url}")
+        self._logger.debug(f"Calling GET {url}")
         access_token = await self.token.get()
         headers = {"authorization": f"Bearer {access_token}"}
         if header:
@@ -293,7 +293,7 @@ class OneDriveClient:
         skipped_exceptions=NotFound,
     )
     async def post(self, url, payload=None):
-        self._logger.debug(f"Making a POST call to url: {url} with payload: {payload}")
+        self._logger.debug(f"Calling POST {url} with payload: {payload}")
         access_token = await self.token.get()
         headers = {
             "authorization": f"Bearer {access_token}",
@@ -352,7 +352,7 @@ class OneDriveClient:
         params["$top"] = fetch_size
         params = "&".join(f"{key}={val}" for key, val in params.items())
 
-        self._logger.info(
+        self._logger.debug(
             f"Started pagination for url: {url} with parameters: {params}"
         )
         url = f"{url}?{params}"
@@ -537,9 +537,8 @@ class OneDriveDataSource(BaseDataSource):
         try:
             url = parse.urljoin(BASE_URL, ENDPOINTS[PING])
             await anext(self.client.get(url=url))
-            self._logger.info("Successfully connected to OneDrive")
         except Exception:
-            self._logger.exception("Error while connecting to OneDrive")
+            self._logger.warning("Error while connecting to OneDrive. Please check the configurations")
             raise
 
     async def get_content(self, file, download_url, timestamp=None, doit=False):
@@ -763,6 +762,7 @@ class OneDriveDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        self._logger.debug("Successfully connected to OneDrive")
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
