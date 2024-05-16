@@ -340,6 +340,7 @@ class BoxDataSource(BaseDataSource):
                     )
                 elif folder_entry.get("type") == "folder":
                     await self.queue.put((doc, None))
+                    self.tasks += 1
                     await self.fetchers.put(
                         partial(
                             self._fetch,
@@ -347,12 +348,13 @@ class BoxDataSource(BaseDataSource):
                             user_id=user_id,
                         )
                     )
-                    self.tasks += 1
-            await self.queue.put(FINISHED)
         except Exception as exception:
             self._logger.info(
                 f"Something went wrong while fetching data from the folder ID: {doc_id}. Error: {exception}"
             )
+            raise
+        finally:
+            await self.queue.put(FINISHED)
 
     async def _get_document_with_content(self, url, attachment_name, document, user_id):
         file_data = await self.client.get(
