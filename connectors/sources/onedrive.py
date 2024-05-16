@@ -280,7 +280,6 @@ class OneDriveClient:
             async with self.session.get(url=url, headers=headers) as response:
                 yield response
         except ServerConnectionError:
-            self._logger.exception(f"Getting ServerConnectionError for url: {url}")
             await self.close_session()
             raise
         except ClientResponseError as e:
