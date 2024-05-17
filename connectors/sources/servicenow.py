@@ -699,9 +699,10 @@ class ServiceNowDataSource(BaseDataSource):
                 )
                 self.task_count += 1
         except Exception as exception:
-            self._logger.warning(
+            self._logger.exception(
                 f"Skipping attachment metadata for {attachment_apis}. Exception: {exception}."
             )
+            raise
         finally:
             await self.queue.put(EndSignal.RECORD)
 
