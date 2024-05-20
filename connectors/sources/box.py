@@ -138,6 +138,7 @@ class BoxClient:
         self._logger = logger
         self.is_enterprise = configuration["is_enterprise"]
         self._http_session = aiohttp.ClientSession(
+            trust_env=True,
             base_url=BASE_URL, raise_for_status=True
         )
         self.token = AccessToken(

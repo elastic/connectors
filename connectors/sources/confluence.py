@@ -156,6 +156,7 @@ class ConfluenceClient:
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
         self.session = aiohttp.ClientSession(
+            trust_env=True,
             auth=basic_auth,
             headers={
                 "accept": "application/json",

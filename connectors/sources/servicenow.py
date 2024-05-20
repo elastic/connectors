@@ -134,6 +134,7 @@ class ServiceNowClient:
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
         return aiohttp.ClientSession(
+            trust_env=True,
             connector=connector,
             base_url=self.configuration["url"],
             auth=basic_auth,

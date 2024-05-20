@@ -70,6 +70,7 @@ class NotionClient:
         connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_CLIENT_SUPPORT)
 
         return aiohttp.ClientSession(
+            trust_env=True,
             connector=connector,
             raise_for_status=True,
         )

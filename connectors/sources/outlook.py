@@ -358,7 +358,10 @@ class Office365Users:
 
     @cached_property
     def _get_session(self):
-        return aiohttp.ClientSession(raise_for_status=True)
+        return aiohttp.ClientSession(
+            trust_env=True,
+            raise_for_status=True
+        )
 
     async def close(self):
         await self._get_session.close()

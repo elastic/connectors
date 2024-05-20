@@ -526,6 +526,7 @@ class SharepointOnlineClient:
         # Change the value at your own risk
         tcp_connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         self._http_session = aiohttp.ClientSession(  # TODO: lazy create this
+            trust_env=True,
             connector=tcp_connector,
             headers={
                 "accept": "application/json",

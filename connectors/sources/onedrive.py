@@ -249,6 +249,7 @@ class OneDriveClient:
         connector = aiohttp.TCPConnector(limit=DEFAULT_PARALLEL_CONNECTION_COUNT)
         timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
         return aiohttp.ClientSession(
+            trust_env=True,
             timeout=timeout,
             raise_for_status=True,
             connector=connector,

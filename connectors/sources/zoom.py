@@ -204,7 +204,10 @@ class ZoomClient:
         self._logger = logger
 
         self.configuration = configuration
-        self.http_session = aiohttp.ClientSession(raise_for_status=True)
+        self.http_session = aiohttp.ClientSession(
+            trust_env=True,
+            raise_for_status=True
+        )
 
         self.api_token = ZoomAPIToken(
             http_session=self.http_session,
