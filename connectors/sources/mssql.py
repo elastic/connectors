@@ -310,7 +310,7 @@ class MSSQLClient:
             )
         ]
 
-        self._logger.debug(f"Found primary keys for table \"{table}\": {primary_keys}")
+        self._logger.debug(f'Found primary keys for table "{table}": {primary_keys}')
 
         return primary_keys
 
@@ -330,7 +330,7 @@ class MSSQLClient:
             )
         )
         self._logger.debug(
-            f"Last updated time for table \"{table}\" is {last_update_time}"
+            f'Last updated time for table "{table}" is {last_update_time}'
         )
         return last_update_time
 
@@ -355,7 +355,7 @@ class MSSQLClient:
                 schema=self.schema,
                 table=table,
             )
-            msg = f"Streaming records from database for table \"{table}\""
+            msg = f'Streaming records from database for table "{table}"'
         self._logger.debug(msg)
         async for data in fetch(
             cursor_func=partial(
@@ -557,7 +557,7 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
-        self._logger.info(f"Fetching records for the table \"{table}\"")
+        self._logger.info(f'Fetching records for the table "{table}"')
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
@@ -624,7 +624,7 @@ class MSSQLDataSource(BaseDataSource):
     async def _yield_all_docs_from_tables(self, table):
         row_count = await self.mssql_client.get_table_row_count(table=table)
         if row_count > 0:
-            self._logger.debug(f"Total {row_count} rows found in table \"{table}\"")
+            self._logger.debug(f'Total {row_count} rows found in table "{table}"')
             # Query to get the table's primary key
             keys = await self.get_primary_key(tables=[table])
             if keys:
