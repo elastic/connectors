@@ -105,7 +105,7 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
+          image: "docker.elastic.co/ci-agent-images/drivah:0.25.0"
           ephemeralStorage: "20G"
           memory: "4G"
         command: ".buildkite/publish/build-multiarch-docker.sh"
@@ -228,7 +228,7 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image based on Wolfi"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
+          image: "docker.elastic.co/ci-agent-images/drivah:0.25.0"
           ephemeralStorage: "20G"
           memory: "4G"
         env:
