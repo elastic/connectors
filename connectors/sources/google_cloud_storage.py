@@ -304,7 +304,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                 ):
                     blob_count += 1
                     yield blob
-                self._logger.info(f"Total {blob_count} blobs fetched for bucket '{bucket.get('name')}'")
+                self._logger.info(
+                    f"Total {blob_count} blobs fetched for bucket '{bucket.get('name')}'"
+                )
             except HTTPError as exception:
                 exception_log_msg = f"Permission denied for {bucket['name']} while fetching blobs. Exception: {exception}."
                 if exception.res.status_code == 403:
