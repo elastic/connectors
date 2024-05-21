@@ -79,7 +79,6 @@ class AccessToken:
 
     async def get(self):
         if cached_value := self._token_cache.get_value():
-            logger.debug("Retrieving access token from the cache")
             return cached_value
         await self._set_access_token()
         return self.access_token
@@ -178,7 +177,12 @@ class BoxClient:
         skipped_exceptions=NotFound,
     )
     async def get(self, url, headers, params=None):
-        self._logger.debug(f"Making a GET call for url: {url} with params: {params}")
+        query_string = (
+            "&".join(f"{key}={value}" for key, value in params.items())
+            if params
+            else ""
+        )
+        self._logger.debug(f"Calling GET {url}?{query_string}")
         try:
             access_token = await self.token.get()
             headers.update({"Authorization": f"Bearer {access_token}"})
@@ -306,9 +310,8 @@ class BoxDataSource(BaseDataSource):
     async def ping(self):
         try:
             await self.client.ping()
-            self._logger.info("Successfully connected to Box.")
         except Exception:
-            self._logger.exception("Error while connecting to Box.")
+            self._logger.warning("Error while connecting to Box.")
             raise
 
     async def get_users_id(self):
@@ -462,29 +465,31 @@ class BoxDataSource(BaseDataSource):
                 yield item
 
     async def get_docs(self, filtering=None):
-        stored_id = set()
+        self._logger.info("Successfully connected to Box")
+        seen_ids = set()
+        root_folder = "0"
         if self.is_enterprise == BOX_ENTERPRISE:
             self._logger.info("Fetching data from Box's Enterprise Account")
             async for user_id in self.get_users_id():
                 # "0" refers to the root folder
                 await self.fetchers.put(
-                    partial(self._fetch, doc_id="0", user_id=user_id)
+                    partial(self._fetch, doc_id=root_folder, user_id=user_id)
                 )
                 self.tasks += 1
         else:
             self._logger.info("Fetching data from Box's Free Account")
-            await self.fetchers.put(partial(self._fetch, doc_id="0"))
+            await self.fetchers.put(partial(self._fetch, doc_id=root_folder))
             self.tasks += 1
 
         async for item in self._consumer():
             current_id = item[0].get("_id")
-            if current_id in stored_id:
+            if current_id in seen_ids:
                 self._logger.debug(
                     f"Already processed item with id '{current_id}'. Skipping item..."
                 )
                 continue
             else:
-                stored_id.add(current_id)
+                seen_ids.add(current_id)
                 yield item
 
         await self.fetchers.join()
