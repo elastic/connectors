@@ -501,7 +501,6 @@ class MSSQLDataSource(BaseDataSource):
         self._logger.info("Validating the Connector Configuration...")
         try:
             await self.mssql_client.ping()
-            self._logger.info("Successfully connected to Microsoft SQL.")
         except Exception as e:
             msg = f"Can't connect to Microsoft SQL on {self.mssql_client.host}"
             raise Exception(msg) from e
@@ -668,6 +667,7 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
+        self._logger.info("Successfully connected to Microsoft SQL.")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             self._logger.info(
