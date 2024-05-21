@@ -420,7 +420,6 @@ class OracleDataSource(BaseDataSource):
         self._logger.info("Validating the Connector Configuration...")
         try:
             await self.oracle_client.ping()
-            self._logger.info("Successfully connected to Oracle.")
         except Exception as e:
             msg = f"Can't connect to Oracle on {self.oracle_client.host}"
             raise Exception(msg) from e
@@ -490,6 +489,7 @@ class OracleDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
+        self._logger.info("Successfully connected to Oracle.")
         table_count = 0
         async for table in self.oracle_client.get_tables_to_fetch():
             table_count += 1
