@@ -279,13 +279,14 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.debug(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> start: 0, limit: {LIMIT}"
-        )
+        start = 0
         while True:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
+                self._logger.debug(
+                    f"Pagination is happening for API endpoint: {URLS[url_name].format(**url_kwargs)} to host: {self.host_url} with the pagination parameters -> start: {start}, limit: {LIMIT}"
+                )
                 async for response in self.api_call(
                     url=url,
                 ):
@@ -826,9 +827,8 @@ class ConfluenceDataSource(BaseDataSource):
         """Verify the connection with Confluence"""
         try:
             await self.confluence_client.ping()
-            self._logger.info("Successfully connected to Confluence")
         except Exception:
-            self._logger.exception("Error while connecting to Confluence")
+            self._logger.warning("Error while connecting to Confluence")
             raise
 
     def get_permission(self, permission):
@@ -1170,6 +1170,7 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
+        self._logger.info("Successfully connected to Confluence")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             for query_info in advanced_rules:
