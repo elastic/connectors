@@ -131,9 +131,10 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 conn_str=self.connection_string, retry_total=self.retry_count
             ) as azure_base_client:
                 await azure_base_client.get_account_information()
-                self._logger.debug("Successfully connected to the Azure Blob Storage.")
         except Exception:
-            self._logger.exception("Error while connecting to the Azure Blob Storage.")
+            self._logger.warn(
+                "Error while connecting to the Azure Blob Storage. Please check the configurations"
+            )
             raise
 
     def prepare_blob_doc(self, blob, container_metadata):
@@ -278,6 +279,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Azure Blob Storage
         """
+        self._logger.info("Successfully connected to the Azure Blob Storage.")
         async for container_data in self.get_container(container_list=self.containers):
             if container_data:
                 async for blob in self.get_blob(container=container_data):
