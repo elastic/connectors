@@ -251,7 +251,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     projectId=self._google_storage_client.user_project_id,
                 )
             )
-            self._logger.info("Successfully connected to the Google Cloud Storage.")
         except Exception:
             self._logger.exception(
                 "Error while connecting to the Google Cloud Storage."
@@ -293,6 +292,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
+            blob_count = 0
             self._logger.info(f"Fetching blobs for '{bucket['id']}' bucket")
             try:
                 async for blob in self._google_storage_client.api_call(
@@ -302,7 +302,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     bucket=bucket["id"],
                     userProject=self._google_storage_client.user_project_id,
                 ):
+                    blob_count += 1
                     yield blob
+                self._logger.info(f"Total {blob_count} blobs fetched for bucket '{bucket.get('name')}'")
             except HTTPError as exception:
                 exception_log_msg = f"Permission denied for {bucket['name']} while fetching blobs. Exception: {exception}."
                 if exception.res.status_code == 403:
@@ -404,6 +406,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
+        self._logger.info("Successfully connected to the Google Cloud Storage.")
         async for bucket in self.fetch_buckets(self.configuration["buckets"]):
             async for blobs in self.fetch_blobs(
                 buckets=bucket,
