@@ -244,7 +244,6 @@ class S3DataSource(BaseDataSource):
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
-            self._logger.debug("Successfully connected to AWS.")
         except Exception:
             self._logger.warning(
                 "Error while connecting to AWS. Please check the configurations"
@@ -304,6 +303,7 @@ class S3DataSource(BaseDataSource):
         Yields:
             dictionary: Document from Amazon S3.
         """
+        self._logger.info("Successfully connected to AWS.")
         if filtering and filtering.has_advanced_rules():
             self._logger.info(
                 f"Advanced sync rules for S3 are configured: {filtering.get_advanced_rules()}"
