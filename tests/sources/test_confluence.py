@@ -91,6 +91,7 @@ RESPONSE_PAGE = {
             "_links": {
                 "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
             },
+            "ancestors": [{"title": "parent_title"}],
         }
     ],
     "start": 0,
@@ -100,13 +101,15 @@ RESPONSE_PAGE = {
 }
 
 EXPECTED_PAGE = {
-    "_id": 4779,
+    "_id": "4779",
     "type": "page",
     "_timestamp": "2023-01-24T04:07:19.672Z",
     "title": "ES-scrum",
+    "ancestors": [{"title": "parent_title"}],
     "body": "This is a test page",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
+    "labels": [None],
 }
 
 EXPECTED_SPACE = {
@@ -213,6 +216,7 @@ RESPONSE_SEARCH_RESULT = {
             "url": "/spaces/SD/pages/983046/Product+Details",
             "lastModified": "2022-12-19T13:06:18.000Z",
             "entityType": "content",
+            "ancestors": [{"title": "page1"}],
         },
         {
             "content": {
@@ -231,10 +235,11 @@ RESPONSE_SEARCH_RESULT = {
             "url": "/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
             "lastModified": "2023-01-24T03:34:38.000Z",
             "entityType": "content",
+            "ancestors": [],
         },
         {
             "space": {
-                "id": 196612,
+                "id": "196612",
                 "key": "SD",
                 "type": "global",
             },
@@ -243,11 +248,13 @@ RESPONSE_SEARCH_RESULT = {
             "url": "/spaces/SD",
             "lastModified": "2022-12-13T09:49:01.000Z",
             "entityType": "space",
+            "ancestors": [],
         },
     ]
 }
 
-EXPECTED_SEARCH_RESULT = [
+
+EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
     {
         "_id": "983046",
         "title": "Product Details",
@@ -268,7 +275,7 @@ EXPECTED_SEARCH_RESULT = [
         "page": "Product Details",
     },
     {
-        "_id": 196612,
+        "_id": "196612",
         "title": "Software Development",
         "_timestamp": "2022-12-13T09:49:01.000Z",
         "body": "",
@@ -350,6 +357,18 @@ PAGE_RESTRICTION_RESPONSE = {
         "size": 2,
     },
     "group": {"results": [], "size": 0},
+}
+
+EXPECTED_QUERY_RESPONSE = {
+    "content": {
+        "id": "983041",
+        "type": "page",
+    },
+    "title": "page 3",
+    "excerpt": "page 3 excerpt",
+    "url": "/spaces/space1/pages/983041/page+3",
+    "entityType": "content",
+    "lastModified": "2024-04-24T08:43:17.000Z",
 }
 
 
@@ -681,6 +700,7 @@ async def test_get_with_429_status():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
     async with create_confluence_source() as source:
         with patch(
             "aiohttp.ClientSession.get",
@@ -705,6 +725,7 @@ async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
     with patch("connectors.sources.confluence.DEFAULT_RETRY_SECONDS", 0):
         async with create_confluence_source() as source:
             with patch(
@@ -775,7 +796,7 @@ async def test_fetch_documents():
     async with create_confluence_source() as source:
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
-
+        source.confluence_client.index_labels = True
         # Execute
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response, _, _, _, _ in source.fetch_documents(api_query=""):
@@ -815,7 +836,7 @@ async def test_search_by_query():
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING
 
 
 @pytest.mark.asyncio
@@ -832,7 +853,7 @@ async def test_search_by_query_for_datacenter():
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING
 
 
 @pytest.mark.asyncio
@@ -1477,3 +1498,33 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
             with pytest.raises(Exception):
                 await source._attachment_coro(document=EXPECTED_PAGE, access_control=[])
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_blog_documents_with_labels():
+    async with create_confluence_source() as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
+        with mock.patch(
+            "aiohttp.ClientSession.get", return_value=async_response
+        ), patch.object(
+            ConfluenceClient, "fetch_label", return_value=["label1", "label2"]
+        ):
+            source.confluence_client.index_labels = True
+            async for response, _ in source.confluence_client.fetch_page_blog_documents(
+                api_query="type in ('blogpost', 'page')"
+            ):
+                assert response == {
+                    "id": 4779,
+                    "title": "ES-scrum",
+                    "type": "page",
+                    "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+                    "children": {"attachment": {"size": 2}},
+                    "body": {"storage": {"value": "This is a test page"}},
+                    "space": {"name": "DEMO"},
+                    "_links": {
+                        "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
+                    },
+                    "ancestors": [{"title": "parent_title"}],
+                    "labels": ["label1", "label2"],
+                }

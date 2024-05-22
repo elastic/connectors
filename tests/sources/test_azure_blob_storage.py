@@ -11,7 +11,7 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 
 import pytest
-from azure.storage.blob.aio import BlobClient, BlobServiceClient, ContainerClient
+from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
@@ -381,9 +381,12 @@ async def test_get_content():
         class DownloadBlobMock:
             """This class is used Mock object of download_blob"""
 
-            async def chunks(self):
+            def __init__(self, size=100000):
+                self.size = size
+
+            async def read(self):
                 """This Method is used to read content"""
-                yield b"Mock...."
+                return b"Mock...."
 
         mock_response = {
             "type": "blob",
@@ -399,7 +402,9 @@ async def test_get_content():
             "size": 1000,
             "container": "container1",
         }
-        with patch.object(BlobClient, "download_blob", return_value=DownloadBlobMock()):
+        with patch.object(
+            ContainerClient, "download_blob", return_value=DownloadBlobMock()
+        ):
             expected_output = {
                 "_id": "container1/blob1",
                 "_timestamp": "2022-04-21T12:12:30",
@@ -422,9 +427,12 @@ async def test_get_content_with_upper_extension():
         class DownloadBlobMock:
             """This class is used Mock object of download_blob"""
 
-            async def chunks(self):
+            def __init__(self, size=100000):
+                self.size = size
+
+            async def read(self):
                 """This Method is used to read content"""
-                yield b"Mock...."
+                return b"Mock...."
 
         mock_response = {
             "type": "blob",
@@ -440,7 +448,9 @@ async def test_get_content_with_upper_extension():
             "size": 1000,
             "container": "container1",
         }
-        with patch.object(BlobClient, "download_blob", return_value=DownloadBlobMock()):
+        with patch.object(
+            ContainerClient, "download_blob", return_value=DownloadBlobMock()
+        ):
             expected_output = {
                 "_id": "container1/blob1",
                 "_timestamp": "2022-04-21T12:12:30",
@@ -668,12 +678,15 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
             class DownloadBlobMock:
                 """This class is used Mock object of download_blob"""
 
-                async def chunks(self):
+                def __init__(self, size=100000):
+                    self.size = size
+
+                async def read(self):
                     """This Method is used to read content"""
-                    yield mock_download
+                    return mock_download
 
             with patch.object(
-                BlobClient, "download_blob", return_value=DownloadBlobMock()
+                ContainerClient, "download_blob", return_value=DownloadBlobMock()
             ):
                 expected_output = {
                     "_id": "container1/blob1",
@@ -685,3 +698,43 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
                 extraction_service_mock.assert_called_once()
                 assert actual_response == expected_output
                 assert "_attachment" not in actual_response
+
+
+@pytest.mark.asyncio
+async def test_get_container_client_when_client_already_exists():
+    async with create_abs_source() as source:
+        container_client = ContainerClient.from_connection_string(
+            conn_str="AccountName=foo;AccountKey=bar;BlobEndpoint=https://foo.endpoint.com",
+            container_name="xyz",
+        )
+        source.container_clients["xyz"] = container_client
+        assert source._get_container_client("xyz") == container_client
+
+
+@pytest.mark.asyncio
+async def test_get_container_client_when_client_does_not_exist():
+    async with create_abs_source() as source:
+        source.connection_string = (
+            "AccountName=foo;AccountKey=bar;BlobEndpoint=https://foo.endpoint.com"
+        )
+        container_client = source._get_container_client("container1")
+        assert isinstance(container_client, ContainerClient)
+
+
+@pytest.mark.asyncio
+async def test_close_with_connector_clients():
+    async with create_abs_source() as source:
+
+        class ContainerClientMock:
+            """Mock class for ContainerClient"""
+
+            async def close(self):
+                """Closes the client connection."""
+                return "Client closed"
+
+        source.container_clients = {
+            "container1": ContainerClientMock(),
+            "container2": ContainerClientMock(),
+        }
+
+    assert source.container_clients == {}

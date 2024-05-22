@@ -1,4 +1,4 @@
-aiohttp==3.9.1
+aiohttp==3.9.5
 aiofiles==23.2.1
 elasticsearch[async]==8.13.0
 elastic-transport==8.13.0
@@ -13,13 +13,13 @@ aiogoogle==5.3.0
 uvloop==0.17.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
 base64io==1.0.3
-azure-storage-blob==12.13.0
+azure-storage-blob==12.19.1
 SQLAlchemy==2.0.1
 oracledb==1.2.2
 asyncpg==0.27.0
 python-tds==1.12.0
 sqlalchemy-pytds==0.3.5
-pyOpenSSL==23.1.1
+pyOpenSSL==24.1.0
 dropbox==11.36.2
 beautifulsoup4==4.12.2
 gidgethub==5.2.1

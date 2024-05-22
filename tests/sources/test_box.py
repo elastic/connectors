@@ -376,8 +376,8 @@ async def test_fetch_returns_none_on_client_exception(
     async with create_source(BoxDataSource) as source:
         mock_time_to_sleep_between_retries.return_value = Mock()
         source.client.token.get = AsyncMock(side_effect=Exception())
-        response = await source._fetch("0")
-    assert response is None
+        with pytest.raises(Exception):
+            await source._fetch("0")
 
 
 @pytest.mark.asyncio
@@ -411,3 +411,17 @@ async def test_get_docs():
             actual_response.append(doc)
 
     assert actual_response == expected_response
+
+
+@pytest.mark.asyncio
+async def test_end_signal_is_added_to_queue_in_case_of_exception():
+    END_SIGNAL = "FINISHED"
+    async with create_source(BoxDataSource) as source:
+        with patch.object(
+            source.client,
+            "paginated_call",
+            side_effect=Exception("Error while fetching documents"),
+        ):
+            with pytest.raises(Exception):
+                await source._fetch(doc_id=0)
+            assert source.queue.get_nowait()[1] == END_SIGNAL
