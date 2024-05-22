@@ -500,7 +500,6 @@ class PostgreSQLDataSource(BaseDataSource):
         self._logger.info("Validating the Connector Configuration...")
         try:
             await self.postgresql_client.ping()
-            self._logger.info("Successfully connected to Postgresql.")
         except Exception as e:
             msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
             raise Exception(msg) from e
@@ -681,6 +680,7 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
+        self._logger.info("Successfully connected to Postgresql.")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             self._logger.info(
