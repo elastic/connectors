@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
 
+import dateutil.parser as parser
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -80,6 +81,10 @@ ISO_ZULU_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 class Format(Enum):
     VERBOSE = "verbose"
     SHORT = "short"
+
+
+def parse_datetime_string(datetime):
+    return parser.parse(datetime)
 
 
 def iso_utc(when=None):

@@ -357,6 +357,7 @@ class NotionDataSource(BaseDataSource):
     name = "Notion"
     service_type = "notion"
     advanced_rules_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Notion instance.
