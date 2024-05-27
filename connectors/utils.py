@@ -93,6 +93,14 @@ def iso_utc(when=None):
     return when.isoformat()
 
 
+def with_utc_tz(ts):
+    """Ensure the timestmap has a timezone of UTC."""
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    else:
+        return ts.astimezone(timezone.utc)
+
+
 def iso_zulu():
     """Returns the current time in ISO Zulu format"""
     return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
@@ -104,9 +112,9 @@ def epoch_timestamp_zulu():
 
 
 def next_run(quartz_definition, now):
-    """Returns the datetime of the next run."""
+    """Returns the datetime in UTC timezone of the next run."""
     cron_obj = QuartzCron(quartz_definition, now)
-    return cron_obj.next_trigger()
+    return with_utc_tz(cron_obj.next_trigger())
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"
