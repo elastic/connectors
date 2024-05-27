@@ -10,7 +10,7 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
@@ -36,7 +36,7 @@ class JobSchedulingService(BaseService):
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
-        self.last_wake_up_time = datetime.utcnow()
+        self.last_wake_up_time = datetime.now(timezone.utc)
 
     async def _schedule(self, connector):
         if self.running is False:
@@ -167,7 +167,7 @@ class JobSchedulingService(BaseService):
                 # Immediately break instead of sleeping
                 if not self.running:
                     break
-                self.last_wake_up_time = datetime.utcnow()
+                self.last_wake_up_time = datetime.now(timezone.utc)
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
@@ -179,7 +179,7 @@ class JobSchedulingService(BaseService):
         return 0
 
     async def _try_schedule_sync(self, connector, job_type):
-        this_wake_up_time = datetime.utcnow()
+        this_wake_up_time = datetime.now(timezone.utc)
         last_wake_up_time = self.last_wake_up_time
 
         self.logger.debug(
@@ -224,7 +224,7 @@ class JobSchedulingService(BaseService):
                 return False
 
             if this_wake_up_time < next_sync:
-                next_sync_due = (next_sync - datetime.now(datetime.UTC)).total_seconds()
+                next_sync_due = (next_sync - datetime.now(timezone.utc)).total_seconds()
                 connector.log_debug(
                     f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )
