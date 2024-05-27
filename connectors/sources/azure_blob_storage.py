@@ -291,12 +291,13 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 yield self.prepare_blob_doc(
                     blob=blob, container_metadata=container["metadata"]
                 )
-            self._logger.info(
-                f"Fetched {blob_count} blobs from '{container['name']}' container"
-            )
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
+            )
+        finally:
+            self._logger.info(
+                f"Fetched {blob_count} blobs from '{container['name']}' container"
             )
 
     async def get_docs(self, filtering=None):
