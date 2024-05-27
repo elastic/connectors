@@ -224,7 +224,7 @@ class JobSchedulingService(BaseService):
                 return False
 
             if this_wake_up_time < next_sync:
-                next_sync_due = (next_sync - datetime.utcnow()).total_seconds()
+                next_sync_due = (next_sync - datetime.now(datetime.UTC)).total_seconds()
                 connector.log_debug(
                     f"Next '{job_type_value}' sync due in {int(next_sync_due)} seconds"
                 )

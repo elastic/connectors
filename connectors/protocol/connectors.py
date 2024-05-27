@@ -639,7 +639,7 @@ class Connector(ESDocument):
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type, now):
-        """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
+        """Returns the datetime in UTC timezone when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
             case JobType.ACCESS_CONTROL:
@@ -659,7 +659,7 @@ class Connector(ESDocument):
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={field: new_ts.isoformat()},
+            doc={field: iso_utc(new_ts)},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )

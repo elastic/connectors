@@ -15,7 +15,7 @@ import string
 import tempfile
 import time
 import timeit
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -56,6 +56,7 @@ from connectors.utils import (
     url_encode,
     validate_email_address,
     validate_index_name,
+    with_utc_tz,
 )
 
 
@@ -63,14 +64,54 @@ def test_next_run():
     now = datetime(2023, 1, 18, 17, 18, 56, 814)
     # can run within two minutes
     assert (
-        next_run("1 * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:19:01"
+        next_run("1 * * * * *", now).isoformat(" ", "seconds")
+        == "2023-01-18 17:19:01+00:00"
     )
     assert (
-        next_run("* * * * * *", now).isoformat(" ", "seconds") == "2023-01-18 17:18:57"
+        next_run("* * * * * *", now).isoformat(" ", "seconds")
+        == "2023-01-18 17:18:57+00:00"
     )
 
     # this should get parsed
     next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030", now)
+
+
+def test_with_utc_tz_naive_timestamp():
+    ts_naive = datetime(2024, 5, 27, 12, 0, 0)
+    ts_utc = with_utc_tz(ts_naive)
+    assert ts_utc.tzinfo == timezone.utc
+    assert ts_utc.year == 2024
+    assert ts_utc.month == 5
+    assert ts_utc.day == 27
+    assert ts_utc.hour == 12
+    assert ts_utc.minute == 0
+    assert ts_utc.second == 0
+
+
+def test_with_utc_tz_aware_timestamp():
+    ts_aware = datetime(
+        2024, 5, 27, 12, 0, 0, tzinfo=timezone(timedelta(hours=5))
+    )  # Timezone aware timestamp with +5 offset
+    ts_utc = with_utc_tz(ts_aware)
+    assert ts_utc.tzinfo == timezone.utc
+    assert ts_utc.year == 2024
+    assert ts_utc.month == 5
+    assert ts_utc.day == 27
+    assert ts_utc.hour == 7  # Converted to UTC
+    assert ts_utc.minute == 0
+    assert ts_utc.second == 0
+
+
+def test_with_utc_tz_timestamp_in_utc():
+    ts_aware = datetime(2024, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
+    ts_utc = with_utc_tz(ts_aware)
+    assert ts_utc.tzinfo == timezone.utc
+    assert ts_utc.year == 2024
+    assert ts_utc.month == 5
+    assert ts_utc.day == 27
+    assert ts_utc.hour == 12
+    assert ts_utc.minute == 0
+    assert ts_utc.second == 0
 
 
 def test_invalid_names():
