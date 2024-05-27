@@ -1,5 +1,6 @@
 aiohttp==3.9.5
 aiofiles==23.2.1
+aiomysql==0.1.1
 elasticsearch[async]==8.13.0
 elastic-transport==8.13.0
 pyyaml==6.0
@@ -25,7 +26,7 @@ beautifulsoup4==4.12.2
 gidgethub==5.2.1
 wcmatch==8.4.1
 msal==1.23.0
-exchangelib==5.0.3
+exchangelib==5.4.0
 ldap3==2.9.1
 lxml==4.9.3
 pywinrm==0.4.3
