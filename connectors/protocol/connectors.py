@@ -38,6 +38,7 @@ from connectors.utils import (
     nested_get_from_dict,
     next_run,
     parse_datetime_string,
+    with_utc_tz,
 )
 
 __all__ = [
@@ -596,6 +597,8 @@ class Connector(ESDocument):
         value = self.get(key)
         if value is not None:
             value = parse_datetime_string(value)  # pyright: ignore
+            # ensure that the datetime is in UTC timezone
+            value = with_utc_tz(value)
         return value
 
     @property
