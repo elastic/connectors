@@ -189,9 +189,6 @@ class DropboxClient:
         if self.token_expiration_time and (
             not isinstance(self.token_expiration_time, datetime)
         ):
-            self._logger.debug(
-                f"Token expiration time '{self.token_expiration_time}' is not in the correct format. Converting it into ISO format"
-            )
             self.token_expiration_time = datetime.fromisoformat(
                 self.token_expiration_time
             )
@@ -1000,7 +997,6 @@ class DropboxDataSource(BaseDataSource):
     async def get_permission(self, permission, account_id):
         permissions = []
         if identities := permission.get("users"):
-            self._logger.debug("Fetching users")
             for identity in identities:
                 permissions.append(
                     _prefix_user_id(identity.get("user", {}).get("account_id"))
@@ -1045,7 +1041,7 @@ class DropboxDataSource(BaseDataSource):
             )
 
     async def get_account_details(self):
-        self._logger.debug("Retrieving account details")
+        self._logger.debug("Fetching account details")
         response = await anext(
             self.dropbox_client.api_call(
                 base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
@@ -1059,7 +1055,7 @@ class DropboxDataSource(BaseDataSource):
         return account_id, member_id
 
     async def get_permission_list(self, item_type, item, account_id):
-        self._logger.debug(f"Retrieving permissions for {item_type}")
+        self._logger.debug(f"Fetching permissions for {item_type}")
         if item_type == FOLDER:
             shared_folder_id = item.get("shared_folder_id") or item.get(
                 "parent_shared_folder_id"
@@ -1199,7 +1195,7 @@ class DropboxDataSource(BaseDataSource):
         elif filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             self._logger.debug(
-                f"Retrieving documents using configured advanced sync rules: {advanced_rules}"
+                f"Fetching documents using configured advanced sync rules: {advanced_rules}"
             )
             for rule in advanced_rules:
                 async for document, attachment in self.advanced_sync(rule=rule):
