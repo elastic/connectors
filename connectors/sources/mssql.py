@@ -255,12 +255,11 @@ class MSSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
-            msg = (
-                "Fetching all tables as the configuration field 'tables' is set to '*'"
-                if not is_filtering
-                else "Fetching all tables as the advanced sync rules are enabled."
-            )
-            self._logger.info(msg)
+            if is_filtering:
+                self._logger.info("Syncing all tables: advanced sync rules are enabled")
+            else:
+                self._logger.info("Syncing all tables: 'tables' is set to '*'")
+
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -274,7 +273,7 @@ class MSSQLClient:
             ):
                 yield row[0]
         else:
-            self._logger.info(f"Fetching user configured tables: {tables}")
+            self._logger.info(f"Fetching configured tables: {tables}")
             for table in tables:
                 yield table
 
@@ -292,6 +291,7 @@ class MSSQLClient:
                 retry_count=self.retry_count,
             )
         )
+        self._logger.info(f'Table "{table}" has {row_count} records')
         return row_count
 
     async def get_table_primary_key(self, table):
@@ -349,14 +349,14 @@ class MSSQLClient:
         record_count = 0
         if query is not None:
             cursor_query = query
-            msg = f"Streaming records from database using query: {query}"
+            self._logger.debug(f"Streaming records from database using query: {query}")
         else:
             cursor_query = self.queries.table_data(
                 schema=self.schema,
                 table=table,
             )
-            msg = f'Streaming records from database for table "{table}"'
-        self._logger.debug(msg)
+            self._logger.debug(f'Streaming records from database for table "{table}"')
+
         async for data in fetch(
             cursor_func=partial(
                 self.get_cursor,
@@ -368,8 +368,6 @@ class MSSQLClient:
         ):
             record_count += 1
             yield data
-
-        self._logger.info(f"Found {record_count} records for query '{cursor_query}'")
 
 
 class MSSQLDataSource(BaseDataSource):
@@ -498,7 +496,7 @@ class MSSQLDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
-        self._logger.info("Validating the Connector Configuration...")
+        self._logger.debug("Validating the Connector Configuration...")
         try:
             await self.mssql_client.ping()
         except Exception as e:
@@ -557,14 +555,14 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
-        self._logger.info(f'Fetching records for the table "{table}"')
+        self._logger.info(f'Fetching records for table "{table}"')
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for table {table}. Error: {exception}"
+                f'Something went wrong while fetching document for table "{table}". Error: {exception}'
             )
 
     async def fetch_documents_from_query(self, tables, query):
@@ -624,7 +622,6 @@ class MSSQLDataSource(BaseDataSource):
     async def _yield_all_docs_from_tables(self, table):
         row_count = await self.mssql_client.get_table_row_count(table=table)
         if row_count > 0:
-            self._logger.debug(f'Total {row_count} rows found in table "{table}"')
             # Query to get the table's primary key
             keys = await self.get_primary_key(tables=[table])
             if keys:
@@ -634,7 +631,7 @@ class MSSQLDataSource(BaseDataSource):
                     )
                 except Exception:
                     self._logger.warning(
-                        f"Unable to fetch last_updated_time for {table}"
+                        f'Unable to fetch last_updated_time for table "{table}"'
                     )
                     last_update_time = None
                 async for row in self.yield_rows_for_query(
@@ -653,10 +650,10 @@ class MSSQLDataSource(BaseDataSource):
                     )
             else:
                 self._logger.warning(
-                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                        f'"{self.database}"."{table}" has no primary key and is skipped. Assign primary key to the table to index it in the next sync interval.'
                 )
         else:
-            self._logger.warning(f"No rows found for {table}.")
+            self._logger.warning(f'No rows found for table "{table}"')
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -667,7 +664,7 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
-        self._logger.info("Successfully connected to Microsoft SQL.")
+        self._logger.info("Successfully connected to Microsoft SQL")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             self._logger.info(
