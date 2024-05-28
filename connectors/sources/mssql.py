@@ -651,7 +651,7 @@ class MSSQLDataSource(BaseDataSource):
                     )
             else:
                 self._logger.warning(
-                        f'"{self.database}"."{table}" has no primary key and is skipped. Assign primary key to the table to index it in the next sync interval.'
+                    f'"{self.database}"."{table}" has no primary key and is skipped. Assign primary key to the table to index it in the next sync interval.'
                 )
         else:
             self._logger.warning(f'No rows found for table "{table}"')
