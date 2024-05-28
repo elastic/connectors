@@ -37,6 +37,8 @@ from connectors.utils import (
     iso_utc,
     nested_get_from_dict,
     next_run,
+    parse_datetime_string,
+    with_utc_tz,
 )
 
 __all__ = [
@@ -146,9 +148,15 @@ class ConnectorIndex(ESIndex):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
+        self.feature_use_connectors_api = elastic_config.get(
+            "feature_use_connectors_api"
+        )
 
     async def heartbeat(self, doc_id):
-        await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
+        if self.feature_use_connectors_api:
+            await self.api.connector_check_in(doc_id)
+        else:
+            await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
     async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
@@ -535,10 +543,7 @@ class Connector(ESDocument):
 
     @property
     def last_seen(self):
-        last_seen = self.get("last_seen")
-        if last_seen is not None:
-            last_seen = datetime.fromisoformat(last_seen)  # pyright: ignore
-        return last_seen
+        return self._property_as_datetime("last_seen")
 
     @property
     def native(self):
@@ -591,7 +596,10 @@ class Connector(ESDocument):
     def _property_as_datetime(self, key):
         value = self.get(key)
         if value is not None:
-            value = datetime.fromisoformat(value)  # pyright: ignore
+            value = parse_datetime_string(value)  # pyright: ignore
+            # Ensure the datetime is in UTC for backward compatibility with historically naive timestamps.
+            # This guarantees that job scheduling logic with offset-aware timestamps works correctly.
+            value = with_utc_tz(value)
         return value
 
     @property
@@ -635,7 +643,7 @@ class Connector(ESDocument):
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type, now):
-        """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
+        """Returns the datetime in UTC timezone when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
             case JobType.ACCESS_CONTROL:
@@ -655,7 +663,7 @@ class Connector(ESDocument):
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={field: new_ts.isoformat()},
+            doc={field: iso_utc(new_ts)},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )

@@ -56,9 +56,10 @@ SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
-CONTENT_QUERY = "limit=50&expand=children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
+CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
 SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
 USER_QUERY = "expand=groups,applicationRoles"
+LABEL = "label"
 
 URLS = {
     SPACE: "rest/api/space?{api_query}",
@@ -70,6 +71,7 @@ URLS = {
     USER: "rest/api/3/users/search",
     USERS_FOR_DATA_CENTER: "rest/api/user/list?limit={limit}&start={start}",
     USERS_FOR_SERVER: "rest/extender/1.0/user/getUsersWithConfluenceAccess?showExtendedDetails=true&startAt={start}&maxResults={limit}",
+    LABEL: "rest/api/content/{id}/label",
 }
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
@@ -112,6 +114,7 @@ class ConfluenceClient:
         self.ssl_enabled = self.configuration["ssl_enabled"]
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
+        self.index_labels = self.configuration["index_labels"]
         if self.data_source_type == CONFLUENCE_CLOUD:
             self.host_url = os.path.join(self.host_url, "wiki")
 
@@ -344,6 +347,9 @@ class ConfluenceClient:
                         .get("attachment", {})
                         .get("size", 0)
                     )
+                if self.index_labels:
+                    labels = await self.fetch_label(document["id"])
+                    document["labels"] = labels
                 yield document, attachment_count
 
     async def fetch_attachments(self, content_id):
@@ -381,6 +387,13 @@ class ConfluenceClient:
                     return
                 yield response.get(key)
                 start_at += limit
+
+    async def fetch_label(self, label_id):
+        async for label_data in self.api_call(
+            url=os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
+        ):
+            labels = await label_data.json()
+            return [label.get("name") for label in labels["results"]]
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -491,24 +504,32 @@ class ConfluenceDataSource(BaseDataSource):
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
             },
+            "index_labels": {
+                "display": "toggle",
+                "label": "Enable indexing labels",
+                "order": 10,
+                "tooltip": "Enabling this will increase the amount of network calls to the source, and may decrease performance",
+                "type": "bool",
+                "value": False,
+            },
             "ssl_enabled": {
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 10,
+                "order": 11,
                 "type": "bool",
                 "value": False,
             },
             "ssl_ca": {
                 "depends_on": [{"field": "ssl_enabled", "value": True}],
                 "label": "SSL certificate",
-                "order": 11,
+                "order": 12,
                 "type": "str",
             },
             "retry_count": {
                 "default_value": 3,
                 "display": "numeric",
                 "label": "Retries per request",
-                "order": 12,
+                "order": 13,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -517,7 +538,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "default_value": MAX_CONCURRENT_DOWNLOADS,
                 "display": "numeric",
                 "label": "Maximum concurrent downloads",
-                "order": 13,
+                "order": 14,
                 "required": False,
                 "type": "int",
                 "ui_restrictions": ["advanced"],
@@ -528,7 +549,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 14,
+                "order": 15,
                 "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -536,7 +557,7 @@ class ConfluenceDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 15,
+                "order": 16,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -861,21 +882,25 @@ class ConfluenceDataSource(BaseDataSource):
                 self.confluence_client.host_url,
                 document.get("_links", {}).get("webui", "")[1:],
             )
-            yield {
-                "_id": document.get("id"),
-                "type": document.get("type", ""),
-                "_timestamp": document.get("history", {})
-                .get("lastUpdated", {})
-                .get("when", iso_utc()),
-                "title": document.get("title", ""),
-                "space": document.get("space", {}).get("name", ""),
-                "body": document.get("body", {}).get("storage", {}).get("value", ""),
+            ancestor_title = [
+                {"title": ancestor["title"]}
+                for ancestor in document.get("ancestors", [])
+            ]
+            doc = {
+                "_id": str(document["id"]),
+                "type": document["type"],
+                "_timestamp": document["history"]["lastUpdated"]["when"],
+                "title": document.get("title"),
+                "ancestors": ancestor_title,
+                "space": document["space"]["name"],
+                "body": document["body"]["storage"]["value"],
                 "url": document_url,
-            }, attachment_count, document.get("space", {}).get("key"), document.get(
-                "space", {}
-            ).get(
-                "permissions", []
-            ), document.get(
+            }
+            if self.confluence_client.index_labels:
+                doc["labels"] = document["labels"]
+            yield doc, attachment_count, document.get("space", {}).get(
+                "key"
+            ), document.get("space", {}).get("permissions", []), document.get(
                 "restrictions", {}
             ).get(
                 "read", {}

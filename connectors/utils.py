@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
 
+import dateutil.parser as parser
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from cstriggers.core.trigger import QuartzCron
@@ -82,10 +83,22 @@ class Format(Enum):
     SHORT = "short"
 
 
+def parse_datetime_string(datetime):
+    return parser.parse(datetime)
+
+
 def iso_utc(when=None):
     if when is None:
         when = datetime.now(timezone.utc)
     return when.isoformat()
+
+
+def with_utc_tz(ts):
+    """Ensure the timestmap has a timezone of UTC."""
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    else:
+        return ts.astimezone(timezone.utc)
 
 
 def iso_zulu():
@@ -99,9 +112,9 @@ def epoch_timestamp_zulu():
 
 
 def next_run(quartz_definition, now):
-    """Returns the datetime of the next run."""
+    """Returns the datetime in UTC timezone of the next run."""
     cron_obj = QuartzCron(quartz_definition, now)
-    return cron_obj.next_trigger()
+    return with_utc_tz(cron_obj.next_trigger())
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"

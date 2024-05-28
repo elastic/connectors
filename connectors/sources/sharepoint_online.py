@@ -1179,6 +1179,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "A comma-separated list of sites to ingest data from. If enumerating all sites, use * to include all available sites, or specify a list of site names. Otherwise, specify a list of site paths.",
                 "order": 5,
                 "type": "list",
+                "value": "*",
             },
             "enumerate_all_sites": {
                 "display": "toggle",

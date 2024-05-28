@@ -46,7 +46,7 @@ ROLES_BY_TITLE_FOR_LIST = "roles_by_title_for_list"
 ROLES_BY_TITLE_FOR_ITEM = "roles_by_title_for_item"
 ATTACHMENT_DATA = "attachment_data"
 DOCUMENT_LIBRARY = "document_library"
-SELECTED_FIELDS = "WikiField,CanvasContent1,Modified,Id,GUID,File,Folder"
+SELECTED_FIELDS = "WikiField,CanvasContent1,Modified,Id,GUID,File,Folder,Author/Name,Editor/Name,Author/Id,Editor/Id"
 VIEW_ITEM_MASK = 0x1  # View items in lists, documents in document libraries, and Web discussion comments.
 VIEW_PAGE_MASK = 0x20000  # View pages in a Site.
 IS_USER = 1  # To verify principal type value for user or group
@@ -71,10 +71,10 @@ VIEW_ROLE_TYPES = [
 
 URLS = {
     PING: "{host_url}{parent_site_url}_api/web/webs",
-    SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
+    SITES: "{host_url}{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}&$expand=Author",
     LISTS: "{host_url}{parent_site_url}/_api/web/lists?$skip={skip}&$top={top}&$expand=RootFolder&$filter=(Hidden eq false)",
     ATTACHMENT: "{host_url}{value}/_api/web/GetFileByServerRelativePath(decodedurl='{file_relative_url}')/$value",
-    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder&$top={top}",
+    DRIVE_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$select={selected_field}&$expand=File,Folder,Author,Editor&$top={top}",
     LIST_ITEM: "{host_url}{parent_site_url}/_api/web/lists(guid'{list_id}')/items?$expand=AttachmentFiles,Author,Editor&$select=*,FileRef,Author/Name,Editor/Name",
     ATTACHMENT_DATA: "{host_url}{parent_site_url}/_api/web/getfilebyserverrelativeurl('{file_relative_url}')",
     USERS: "{host_url}{parent_site_url}/_api/web/siteusers?$skip={skip}&$top={top}",
@@ -1008,6 +1008,8 @@ class SharepointServerDataSource(BaseDataSource):
         document = {
             "type": SITES,
             "_id": hash_id(f'{item.get("Id","")}/{item.get("Url","")}'),
+            "author": item.get("Author", {}).get("LoginName", ""),
+            "author_id": item.get("Author", {}).get("Id", ""),
         }
 
         self.map_document_with_schema(document=document, item=item, document_type=SITES)
@@ -1035,6 +1037,10 @@ class SharepointServerDataSource(BaseDataSource):
                 ),
                 "server_relative_url": item[item_type]["ServerRelativeUrl"],
                 "type": item_type,
+                "author": item.get("Author", {}).get("Name", ""),
+                "author_id": item.get("Author", {}).get("Id", ""),
+                "editor": item.get("Editor", {}).get("Name", ""),
+                "editor_id": item.get("Editor", {}).get("Id", ""),
             }
         )
         self.map_document_with_schema(
@@ -1171,7 +1177,7 @@ class SharepointServerDataSource(BaseDataSource):
                 site_url=site_url, site_access_control=site_access_control
             ):
                 is_site_page = False
-                selected_field = ""
+                selected_field = "*,Author/Name,Editor/Name,Author/Id,Editor/Id"
                 # if BaseType value is 1 then it's document library else it's a list
                 if result.get("BaseType") == 1:
                     if result.get("Title") == "Site Pages":
