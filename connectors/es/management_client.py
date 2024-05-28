@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from collections import ChainMap
+from collections.abc import Mapping as MappingType
 from functools import partial
 
 from elasticsearch import ApiError
@@ -15,6 +17,46 @@ from elasticsearch.helpers import async_scan
 from connectors.es.client import ESClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings, Settings
 from connectors.logger import logger
+
+
+class _DeepChainMap(ChainMap):
+    """A view grouping multiple mappings in depth.
+
+    In addition to the characteristics of `collections.ChainMap`, each value
+    becomes a view if its type is Mapping. In that case, the view consists of
+    only values prior to the first non-Mapping value found in the underlying
+    mappings.
+
+    For example, if the underlying mappings return the following values to a
+    key - `dict`, `dict`, `str`, and `dict`, the value becomes a view grouping
+    only the first two `dict` objects.
+    """
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if not isinstance(value, MappingType):
+            return value
+
+        values = []
+        for m in self.maps:
+            try:
+                v = m[key]
+            except KeyError:
+                continue
+
+            if isinstance(v, MappingType):
+                values.append(v)
+            else:
+                break
+
+        return type(self)(*values)
+
+    def to_dict(self):
+        """Returns a new dict by merging the underlying mappings."""
+        return {k: self[k].to_dict()
+                    if isinstance(self[k], type(self))
+                    else self[k]
+                for k in self}
 
 
 class ESManagementClient(ESClient):
@@ -70,35 +112,33 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.get_mapping, index=index)
         )
 
-        existing_mappings = response[index].get("mappings", {})
-        if len(existing_mappings) == 0:
-            if mappings:
-                logger.info(
-                    "Index %s has no mappings or it's empty. Adding mappings...", index
-                )
-                try:
-                    await self._retrier.execute_with_retry(
-                        partial(
-                            self.client.indices.put_mapping,
-                            index=index,
-                            dynamic=mappings.get("dynamic", False),
-                            dynamic_templates=mappings.get("dynamic_templates", []),
-                            properties=mappings.get("properties", {}),
-                        )
-                    )
-                    logger.info("Successfully added mappings for index %s", index)
-                except Exception as e:
-                    logger.warning(
-                        f"Could not create mappings for index {index}, encountered error {e}"
-                    )
-            else:
-                logger.info(
-                    "Index %s has no mappings but no mappings are provided, skipping mappings creation"
-                )
-        else:
-            logger.debug(
-                "Index %s already has mappings, skipping mappings creation", index
+        if existing_mappings := response[index].get("mappings", {}):
+            logger.info(
+                "Index %s already has mappings. Adding non-present mappings", index
             )
+            desired_mappings = _DeepChainMap(existing_mappings, mappings).to_dict()
+        else:
+            logger.info(
+                "Index %s has no mappings or it's empty. Adding mappings...", index
+            )
+            desired_mappings = mappings
+
+        try:
+            await self._retrier.execute_with_retry(
+                partial(
+                    self.client.indices.put_mapping,
+                    index=index,
+                    dynamic=desired_mappings.get("dynamic", False),
+                    dynamic_templates=desired_mappings.get("dynamic_templates", []),
+                    properties=desired_mappings.get("properties", {}),
+                )
+            )
+            logger.info("Successfully added mappings for index %s", index)
+        except Exception as e:
+            logger.warning(
+                f"Could not create mappings for index {index}, encountered error {e}"
+            )
+
 
     async def ensure_content_index_settings(
         self, index_name, index, language_code=None
