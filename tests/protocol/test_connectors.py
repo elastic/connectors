@@ -1736,9 +1736,11 @@ def test_feature_enabled(features_json, feature_enabled):
     features = Features(features_json)
 
     assert all(
-        features.feature_enabled(feature)
-        if enabled
-        else not features.feature_enabled(feature)
+        (
+            features.feature_enabled(feature)
+            if enabled
+            else not features.feature_enabled(feature)
+        )
         for feature, enabled in feature_enabled.items()
     )
 
@@ -2259,3 +2261,35 @@ async def test_get_connector_by_index():
     es_client.client.search.assert_awaited_once()
     assert connector.id == doc["_id"]
     assert connector.index_name == index_name
+
+
+@pytest.mark.parametrize(
+    "indexed_timestamp, expected_datetime",
+    [
+        ("2024-05-28T12:34:56", datetime(2024, 5, 28, 12, 34, 56, tzinfo=timezone.utc)),
+        (
+            "2024-05-28T12:34:56+00:00",
+            datetime(2024, 5, 28, 12, 34, 56, tzinfo=timezone.utc),
+        ),
+        (
+            "2024-05-28T12:34:56+02:00",
+            datetime(2024, 5, 28, 10, 34, 56, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_property_as_datetime(indexed_timestamp, expected_datetime):
+    connector = Connector(
+        elastic_index=Mock(),
+        doc_source={
+            "_id": "test-tz-aware-timestamp-migration",
+            "_source": {
+                "last_sync_scheduled_at": indexed_timestamp,
+                "last_incremental_sync_scheduled_at": indexed_timestamp,
+                "last_access_control_sync_scheduled_at": indexed_timestamp,
+            },
+        },
+    )
+
+    assert connector.last_sync_scheduled_at == expected_datetime
+    assert connector.last_incremental_sync_scheduled_at == expected_datetime
+    assert connector.last_access_control_sync_scheduled_at == expected_datetime
