@@ -597,9 +597,8 @@ class Connector(ESDocument):
         value = self.get(key)
         if value is not None:
             value = parse_datetime_string(value)  # pyright: ignore
-            # Ensure the datetime is in UTC. This handles historically naive timestamps
-            # that might be present in the index, ensuring the job scheduling logic with
-            # offset-aware timestamps works correctly.
+            # Ensure the datetime is in UTC for backward compatibility with historically naive timestamps.
+            # This guarantees that job scheduling logic with offset-aware timestamps works correctly.
             value = with_utc_tz(value)
         return value
 
