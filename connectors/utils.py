@@ -20,7 +20,6 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
 
-import dateutil.parser as parser
 import pytz
 import tzcron
 from base64io import Base64IO
