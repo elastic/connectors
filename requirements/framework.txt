@@ -1,5 +1,6 @@
 aiohttp==3.9.5
 aiofiles==23.2.1
+aiomysql==0.1.1
 elasticsearch[async]==8.13.0
 elastic-transport==8.13.0
 pyyaml==6.0
@@ -36,3 +37,4 @@ redis==5.0.1
 simple-term-menu==1.6.4
 graphql-core==3.2.3
 notion-client==2.2.1
+certifi==2023.7.22
