@@ -60,20 +60,82 @@ from connectors.utils import (
 )
 
 
-def test_next_run():
-    now = datetime(2023, 1, 18, 17, 18, 56, 814)
+@pytest.mark.parametrize(
+    "cron_statement, now, expected_next_run",
+    [
+        (
+            # Every minute at second=1
+            "1 * * * * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814),
+            datetime(2023, 1, 18, 17, 19, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every second
+            "* * * * * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814),
+            datetime(2023, 1, 18, 17, 18, 57, tzinfo=timezone.utc),
+        ),
+        (
+            # Every 5 minutes at second 0 with common statement format
+            "0 */5 * * * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814),
+            datetime(2023, 1, 18, 17, 20, 0, tzinfo=timezone.utc),
+        ),
+        (
+            # Every 5 minutes at second 0 with special statement format (0/5 not supported by every cron)
+            "0 0/5 * * * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814),
+            datetime(2023, 1, 18, 17, 20, 0, tzinfo=timezone.utc),
+        ),
+        (
+            # Every hour at second=0 and minute=10
+            "1 10 * * * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814),
+            datetime(2023, 1, 18, 18, 10, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every day at hour=13 second=0 and minute=10
+            "1 10 13 * * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814),
+            datetime(2023, 1, 19, 13, 10, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every Tuesday at hour=13 second=0 and minute=10
+            "1 10 13 ? * TUE",
+            datetime(2023, 1, 18, 17, 18, 56, 814), # Wednesday
+            datetime(2023, 1, 24, 13, 10, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every Tuesday at hour=13 second=0 and minute=10, but today is already Tuesday
+            "1 10 13 ? * TUE",
+            datetime(2023, 1, 24, 0, 0, 0, 1), # Wednesday
+            datetime(2023, 1, 24, 13, 10, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every third day at hour=13 second=0 and minute=10 with common statement format
+            "1 10 13 */3 * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814), # Wednesday
+            datetime(2023, 1, 24, 13, 10, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every third day at hour=13 second=0 and minute=10 with special statement format
+            "1 10 13 0/3 * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814), # Wednesday
+            datetime(2023, 1, 21, 13, 10, 1, tzinfo=timezone.utc),
+        ),
+        (
+            # Every third day at hour=13 second=0 and minute=10 with special statement format
+            "1 10 13 0/3 * *",
+            datetime(2023, 1, 18, 17, 18, 56, 814), # Wednesday
+            datetime(2023, 1, 21, 13, 10, 1, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_next_run(cron_statement, now, expected_next_run):
     # can run within two minutes
-    assert (
-        next_run("1 * * * * *", now).isoformat(" ", "seconds")
-        == "2023-01-18 17:19:01+00:00"
-    )
-    assert (
-        next_run("* * * * * *", now).isoformat(" ", "seconds")
-        == "2023-01-18 17:18:57+00:00"
-    )
-
-    # this should get parsed
-    next_run("0/5 14,18,52 * ? JAN,MAR,SEP MON-FRI 2010-2030", now)
+    assert next_run(cron_statement, now).isoformat(
+        " ", "seconds"
+    ) == expected_next_run.isoformat(" ", "seconds")
 
 
 def test_with_utc_tz_naive_timestamp():
