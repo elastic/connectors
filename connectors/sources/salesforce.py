@@ -1106,7 +1106,9 @@ class SalesforceAPIToken:
             if 400 <= e.status < 500:
                 # 400s have detailed error messages in body
                 error_message = response_body.get("error", "No error message found.")
-                error_description = response_body.get("error_description", "No error description found.")
+                error_description = response_body.get(
+                    "error_description", "No error description found."
+                )
                 if error_message == "invalid_client":
                     msg = f"The `client_id` and `client_secret` provided could not be used to generate a token. Status: {e.status}, message: {e.message}, details: {error_message}, description: {error_description}"
                     raise InvalidCredentialsException(msg) from e
