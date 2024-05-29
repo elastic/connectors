@@ -89,5 +89,5 @@ async def test_cleanup_jobs(
     await run_service_with_stop_after(service, 0.1)
 
     delete_jobs.assert_called_with(job_ids=[sync_job.id, another_sync_job.id])
-    sync_job.fail.assert_called_with(message=IDLE_JOB_ERROR)
+    sync_job.fail.assert_called_with(IDLE_JOB_ERROR)
     connector.sync_done.assert_called_with(job=sync_job)
