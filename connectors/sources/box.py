@@ -185,7 +185,9 @@ class BoxClient:
         skipped_exceptions=NotFound,
     )
     async def get(self, url, headers, params=None):
-        self._logger.debug(f"Calling GET {url}?{self.debug_query_string(params=params)}")
+        self._logger.debug(
+            f"Calling GET {url}?{self.debug_query_string(params=params)}"
+        )
         try:
             access_token = await self.token.get()
             headers.update({"Authorization": f"Bearer {access_token}"})
