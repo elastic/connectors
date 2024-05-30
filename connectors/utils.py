@@ -93,6 +93,14 @@ def iso_zulu():
     return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
 
 
+def with_utc_tz(ts):
+    """Ensure the timestmap has a timezone of UTC."""
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    else:
+        return ts.astimezone(timezone.utc)
+
+
 def epoch_timestamp_zulu():
     """Returns the timestamp of the start of the epoch, in ISO Zulu format"""
     return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
@@ -125,7 +133,7 @@ def next_run(quartz_definition, now):
     schedule = tzcron.Schedule(repackaged_definition, pytz.utc, now)
 
     next_occurrence = next(schedule)
-    return next_occurrence
+    return with_utc_tz(next_occurrence)
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"
