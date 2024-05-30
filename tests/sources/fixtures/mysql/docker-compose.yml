@@ -26,7 +26,7 @@ services:
 
   mysql:
     container_name: mysql
-    image: mysql:latest
+    image: mysql:8.3
     environment:
       MYSQL_ROOT_PASSWORD: changeme
     command: --default-authentication-plugin=mysql_native_password

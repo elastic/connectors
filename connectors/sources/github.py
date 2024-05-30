@@ -204,6 +204,9 @@ class GithubQuery(Enum):
             body
             state
             mergedAt
+            author {{
+            login
+            }}
             assignees(first: {NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
@@ -294,6 +297,9 @@ class GithubQuery(Enum):
             title
             body
             state
+            author {{
+            login
+            }}
             assignees(first: {NODE_SIZE}) {{
             pageInfo {{
                 hasNextPage
@@ -627,6 +633,10 @@ class NoInstallationAccessTokenException(Exception):
     pass
 
 
+class ForbiddenException(Exception):
+    pass
+
+
 class GitHubClient:
     def __init__(
         self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca
@@ -781,6 +791,9 @@ class GitHubClient:
         except BadGraphQLRequest as exception:
             if self.get_rate_limit_encountered(exception.status_code, exception):
                 await self._put_to_sleep(resource_type="graphql")
+            elif exception.status == FORBIDDEN:
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {url} and query: {query}."
+                raise ForbiddenException(msg) from exception
         except Exception:
             raise
 
@@ -815,6 +828,9 @@ class GitHubClient:
                     raise
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
+            elif exception.status == FORBIDDEN:
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {resource}."
+                raise ForbiddenException(msg) from exception
             else:
                 raise
         except RateLimitExceeded:
@@ -1075,19 +1091,10 @@ class GitHubDataSource(BaseDataSource):
         self.org_repos = {}
         self.foreign_repos = {}
         self.prev_repos = []
-        self.members = set()
+        self.members = {}
         self._user = None
         # A dict caches GitHub App installation info, where the key is the org name/user login,
-        # and the value is another dict contains installation id and repo details (lazy-loaded)
-        # An example:
-        # {
-        #     "org_name": {
-        #         "installation_id": 123,
-        #         "repos": {
-        #             "org_name/repo_name": {}
-        #         }
-        #     }
-        # }
+        # and the value is the installation id
         self._installations = {}
 
     def _set_internal_logger(self):
@@ -1273,52 +1280,64 @@ class GitHubDataSource(BaseDataSource):
             )
         )
 
-        await self._fetch_installations()
-        for repo in self.configured_repos:
-            if repo in invalid_repos:
+        for full_repo_name in self.configured_repos:
+            if full_repo_name in invalid_repos:
                 continue
-            owner, repo_name = self.github_client.get_repo_details(repo_name=repo)
-            if owner not in self._installations:
-                self._logger.debug(
-                    f"Invalid repo {repo} as the github app is not installed on {owner}"
-                )
-                invalid_repos.add(repo)
-                continue
-
-            if "repos" not in self._installations[owner]:
-                repos = {}
-                await self.github_client.update_installation_id(
-                    self._installations[owner]["installation_id"]
-                )
-                if self.configuration["repo_type"] == "organization":
-                    async for org_repo in self.github_client.get_org_repos(owner):
-                        repos[org_repo["nameWithOwner"]] = org_repo
-                else:
-                    async for user_repo in self.github_client.get_user_repos(owner):
-                        repos[user_repo["nameWithOwner"]] = user_repo
-                self._installations[owner]["repos"] = repos
-
-            if repo not in self._installations[owner]["repos"]:
-                self._logger.debug(
-                    f"Invalid repo {repo} as it's either non-existing or not accessible"
-                )
-                invalid_repos.add(repo)
+            owner, repo_name = self.github_client.get_repo_details(
+                repo_name=full_repo_name
+            )
+            if await self._get_repo_object_for_github_app(owner, repo_name) is None:
+                invalid_repos.add(full_repo_name)
 
         return list(invalid_repos)
+
+    async def _get_repo_object_for_github_app(self, owner, repo_name):
+        await self._fetch_installations()
+        full_repo_name = f"{owner}/{repo_name}"
+        if owner not in self._installations:
+            self._logger.debug(
+                f"Invalid repo {full_repo_name} as the github app is not installed on {owner}"
+            )
+            return None
+        await self.github_client.update_installation_id(self._installations[owner])
+
+        if self.configuration["repo_type"] == "organization":
+            if owner not in self.org_repos:
+                # get repos for an org and cached it in self.org_repos
+                async for _ in self._get_org_repos(owner):
+                    pass
+
+            cached_repo = self.org_repos
+        else:
+            if owner not in self.user_repos:
+                # get repos for a user cna cached it in self.user_repos
+                async for _ in self._get_personal_repos(owner):
+                    pass
+
+            cached_repo = self.user_repos
+
+        if full_repo_name not in cached_repo[owner]:
+            self._logger.debug(
+                f"Invalid repo {full_repo_name} as it's either non-existing or not accessible"
+            )
+            return None
+
+        return cached_repo[owner][full_repo_name]
 
     async def _get_invalid_repos_for_personal_access_token(self):
         try:
             if self.configuration["repo_type"] == "other":
+                logged_in_user = await self._logged_in_user()
                 foreign_repos, configured_repos = self.github_client.bifurcate_repos(
                     repos=self.configured_repos,
-                    owner=await self._logged_in_user(),
+                    owner=logged_in_user,
                 )
-                async for repo in self.github_client.get_user_repos(
-                    await self._logged_in_user()
-                ):
-                    self.user_repos[repo["nameWithOwner"]] = repo
+                if logged_in_user not in self.user_repos:
+                    self.user_repos[logged_in_user] = {}
+                async for repo in self.github_client.get_user_repos(logged_in_user):
+                    self.user_repos[logged_in_user][repo["nameWithOwner"]] = repo
                 invalid_repos = list(
-                    set(configured_repos) - set(self.user_repos.keys())
+                    set(configured_repos) - set(self.user_repos[logged_in_user].keys())
                 )
 
                 for repo_name in foreign_repos:
@@ -1337,11 +1356,18 @@ class GitHubDataSource(BaseDataSource):
                     owner=self.configuration["org_name"],
                 )
                 configured_repos.extend(foreign_repos)
+                if self.configuration["org_name"] not in self.org_repos:
+                    self.org_repos[self.configuration["org_name"]] = {}
                 async for repo in self.github_client.get_org_repos(
                     self.configuration["org_name"]
                 ):
-                    self.org_repos[repo["nameWithOwner"]] = repo
-                invalid_repos = list(set(configured_repos) - set(self.org_repos.keys()))
+                    self.org_repos[self.configuration["org_name"]][
+                        repo["nameWithOwner"]
+                    ] = repo
+                invalid_repos = list(
+                    set(configured_repos)
+                    - set(self.org_repos[self.configuration["org_name"]].keys())
+                )
             return invalid_repos
         except Exception as exception:
             self._logger.exception(
@@ -1383,10 +1409,8 @@ class GitHubDataSource(BaseDataSource):
         """Yields organization or personal accounts based on the configured repo_type"""
         if self.configuration["auth_method"] == GITHUB_APP:
             await self._fetch_installations()
-            for owner, installation in self._installations.items():
-                await self.github_client.update_installation_id(
-                    installation["installation_id"]
-                )
+            for owner, installation_id in self._installations.items():
+                await self.github_client.update_installation_id(installation_id)
                 yield owner
         else:
             if self.configuration["repo_type"] == "organization":
@@ -1481,11 +1505,14 @@ class GitHubDataSource(BaseDataSource):
         }
 
     def _prepare_review_doc(self, review):
+        # review.author can be None if the user was deleted, so need to be extra null-safe
+        author = review.get("author", {}) or {}
+
         return {
-            "author": review.get("author").get("login"),
+            "author": author.get("login"),
             "body": review.get("body"),
             "state": review.get("state"),
-            "comments": review.get("comments").get("nodes"),
+            "comments": review.get("comments", {}).get("nodes"),
         }
 
     async def _fetch_installations(self):
@@ -1505,41 +1532,33 @@ class GitHubDataSource(BaseDataSource):
                 self.configuration["repo_type"] == "other"
                 and installation["account"]["type"] == "User"
             ):
-                self._installations[installation["account"]["login"]] = {
-                    "installation_id": installation["id"]
-                }
+                self._installations[installation["account"]["login"]] = installation[
+                    "id"
+                ]
 
         return self._installations
 
     async def _get_personal_repos(self, user):
         self._logger.info(f"Fetching personal repos {user}")
-        if not self.user_repos:
+        if user in self.user_repos:
+            for repo_object in self.user_repos[user]:
+                yield repo_object
+        else:
+            self.user_repos[user] = {}
             async for repo_object in self.github_client.get_user_repos(user):
-                self.user_repos[repo_object["nameWithOwner"]] = repo_object
-        for repo_object in self.user_repos.values():
-            repo_object.update(
-                {
-                    "_id": repo_object.pop("id"),
-                    "_timestamp": repo_object.pop("updatedAt"),
-                    "type": ObjectType.REPOSITORY.value,
-                }
-            )
-            yield repo_object
+                self.user_repos[user][repo_object["nameWithOwner"]] = repo_object
+                yield repo_object
 
     async def _get_org_repos(self, org_name):
         self._logger.info(f"Fetching org repos for {org_name}")
-        if not self.org_repos:
+        if org_name in self.org_repos:
+            for repo_object in self.org_repos[org_name]:
+                yield repo_object
+        else:
+            self.org_repos[org_name] = {}
             async for repo_object in self.github_client.get_org_repos(org_name):
-                self.org_repos[repo_object["nameWithOwner"]] = repo_object
-        for repo_object in self.org_repos.values():
-            repo_object.update(
-                {
-                    "_id": repo_object.pop("id"),
-                    "_timestamp": repo_object.pop("updatedAt"),
-                    "type": ObjectType.REPOSITORY.value,
-                }
-            )
-            yield repo_object
+                self.org_repos[org_name][repo_object["nameWithOwner"]] = repo_object
+                yield repo_object
 
     async def _get_configured_repos(self, configured_repos):
         self._logger.info(f"Fetching configured repos: '{configured_repos}'")
@@ -1548,34 +1567,37 @@ class GitHubDataSource(BaseDataSource):
             if repo_name in ["", None]:
                 continue
 
-            # Converting the local repository names to username/repo_name format.
-            if "/" not in repo_name:
-                owner = (
-                    await self._logged_in_user()
-                    if self.configuration["repo_type"] == "other"
-                    else self.configuration["org_name"]
-                )
-                repo_name = f"{owner}/{repo_name}"
-            repo_object = self.foreign_repos.get(repo_name) or self.user_repos.get(
-                repo_name
-            )
+            if self.configuration["auth_method"] == PERSONAL_ACCESS_TOKEN:
+                # Converting the local repository names to username/repo_name format.
+                logged_in_user = await self._logged_in_user()
+                if "/" not in repo_name:
+                    owner = (
+                        logged_in_user
+                        if self.configuration["repo_type"] == "other"
+                        else self.configuration["org_name"]
+                    )
+                    repo_name = f"{owner}/{repo_name}"
+                repo_object = self.foreign_repos.get(repo_name) or self.user_repos.get(
+                    logged_in_user, {}
+                ).get(repo_name)
 
-            if not repo_object:
+                if not repo_object:
+                    owner, repo = self.github_client.get_repo_details(
+                        repo_name=repo_name
+                    )
+                    variables = {"owner": owner, "repositoryName": repo}
+                    data = await self.github_client.graphql(
+                        query=GithubQuery.REPO_QUERY.value, variables=variables
+                    )
+                    repo_object = data.get(REPOSITORY_OBJECT)
+            else:
                 owner, repo = self.github_client.get_repo_details(repo_name=repo_name)
-                variables = {"owner": owner, "repositoryName": repo}
-                data = await self.github_client.graphql(
-                    query=GithubQuery.REPO_QUERY.value, variables=variables
+                repo_object = await self._get_repo_object_for_github_app(owner, repo)
+                # update installation and re-generate installation access token
+                await self.github_client.update_installation_id(
+                    self._installations[owner]
                 )
-                repo_object = data.get(REPOSITORY_OBJECT)
-            repo_object = repo_object.copy()
-            repo_object.update(
-                {
-                    "_id": repo_object.pop("id"),
-                    "_timestamp": repo_object.pop("updatedAt"),
-                    "type": ObjectType.REPOSITORY.value,
-                }
-            )
-            yield repo_object
+            yield self._convert_repo_object_to_doc(repo_object)
 
     async def _fetch_repos(self):
         self._logger.info("Fetching repos")
@@ -1584,18 +1606,16 @@ class GitHubDataSource(BaseDataSource):
                 WILDCARD in self.configured_repos
                 and self.configuration["repo_type"] == "other"
             ):
-                async for repo_object in self._get_personal_repos(
-                    await self._logged_in_user()
-                ):
-                    yield repo_object
+                async for user in self._get_owners():
+                    async for repo_object in self._get_personal_repos(user):
+                        yield self._convert_repo_object_to_doc(repo_object)
             elif (
                 WILDCARD in self.configured_repos
                 and self.configuration["repo_type"] == "organization"
             ):
-                async for repo_object in self._get_org_repos(
-                    self.configuration["org_name"]
-                ):
-                    yield repo_object
+                async for org in self._get_owners():
+                    async for repo_object in self._get_org_repos(org):
+                        yield self._convert_repo_object_to_doc(repo_object)
             else:
                 async for repo_object in self._get_configured_repos(
                     configured_repos=self.configured_repos
@@ -1603,11 +1623,24 @@ class GitHubDataSource(BaseDataSource):
                     yield repo_object
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the repository. Exception: {exception}",
                 exc_info=True,
             )
+
+    def _convert_repo_object_to_doc(self, repo_object):
+        repo_object = repo_object.copy()
+        repo_object.update(
+            {
+                "_id": repo_object.pop("id"),
+                "_timestamp": repo_object.pop("updatedAt"),
+                "type": ObjectType.REPOSITORY.value,
+            }
+        )
+        return repo_object
 
     async def _fetch_remaining_data(
         self, variables, object_type, query, field_type, keys
@@ -1728,6 +1761,8 @@ class GitHubDataSource(BaseDataSource):
                         yield pull_request_doc
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the pull requests. Exception: {exception}",
@@ -1783,6 +1818,8 @@ class GitHubDataSource(BaseDataSource):
                     yield issue
         except UnauthorizedException:
             raise
+        except ForbiddenException:
+            raise
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching the issues. Exception: {exception}",
@@ -1836,6 +1873,8 @@ class GitHubDataSource(BaseDataSource):
                         document["_id"] = f"{repo_name}/{repo_object['path']}"
                         yield document, repo_object
         except UnauthorizedException:
+            raise
+        except ForbiddenException:
             raise
         except Exception as exception:
             self._logger.warning(
@@ -1932,11 +1971,11 @@ class GitHubDataSource(BaseDataSource):
             "cursor": None,
         }
         access_control = []
-        if len(self.members) <= 0:
-            async for user in self.github_client._fetch_all_members(
-                self.configuration["org_name"]
-            ):
-                self.members.add(user.get("id"))
+        if owner not in self.members:
+            members = set()
+            async for user in self.github_client._fetch_all_members(owner):
+                members.add(user.get("id"))
+            self.members[owner] = members
         async for response in self.github_client.paginated_api_call(
             query=GithubQuery.COLLABORATORS_QUERY.value,
             variables=collaborator_variables,
@@ -1948,7 +1987,7 @@ class GitHubDataSource(BaseDataSource):
                 user_id = user.get("node", {}).get("id")
                 user_name = user.get("node", {}).get("login")
                 user_email = user.get("node", {}).get("email")
-                if user_id in self.members:
+                if user_id in self.members[owner]:
                     access_control.append(_prefix_user_id(user_id=user_id))
                     if user_name:
                         access_control.append(_prefix_username(user=user_name))

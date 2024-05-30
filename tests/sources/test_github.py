@@ -21,6 +21,7 @@ from connectors.sources.github import (
     GITHUB_APP,
     PERSONAL_ACCESS_TOKEN,
     REPOSITORY_OBJECT,
+    ForbiddenException,
     GitHubAdvancedRulesValidator,
     GitHubDataSource,
     UnauthorizedException,
@@ -69,6 +70,9 @@ def pull_request():
                             "body": "test pull request",
                             "state": "OPEN",
                             "mergedAt": "None",
+                            "author": {
+                                "login": "author-authorson",
+                            },
                             "assignees": {
                                 "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
                                 "nodes": [{"login": "test_user"}],
@@ -226,7 +230,6 @@ PUBLIC_REPO = {
     "_id": "R_kgDOJXuc8A",
     "_timestamp": "2023-06-20T07:09:34Z",
     "isArchived": False,
-    "type": "Repository",
 }
 PRIVATE_REPO = {
     "name": "demo_repo",
@@ -276,46 +279,47 @@ MOCK_RESPONSE_REPO = [
 ]
 
 MOCK_RESPONSE_ISSUE = {
-    "data": {
-        "repository": {
-            "issues": {
-                "nodes": [
-                    {
-                        "number": 1,
-                        "url": "https://github.com/demo_user/demo_repo/issues/1",
-                        "createdAt": "2023-04-18T10:12:21Z",
-                        "closedAt": None,
-                        "title": "demo issues",
-                        "body": "demo issues test",
-                        "state": "OPEN",
-                        "id": "I_kwDOJXuc8M5jtMsK",
-                        "type": "Issue",
-                        "updatedAt": "2023-04-19T08:56:23Z",
-                        "comments": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                            "nodes": [
-                                {
-                                    "author": {"login": "demo_user"},
-                                    "body": "demo comments updated!!",
-                                }
-                            ],
-                        },
-                        "labels": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                            "nodes": [
-                                {
-                                    "name": "enhancement",
-                                    "description": "New feature or request",
-                                }
-                            ],
-                        },
-                        "assignees": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
-                            "nodes": [{"login": "demo_user"}],
-                        },
-                    }
-                ]
-            }
+    "repository": {
+        "issues": {
+            "nodes": [
+                {
+                    "number": 1,
+                    "url": "https://github.com/demo_user/demo_repo/issues/1",
+                    "createdAt": "2023-04-18T10:12:21Z",
+                    "closedAt": None,
+                    "title": "demo issues",
+                    "body": "demo issues test",
+                    "state": "OPEN",
+                    "id": "I_kwDOJXuc8M5jtMsK",
+                    "type": "Issue",
+                    "updatedAt": "2023-04-19T08:56:23Z",
+                    "author": {
+                        "login": "author-mac-author",
+                    },
+                    "comments": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                        "nodes": [
+                            {
+                                "author": {"login": "demo_user"},
+                                "body": "demo comments updated!!",
+                            }
+                        ],
+                    },
+                    "labels": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                        "nodes": [
+                            {
+                                "name": "enhancement",
+                                "description": "New feature or request",
+                            }
+                        ],
+                    },
+                    "assignees": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd4321"},
+                        "nodes": [{"login": "demo_user"}],
+                    },
+                }
+            ]
         }
     }
 }
@@ -330,6 +334,7 @@ EXPECTED_ISSUE = {
     "type": "Issue",
     "_id": "I_kwDOJXuc8M5jtMsK",
     "_timestamp": "2023-04-19T08:56:23Z",
+    "author": {"login": "author-mac-author"},
     "issue_comments": [
         {"author": {"login": "demo_user"}, "body": "demo comments updated!!"}
     ],
@@ -337,70 +342,69 @@ EXPECTED_ISSUE = {
     "assignees_list": [{"login": "demo_user"}],
 }
 MOCK_RESPONSE_PULL = {
-    "data": {
-        "repository": {
-            "pullRequests": {
-                "nodes": [
-                    {
-                        "id": "1",
-                        "updatedAt": "2023-07-03T12:24:16Z",
-                        "number": 2,
-                        "url": "https://github.com/demo_repo/demo_repo/pull/2",
-                        "createdAt": "2023-04-19T09:06:01Z",
-                        "closedAt": "None",
-                        "title": "test pull request",
-                        "body": "test pull request",
-                        "state": "OPEN",
-                        "mergedAt": "None",
-                        "assignees": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
-                            "nodes": [{"login": "test_user"}],
-                        },
-                        "labels": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
-                            "nodes": [
-                                {
-                                    "name": "bug",
-                                    "description": "Something isn't working",
-                                },
-                            ],
-                        },
-                        "reviewRequests": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
-                            "nodes": [{"requestedReviewer": {"login": "test_user"}}],
-                        },
-                        "comments": {
-                            "pageInfo": {
-                                "hasNextPage": True,
-                                "endCursor": "Y3Vyc29yOnYyOpHOXmz8gA==",
+    "repository": {
+        "pullRequests": {
+            "nodes": [
+                {
+                    "id": "1",
+                    "updatedAt": "2023-07-03T12:24:16Z",
+                    "number": 2,
+                    "url": "https://github.com/demo_repo/demo_repo/pull/2",
+                    "createdAt": "2023-04-19T09:06:01Z",
+                    "closedAt": "None",
+                    "title": "test pull request",
+                    "body": "test pull request",
+                    "state": "OPEN",
+                    "mergedAt": "None",
+                    "author": {"login": "author-authorson"},
+                    "assignees": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                        "nodes": [{"login": "test_user"}],
+                    },
+                    "labels": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                        "nodes": [
+                            {
+                                "name": "bug",
+                                "description": "Something isn't working",
                             },
-                            "nodes": [
-                                {
-                                    "author": {"login": "test_user"},
-                                    "body": "issues comments",
-                                },
-                            ],
+                        ],
+                    },
+                    "reviewRequests": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd1234"},
+                        "nodes": [{"requestedReviewer": {"login": "test_user"}}],
+                    },
+                    "comments": {
+                        "pageInfo": {
+                            "hasNextPage": True,
+                            "endCursor": "Y3Vyc29yOnYyOpHOXmz8gA==",
                         },
-                        "reviews": {
-                            "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
-                            "nodes": [
-                                {
-                                    "author": {"login": "test_user"},
-                                    "state": "COMMENTED",
-                                    "body": "add some comments",
-                                    "comments": {
-                                        "pageInfo": {
-                                            "hasNextPage": False,
-                                            "endCursor": "abcd",
-                                        },
-                                        "nodes": [{"body": "nice!!!"}],
+                        "nodes": [
+                            {
+                                "author": {"login": "test_user"},
+                                "body": "issues comments",
+                            },
+                        ],
+                    },
+                    "reviews": {
+                        "pageInfo": {"hasNextPage": True, "endCursor": "abcd"},
+                        "nodes": [
+                            {
+                                "author": {"login": "test_user"},
+                                "state": "COMMENTED",
+                                "body": "add some comments",
+                                "comments": {
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": "abcd",
                                     },
+                                    "nodes": [{"body": "nice!!!"}],
                                 },
-                            ],
-                        },
-                    }
-                ]
-            }
+                            },
+                        ],
+                    },
+                }
+            ]
         }
     }
 }
@@ -416,6 +420,9 @@ EXPECTED_PULL_RESPONSE = {
     "_id": "1",
     "_timestamp": "2023-07-03T12:24:16Z",
     "type": "Pull request",
+    "author": {
+        "login": "author-authorson",
+    },
     "issue_comments": [
         {"author": {"login": "test_user"}, "body": "issues comments"},
         {"author": {"login": "test_user"}, "body": "more_comments"},
@@ -445,86 +452,76 @@ EXPECTED_PULL_RESPONSE = {
     ],
 }
 MOCK_REVIEWS_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "reviews": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {
-                            "author": {"login": "test_user"},
-                            "state": "APPROVED",
-                            "body": "LGTM",
-                            "comments": {
-                                "pageInfo": {
-                                    "hasNextPage": False,
-                                    "endCursor": "abcd",
-                                },
-                                "nodes": [{"body": "LGTM"}],
+    "repository": {
+        "pullRequest": {
+            "reviews": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {
+                        "author": {"login": "test_user"},
+                        "state": "APPROVED",
+                        "body": "LGTM",
+                        "comments": {
+                            "pageInfo": {
+                                "hasNextPage": False,
+                                "endCursor": "abcd",
                             },
+                            "nodes": [{"body": "LGTM"}],
                         },
-                    ],
-                }
+                    },
+                ],
             }
         }
     }
 }
 MOCK_REVIEW_REQUESTED_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "reviewRequests": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd1234"},
-                    "nodes": [{"requestedReviewer": {"login": "other_user"}}],
-                }
+    "repository": {
+        "pullRequest": {
+            "reviewRequests": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd1234"},
+                "nodes": [{"requestedReviewer": {"login": "other_user"}}],
             }
         }
     }
 }
 MOCK_COMMENTS_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "comments": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {
-                            "author": {"login": "test_user"},
-                            "body": "more_comments",
-                        },
-                    ],
-                }
+    "repository": {
+        "pullRequest": {
+            "comments": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {
+                        "author": {"login": "test_user"},
+                        "body": "more_comments",
+                    },
+                ],
             }
         }
     }
 }
 MOCK_LABELS_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "labels": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {
-                            "name": "8.8.0",
-                            "description": "8.8 Version",
-                        },
-                    ],
-                }
+    "repository": {
+        "pullRequest": {
+            "labels": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {
+                        "name": "8.8.0",
+                        "description": "8.8 Version",
+                    },
+                ],
             }
         }
     }
 }
 MOCK_ASSIGNEE_RESPONSE = {
-    "data": {
-        "repository": {
-            "pullRequest": {
-                "assignees": {
-                    "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
-                    "nodes": [
-                        {"login": "test_user"},
-                    ],
-                }
+    "repository": {
+        "pullRequest": {
+            "assignees": {
+                "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                "nodes": [
+                    {"login": "test_user"},
+                ],
             }
         }
     }
@@ -733,6 +730,50 @@ MOCK_INSTALLATIONS = [
     {"id": 3, "account": {"login": "user_1", "type": "User"}},
     {"id": 4, "account": {"login": "user_2", "type": "User"}},
 ]
+MOCK_REPO_1 = {
+    "nameWithOwner": "org_1/repo_1",
+    "id": "repo_1_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_1_DOC = {
+    "nameWithOwner": "org_1/repo_1",
+    "_id": "repo_1_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
+MOCK_REPO_2 = {
+    "nameWithOwner": "org_2/repo_2",
+    "id": "repo_2_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_2_DOC = {
+    "nameWithOwner": "org_2/repo_2",
+    "_id": "repo_2_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
+MOCK_REPO_3 = {
+    "nameWithOwner": "user_1/repo_3",
+    "id": "repo_3_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_3_DOC = {
+    "nameWithOwner": "user_1/repo_3",
+    "_id": "repo_3_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
+MOCK_REPO_4 = {
+    "nameWithOwner": "user_2/repo_4",
+    "id": "repo_4_id",
+    "updatedAt": "2023-04-17T12:55:01Z",
+}
+MOCK_REPO_4_DOC = {
+    "nameWithOwner": "user_2/repo_4",
+    "_id": "repo_4_id",
+    "_timestamp": "2023-04-17T12:55:01Z",
+    "type": "Repository",
+}
 
 
 @asynccontextmanager
@@ -1176,25 +1217,16 @@ async def test_fetch_repos():
 @pytest.mark.asyncio
 async def test_fetch_repos_organization():
     async with create_github_source(
-        repo_type="organization", org_name="org1"
+        repo_type="organization", org_name="org_1"
     ) as source:
         source.github_client.graphql = AsyncMock(
             return_value={"data": {"viewer": {"login": "owner1"}}}
         )
-        source.org_repos = {
-            "org1/repo1": {
-                "id": "123",
-                "nameWithOwner": "org1/repo1",
-                "updatedAt": "2023-04-17T12:55:01Z",
-            }
-        }
+        source.github_client.get_org_repos = Mock(
+            side_effect=AsyncIterator([MOCK_REPO_1])
+        )
         async for repo in source._fetch_repos():
-            assert repo == {
-                "nameWithOwner": "org1/repo1",
-                "_id": "123",
-                "_timestamp": "2023-04-17T12:55:01Z",
-                "type": "Repository",
-            }
+            assert repo == MOCK_REPO_1_DOC
 
 
 @pytest.mark.asyncio
@@ -1222,12 +1254,58 @@ async def test_fetch_repos_when_user_repos_is_available():
 
 
 @pytest.mark.asyncio
-async def test_fetch_repos_with_unauthorized_exception():
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_repos_with_client_exception(exception):
     async with create_github_source() as source:
-        source.github_client.graphql = Mock(side_effect=UnauthorizedException())
-        with pytest.raises(UnauthorizedException):
+        source.github_client.graphql = Mock(side_effect=exception())
+        with pytest.raises(exception):
             async for _ in source._fetch_repos():
                 pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "repo_type, repos, expected_repos",
+    [
+        ("organization", "*", [MOCK_REPO_1_DOC, MOCK_REPO_2_DOC]),
+        ("other", "*", [MOCK_REPO_3_DOC, MOCK_REPO_4_DOC]),
+        ("organization", "org_1/repo_1", [MOCK_REPO_1_DOC]),
+        (
+            "organization",
+            "org_1/repo_1, org_2/repo_2",
+            [MOCK_REPO_1_DOC, MOCK_REPO_2_DOC],
+        ),
+        ("other", "user_1/repo_3", [MOCK_REPO_3_DOC]),
+        ("other", "user_1/repo_3, user_2/repo_4", [MOCK_REPO_3_DOC, MOCK_REPO_4_DOC]),
+    ],
+)
+async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
+    async with create_github_source(
+        auth_method=GITHUB_APP, repo_type=repo_type, repos=repos
+    ) as source:
+        source.github_client.get_installations = Mock(
+            return_value=AsyncIterator(MOCK_INSTALLATIONS)
+        )
+        source.github_client.get_user_repos = Mock(
+            side_effect=lambda user: AsyncIterator([MOCK_REPO_3])
+            if user == "user_1"
+            else AsyncIterator([MOCK_REPO_4])
+        )
+        source.github_client.get_org_repos = Mock(
+            side_effect=lambda org_name: AsyncIterator([MOCK_REPO_1])
+            if org_name == "org_1"
+            else AsyncIterator([MOCK_REPO_2])
+        )
+        jwt_response = {"token": "changeme"}
+        with patch(
+            "connectors.sources.github.get_installation_access_token",
+            return_value=jwt_response,
+        ):
+            actual_repos = [repo async for repo in source._fetch_repos()]
+            assert actual_repos == expected_repos
 
 
 @pytest.mark.asyncio
@@ -1249,10 +1327,14 @@ async def test_fetch_issues():
 
 
 @pytest.mark.asyncio
-async def test_fetch_issues_with_unauthorized_exception():
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_issues_with_client_exception(exception):
     async with create_github_source() as source:
-        source.github_client.graphql = Mock(side_effect=UnauthorizedException())
-        with pytest.raises(UnauthorizedException):
+        source.github_client.graphql = Mock(side_effect=exception())
+        with pytest.raises(exception):
             async for _ in source._fetch_issues(
                 repo_name="demo_user/demo_repo",
                 response_key=[REPOSITORY_OBJECT, "issues"],
@@ -1283,15 +1365,81 @@ async def test_fetch_pull_requests():
 
 
 @pytest.mark.asyncio
-async def test_fetch_pull_requests_with_unauthorized_exception():
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_pull_requests_with_client_exception(exception):
     async with create_github_source() as source:
-        source.github_client.graphql = Mock(side_effect=UnauthorizedException())
-        with pytest.raises(UnauthorizedException):
+        source.github_client.graphql = Mock(side_effect=exception())
+        with pytest.raises(exception):
             async for _ in source._fetch_pull_requests(
                 repo_name="demo_user/demo_repo",
                 response_key=[REPOSITORY_OBJECT, "pullRequests"],
             ):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_fetch_pull_requests_with_deleted_users():
+    async with create_github_source() as source:
+        mock_review_deleted_user = {
+            "repository": {
+                "pullRequest": {
+                    "reviews": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "abcd"},
+                        "nodes": [
+                            {
+                                "author": None,  # author will return None in this situation
+                                "state": "APPROVED",
+                                "body": "LGTM",
+                                "comments": {
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": "abcd",
+                                    },
+                                    "nodes": [{"body": "LGTM"}],
+                                },
+                            },
+                        ],
+                    }
+                }
+            }
+        }
+
+        expected_pull_response_deleted_user = deepcopy(EXPECTED_PULL_RESPONSE)
+        expected_pull_response_deleted_user["reviews_comments"] = [
+            {
+                "author": "test_user",
+                "body": "add some comments",
+                "state": "COMMENTED",
+                "comments": [{"body": "nice!!!"}],
+            },
+            {
+                "author": None,  # deleted author
+                "body": "LGTM",
+                "state": "APPROVED",
+                "comments": [{"body": "LGTM"}],
+            },
+        ]
+
+        with patch.object(
+            source.github_client,
+            "paginated_api_call",
+            side_effect=[
+                AsyncIterator([MOCK_RESPONSE_PULL]),
+                AsyncIterator([MOCK_COMMENTS_RESPONSE]),
+                AsyncIterator([MOCK_REVIEW_REQUESTED_RESPONSE]),
+                AsyncIterator([MOCK_LABELS_RESPONSE]),
+                AsyncIterator([MOCK_ASSIGNEE_RESPONSE]),
+                AsyncIterator([mock_review_deleted_user]),
+            ],
+        ):
+            async for pull in source._fetch_pull_requests(
+                repo_name="demo_user/demo_repo",
+                response_key=[REPOSITORY_OBJECT, "pullRequests"],
+            ):
+                assert pull == expected_pull_response_deleted_user
 
 
 @pytest.mark.asyncio
@@ -1884,9 +2032,9 @@ async def test_fetch_installations_withp_prepopulated_installations():
     [
         (
             "organization",
-            {"org_1": {"installation_id": 1}, "org_2": {"installation_id": 2}},
+            {"org_1": 1, "org_2": 2},
         ),
-        ("other", {"user_1": {"installation_id": 3}, "user_2": {"installation_id": 4}}),
+        ("other", {"user_1": 3, "user_2": 4}),
     ],
 )
 async def test_fetch_installations(repo_type, expected_installations):

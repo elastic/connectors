@@ -5,6 +5,25 @@ agents:
   image: family/enterprise-search-ubuntu-2204-connectors-py
 
 steps:
-  - label: "🏗️ Docker images"
-    command:
-      - ".buildkite/publish_docker.sh"
+  # ----
+  # Docker images
+  # ----
+  - group: "🏗️ Docker images"
+    steps:
+      - label: "Building and pushing Docker image"
+        env:
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors"
+          DOCKERFILE_PATH: "Dockerfile"
+        command:
+          - ".buildkite/publish_docker.sh"
+  # ----
+  # Docker images - Chainguard
+  # ----
+  - group: "🏗️ Docker images - Chainguard"
+    steps:
+      - label: "Building and pushing Docker image based on Wolfi"
+        env:
+          DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        command:
+          - ".buildkite/publish_docker.sh"

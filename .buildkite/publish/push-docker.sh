@@ -18,7 +18,7 @@ source $CURDIR/publish-common.sh
 
 # Load the image from the artifact created in build-docker.sh
 echo "Loading image from archive file..."
-docker load < "$PROJECT_ROOT/.artifacts/elastic-connectors-docker-${VERSION}-${ARCHITECTURE}.tar.gz"
+docker load < "$PROJECT_ROOT/.artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-${ARCHITECTURE}.tar.gz"
 
 # ensure +x is set to avoid writing any sensitive information to the console
 set +x

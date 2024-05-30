@@ -69,10 +69,16 @@ docker build -t <TAG_OF_THE_IMAGE> .
 For example, if you've created a custom version of MongoDB connector, you can tag it with the following command:
 
 ```
-docker build -t connector/custom-mongodb:1.0 -f .
+docker build -t connector/custom-mongodb:1.0 .
 ```
 
 You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` in the next step to run the Docker image.
+
+If you're an Elastic employee, you may want to build a Chainguard-based image using `Dockerfile.wolfi`:
+
+```
+docker build -t <TAG_OF_THE_IMAGE> -f Dockerfile.wolfi .
+```
 
 ## 5. Run the Docker image.
 
