@@ -99,14 +99,6 @@ def epoch_timestamp_zulu():
     return strftime(ISO_ZULU_TIMESTAMP_FORMAT, time.gmtime(0))
 
 
-def with_utc_tz(ts):
-    """Ensure the timestmap has a timezone of UTC."""
-    if ts.tzinfo is None:
-        return ts.replace(tzinfo=timezone.utc)
-    else:
-        return ts.astimezone(timezone.utc)
-
-
 def next_run(quartz_definition, now):
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
@@ -131,10 +123,10 @@ def next_run(quartz_definition, now):
     # ? comes from Quartz Cron, regular cron doesn't handle it well
     repackaged_definition = repackaged_definition.replace("?", "*")
 
-    schedule = tzcron.Schedule(repackaged_definition, pytz.utc, with_utc_tz(now))
+    schedule = tzcron.Schedule(repackaged_definition, pytz.utc, now)
 
     next_occurrence = next(schedule)
-    return with_utc_tz(next_occurrence)
+    return next_occurrence
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"
