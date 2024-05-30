@@ -131,7 +131,7 @@ def next_run(quartz_definition, now):
     # ? comes from Quartz Cron, regular cron doesn't handle it well
     repackaged_definition = repackaged_definition.replace("?", "*")
 
-    schedule = tzcron.Schedule(repackaged_definition, pytz.utc, now)
+    schedule = tzcron.Schedule(repackaged_definition, pytz.utc, with_utc_tz(now))
 
     next_occurrence = next(schedule)
     return with_utc_tz(next_occurrence)
