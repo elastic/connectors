@@ -2126,7 +2126,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
                 base_permission_low = int(
-                    nested_get_from_dict(binding, ["BasePermissions", "Low"], "0")
+                    nested_get_from_dict(
+                        binding, ["BasePermissions", "Low"], "0"
+                    )  # pyright: ignore
                 )
                 role_type_kind = binding.get("RoleTypeKind", 0)
                 if (
@@ -2153,7 +2155,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         if is_group:
             users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
 
-            for user in users:
+            for user in users:  # pyright: ignore
                 access_control.extend(await self._access_control_for_member(user))
         elif is_user:
             member = role_assignment.get("Member", {})
