@@ -210,6 +210,14 @@ RESPONSE_SEARCH_RESULT = {
                 "id": "983046",
                 "type": "page",
                 "space": {"name": "Software Development"},
+                "body": {
+                    "storage": {
+                        "value": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
+                        "representation": "storage",
+                        "embeddedContent": [],
+                        "_expandable": {"content": "/rest/api/content/6455384"},
+                    },
+                },
             },
             "title": "Product Details",
             "excerpt": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
@@ -227,6 +235,14 @@ RESPONSE_SEARCH_RESULT = {
                     "fileSize": 1119256,
                 },
                 "space": {"name": "Software Development"},
+                "body": {
+                    "storage": {
+                        "value": "",
+                        "representation": "storage",
+                        "embeddedContent": [],
+                        "_expandable": {"content": "/rest/api/content"},
+                    },
+                },
                 "container": {"type": "page", "title": "Product Details"},
                 "_links": {"download": "/download/attachments/196717/Potential.pdf"},
             },
@@ -278,7 +294,7 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
         "_id": "196612",
         "title": "Software Development",
         "_timestamp": "2022-12-13T09:49:01.000Z",
-        "body": "",
+        "body": None,
         "type": "space",
         "url": f"{HOST_URL}/spaces/SD",
     },

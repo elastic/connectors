@@ -57,7 +57,7 @@ USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions"
 ATTACHMENT_QUERY = "limit=100&expand=version"
 CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
-SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
+SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,content.body.storage,space.description"
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
 
@@ -959,7 +959,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
                 "_timestamp": entity.get("lastModified"),
-                "body": entity.get("excerpt"),
+                "body": entity_details.get("body", {}).get("storage", {}).get("value"),
                 "type": entity.get("entityType"),
                 "url": os.path.join(
                     self.confluence_client.host_url, entity.get("url")[1:]
