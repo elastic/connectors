@@ -156,6 +156,14 @@ class BoxClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
+    def debug_query_string(self, params):
+        if self._logger.level == 10:  # log level code for DEBUG
+            return (
+                "&".join(f"{key}={value}" for key, value in params.items())
+                if params
+                else ""
+            )
+
     async def _handle_client_errors(self, exception):
         match exception.status:
             case 401:
@@ -177,12 +185,7 @@ class BoxClient:
         skipped_exceptions=NotFound,
     )
     async def get(self, url, headers, params=None):
-        query_string = (
-            "&".join(f"{key}={value}" for key, value in params.items())
-            if params
-            else ""
-        )
-        self._logger.debug(f"Calling GET {url}?{query_string}")
+        self._logger.debug(f"Calling GET {url}?{self.debug_query_string(params=params)}")
         try:
             access_token = await self.token.get()
             headers.update({"Authorization": f"Bearer {access_token}"})
