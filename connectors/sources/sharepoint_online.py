@@ -41,6 +41,7 @@ from connectors.utils import (
     iso_utc,
     iso_zulu,
     iterable_batches_generator,
+    nested_get_from_dict,
     retryable,
     url_encode,
 )
@@ -436,7 +437,9 @@ class MicrosoftAPISession:
                     request_info=req_info,
                     headers=headers,
                     status=status,
-                    message=response.get("body", {}).get("error", {}).get("message"),
+                    message=nested_get_from_dict(
+                        response, ["body", "error", "message"]
+                    ),
                     history=(batch_resp),
                 )
 
@@ -1583,7 +1586,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         ):
             drive_item_id = permissions_response.get("id")
             drive_item = upsert_ids_to_items.get(drive_item_id)
-            permissions = permissions_response.get("body", {}).get("value", [])
+            permissions = nested_get_from_dict(
+                permissions_response, ["body", "value"], []
+            )
 
             if drive_item:
                 yield await self._with_drive_item_permissions(
@@ -1868,10 +1873,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             return drive_item
 
         def _get_id(permissions, label):
-            return permissions.get(label, {}).get("id")
+            return nested_get_from_dict(permissions, [label, "id"])
 
         def _get_email(permissions, label):
-            return permissions.get(label, {}).get("email")
+            return nested_get_from_dict(permissions, [label, "email"])
 
         def _get_login_name(permissions, label):
             identity = permissions.get(label, {})
@@ -1946,7 +1951,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     ):
         site_id = site.get("id")
         site_web_url = site.get("webUrl")
-        site_collection = site.get("siteCollection", {}).get("hostname")
+        site_collection = nested_get_from_dict(site, ["siteCollection", "hostname"])
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             if not check_timestamp or (
                 check_timestamp
@@ -2121,7 +2126,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
                 base_permission_low = int(
-                    binding.get("BasePermissions", {}).get("Low", "0")
+                    nested_get_from_dict(
+                        binding, ["BasePermissions", "Low"], "0"
+                    )  # pyright: ignore
                 )
                 role_type_kind = binding.get("RoleTypeKind", 0)
                 if (
@@ -2139,14 +2146,16 @@ class SharepointOnlineDataSource(BaseDataSource):
             return []
 
         access_control = []
-        identity_type = role_assignment.get("Member", {}).get("odata.type", "")
+        identity_type = nested_get_from_dict(
+            role_assignment, ["Member", "odata.type"], ""
+        )
         is_group = identity_type == "SP.Group"
         is_user = identity_type == "SP.User"
 
         if is_group:
-            users = role_assignment.get("Member", {}).get("Users", [])
+            users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
 
-            for user in users:
+            for user in users:  # pyright: ignore
                 access_control.extend(await self._access_control_for_member(user))
         elif is_user:
             member = role_assignment.get("Member", {})
@@ -2240,7 +2249,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
 
     def get_drive_delta_link(self, drive_id):
-        return self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY, {}).get(drive_id)
+        return nested_get_from_dict(
+            self._sync_cursor, [CURSOR_SITE_DRIVE_KEY, drive_id]
+        )
 
     def drive_item_operation(self, item):
         if "deleted" in item:
