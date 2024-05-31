@@ -809,9 +809,9 @@ async def test_sync_job_claim_fails():
     )
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
-    with pytest.raises(ProtocolError):
+    with pytest.raises(ProtocolError) as e:
         await sync_job.claim(sync_cursor=SYNC_CURSOR)
-        "because Elasticsearch responded with status 413. Reason: mocked test failure"
+        "because Elasticsearch responded with status 413. Reason: mocked test failure" in str(e)
 
 
 @pytest.mark.asyncio
