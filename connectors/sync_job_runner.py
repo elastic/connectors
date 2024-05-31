@@ -132,18 +132,19 @@ class SyncJobRunner:
 
         self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
 
-        await self.sync_starts()
-        sync_cursor = (
-            self.connector.sync_cursor
-            if self.sync_job.job_type == JobType.INCREMENTAL
-            else None
-        )
-        await self.sync_job.claim(sync_cursor=sync_cursor)
-        self._start_time = time.time()
-
-        self.sync_job.log_debug("Successfully claimed the sync job.")
+        await self.sync_starts()  # This MUST be the last line before the `try` begins
 
         try:
+            sync_cursor = (
+                self.connector.sync_cursor
+                if self.sync_job.job_type == JobType.INCREMENTAL
+                else None
+            )
+            self._start_time = time.time()
+            await self.sync_job.claim(sync_cursor=sync_cursor)
+
+            self.sync_job.log_debug("Successfully claimed the sync job.")
+
             self.data_provider = self.source_klass(
                 configuration=self.sync_job.configuration
             )
@@ -216,6 +217,7 @@ class SyncJobRunner:
             self.sync_job.log_error(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
+            self.sync_job.log_info("Terminating the job in error, and cleaning up")
             self.running = False
             if self.sync_orchestrator is not None:
                 await self.sync_orchestrator.close()
@@ -374,7 +376,9 @@ class SyncJobRunner:
 
         if await self.reload_connector():
             sync_cursor = (
-                self.data_provider.sync_cursor()
+                None
+                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
+                else self.data_provider.sync_cursor()
                 if self.sync_job.is_content_sync()
                 else None
             )
