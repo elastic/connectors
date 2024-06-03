@@ -53,10 +53,10 @@ class _DeepChainMap(ChainMap):
 
     def to_dict(self):
         """Returns a new dict by merging the underlying mappings."""
-        return {k: self[k].to_dict()
-                    if isinstance(self[k], type(self))
-                    else self[k]
-                for k in self}
+        return {
+            k: self[k].to_dict() if isinstance(self[k], type(self)) else self[k]
+            for k in self
+        }
 
 
 class ESManagementClient(ESClient):
@@ -138,7 +138,6 @@ class ESManagementClient(ESClient):
             logger.warning(
                 f"Could not create mappings for index {index}, encountered error {e}"
             )
-
 
     async def ensure_content_index_settings(
         self, index_name, index, language_code=None
