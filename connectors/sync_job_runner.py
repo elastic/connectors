@@ -206,8 +206,12 @@ class SyncJobRunner:
             sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
             await self._sync_done(sync_status=sync_status, sync_error=sync_error)
         except asyncio.CancelledError:
+            self.sync_job.log_warning("Caught signal to suspend the job.")
+            self.sync_job.log_debug("with stack:", exc_info=True)
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
+            self.sync_job.log_warning("Caught signal to cancel the job.")
+            self.sync_job.log_debug("with stack:", exc_info=True)
             await self._sync_done(sync_status=JobStatus.CANCELED)
         except ElasticAuthorizationException as e:
             error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
@@ -217,8 +221,8 @@ class SyncJobRunner:
             self.sync_job.log_error(e, exc_info=True)
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
-            self.sync_job.log_info("Terminating the job in error, and cleaning up")
             self.running = False
+            self.sync_job.log_info("Job terminated. Cleaning up.")
             if self.sync_orchestrator is not None:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
