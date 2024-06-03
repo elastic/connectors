@@ -13,7 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 from aiohttp import StreamReader
-from aiohttp.client_exceptions import ClientResponseError
+from aiohttp.client_exceptions import (
+    ClientPayloadError,
+    ClientResponseError,
+    ServerDisconnectedError,
+)
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
@@ -27,6 +31,7 @@ from connectors.sources.confluence import (
     ConfluenceDataSource,
     InternalServerError,
     NotFound,
+    SyncFailure,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -1544,3 +1549,192 @@ async def test_fetch_page_blog_documents_with_labels():
                     "ancestors": [{"title": "parent_title"}],
                     "labels": ["label1", "label2"],
                 }
+
+
+@pytest.mark.parametrize(
+    "method_name, method_params",
+    [
+        ("paginated_api_call", {"url_name": "space", "api_query": "api_query"}),
+        (
+            "paginated_api_call_for_datacenter_syncrule",
+            {"url_name": "space", "api_query": "api_query"},
+        ),
+        ("fetch_confluence_server_users", {}),
+    ],
+)
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_confluence_client_api_call_with_client_payload_error(
+    caplog, method_name, method_params
+):
+    caplog.set_level("ERROR")
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceClient,
+            "api_call",
+            side_effect=ClientPayloadError,
+        ):
+            method = getattr(source.confluence_client, method_name)
+            async for _ in method(**method_params):
+                assert "Payload error occurred" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "method_name, method_params",
+    [
+        ("paginated_api_call", {"url_name": "space", "api_query": "api_query"}),
+        (
+            "paginated_api_call_for_datacenter_syncrule",
+            {"url_name": "space", "api_query": "api_query"},
+        ),
+        ("fetch_confluence_server_users", {}),
+    ],
+)
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_confluence_client_api_call_with_server_disconnected_error(
+    method_name, method_params
+):
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceClient,
+            "api_call",
+            side_effect=ServerDisconnectedError,
+        ):
+            with pytest.raises(ServerDisconnectedError):
+                method = getattr(source.confluence_client, method_name)
+                await anext(method(**method_params))
+
+
+@pytest.mark.parametrize(
+    "method_name, method_params",
+    [
+        ("paginated_api_call", {"url_name": "space", "api_query": "api_query"}),
+        (
+            "paginated_api_call_for_datacenter_syncrule",
+            {"url_name": "space", "api_query": "api_query"},
+        ),
+        ("fetch_confluence_server_users", {}),
+    ],
+)
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_confluence_client_api_call_with_client_response_error(
+    method_name, method_params
+):
+    async with create_confluence_source() as source:
+        with patch("connectors.sources.confluence.DEFAULT_RETRY_SECONDS", 0.3):
+            with patch.object(
+                ConfluenceClient,
+                "api_call",
+                side_effect=ClientResponseError(
+                    status=500,
+                    request_info=aiohttp.RequestInfo(
+                        real_url="", method=None, headers=None, url=""
+                    ),
+                    history=None,
+                ),
+            ):
+                with pytest.raises(ClientResponseError):
+                    method = getattr(source.confluence_client, method_name)
+                    await anext(method(**method_params))
+
+
+@pytest.mark.parametrize(
+    "method_name, method_params",
+    [
+        ("paginated_api_call", {"url_name": "space", "api_query": "api_query"}),
+        (
+            "paginated_api_call_for_datacenter_syncrule",
+            {"url_name": "space", "api_query": "api_query"},
+        ),
+        ("fetch_confluence_server_users", {}),
+    ],
+)
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_confluence_client_api_call_with_exception(
+    caplog, method_name, method_params
+):
+    caplog.set_level("ERROR")
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceClient,
+            "api_call",
+            side_effect=Exception,
+        ):
+            method = getattr(source.confluence_client, method_name)
+            async for _ in method(**method_params):
+                assert "Something went wrong" in caplog.text
+
+
+@pytest.mark.parametrize("exception", [Exception, ClientPayloadError])
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_server_space_permission_with_exception(exception):
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceClient,
+            "api_call",
+            side_effect=exception,
+        ):
+            await source.confluence_client.fetch_server_space_permission("key")
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_space_permission_with_server_disconnected_error():
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=ServerDisconnectedError,
+        ):
+            with pytest.raises(ServerDisconnectedError):
+                await source.confluence_client.fetch_server_space_permission(url="abc")
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_label_with_server_disconnected_error():
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=ServerDisconnectedError,
+        ):
+            with pytest.raises(ServerDisconnectedError):
+                await source.confluence_client.fetch_label(label_id="abc")
+
+
+@pytest.mark.parametrize("exception", [Exception, ClientPayloadError])
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_fetch_label_with_exception(exception):
+    async with create_confluence_source() as source:
+        with patch.object(
+            ConfluenceClient,
+            "api_call",
+            side_effect=exception,
+        ):
+            await source.confluence_client.fetch_label("key")
+
+
+@pytest.mark.parametrize("exception", [Exception, ClientPayloadError])
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_api_call_exception_raise(exception):
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=exception,
+        ):
+            with pytest.raises(exception):
+                await anext(source.confluence_client.api_call(url="abc"))
+
+
+@pytest.mark.asyncio
+async def test_check_api_exceptions_percentage_below_threshold():
+    async with create_confluence_source() as source:
+        source.confluence_client.api_total_count = 10
+        source.confluence_client.api_failed_count = 5
+        with pytest.raises(SyncFailure):
+            source.check_api_exceptions_and_raise()
