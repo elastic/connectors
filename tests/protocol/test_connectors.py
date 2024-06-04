@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from elasticsearch import ConflictError
+from elasticsearch import ApiError, ConflictError
 
 from connectors.config import load_config
 from connectors.filtering.validation import (
@@ -39,6 +39,7 @@ from connectors.protocol import (
     SyncJob,
     SyncJobIndex,
 )
+from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
 from tests.commons import AsyncIterator
@@ -792,6 +793,28 @@ async def test_sync_job_claim():
     await sync_job.claim(sync_cursor=SYNC_CURSOR)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_claim_fails():
+    source = {"_id": "1"}
+    index = Mock()
+    api_meta = Mock()
+    api_meta.status = 413
+    error_body = {"error": {"reason": "mocked test failure"}}
+    index.update = AsyncMock(
+        side_effect=ApiError(
+            message="this is an error message", body=error_body, meta=api_meta
+        )
+    )
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    with pytest.raises(ProtocolError) as e:
+        await sync_job.claim(sync_cursor=SYNC_CURSOR)
+        assert (
+            "because Elasticsearch responded with status 413. Reason: mocked test failure"
+            in str(e)
+        )
 
 
 @pytest.mark.asyncio
