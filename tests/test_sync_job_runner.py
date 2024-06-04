@@ -21,6 +21,7 @@ from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import InvalidFilteringError
 from connectors.protocol import Filter, JobStatus, JobType, Pipeline
+from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
     ApiKeyNotFoundError,
@@ -249,6 +250,30 @@ async def test_connector_incremental_sync_job_starts_fail():
     sync_job_runner.sync_job.fail.assert_awaited()
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_content_claim_fails():
+    sync_job_runner = create_runner()
+
+    # Do nothing in the first call, and the last_sync_status is set to `in_progress` by another instance in the subsequent calls
+    def _reset_last_sync_status():
+        if sync_job_runner.connector.reload.await_count > 1:
+            sync_job_runner.connector.last_sync_status = JobStatus.IN_PROGRESS
+
+    sync_job_runner.connector.reload.side_effect = _reset_last_sync_status
+    sync_job_runner.sync_job.claim.side_effect = ProtocolError("mocking failed claim")
+
+    await sync_job_runner.execute()
+
+    assert sync_job_runner.sync_orchestrator is None
+    sync_job_runner.connector.sync_starts.assert_awaited()
+    sync_job_runner.sync_job.claim.assert_awaited()
+    sync_job_runner.sync_job.done.assert_not_awaited()
+    sync_job_runner.sync_job.fail.assert_awaited()
+    sync_job_runner.sync_job.cancel.assert_not_awaited()
+    sync_job_runner.sync_job.suspend.assert_not_awaited()
+    sync_job_runner.connector.sync_done.assert_awaited()
 
 
 @pytest.mark.parametrize(
