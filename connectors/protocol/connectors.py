@@ -203,12 +203,17 @@ class ConnectorIndex(ESIndex):
         )
 
     async def get_connector_by_index(self, index_name):
-        connectors = [
-            connector
-            async for connector in self.get_all_docs(
-                {"match": {"index_name": index_name}}
+        if self.feature_use_connectors_api:
+            connectors = self.api.get_connector_by_index_name(index_name).get(
+                "results", []
             )
-        ]
+        else:
+            connectors = [
+                connector
+                async for connector in self.get_all_docs(
+                    {"match": {"index_name": index_name}}
+                )
+            ]
         if len(connectors) > 1:
             msg = f"Multiple connectors exist for index {index_name}"
             raise InvalidConnectorSetupError(msg)

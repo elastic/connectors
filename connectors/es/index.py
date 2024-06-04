@@ -34,6 +34,13 @@ class TemporaryConnectorApiWrapper(ESClient):
             headers={"accept": "application/json"},
         )
 
+    async def get_connector_by_index_name(self, index_name):
+        return await self.client.perform_request(
+            "GET",
+            f"/_connector?index_name={index_name}",
+            headers={"accept": "application/json"},
+        )
+
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -43,6 +50,11 @@ class ESApi(ESClient):
     async def connector_check_in(self, connector_id):
         await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_check_in, connector_id)
+        )
+
+    async def get_connector_by_index_name(self, index_name):
+        await self._retrier.execute_with_retry(
+            partial(self._api_wrapper.get_connector_by_index_name, index_name)
         )
 
 
