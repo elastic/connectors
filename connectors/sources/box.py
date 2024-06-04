@@ -84,6 +84,7 @@ class AccessToken:
         return self.access_token
 
     async def _set_access_token(self):
+        logger.debug("Generating an access token")
         try:
             if self.is_enterprise == BOX_FREE:
                 global refresh_token
@@ -155,6 +156,14 @@ class BoxClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
+    def debug_query_string(self, params):
+        if self._logger.level == 10:  # log level code for DEBUG
+            return (
+                "&".join(f"{key}={value}" for key, value in params.items())
+                if params
+                else ""
+            )
+
     async def _handle_client_errors(self, exception):
         match exception.status:
             case 401:
@@ -176,6 +185,9 @@ class BoxClient:
         skipped_exceptions=NotFound,
     )
     async def get(self, url, headers, params=None):
+        self._logger.debug(
+            f"Calling GET {url}?{self.debug_query_string(params=params)}"
+        )
         try:
             access_token = await self.token.get()
             headers.update({"Authorization": f"Bearer {access_token}"})
@@ -303,18 +315,21 @@ class BoxDataSource(BaseDataSource):
     async def ping(self):
         try:
             await self.client.ping()
-            self._logger.info("Successfully connected to Box.")
         except Exception:
-            self._logger.exception("Error while connecting to Box.")
+            self._logger.warning("Error while connecting to Box.")
             raise
 
-    async def get_user_ids(self):
+    async def get_users_id(self):
+        self._logger.debug("Fetching users")
         async for user in self.client.paginated_call(
             url=ENDPOINTS["USERS"], params={}, headers={}
         ):
             yield user.get("id")
 
     async def _fetch(self, doc_id, user_id=None):
+        self._logger.info(
+            f"Fetching files and folders recursively for folder ID: {doc_id}"
+        )
         try:
             params = {
                 "fields": FIELDS,
@@ -457,32 +472,31 @@ class BoxDataSource(BaseDataSource):
                 yield item
 
     async def get_docs(self, filtering=None):
-        already_processed_ids = set()
+        self._logger.info("Successfully connected to Box")
+        seen_ids = set()
         root_folder = "0"
-
         if self.is_enterprise == BOX_ENTERPRISE:
-            async for user_id in self.get_user_ids():
-                logger.debug(
-                    f"Fetching content for user with id '{user_id}' starting from root folder"
-                )
+            self._logger.info("Fetching data from Box's Enterprise Account")
+            async for user_id in self.get_users_id():
+                # "0" refers to the root folder
                 await self.fetchers.put(
                     partial(self._fetch, doc_id=root_folder, user_id=user_id)
                 )
                 self.tasks += 1
         else:
-            logger.debug("Fetching content starting from root folder")
+            self._logger.info("Fetching data from Box's Free Account")
             await self.fetchers.put(partial(self._fetch, doc_id=root_folder))
             self.tasks += 1
 
         async for item in self._consumer():
             current_id = item[0].get("_id")
-            if current_id in already_processed_ids:
-                logger.debug(
+            if current_id in seen_ids:
+                self._logger.debug(
                     f"Already processed item with id '{current_id}'. Skipping item..."
                 )
                 continue
             else:
-                already_processed_ids.add(current_id)
+                seen_ids.add(current_id)
                 yield item
 
         await self.fetchers.join()
