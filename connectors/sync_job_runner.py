@@ -116,16 +116,23 @@ class SyncJobRunner:
 
         self.running = True
 
-        await self.sync_starts()
-        sync_cursor = (
-            self.connector.sync_cursor
-            if self.sync_job.job_type == JobType.INCREMENTAL
-            else None
-        )
-        await self.sync_job.claim(sync_cursor=sync_cursor)
-        self._start_time = time.time()
+        job_type = self.sync_job.job_type
+
+        self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
+
+        await self.sync_starts()  # This MUST be the last line before the `try` begins
 
         try:
+            sync_cursor = (
+                self.connector.sync_cursor
+                if self.sync_job.job_type == JobType.INCREMENTAL
+                else None
+            )
+            self._start_time = time.time()
+            await self.sync_job.claim(sync_cursor=sync_cursor)
+
+            self.sync_job.log_debug("Successfully claimed the sync job.")
+
             self.data_provider = self.source_klass(
                 configuration=self.sync_job.configuration
             )
@@ -186,8 +193,12 @@ class SyncJobRunner:
             )
             await self._sync_done(sync_status=sync_status, sync_error=fetch_error)
         except asyncio.CancelledError:
+            self.sync_job.log_warning("Caught signal to suspend the job.")
+            self.sync_job.log_debug("with stack:", exc_info=True)
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
+            self.sync_job.log_warning("Caught signal to cancel the job.")
+            self.sync_job.log_debug("with stack:", exc_info=True)
             await self._sync_done(sync_status=JobStatus.CANCELED)
         except ElasticAuthorizationException as e:
             error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
@@ -198,6 +209,7 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
+            self.sync_job.log_info("Job terminated. Cleaning up.")
             if self.sync_orchestrator is not None:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
@@ -354,7 +366,9 @@ class SyncJobRunner:
 
         if await self.reload_connector():
             sync_cursor = (
-                self.data_provider.sync_cursor()
+                None
+                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
+                else self.data_provider.sync_cursor()
                 if self.sync_job.is_content_sync()
                 else None
             )
