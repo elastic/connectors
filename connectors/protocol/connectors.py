@@ -18,6 +18,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
+from elasticsearch import ApiError
+
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
 from connectors.filtering.validation import (
@@ -133,6 +135,10 @@ class DataSourceError(Exception):
 
 
 class InvalidConnectorSetupError(Exception):
+    pass
+
+
+class ProtocolError(Exception):
     pass
 
 
@@ -293,56 +299,85 @@ class SyncJob(ESDocument):
             msg = f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             raise InvalidFilteringError(msg)
 
+    def _wrap_errors(self, operation_name, e):
+        if isinstance(e, ApiError):
+            reason = None
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
+                reason = e.info["error"]["reason"]
+            msg = f"Failed to {operation_name} for job {self.id} because Elasticsearch responded with status {e.status_code}.{f' Reason: {reason}' if reason else ''}"
+            raise ProtocolError(msg) from e
+        else:
+            msg = f"Failed to {operation_name} for job {self.id} because of {e.__class__.__name__}: {str(e)}"
+            raise ProtocolError(msg) from e
+
     async def claim(self, sync_cursor=None):
-        doc = {
-            "status": JobStatus.IN_PROGRESS.value,
-            "started_at": iso_utc(),
-            "last_seen": iso_utc(),
-            "worker_hostname": socket.gethostname(),
-            "connector.sync_cursor": sync_cursor,
-        }
-        await self.index.update(doc_id=self.id, doc=doc)
+        try:
+            doc = {
+                "status": JobStatus.IN_PROGRESS.value,
+                "started_at": iso_utc(),
+                "last_seen": iso_utc(),
+                "worker_hostname": socket.gethostname(),
+                "connector.sync_cursor": sync_cursor,
+            }
+            await self.index.update(doc_id=self.id, doc=doc)
+        except Exception as e:
+            self._wrap_errors("claim job", e)
 
     async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
-        ingestion_stats = filter_ingestion_stats(ingestion_stats)
-        if connector_metadata is None:
-            connector_metadata = {}
+        try:
+            ingestion_stats = filter_ingestion_stats(ingestion_stats)
+            if connector_metadata is None:
+                connector_metadata = {}
 
-        doc = {
-            "last_seen": iso_utc(),
-        }
-        doc.update(ingestion_stats)
-        if len(connector_metadata) > 0:
-            doc["metadata"] = connector_metadata
-        await self.index.update(doc_id=self.id, doc=doc)
+            doc = {
+                "last_seen": iso_utc(),
+            }
+            doc.update(ingestion_stats)
+            if len(connector_metadata) > 0:
+                doc["metadata"] = connector_metadata
+            await self.index.update(doc_id=self.id, doc=doc)
+        except Exception as e:
+            self._wrap_errors("update metadata and stats", e)
 
     async def done(self, ingestion_stats=None, connector_metadata=None):
-        await self._terminate(
-            JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
-        )
+        try:
+            await self._terminate(
+                JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as completed", e)
 
     async def fail(self, error, ingestion_stats=None, connector_metadata=None):
-        if isinstance(error, str):
-            message = error
-        elif isinstance(error, Exception):
-            message = f"{error.__class__.__name__}"
-            if str(error):
-                message += f": {str(error)}"
-        else:
-            message = str(error)
-        await self._terminate(
-            JobStatus.ERROR, message, ingestion_stats, connector_metadata
-        )
+        try:
+            if isinstance(error, str):
+                message = error
+            elif isinstance(error, Exception):
+                message = f"{error.__class__.__name__}"
+                if str(error):
+                    message += f": {str(error)}"
+            else:
+                message = str(error)
+            await self._terminate(
+                JobStatus.ERROR, message, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as failed", e)
 
     async def cancel(self, ingestion_stats=None, connector_metadata=None):
-        await self._terminate(
-            JobStatus.CANCELED, None, ingestion_stats, connector_metadata
-        )
+        try:
+            await self._terminate(
+                JobStatus.CANCELED, None, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as canceled", e)
 
     async def suspend(self, ingestion_stats=None, connector_metadata=None):
-        await self._terminate(
-            JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
-        )
+        try:
+            await self._terminate(
+                JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as suspended", e)
 
     async def _terminate(
         self, status, error=None, ingestion_stats=None, connector_metadata=None
