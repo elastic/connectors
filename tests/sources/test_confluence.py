@@ -1732,9 +1732,17 @@ async def test_api_call_exception_raise(exception):
 
 
 @pytest.mark.asyncio
+async def test_check_api_exceptions_percentage_above_threshold():
+    async with create_confluence_source() as source:
+        source.confluence_client.api_total_count = 10
+        source.confluence_client.api_failed_count = 2
+        with pytest.raises(SyncFailure):
+            source.check_api_exceptions_and_raise()
+
+
+@pytest.mark.asyncio
 async def test_check_api_exceptions_percentage_below_threshold():
     async with create_confluence_source() as source:
         source.confluence_client.api_total_count = 10
-        source.confluence_client.api_failed_count = 5
-        with pytest.raises(SyncFailure):
-            source.check_api_exceptions_and_raise()
+        source.confluence_client.api_failed_count = 0
+        source.check_api_exceptions_and_raise()

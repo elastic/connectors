@@ -44,6 +44,7 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
+API_FAILURE_THRESHOLD = 0.10
 
 LIMIT = 100
 SPACE = "space"
@@ -1273,7 +1274,7 @@ class ConfluenceDataSource(BaseDataSource):
             self.confluence_client.api_failed_count
             / self.confluence_client.api_total_count
         ) * 100
-        if failed_percentage >= 30:
+        if failed_percentage >= API_FAILURE_THRESHOLD * 100:
             msg = f"High percentage of API exceptions: {failed_percentage}%. Please review the logs for more information."
             self._logger.error(msg)
             raise SyncFailure(msg)
