@@ -105,9 +105,8 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.25.0"
-          ephemeralStorage: "20G"
-          memory: "4G"
+          provider: aws
+          instanceType: m6i.xlarge
         command: ".buildkite/publish/build-multiarch-docker.sh"
         depends_on:
           - "push_amd64_docker_image"
@@ -228,9 +227,8 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image based on Wolfi"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.25.0"
-          ephemeralStorage: "20G"
-          memory: "4G"
+          provider: aws
+          instanceType: m6i.xlarge
         env:
           DOCKER_IMAGE_NAME: "docker.elastic.co/enterprise-search/elastic-connectors-wolfi"
         command: ".buildkite/publish/build-multiarch-docker.sh"

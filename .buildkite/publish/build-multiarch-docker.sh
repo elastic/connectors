@@ -17,8 +17,8 @@ AMD64_TAG="${BASE_TAG_NAME}:${VERSION}-amd64"
 ARM64_TAG="${BASE_TAG_NAME}:${VERSION}-arm64"
 
 # Pull the images from the registry
-buildah pull $AMD64_TAG
-buildah pull $ARM64_TAG
+docker pull $AMD64_TAG
+docker pull $ARM64_TAG
 
 # ensure +x is set to avoid writing any sensitive information to the console
 set +x
@@ -29,18 +29,16 @@ DOCKER_PASSWORD=$(vault read -address "${VAULT_ADDR}" -field secret_20230609 sec
 echo "Logging into docker..."
 DOCKER_USER=$(vault read -address "${VAULT_ADDR}" -field user_20230609 secret/ci/elastic-connectors/${VAULT_USER})
 vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-connectors/${VAULT_USER} | \
-  buildah login --username="${DOCKER_USER}" --password-stdin docker.elastic.co
+  docker login --username="${DOCKER_USER}" --password-stdin docker.elastic.co
 
 # Create the manifest for the multiarch image
 echo "Creating manifest..."
-buildah manifest create $TAG_NAME \
-  $AMD64_TAG \
-  $ARM64_TAG
+docker manifest create $TAG_NAME $AMD64_TAG $ARM64_TAG
 
 # ... and push it
 echo "Pushing manifest..."
-buildah manifest push $TAG_NAME docker://$TAG_NAME
+docker manifest push $TAG_NAME
 
 # Write out the final manifest for debugging purposes
 echo "Built and pushed multiarch image... dumping final manifest..."
-buildah manifest inspect $TAG_NAME
+docker manifest inspect $TAG_NAME
