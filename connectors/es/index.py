@@ -34,6 +34,23 @@ class TemporaryConnectorApiWrapper(ESClient):
             headers={"accept": "application/json"},
         )
 
+    async def connector_update_filtering_draft_validation(
+        self, connector_id, validation_info
+    ):
+        await self.client.perform_request(
+            "PUT",
+            f"/_connector/{connector_id}/_filtering/_validation",
+            headers={"accept": "application/json", "Content-Type": "application/json"},
+            body={"validation": validation_info},
+        )
+
+    async def connector_activate_filtering_draft(self, connector_id):
+        await self.client.perform_request(
+            "PUT",
+            f"/_connector/{connector_id}/_filtering/_activate",
+            headers={"accept": "application/json"},
+        )
+
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -43,6 +60,22 @@ class ESApi(ESClient):
     async def connector_check_in(self, connector_id):
         await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_check_in, connector_id)
+        )
+
+    async def connector_update_filtering_draft_validation(
+        self, connector_id, validation_info
+    ):
+        await self._retrier.execute_with_retry(
+            partial(
+                self._api_wrapper.connector_update_filtering_draft_validation,
+                connector_id,
+                validation_info,
+            )
+        )
+
+    async def connector_activate_filtering_draft(self, connector_id):
+        await self._retrier.execute_with_retry(
+            partial(self._api_wrapper.connector_activate_filtering_draft, connector_id)
         )
 
 
