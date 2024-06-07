@@ -1425,6 +1425,7 @@ async def test_connector_update_last_sync_scheduled_at_by_job_type(
 async def test_connector_validate_filtering_not_edited():
     index = Mock()
     index.update = AsyncMock()
+    index.feature_use_connectors_api = False
     index.fetch_response_by_id = AsyncMock(return_value=DOC_SOURCE)
     validator = Mock()
     validator.validate_filtering = AsyncMock()
@@ -1441,6 +1442,7 @@ async def test_connector_validate_filtering_invalid():
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
+    index.feature_use_connectors_api = False
     index.fetch_response_by_id = AsyncMock(return_value=doc_source)
     validation_result = FilteringValidationResult(
         state=FilteringValidationState.INVALID,
@@ -1477,6 +1479,7 @@ async def test_connector_validate_filtering_valid():
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
+    index.feature_use_connectors_api = False
     index.fetch_response_by_id = AsyncMock(return_value=doc_source)
     validation_result = FilteringValidationResult()
     validator = Mock()
@@ -1511,6 +1514,7 @@ async def test_connector_validate_filtering_with_race_condition():
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.update = AsyncMock()
+    index.feature_use_connectors_api = False
     validation_result = FilteringValidationResult()
     validator = Mock()
     validator.validate_filtering = AsyncMock(return_value=validation_result)
@@ -1540,6 +1544,61 @@ async def test_connector_validate_filtering_with_race_condition():
         doc=expected_validation_update_doc,
         if_seq_no=doc_source["_seq_no"],
         if_primary_term=doc_source["_primary_term"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_invalid_with_connector_api():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
+    index = Mock()
+    index.api.connector_update_filtering_draft_validation = AsyncMock()
+    index.api.connector_activate_filtering_draft = AsyncMock()
+    index.feature_use_connectors_api = True
+    index.fetch_response_by_id = AsyncMock(return_value=doc_source)
+    validation_result = FilteringValidationResult(
+        state=FilteringValidationState.INVALID,
+        errors=[FilterValidationError(ids=[1], messages="something wrong")],
+    )
+    validator = Mock()
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+
+    connector = Connector(elastic_index=index, doc_source=doc_source)
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_awaited()
+    index.api.connector_update_filtering_draft_validation.assert_awaited_once_with(
+        connector_id=CONNECTOR_ID,
+        validation_result=validation_result.to_dict(),
+    )
+    index.api.connector_activate_filtering_draft.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_connector_validate_filtering_valid_with_connector_api():
+    doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
+    index = Mock()
+    index.api.connector_update_filtering_draft_validation = AsyncMock()
+    index.api.connector_activate_filtering_draft = AsyncMock()
+    index.feature_use_connectors_api = True
+    index.fetch_response_by_id = AsyncMock(return_value=doc_source)
+    validation_result = FilteringValidationResult(
+        state=FilteringValidationState.VALID,
+        errors=[],
+    )
+    validator = Mock()
+    validator.validate_filtering = AsyncMock(return_value=validation_result)
+
+    connector = Connector(elastic_index=index, doc_source=doc_source)
+    await connector.validate_filtering(validator=validator)
+
+    validator.validate_filtering.assert_awaited()
+    index.api.connector_update_filtering_draft_validation.assert_awaited_once_with(
+        connector_id=CONNECTOR_ID,
+        validation_result=validation_result.to_dict(),
+    )
+
+    index.api.connector_activate_filtering_draft.assert_awaited_once_with(
+        connector_id=CONNECTOR_ID,
     )
 
 

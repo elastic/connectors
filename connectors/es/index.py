@@ -35,13 +35,13 @@ class TemporaryConnectorApiWrapper(ESClient):
         )
 
     async def connector_update_filtering_draft_validation(
-        self, connector_id, validation_info
+        self, connector_id, validation_result
     ):
         await self.client.perform_request(
             "PUT",
             f"/_connector/{connector_id}/_filtering/_validation",
             headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={"validation": validation_info},
+            body={"validation": validation_result},
         )
 
     async def connector_activate_filtering_draft(self, connector_id):
@@ -63,13 +63,13 @@ class ESApi(ESClient):
         )
 
     async def connector_update_filtering_draft_validation(
-        self, connector_id, validation_info
+        self, connector_id, validation_result
     ):
         await self._retrier.execute_with_retry(
             partial(
                 self._api_wrapper.connector_update_filtering_draft_validation,
                 connector_id,
-                validation_info,
+                validation_result,
             )
         )
 

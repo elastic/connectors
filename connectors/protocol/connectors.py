@@ -972,10 +972,12 @@ class Connector(ESDocument):
 
         if self.index.feature_use_connectors_api:
             await self.index.api.connector_update_filtering_draft_validation(
-                self.id, validation_result.to_dict()
+                connector_id=self.id, validation_result=validation_result.to_dict()
             )
             if validation_result.state == FilteringValidationState.VALID:
-                await self.index.api.connector_activate_filtering_draft(self.id)
+                await self.index.api.connector_activate_filtering_draft(
+                    connector_id=self.id
+                )
         else:
             filtering = self.filtering.to_list()
             for filter_ in filtering:
