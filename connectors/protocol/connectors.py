@@ -970,21 +970,30 @@ class Connector(ESDocument):
         validation_result = await validator.validate_filtering(draft_filter)
         self.log_info(f"Filtering validation result: {validation_result.state.value}")
 
-        filtering = self.filtering.to_list()
-        for filter_ in filtering:
-            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                filter_.get("draft", {"validation": {}})[
-                    "validation"
-                ] = validation_result.to_dict()
-                if validation_result.state == FilteringValidationState.VALID:
-                    filter_["active"] = filter_.get("draft")
+        if self.index.feature_use_connectors_api:
+            await self.index.api.connector_update_filtering_draft_validation(
+                connector_id=self.id, validation_result=validation_result.to_dict()
+            )
+            if validation_result.state == FilteringValidationState.VALID:
+                await self.index.api.connector_activate_filtering_draft(
+                    connector_id=self.id
+                )
+        else:
+            filtering = self.filtering.to_list()
+            for filter_ in filtering:
+                if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                    filter_.get("draft", {"validation": {}})[
+                        "validation"
+                    ] = validation_result.to_dict()
+                    if validation_result.state == FilteringValidationState.VALID:
+                        filter_["active"] = filter_.get("draft")
 
-        await self.index.update(
-            doc_id=self.id,
-            doc={"filtering": filtering},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
+            await self.index.update(
+                doc_id=self.id,
+                doc={"filtering": filtering},
+                if_seq_no=self._seq_no,
+                if_primary_term=self._primary_term,
+            )
         await self.reload()
 
     async def document_count(self):
