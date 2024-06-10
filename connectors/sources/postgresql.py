@@ -196,7 +196,7 @@ class PostgreSQLClient:
         Returns:
             cursor: Asynchronous cursor
         """
-        self._logger.debug(f"Retrieving the cursor for query: {query}")
+        self._logger.debug(f"Retrieving the cursor for query '{query}'")
         try:
             async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
@@ -269,12 +269,12 @@ class PostgreSQLClient:
             )
         ]
 
-        self._logger.debug(f"Found primary keys for '{table}' table: {primary_keys}")
+        self._logger.debug(f"Found primary keys for table '{table}': {primary_keys}")
 
         return primary_keys
 
     async def get_table_last_update_time(self, table):
-        self._logger.debug(f"Fetching last updated time for table: {table}")
+        self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
@@ -288,9 +288,7 @@ class PostgreSQLClient:
                 retry_count=self.retry_count,
             )
         )
-        self._logger.debug(
-            f"Last updated time for table: {table} is {last_update_time}"
-        )
+        self._logger.debug(f"Last updated time for table '{table}': {last_update_time}")
         return last_update_time
 
     async def data_streamer(
@@ -310,7 +308,7 @@ class PostgreSQLClient:
         """
         record_count = 0
         if query is None and row_count is not None and order_by_columns is not None:
-            self._logger.debug(f"Streaming records from database for table: {table}")
+            self._logger.debug(f"Streaming records from database for table '{table}'")
             order_by_columns_list = ",".join(
                 [f'"{column}"' for column in order_by_columns]
             )
@@ -341,7 +339,7 @@ class PostgreSQLClient:
 
                 if row_count <= offset:
                     self._logger.info(
-                        f"Found {record_count} records from '{table}' table"
+                        f"Found {record_count} records from table '{table}'"
                     )
                     return
         else:
@@ -497,7 +495,7 @@ class PostgreSQLDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
-        self._logger.info("Validating the Connector Configuration...")
+        self._logger.debug("Pinging the PostgreSQL instance")
         try:
             await self.postgresql_client.ping()
         except Exception as e:
@@ -540,14 +538,14 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
-        self._logger.info(f"Fetching records for the table: {table}")
+        self._logger.info(f"Fetching records for table '{table}'")
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for table {table}. Error: {exception}"
+                f"Something went wrong while fetching document for table '{table}'. Error: {exception}"
             )
 
     async def fetch_documents_from_query(self, tables, query):
@@ -561,7 +559,7 @@ class PostgreSQLDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         self._logger.info(
-            f"Fetching records for {tables} tables using the custom query: {query}"
+            f"Fetching records for {tables} tables using custom query: {query}"
         )
         try:
             docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
@@ -569,7 +567,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
+                f"Something went wrong while fetching document for query '{query}' and tables {', '.join(tables)}. Error: {exception}"
             )
 
     async def _yield_docs_custom_query(self, tables, query):
@@ -608,7 +606,7 @@ class PostgreSQLDataSource(BaseDataSource):
         row_count = await self.postgresql_client.get_table_row_count(table=table)
         if row_count > 0:
             # Query to get the table's primary key
-            self._logger.debug(f"Total '{row_count}' rows found in '{table}' table")
+            self._logger.debug(f"Total '{row_count}' rows found in table '{table}'")
             keys, order_by_columns = await self.get_primary_key(tables=[table])
             if keys:
                 try:
@@ -619,7 +617,7 @@ class PostgreSQLDataSource(BaseDataSource):
                     )
                 except Exception:
                     self._logger.warning(
-                        f"Unable to fetch last_updated_time for {table}"
+                        f"Unable to fetch last_updated_time for table  '{table}'"
                     )
                     last_update_time = None
                 async for row in self.yield_rows_for_query(
@@ -641,10 +639,10 @@ class PostgreSQLDataSource(BaseDataSource):
                     )
             else:
                 self._logger.warning(
-                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                    f"Skipping table '{table}' from database '{self.database}' since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
                 )
         else:
-            self._logger.warning(f"No rows found for {table}.")
+            self._logger.warning(f"No rows found for table '{table}'")
 
     async def yield_rows_for_query(
         self,
