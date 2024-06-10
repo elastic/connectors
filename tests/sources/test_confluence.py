@@ -26,9 +26,9 @@ from connectors.sources.confluence import (
     ConfluenceClient,
     ConfluenceDataSource,
     InternalServerError,
-    ThrottledError,
     NotFound,
     SyncFailure,
+    ThrottledError,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator

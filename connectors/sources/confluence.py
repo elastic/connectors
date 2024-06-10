@@ -225,8 +225,8 @@ class ConfluenceClient:
             # Re-raising the error as it is not handled explicitly by retryable
             raise
         else:
-            self._logger.exception(
-                f"Something went wrong while fetching url: {url}. Exception: {exception}."
+            self._logger.error(
+                f"Error encountered. Skipping data for {url}. Exception: {exception}. Pagination terminated early."
             )
 
     @retryable(
