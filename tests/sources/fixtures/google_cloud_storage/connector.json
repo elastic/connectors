@@ -135,7 +135,7 @@
     },
     "full": {
       "enabled": true,
-      "interval": "* * * * * 1"
+      "interval": "* * * * * *"
     },
     "incremental": {
       "enabled": false,

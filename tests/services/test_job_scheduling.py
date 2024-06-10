@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -57,7 +57,7 @@ def sync_job_index_mock():
         yield sync_job_index_mock
 
 
-default_next_sync = datetime.utcnow() + timedelta(hours=1)
+default_next_sync = datetime.now(timezone.utc) + timedelta(hours=1)
 
 
 def mock_connector(
@@ -112,7 +112,7 @@ async def test_connector_ready_to_sync(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service(JobSchedulingService)
 
@@ -136,13 +136,13 @@ async def test_connector_ready_to_sync_with_race_condition(
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
 
     # Do nothing in the first call(in _should_schedule_on_demand_sync) and second call(in _should_schedule_scheduled_sync), and the last_sync_scheduled_at is updated by another instance in the subsequent calls
     def _reset_last_sync_scheduled_at_by_job_type():
         if connector.reload.await_count > 2:
             connector.last_sync_scheduled_at_by_job_type = Mock(
-                return_value=datetime.utcnow() + timedelta(seconds=20)
+                return_value=datetime.now(timezone.utc) + timedelta(seconds=20)
             )
 
     connector.reload.side_effect = _reset_last_sync_scheduled_at_by_job_type
@@ -181,7 +181,7 @@ async def test_connector_scheduled_access_control_sync_with_dls_feature_disabled
     set_env,
 ):
     connector = mock_connector(
-        next_sync=datetime.utcnow(), document_level_security_enabled=False
+        next_sync=datetime.now(timezone.utc), document_level_security_enabled=False
     )
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service(JobSchedulingService)
@@ -205,7 +205,7 @@ async def test_connector_scheduled_access_control_sync_with_insufficient_license
     sync_job_index_mock,
     set_env,
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     connector_index_mock.has_active_license_enabled = AsyncMock(
         return_value=(False, License.BASIC)
@@ -246,7 +246,7 @@ async def test_connector_scheduled_incremental_sync(
 ):
     connector = mock_connector(
         service_type=service_type,
-        next_sync=datetime.utcnow(),
+        next_sync=datetime.now(timezone.utc),
         incremental_sync_enabled=incremental_sync_enabled,
         document_level_security_enabled=False,
     )
@@ -323,8 +323,8 @@ async def test_connector_prepare_failed(
 async def test_run_when_sync_fails_then_continues_service_execution(
     connector_index_mock, set_env
 ):
-    connector = mock_connector(next_sync=datetime.utcnow())
-    another_connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
+    another_connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator(
         [connector, another_connector]
     )
@@ -365,7 +365,7 @@ async def test_run_when_connector_fields_are_invalid(
     data_source_mock.ping = AsyncMock()
     data_source_mock.close = AsyncMock()
 
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service(JobSchedulingService, stop_after=0.15)
 
@@ -397,7 +397,7 @@ async def test_run_when_connector_ping_fails(
     data_source_mock.ping = AsyncMock(side_effect=[actual_error])
     data_source_mock.close = AsyncMock()
 
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
     await create_and_run_service(JobSchedulingService, stop_after=0.15)
 
@@ -427,7 +427,7 @@ async def test_run_when_connector_validate_config_fails(
     data_source_mock.ping = AsyncMock()
     data_source_mock.close = AsyncMock()
 
-    connector = mock_connector(next_sync=datetime.utcnow())
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
     connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
 
     await create_and_run_service(JobSchedulingService, stop_after=0.15)
