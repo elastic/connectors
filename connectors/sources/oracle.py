@@ -139,6 +139,7 @@ class OracleClient:
         Returns:
             cursor: Synchronous cursor
         """
+        self._logger.debug(f"Retrieving the cursor for query: {query}")
         try:
             loop = asyncio.get_running_loop()
             if self.connection is None:
@@ -168,6 +169,9 @@ class OracleClient:
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
         if is_wildcard(tables):
+            self._logger.info(
+                "Fetching all tables as the configuration field 'tables' is set to '*'"
+            )
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -180,6 +184,7 @@ class OracleClient:
             ):
                 yield row[0]
         else:
+            self._logger.info(f"Fetching user configured tables: {tables}")
             for table in tables:
                 yield table
 
@@ -199,6 +204,7 @@ class OracleClient:
         return row_count
 
     async def get_table_primary_key(self, table):
+        self._logger.debug(f"Extracting primary keys for table: {table}")
         primary_keys = [
             key
             async for [key] in fetch(
@@ -213,9 +219,11 @@ class OracleClient:
                 retry_count=self.retry_count,
             )
         ]
+        self._logger.debug(f"Found primary keys for '{table}' table")
         return primary_keys
 
     async def get_table_last_update_time(self, table):
+        self._logger.debug(f"Fetching last updated time for table: {table}")
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
@@ -242,6 +250,8 @@ class OracleClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        self._logger.debug(f'Streaming records from database for table "{table}"')
+        record_count = 0
         async for data in fetch(
             cursor_func=partial(
                 self.get_cursor,
@@ -253,7 +263,9 @@ class OracleClient:
             fetch_size=self.fetch_size,
             retry_count=self.retry_count,
         ):
+            record_count += 1
             yield data
+        self._logger.info(f'Found {record_count} records in table  "{table}"')
 
 
 class OracleDataSource(BaseDataSource):
@@ -409,7 +421,6 @@ class OracleDataSource(BaseDataSource):
         self._logger.info("Validating the Connector Configuration...")
         try:
             await self.oracle_client.ping()
-            self._logger.info("Successfully connected to Oracle.")
         except Exception as e:
             msg = f"Can't connect to Oracle on {self.oracle_client.host}"
             raise Exception(msg) from e
@@ -424,9 +435,11 @@ class OracleDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
+            self._logger.info(f'Fetching records for the table "{table}"')
             row_count = await self.oracle_client.get_table_row_count(table=table)
             if row_count > 0:
                 # Query to get the table's primary key
+                self._logger.debug(f'Total {row_count} rows found in table "{table}"')
                 keys = await self.oracle_client.get_table_primary_key(table=table)
                 keys = map_column_names(column_names=keys, tables=[table])
                 if keys:
@@ -477,9 +490,9 @@ class OracleDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
+        self._logger.info("Successfully connected to Oracle.")
         table_count = 0
         async for table in self.oracle_client.get_tables_to_fetch():
-            self._logger.debug(f"Found table: {table} in database: {self.database}.")
             table_count += 1
             async for row in self.fetch_documents(table=table):
                 yield row, None
