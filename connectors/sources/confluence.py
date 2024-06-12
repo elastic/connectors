@@ -33,6 +33,7 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     iso_utc,
+    nested_get_from_dict,
     retryable,
     ssl_context,
 )
@@ -57,7 +58,7 @@ USERS_FOR_SERVER = "users_for_server"
 SPACE_QUERY = "limit=100&expand=permissions,history"
 ATTACHMENT_QUERY = "limit=100&expand=version,history"
 CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
-SEARCH_QUERY = "limit=100&expand=ancestors,content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
+SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
 
@@ -949,7 +950,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
                 "size": attachment.get("extensions", {}).get("fileSize", 0),
                 "url": attachment_url,
-                "createdDate": attachment.get("history", {}).get("createdDate"),
+                "createdDate": nested_get_from_dict(
+                    attachment, ["history", "createdDate"]
+                ),
             }, attachment.get("_links", {}).get("download")
 
     async def search_by_query(self, query):
@@ -978,14 +981,11 @@ class ConfluenceDataSource(BaseDataSource):
                 document["type"] == "space"
                 and self.confluence_client.data_source_type == CONFLUENCE_CLOUD
             ):
-                document["author"] = (
-                    entity.get("space", {})
-                    .get("history", {})
-                    .get("createdBy", {})
-                    .get(self.authorkey)
+                document["author"] = nested_get_from_dict(
+                    entity, ["space", "history", "createdBy", self.authorkey]
                 )
-                document["createdDate"] = (
-                    entity.get("space", {}).get("history", {}).get("createdDate")
+                document["createdDate"] = nested_get_from_dict(
+                    entity, ["space", "history", "createdDate"]
                 )
             if document.get("type", "") == "content":
                 document.update(
@@ -994,14 +994,11 @@ class ConfluenceDataSource(BaseDataSource):
                         "space": entity_details.get("space", {}).get("name"),
                     }
                 )
-                document["author"] = (
-                    entity.get("content", {})
-                    .get("history", {})
-                    .get("createdBy", {})
-                    .get(self.authorkey)
+                document["author"] = nested_get_from_dict(
+                    entity, ["content", "history", "createdBy", self.authorkey]
                 )
-                document["createdDate"] = (
-                    entity.get("content", {}).get("history", {}).get("createdDate")
+                document["createdDate"] = nested_get_from_dict(
+                    entity, ["content", "history", "createdDate"]
                 )
 
                 if document.get("type", "") == "attachment":
@@ -1101,11 +1098,12 @@ class ConfluenceDataSource(BaseDataSource):
             "url": space_url,
         }
         if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
-            document["createdDate"] = space.get("history", {}).get("createdDate")
-            document["author"] = (
-                space.get("history", {}).get("createdBy", {}).get(self.authorkey)
+            document["createdDate"] = nested_get_from_dict(
+                space, ["history", "createdDate"]
             )
-
+            document["author"] = nested_get_from_dict(
+                space, ["history", "createdBy", self.authorkey]
+            )
         return document
 
     async def _space_coro(self):
