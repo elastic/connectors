@@ -1,8 +1,8 @@
 aiohttp==3.9.5
 aiofiles==23.2.1
 aiomysql==0.1.1
-elasticsearch[async]==8.13.0
-elastic-transport==8.13.0
+elasticsearch[async]==8.14.0
+elastic-transport==8.13.1
 pyyaml==6.0
 envyaml==1.10.211231
 ecs-logging==2.0.0
