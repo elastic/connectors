@@ -76,6 +76,11 @@ SPACE = {
             "operation": {"operation": "read", "targetType": "space"},
         }
     ],
+    "history": {
+        "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "createdBy": {"publicName": "user1"},
+    },
 }
 
 RESPONSE_PAGE = {
@@ -84,7 +89,11 @@ RESPONSE_PAGE = {
             "id": 4779,
             "title": "ES-scrum",
             "type": "page",
-            "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+            "history": {
+                "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                "createdDate": "2023-01-03T09:24:50.633Z",
+                "createdBy": {"publicName": "user1"},
+            },
             "children": {"attachment": {"size": 2}},
             "body": {"storage": {"value": "This is a test page"}},
             "space": {"name": "DEMO"},
@@ -110,6 +119,8 @@ EXPECTED_PAGE = {
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
     "labels": [None],
+    "author": "user1",
+    "createdDate": "2023-01-03T09:24:50.633Z",
 }
 
 EXPECTED_SPACE = {
@@ -118,6 +129,8 @@ EXPECTED_SPACE = {
     "title": "DEMO",
     "_timestamp": "2024-04-02T09:53:15.818621+00:00",
     "url": "http://127.0.0.1:9696/spaces/DM",
+    "createdDate": "2023-01-03T09:24:50.633Z",
+    "author": "user1",
 }
 
 RESPONSE_ATTACHMENT = {
@@ -127,6 +140,7 @@ RESPONSE_ATTACHMENT = {
             "title": "demo.py",
             "type": "attachment",
             "version": {"when": "2023-01-03T09:24:50.633Z"},
+            "history": {"createdDate": "2023-01-03T09:24:50.633Z"},
             "extensions": {"fileSize": 230},
             "_links": {
                 "download": "/download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
@@ -149,6 +163,7 @@ EXPECTED_ATTACHMENT = {
     "space": "DEMO",
     "page": "ES-scrum",
     "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+    "createdDate": "2023-01-03T09:24:50.633Z",
 }
 
 RESPONSE_CONTENT = "# This is the dummy file"
@@ -190,6 +205,8 @@ EXPECTED_BLOG = {
     "body": "This is a test blog",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/blogposts/4779/demo-blog",
+    "createdDate": "2023-01-03T09:24:50.633Z",
+    "author": "user1",
 }
 
 EXPECTED_BLOG_ATTACHMENT = {
@@ -201,6 +218,8 @@ EXPECTED_BLOG_ATTACHMENT = {
     "space": "DEMO",
     "blog": "demo-blog",
     "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+    "createdDate": "2023-01-03T09:24:50.633Z",
+    "author": "user1",
 }
 
 RESPONSE_SEARCH_RESULT = {
@@ -217,6 +236,11 @@ RESPONSE_SEARCH_RESULT = {
                         "embeddedContent": [],
                         "_expandable": {"content": "/rest/api/content/6455384"},
                     },
+                },
+                "history": {
+                    "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                    "createdDate": "2023-01-03T09:24:50.633Z",
+                    "createdBy": {"publicName": "user1", "username": "user1"},
                 },
             },
             "title": "Product Details",
@@ -245,6 +269,11 @@ RESPONSE_SEARCH_RESULT = {
                 },
                 "container": {"type": "page", "title": "Product Details"},
                 "_links": {"download": "/download/attachments/196717/Potential.pdf"},
+                "history": {
+                    "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                    "createdDate": "2023-01-03T09:24:50.633Z",
+                    "createdBy": {"publicName": "user1", "username": "user1"},
+                },
             },
             "title": "Potential.pdf",
             "excerpt": "Evaluation Overview",
@@ -258,6 +287,11 @@ RESPONSE_SEARCH_RESULT = {
                 "id": "196612",
                 "key": "SD",
                 "type": "global",
+                "history": {
+                    "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                    "createdDate": "2023-01-03T09:24:50.633Z",
+                    "createdBy": {"publicName": "user1", "username": "user1"},
+                },
             },
             "title": "Software Development",
             "excerpt": "",
@@ -270,7 +304,7 @@ RESPONSE_SEARCH_RESULT = {
 }
 
 
-EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
+EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD = [
     {
         "_id": "983046",
         "title": "Product Details",
@@ -279,6 +313,8 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
         "type": "page",
         "space": "Software Development",
         "url": f"{HOST_URL}/spaces/SD/pages/983046/Product+Details",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
     },
     {
         "_id": "att4587521",
@@ -289,6 +325,45 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
         "space": "Software Development",
         "size": 1119256,
         "page": "Product Details",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
+    },
+    {
+        "_id": "196612",
+        "title": "Software Development",
+        "_timestamp": "2022-12-13T09:49:01.000Z",
+        "body": None,
+        "type": "space",
+        "url": f"{HOST_URL}/spaces/SD",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
+    },
+]
+
+
+EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER = [
+    {
+        "_id": "983046",
+        "title": "Product Details",
+        "_timestamp": "2022-12-19T13:06:18.000Z",
+        "body": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
+        "type": "page",
+        "url": f"{HOST_URL}/spaces/SD/pages/983046/Product+Details",
+        "space": "Software Development",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
+    },
+    {
+        "_id": "att4587521",
+        "title": "Potential.pdf",
+        "_timestamp": "2023-01-24T03:34:38.000Z",
+        "type": "attachment",
+        "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
+        "space": "Software Development",
+        "size": 1119256,
+        "page": "Product Details",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
     },
     {
         "_id": "196612",
@@ -299,6 +374,7 @@ EXPECTED_SEARCH_RESULT_FOR_FILTERING = [
         "url": f"{HOST_URL}/spaces/SD",
     },
 ]
+
 
 SPACE_PERMISSION_RESPONSE = [
     {
@@ -813,6 +889,7 @@ async def test_fetch_documents():
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
         source.confluence_client.index_labels = True
+        source.confluence_client.data_source_type = "confluence_cloud"
         # Execute
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response, _, _, _, _ in source.fetch_documents(api_query=""):
@@ -846,13 +923,14 @@ async def test_search_by_query():
         async_response.__aenter__ = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
         )
+        source.confluence_client.data_source_type = "confluence_cloud"
         documents = []
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response, _ in source.search_by_query(
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD
 
 
 @pytest.mark.asyncio
@@ -869,7 +947,7 @@ async def test_search_by_query_for_datacenter():
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER
 
 
 @pytest.mark.asyncio
@@ -1534,7 +1612,11 @@ async def test_fetch_page_blog_documents_with_labels():
                     "id": 4779,
                     "title": "ES-scrum",
                     "type": "page",
-                    "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+                    "history": {
+                        "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                        "createdDate": "2023-01-03T09:24:50.633Z",
+                        "createdBy": {"publicName": "user1"},
+                    },
                     "children": {"attachment": {"size": 2}},
                     "body": {"storage": {"value": "This is a test page"}},
                     "space": {"name": "DEMO"},
