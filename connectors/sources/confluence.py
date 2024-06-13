@@ -44,6 +44,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 API_FAILURE_THRESHOLD = 0.10
+MIN_API_CALL = 1000
 
 LIMIT = 100
 SPACE = "space"
@@ -261,10 +262,10 @@ class ConfluenceClient:
             raise
         except ClientResponseError as exception:
             await self._handle_client_errors(url=url, exception=exception)
-        except Exception:
+        except Exception as exception:
             self.api_failed_count += 1
             self._logger.debug(
-                f"Incrementing error count due to unknown exception. Failed API count: {self.api_failed_count}"
+                f"Incrementing error count due to exception: {exception}. Failed API count: {self.api_failed_count}"
             )
             raise
 
@@ -1270,7 +1271,7 @@ class ConfluenceDataSource(BaseDataSource):
             2,
         )
         if failed_percentage >= API_FAILURE_THRESHOLD * 100:
-            msg = f"High percentage of API exceptions {failed_percentage}% is greater than or equal to the default threshold {API_FAILURE_THRESHOLD*100}%). This calculation is done at the end of the synchronization process. Please review the logs for more details."
+            msg = f"High percentage of API exceptions {failed_percentage}% is greater than or equal to the default threshold {API_FAILURE_THRESHOLD*100}%. This calculation is done at the end of the synchronization process. Please review the logs for more details."
             self._logger.error(msg)
             raise SyncFailure(msg)
 
@@ -1328,5 +1329,5 @@ class ConfluenceDataSource(BaseDataSource):
                 yield item
             await self.fetchers.join()
 
-        if self.confluence_client.api_total_count > 0:
+        if self.confluence_client.api_total_count > MIN_API_CALL:
             self.check_api_exceptions_and_raise()
