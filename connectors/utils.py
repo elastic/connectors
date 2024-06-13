@@ -456,9 +456,16 @@ class ConcurrentTasks:
                 f"Task {task.get_name()} was cancelled",
             )
         elif task.exception():
-            logger.error(
-                f"Exception found for task {task.get_name()}: {task.exception()}",
-            )
+            try:
+                raise task.exception()
+            except Exception as e:
+                logger.error(
+                    f"Exception found for task {task.get_name()}: {e}",
+                    exc_info=True,
+                )
+            # logger.error(
+            #     f"Exception found for task {task.get_name()}: {task.exception()} {task}"
+            # )
 
     def _add_task(self, coroutine, name=None):
         task = asyncio.create_task(coroutine(), name=name)
