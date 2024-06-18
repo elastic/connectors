@@ -36,6 +36,7 @@ from connectors.utils import (
     MemQueue,
     RetryStrategy,
     iso_utc,
+    nested_get_from_dict,
     retryable,
     ssl_context,
 )
@@ -59,10 +60,10 @@ USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
-SPACE_QUERY = "limit=100&expand=permissions"
-ATTACHMENT_QUERY = "limit=100&expand=version"
+SPACE_QUERY = "limit=100&expand=permissions,history"
+ATTACHMENT_QUERY = "limit=100&expand=version,history"
 CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
-SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,content.body.storage,space.description"
+SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
 
@@ -495,6 +496,11 @@ class ConfluenceDataSource(BaseDataSource):
         self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.fetcher_count = 0
+        self.authorkey = (
+            "username"
+            if self.confluence_client.data_source_type == "confluence_data_center"
+            else "publicName"
+        )
 
     def _set_internal_logger(self):
         self.confluence_client.set_logger(self._logger)
@@ -968,6 +974,8 @@ class ConfluenceDataSource(BaseDataSource):
                 "space": document["space"]["name"],
                 "body": document["body"]["storage"]["value"],
                 "url": document_url,
+                "author": document["history"]["createdBy"][self.authorkey],
+                "createdDate": document["history"]["createdDate"],
             }
             if self.confluence_client.index_labels:
                 doc["labels"] = document["labels"]
@@ -1015,6 +1023,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
                 "size": attachment.get("extensions", {}).get("fileSize", 0),
                 "url": attachment_url,
+                "createdDate": nested_get_from_dict(
+                    attachment, ["history", "createdDate"]
+                ),
             }, attachment.get("_links", {}).get("download")
 
     async def search_by_query(self, query):
@@ -1039,12 +1050,28 @@ class ConfluenceDataSource(BaseDataSource):
                 ),
             }
             download_url = None
+            if (
+                document["type"] == "space"
+                and self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+            ):
+                document["author"] = nested_get_from_dict(
+                    entity, ["space", "history", "createdBy", self.authorkey]
+                )
+                document["createdDate"] = nested_get_from_dict(
+                    entity, ["space", "history", "createdDate"]
+                )
             if document.get("type", "") == "content":
                 document.update(
                     {
                         "type": entity_details.get("type"),
                         "space": entity_details.get("space", {}).get("name"),
                     }
+                )
+                document["author"] = nested_get_from_dict(
+                    entity, ["content", "history", "createdBy", self.authorkey]
+                )
+                document["createdDate"] = nested_get_from_dict(
+                    entity, ["content", "history", "createdDate"]
                 )
 
                 if document.get("type", "") == "attachment":
@@ -1146,13 +1173,21 @@ class ConfluenceDataSource(BaseDataSource):
             self.confluence_client.host_url,
             space.get("_links", {}).get("webui", "")[1:],
         )
-        return {
+        document = {
             "_id": space.get("id"),
             "type": "Space",
             "title": space.get("name"),
             "_timestamp": iso_utc(),
             "url": space_url,
         }
+        if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+            document["createdDate"] = nested_get_from_dict(
+                space, ["history", "createdDate"]
+            )
+            document["author"] = nested_get_from_dict(
+                space, ["history", "createdBy", self.authorkey]
+            )
+        return document
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
