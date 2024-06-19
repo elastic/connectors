@@ -64,14 +64,19 @@ class TestESManagementClient:
     ):
         index_name = "something"
         mappings = {}
-        existing_mappings_response = {index_name: {"mappings": ["something"]}}
+        existing_mappings_response = {index_name: {"mappings": {"properties": "something"}}}
 
         es_management_client.client.indices.get_mapping = AsyncMock(
             return_value=existing_mappings_response
         )
 
         await es_management_client.ensure_content_index_mappings(index_name, mappings)
-        es_management_client.client.indices.put_mapping.assert_not_called()
+        es_management_client.client.indices.put_mapping.assert_awaited_with(
+            index=index_name,
+            dynamic=False,
+            dynamic_templates=[],
+            properties="something",
+        )
 
     @pytest.mark.asyncio
     async def test_ensure_content_index_mappings_when_mappings_do_not_exist(
