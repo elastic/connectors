@@ -69,7 +69,9 @@ class S3Client:
             return self.clients[region_name]
 
         if AWS_ENDPOINT is not None:
-            self._logger.debug(f"Creating a session against {AWS_ENDPOINT}")
+            self._logger.debug(
+                f"Creating a session against {AWS_ENDPOINT} for region: {region_name}"
+            )
 
         # AsyncExitStack, supports asynchronous context managers, used to create client using enter_async_context and
         # these context manager will be stored in client_context list also client will be stored in clients dict with their region
@@ -104,11 +106,16 @@ class S3Client:
             list: List of buckets
         """
         if self.configuration["buckets"] == ["*"]:
+            self._logger.info(
+                "Retrieving all buckets from S3 as configuration field 'buckets' is set to '*'"
+            )
             s3 = await self.client()
             bucket_list = await s3.list_buckets()
             buckets = [bucket["Name"] for bucket in bucket_list["Buckets"]]
+            self._logger.debug(f"Retrieved buckets from S3: {buckets}")
         else:
             buckets = self.configuration["buckets"]
+            self._logger.info(f"Fetching configured buckets: {buckets}")
         return buckets
 
     async def get_bucket_objects(self, bucket, **kwargs):
@@ -119,9 +126,11 @@ class S3Client:
             obj_summary: Bucket objects metadata
             s3_client: S3 client object
         """
+        self._logger.info(f"Fetching documents for '{bucket}' bucket")
         page_size = self.configuration["page_size"]
         region_name = await self.get_bucket_region(bucket)
         s3_client = await self.client(region=region_name)
+        document_count = 0
         async with self.session.resource(
             service_name="s3",
             config=self.config,
@@ -140,11 +149,16 @@ class S3Client:
                     objects = bucket_obj.objects.page_size(page_size)
 
                 async for obj_summary in objects:
+                    document_count += 1
                     yield obj_summary, s3_client
             except Exception as exception:
                 self._logger.warning(
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
+
+        self._logger.info(
+            f"Total {document_count} documents fetched for '{bucket}' bucket"
+        )
 
     async def get_bucket_region(self, bucket_name):
         """This method return the name of region for a bucket.
@@ -155,6 +169,7 @@ class S3Client:
         """
         region = None
         try:
+            self._logger.debug(f"Retrieving the region for bucket '{bucket_name}'")
             s3 = await self.client()
             response = await s3.get_bucket_location(
                 Bucket=bucket_name,
@@ -229,9 +244,10 @@ class S3DataSource(BaseDataSource):
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
-            self._logger.info("Successfully connected to AWS.")
         except Exception:
-            self._logger.exception("Error while connecting to AWS.")
+            self._logger.warning(
+                "Error while connecting to AWS. Please check the configurations"
+            )
             raise
 
     async def format_document(self, bucket_name, bucket_object):
@@ -268,6 +284,7 @@ class S3DataSource(BaseDataSource):
 
         bucket = rule["bucket"]
         prefix = rule.get("prefix", "")
+        self._logger.info(f"Fetching content from S3 using sync rule: {rule}")
         async for obj_summary, s3_client in self.s3_client.get_bucket_objects(
             bucket=bucket, prefix=prefix
         ):
@@ -286,7 +303,11 @@ class S3DataSource(BaseDataSource):
         Yields:
             dictionary: Document from Amazon S3.
         """
+        self._logger.info("Successfully connected to AWS.")
         if filtering and filtering.has_advanced_rules():
+            self._logger.info(
+                f"Advanced sync rules for S3 are configured: {filtering.get_advanced_rules()}"
+            )
             for rule in filtering.get_advanced_rules():
                 async for document, attachment in self.advanced_sync(rule=rule):
                     yield document, attachment
