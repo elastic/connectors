@@ -1961,11 +1961,42 @@ async def test_create_job(index_method, trigger_method, set_env):
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_job_index.feature_use_connectors_api = False
     await sync_job_index.create(
         connector=connector, trigger_method=trigger_method, job_type=JobType.INCREMENTAL
     )
 
     index_method.assert_called_with(expected_index_doc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "trigger_method, job_type",
+    [
+        (JobTriggerMethod.ON_DEMAND, JobType.FULL),
+        (JobTriggerMethod.ON_DEMAND, JobType.INCREMENTAL),
+        (JobTriggerMethod.ON_DEMAND, JobType.ACCESS_CONTROL),
+        (JobTriggerMethod.SCHEDULED, JobType.FULL),
+        (JobTriggerMethod.SCHEDULED, JobType.INCREMENTAL),
+        (JobTriggerMethod.SCHEDULED, JobType.ACCESS_CONTROL),
+    ],
+)
+async def test_create_job_with_connector_api(trigger_method, job_type):
+    connector = Mock()
+    connector.id = "id"
+    config = load_config(CONFIG)
+    sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_job_index.feature_use_connectors_api = True
+    sync_job_index.api.connector_sync_job_create = AsyncMock()
+    await sync_job_index.create(
+        connector=connector, trigger_method=trigger_method, job_type=job_type
+    )
+
+    sync_job_index.api.connector_sync_job_create.assert_awaited_once_with(
+        connector_id=connector.id,
+        trigger_method=trigger_method.value,
+        job_type=job_type.value,
+    )
 
 
 @pytest.mark.asyncio
@@ -2010,6 +2041,7 @@ async def test_create_jobs_with_correct_target_index(
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
+    sync_job_index.feature_use_connectors_api = False
     await sync_job_index.create(
         connector=connector,
         trigger_method=JobTriggerMethod.SCHEDULED,
