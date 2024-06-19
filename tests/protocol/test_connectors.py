@@ -1993,7 +1993,9 @@ async def test_create_job_with_connector_api(trigger_method, job_type):
     )
 
     sync_job_index.api.connector_sync_job_create.assert_awaited_once_with(
-        connector_id=connector.id, trigger_method=trigger_method, job_type=job_type
+        connector_id=connector.id,
+        trigger_method=trigger_method.value,
+        job_type=job_type.value,
     )
 
 
