@@ -110,7 +110,7 @@ class ESApi(ESClient):
                 sync_cursor,
             )
         )
-    
+
     async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
         return await self._retrier.execute_with_retry(
             partial(
