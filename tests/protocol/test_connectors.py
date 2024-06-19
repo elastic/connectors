@@ -790,9 +790,25 @@ async def test_sync_job_claim():
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
+    sync_job.index.feature_use_connectors_api = False
     await sync_job.claim(sync_cursor=SYNC_CURSOR)
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_claim_with_connector_api():
+    source = {"_id": "1"}
+    index = Mock()
+    index.api.connector_sync_job_claim = AsyncMock(return_value={"result": "updated"})
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+    sync_job.index.feature_use_connectors_api = True
+    await sync_job.claim(sync_cursor=SYNC_CURSOR)
+
+    index.api.connector_sync_job_claim.assert_called_with(
+        sync_job_id=sync_job.id, worker_hostname=ANY, sync_cursor=SYNC_CURSOR
+    )
 
 
 @pytest.mark.asyncio

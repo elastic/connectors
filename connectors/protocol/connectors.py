@@ -322,14 +322,21 @@ class SyncJob(ESDocument):
 
     async def claim(self, sync_cursor=None):
         try:
-            doc = {
-                "status": JobStatus.IN_PROGRESS.value,
-                "started_at": iso_utc(),
-                "last_seen": iso_utc(),
-                "worker_hostname": socket.gethostname(),
-                "connector.sync_cursor": sync_cursor,
-            }
-            await self.index.update(doc_id=self.id, doc=doc)
+            if self.index.feature_use_connectors_api:
+                await self.index.api.connector_sync_job_claim(
+                    sync_job_id=self.id,
+                    worker_hostname=socket.gethostname(),
+                    sync_cursor=sync_cursor,
+                )
+            else:
+                doc = {
+                    "status": JobStatus.IN_PROGRESS.value,
+                    "started_at": iso_utc(),
+                    "last_seen": iso_utc(),
+                    "worker_hostname": socket.gethostname(),
+                    "connector.sync_cursor": sync_cursor,
+                }
+                await self.index.update(doc_id=self.id, doc=doc)
         except Exception as e:
             self._wrap_errors("claim job", e)
 

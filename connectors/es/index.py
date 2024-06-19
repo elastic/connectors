@@ -51,6 +51,17 @@ class TemporaryConnectorApiWrapper(ESClient):
             headers={"accept": "application/json"},
         )
 
+    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
+        await self.client.perform_request(
+            "PUT",
+            f"/_connector/_sync_job/{sync_job_id}/_claim",
+            headers={"accept": "application/json", "Content-Type": "application/json"},
+            body={
+                "worker_hostname": worker_hostname,
+                **({"sync_cursor": sync_cursor} if sync_cursor else {}),
+            },
+        )
+
     async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
         return await self.client.perform_request(
             "POST",
@@ -88,6 +99,16 @@ class ESApi(ESClient):
     async def connector_activate_filtering_draft(self, connector_id):
         return await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_activate_filtering_draft, connector_id)
+        )
+
+    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self._api_wrapper.connector_sync_job_claim,
+                sync_job_id,
+                worker_hostname,
+                sync_cursor,
+            )
         )
 
     async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
