@@ -154,9 +154,6 @@ class ConnectorIndex(ESIndex):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
-        self.feature_use_connectors_api = elastic_config.get(
-            "feature_use_connectors_api"
-        )
 
     async def heartbeat(self, doc_id):
         if self.feature_use_connectors_api:
@@ -1051,34 +1048,42 @@ class SyncJobIndex(ESIndex):
         )
 
     async def create(self, connector, trigger_method, job_type):
-        filtering = connector.filtering.get_active_filter().transform_filtering()
-        index_name = connector.index_name
+        if self.feature_use_connectors_api:
+            response = await self.api.connector_sync_job_create(
+                connector_id=connector.id,
+                trigger_method=trigger_method.value,
+                job_type=job_type.value,
+            )
+            return response["id"]
+        else:
+            filtering = connector.filtering.get_active_filter().transform_filtering()
+            index_name = connector.index_name
 
-        if job_type == JobType.ACCESS_CONTROL:
-            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+            if job_type == JobType.ACCESS_CONTROL:
+                index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
 
-        job_def = {
-            "connector": {
-                "id": connector.id,
-                "filtering": filtering,
-                "index_name": index_name,
-                "language": connector.language,
-                "pipeline": connector.pipeline.data,
-                "service_type": connector.service_type,
-                "configuration": connector.configuration.to_dict(),
-            },
-            "trigger_method": trigger_method.value,
-            "job_type": job_type.value,
-            "status": JobStatus.PENDING.value,
-            INDEXED_DOCUMENT_COUNT: 0,
-            INDEXED_DOCUMENT_VOLUME: 0,
-            DELETED_DOCUMENT_COUNT: 0,
-            "created_at": iso_utc(),
-            "last_seen": iso_utc(),
-        }
-        api_response = await self.index(job_def)
+            job_def = {
+                "connector": {
+                    "id": connector.id,
+                    "filtering": filtering,
+                    "index_name": index_name,
+                    "language": connector.language,
+                    "pipeline": connector.pipeline.data,
+                    "service_type": connector.service_type,
+                    "configuration": connector.configuration.to_dict(),
+                },
+                "trigger_method": trigger_method.value,
+                "job_type": job_type.value,
+                "status": JobStatus.PENDING.value,
+                INDEXED_DOCUMENT_COUNT: 0,
+                INDEXED_DOCUMENT_VOLUME: 0,
+                DELETED_DOCUMENT_COUNT: 0,
+                "created_at": iso_utc(),
+                "last_seen": iso_utc(),
+            }
+            api_response = await self.index(job_def)
 
-        return api_response["_id"]
+            return api_response["_id"]
 
     async def pending_jobs(self, connector_ids, job_types):
         if not job_types:

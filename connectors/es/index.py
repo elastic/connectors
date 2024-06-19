@@ -28,7 +28,7 @@ class TemporaryConnectorApiWrapper(ESClient):
         super().__init__(elastic_config)
 
     async def connector_check_in(self, connector_id):
-        await self.client.perform_request(
+        return await self.client.perform_request(
             "PUT",
             f"/_connector/{connector_id}/_check_in",
             headers={"accept": "application/json"},
@@ -37,7 +37,7 @@ class TemporaryConnectorApiWrapper(ESClient):
     async def connector_update_filtering_draft_validation(
         self, connector_id, validation_result
     ):
-        await self.client.perform_request(
+        return await self.client.perform_request(
             "PUT",
             f"/_connector/{connector_id}/_filtering/_validation",
             headers={"accept": "application/json", "Content-Type": "application/json"},
@@ -45,7 +45,7 @@ class TemporaryConnectorApiWrapper(ESClient):
         )
 
     async def connector_activate_filtering_draft(self, connector_id):
-        await self.client.perform_request(
+        return await self.client.perform_request(
             "PUT",
             f"/_connector/{connector_id}/_filtering/_activate",
             headers={"accept": "application/json"},
@@ -62,6 +62,18 @@ class TemporaryConnectorApiWrapper(ESClient):
             },
         )
 
+    async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
+        return await self.client.perform_request(
+            "POST",
+            "/_connector/_sync_job",
+            headers={"accept": "application/json", "Content-Type": "application/json"},
+            body={
+                "id": connector_id,
+                "job_type": job_type,
+                "trigger_method": trigger_method,
+            },
+        )
+
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -69,14 +81,14 @@ class ESApi(ESClient):
         self._api_wrapper = TemporaryConnectorApiWrapper(elastic_config)
 
     async def connector_check_in(self, connector_id):
-        await self._retrier.execute_with_retry(
+        return await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_check_in, connector_id)
         )
 
     async def connector_update_filtering_draft_validation(
         self, connector_id, validation_result
     ):
-        await self._retrier.execute_with_retry(
+        return await self._retrier.execute_with_retry(
             partial(
                 self._api_wrapper.connector_update_filtering_draft_validation,
                 connector_id,
@@ -85,7 +97,7 @@ class ESApi(ESClient):
         )
 
     async def connector_activate_filtering_draft(self, connector_id):
-        await self._retrier.execute_with_retry(
+        return await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_activate_filtering_draft, connector_id)
         )
 
@@ -96,6 +108,16 @@ class ESApi(ESClient):
                 sync_job_id,
                 worker_hostname,
                 sync_cursor,
+            )
+        )
+    
+    async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self._api_wrapper.connector_sync_job_create,
+                connector_id,
+                job_type,
+                trigger_method,
             )
         )
 
