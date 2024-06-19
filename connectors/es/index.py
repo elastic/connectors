@@ -51,6 +51,17 @@ class TemporaryConnectorApiWrapper(ESClient):
             headers={"accept": "application/json"},
         )
 
+    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
+        await self.client.perform_request(
+            "PUT",
+            f"/_connector/_sync_job/{sync_job_id}/_claim",
+            headers={"accept": "application/json", "Content-Type": "application/json"},
+            body={
+                "worker_hostname": worker_hostname,
+                **({"sync_cursor": sync_cursor} if sync_cursor else {}),
+            },
+        )
+
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -78,6 +89,16 @@ class ESApi(ESClient):
             partial(self._api_wrapper.connector_activate_filtering_draft, connector_id)
         )
 
+    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self._api_wrapper.connector_sync_job_claim,
+                sync_job_id,
+                worker_hostname,
+                sync_cursor,
+            )
+        )
+
 
 class ESIndex(ESClient):
     """
@@ -95,6 +116,9 @@ class ESIndex(ESClient):
         # initialize elasticsearch client
         super().__init__(elastic_config)
         self.api = ESApi(elastic_config)
+        self.feature_use_connectors_api = elastic_config.get(
+            "feature_use_connectors_api"
+        )
         self.index_name = index_name
         self.elastic_config = elastic_config
 
