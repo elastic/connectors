@@ -51,7 +51,7 @@ class MySQLQueries(Queries):
         return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
 
     def table_data(self, table):
-        return f"SELECT * FROM {self.database}.{table}"
+        return f"SELECT * FROM `{self.database}`.`{table}`"
 
     def table_last_update_time(self, table):
         return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
