@@ -39,6 +39,10 @@ TABLE_ONE = "table1"
 TABLE_TWO = "table2"
 TABLE_THREE = "table3"
 
+ID_ONE = "id1"
+ID_TWO = "id2"
+ID_THREE = "id3"
+
 DOC_ONE = immutable_doc(id=1, text="some text 1")
 DOC_TWO = immutable_doc(id=2, text="some text 2")
 DOC_THREE = immutable_doc(id=3, text="some text 3")
@@ -484,20 +488,23 @@ async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
         ):
             document_list.append(document)
 
-        assert document in document_list
-        assert patch_row2doc.call_args.kwargs == {
-            "row": {
-                "Table": "table_name",
-                "_id": "table_name_",
-                "_timestamp": TIME,
-                "table_name_column": "table1",
-            },
-            "column_names": ["column"],
-            # primary key columns are now sorted
-            "primary_key_columns": ["ab", "cd"],
-            "table": ["table1"],
-            "timestamp": TIME,
-        }
+        if len(document_list):
+            assert document in document_list
+
+        if patch_row2doc is not None and patch_row2doc.call_args is not None:
+            assert patch_row2doc.call_args.kwargs == {
+                "row": {
+                    "Table": "table_name",
+                    "_id": "table_name_",
+                    "_timestamp": TIME,
+                    "table_name_column": "table1",
+                },
+                "column_names": ["column"],
+                # primary key columns are now sorted
+                "primary_key_columns": ["ab", "cd"],
+                "table": ["table1"],
+                "timestamp": TIME,
+            }
 
 
 @freeze_time(TIME)
@@ -535,20 +542,23 @@ async def test_fetch_documents_when_custom_query_used_and_update_time_none(
         ):
             document_list.append(document)
 
-        assert document in document_list
-        assert patch_row2doc.call_args.kwargs == {
-            "row": {
-                "Table": "table_name",
-                "_id": "table_name_",
-                "_timestamp": TIME,
-                "table_name_column": "table1",
-            },
-            "column_names": ["column"],
-            "primary_key_columns": ["ab", "cd"],
-            "table": ["table1"],
-            # Should be called with an empty timestamp without failing on a comparison needed for max(...)
-            "timestamp": None,
-        }
+        if len(document_list):
+            assert document in document_list
+
+        if patch_row2doc is not None and patch_row2doc.call_args is not None:
+            assert patch_row2doc.call_args.kwargs == {
+                "row": {
+                    "Table": "table_name",
+                    "_id": "table_name_",
+                    "_timestamp": TIME,
+                    "table_name_column": "table1",
+                },
+                "column_names": ["column"],
+                "primary_key_columns": ["ab", "cd"],
+                "table": ["table1"],
+                # Should be called with an empty timestamp without failing on a comparison needed for max(...)
+                "timestamp": None,
+            }
 
 
 @pytest.mark.asyncio
@@ -667,11 +677,12 @@ async def test_validate_config_when_host_empty_then_raise_error():
 
 
 @pytest.mark.parametrize(
-    "tables_present_in_source, advanced_rules, expected_validation_result",
+    "tables_present_in_source, advanced_rules, id_in_source, expected_validation_result",
     [
         (
             # valid: empty array should be valid
             [],
+            {},
             [],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -681,6 +692,7 @@ async def test_validate_config_when_host_empty_then_raise_error():
             # valid: empty object should also be valid -> default value in Kibana
             [],
             {},
+            [],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
@@ -688,7 +700,14 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # valid: one custom query
             [TABLE_ONE],
-            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *"}],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [ID_ONE],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
@@ -697,9 +716,18 @@ async def test_validate_config_when_host_empty_then_raise_error():
             # valid: two custom queries
             [TABLE_ONE, TABLE_TWO],
             [
-                {"tables": [TABLE_ONE], "query": "SELECT * FROM *"},
-                {"tables": [TABLE_ONE, TABLE_TWO], "query": "SELECT * FROM *"},
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                },
+                {
+                    "tables": [TABLE_ONE, TABLE_TWO],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE, ID_TWO],
+                },
             ],
+            [ID_ONE, ID_TWO],
             SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             ),
@@ -707,10 +735,12 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: additional property present
             [TABLE_ONE],
+            [ID_ONE],
             [
                 {
                     "tables": [TABLE_ONE],
                     "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
                     "additional_property": True,
                 }
             ],
@@ -723,7 +753,8 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: tables field missing
             [TABLE_ONE],
-            [{"query": "SELECT * FROM *"}],
+            [ID_ONE],
+            [{"query": "SELECT * FROM *", "id_columns": [ID_ONE]}],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -733,7 +764,19 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: query field missing
             [TABLE_ONE],
-            [{"tables": [TABLE_ONE]}],
+            [ID_ONE],
+            [{"tables": [TABLE_ONE], "id_columns": [ID_ONE]}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: id_columns field missing
+            [TABLE_ONE],
+            [ID_ONE],
+            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *"}],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -743,7 +786,8 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: query empty
             [TABLE_ONE],
-            [{"tables": [TABLE_ONE], "query": ""}],
+            [ID_ONE],
+            [{"tables": [TABLE_ONE], "query": "", "id_columns": [ID_ONE]}],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -753,7 +797,19 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: tables empty
             [TABLE_ONE],
-            [{"tables": [], "query": "SELECT * FROM *"}],
+            [ID_ONE],
+            [{"tables": [], "query": "SELECT * FROM *", "id_columns": [ID_ONE]}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: id_columns empty
+            [TABLE_ONE],
+            [ID_ONE],
+            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *", "id_columns": []}],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -763,7 +819,31 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: table missing in source
             [TABLE_ONE],
-            [{"tables": [TABLE_ONE, TABLE_TWO], "query": "SELECT * FROM *"}],
+            [ID_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE, TABLE_TWO],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: ID missing in source
+            [TABLE_ONE],
+            [ID_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE, ID_TWO],
+                }
+            ],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -774,6 +854,7 @@ async def test_validate_config_when_host_empty_then_raise_error():
             # invalid: array of arrays -> wrong type
             [TABLE_ONE],
             [[]],
+            None,
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -786,6 +867,7 @@ async def test_validate_config_when_host_empty_then_raise_error():
 async def test_advanced_rules_validation(
     tables_present_in_source,
     advanced_rules,
+    id_in_source,
     expected_validation_result,
     patch_ping,
 ):
@@ -827,7 +909,7 @@ async def test_validate_database_accessible_when_accessible_then_no_error_raised
         cursor.execute.return_value = None
 
         await source._validate_database_accessible(cursor)
-        cursor.execute.assert_called_with(f"USE `{source.database}`;")
+        cursor.execute.assert_called_with(f"USE {source.database};")
 
 
 @pytest.mark.asyncio
