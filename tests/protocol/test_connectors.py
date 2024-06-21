@@ -797,7 +797,7 @@ async def test_sync_job_claim():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim_with_connector_api():
+async def test_sync_job_claim_with_connector_api(set_env):
     source = {"_id": "1"}
     index = Mock()
     index.api.connector_sync_job_claim = AsyncMock(return_value={"result": "updated"})
@@ -1564,7 +1564,7 @@ async def test_connector_validate_filtering_with_race_condition():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid_with_connector_api():
+async def test_connector_validate_filtering_invalid_with_connector_api(set_env):
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.api.connector_update_filtering_draft_validation = AsyncMock()
@@ -1590,7 +1590,7 @@ async def test_connector_validate_filtering_invalid_with_connector_api():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_valid_with_connector_api():
+async def test_connector_validate_filtering_valid_with_connector_api(set_env):
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.api.connector_update_filtering_draft_validation = AsyncMock()
@@ -1997,7 +1997,7 @@ async def test_create_job(index_method, trigger_method, set_env):
         (JobTriggerMethod.SCHEDULED, JobType.ACCESS_CONTROL),
     ],
 )
-async def test_create_job_with_connector_api(trigger_method, job_type):
+async def test_create_job_with_connector_api(trigger_method, job_type, set_env):
     connector = Mock()
     connector.id = "id"
     config = load_config(CONFIG)
