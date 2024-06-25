@@ -76,3 +76,25 @@ The framework serves two distinct, but related use cases:
 - [Command line interface](docs/CLI.md)
 - [Contribution guide](docs/CONTRIBUTING.md)
 - [Upgrading](docs/UPGRADING.md)
+
+### Version compatibility with Elasticsearch
+
+> [!NOTE]
+> Version compatibility will not be checked if Elasticsearch is serverless.
+
+The Connector will perform a version compatibility check with the configured Elasticsearch server on startup.
+If the versions are incompatible, the Connector will terminate and output the incompatible versions in the shell.
+If the versions are different but otherwise compatible, the Connector will output a warning in the shell but will continue operating.
+
+We recommend running on the same version as Elasticsearch.
+However, if you want to hold back upgrading one or the other for any reason, use this table to determine if your versions will be compatible.
+
+| Situation                 | Example Conenctor Framework version | Example ES version | Outcome |
+| ------------------------- |-------------------------------------|--------------------| ------- |
+| Versions are the same.    | 8.15.1                              | 8.15.1             | 💚 OK      |
+| ES patch number is newer. | 8.15.__0__                          | 8.15.__1__         | ⚠️ Logged warning      |
+| ES minor number is newer. | 8.__14__.2                          | 8.__15__.0         | ⚠️ Logged warning      |
+| ES major number is newer. | __8__.15.1                          | __9__.0.0          | 🚫 Fatal error      |
+| ES patch number is older. | 8.15.__1__                          | 8.15.__0__         | ⚠️ Logged warning      |
+| ES minor number is older. | 8.__15__.1                          | 8.__14__.2         | 🚫 Fatal error      |
+| ES major number is older. | __9__.0.0                           | __8__.15.1         | 🚫 Fatal error      |

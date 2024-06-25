@@ -179,7 +179,7 @@ class ESClient:
     async def ping(self):
         try:
             response = await self.client.info()
-            logger.info(
+            logger.debug(
                 f"Connected to Elasticsearch server with version '{response['version']['number']}' and build flavor '{response['version']['build_flavor']}'"
             )
             return response

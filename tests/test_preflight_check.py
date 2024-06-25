@@ -165,8 +165,8 @@ async def test_pass_serverless_mismatched_versions(patched_logger, mock_response
             f"Elasticsearch 2.0.0-SNAPSHOT and Connectors {connectors_version} are incompatible: major versions are different",
         ),
         (
-            "1.0.3",
-            f"Elasticsearch 1.0.3 and Connectors {connectors_version} are incompatible: Elasticsearch minor version is lower than Connectors",
+            "1.3.3",
+            f"Elasticsearch 1.3.3 and Connectors {connectors_version} are incompatible: Elasticsearch minor version is higher than Connectors",
         ),
     ],
 )
@@ -188,8 +188,8 @@ async def test_fail_mismatched_version(
     "es_version, expected_log",
     [
         (
-            "1.3.3",
-            f"Elasticsearch 1.3.3 minor version is higher than Connectors {connectors_version} which can lead to unexpected behavior",
+            "1.0.3",
+            f"Elasticsearch 1.0.3 minor version is lower than Connectors {connectors_version} which can lead to unexpected behavior",
         ),
         (
             "1.2.0",

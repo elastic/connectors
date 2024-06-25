@@ -71,7 +71,8 @@ class PreflightCheck:
             )
             return False, False
 
-        is_serverless = es_info["version"]["build_flavor"] == "serverless"
+        version = es_info.get("version", {}) or {}
+        is_serverless = version.get("build_flavor") == "serverless"
         if is_serverless:
             logger.info(
                 "Elasticsearch server is serverless, skipping version compatibility check."
@@ -79,20 +80,13 @@ class PreflightCheck:
             return True, is_serverless
 
         versions_compatible = await self._versions_compatible(
-            es_info["version"]["number"]
+            version.get("number")
         )
         return versions_compatible, is_serverless
 
     async def _versions_compatible(self, es_version):
         """
-        Versions are incompatible in the following scenarios:
-
-        1. the major version is different
-            e.g. ES v7.13.0 vs Connectors v8.13.0.0
-        2. the ES minor is lower than Connectors
-            e.g. ES v8.12.0 vs Conectors v8.13.0.0
-
-        If the above is satisfied but the versions are not exactly the same we log a warning
+        Checks if the Connector and ES versions are compatible
         """
 
         # array legend: 0 - major, 1 - minor, 2 - patch
@@ -110,16 +104,16 @@ class PreflightCheck:
 
         # minor
         if es_version_parts[1] > connector_version_parts[1]:
-            logger.warning(
-                f"Elasticsearch {es_version} minor version is higher than Connectors {self.version} which can lead to unexpected behavior"
-            )
-            return True
-
-        if es_version_parts[1] < connector_version_parts[1]:
             logger.critical(
-                f"Elasticsearch {es_version} and Connectors {self.version} are incompatible: Elasticsearch minor version is lower than Connectors"
+                f"Elasticsearch {es_version} and Connectors {self.version} are incompatible: Elasticsearch minor version is higher than Connectors"
             )
             return False
+
+        if es_version_parts[1] < connector_version_parts[1]:
+            logger.warning(
+                f"Elasticsearch {es_version} minor version is lower than Connectors {self.version} which can lead to unexpected behavior"
+            )
+            return True
 
         # patch
         if es_version_parts[2] != connector_version_parts[2]:
