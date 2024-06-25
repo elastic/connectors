@@ -160,7 +160,11 @@ class ConfluenceAPI:
                     "id": f"{document_type}_{content_count}",
                     "title": f"ES-scrum_{content_count}",
                     "type": document_type,
-                    "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+                    "history": {
+                        "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                        "createdDate": "2023-01-03T09:24:50.633Z",
+                        "createdBy": {"publicName": "user1", "username": "user1"},
+                    },
                     "children": {"attachment": {"size": ATTACHMENT_COUNT}},
                     "body": {"storage": {"value": f"This is a test {document_type}"}},
                     "space": {"name": "Demo Space 0"},
