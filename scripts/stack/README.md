@@ -20,7 +20,8 @@ These scripts can also be used as a starting place for adding Connectors to your
 * Python 3.10
 * Docker with Docker Compose Installed
     * It is recommended to run Docker with at least 4GB of available RAM.
-* cURL 8.7.1 or higher
+* Curl 8.7.1 or higher
+    * Versions before 8.6.0 should also work. Just avoid 8.6 due to a [regression](https://curl.se/mail/lib-2024-02/0000.html) that will cause Kibana to not boot properly.
 
 ## Running the Stack
 
