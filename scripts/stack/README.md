@@ -19,7 +19,8 @@ These scripts can also be used as a starting place for adding Connectors to your
 * Linux or macOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
 * Python 3.10
 * Docker with Docker Compose Installed
-* It is recommended to run Docker with at least 4GB of available RAM.
+    * It is recommended to run Docker with at least 4GB of available RAM.
+* cURL 8.7.1 or higher
 
 ## Running the Stack
 
