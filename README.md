@@ -89,12 +89,13 @@ If the versions are different but otherwise compatible, the Connector will outpu
 We recommend running on the same version as Elasticsearch.
 However, if you want to hold back upgrading one or the other for any reason, use this table to determine if your versions will be compatible.
 
-| Situation                 | Example Conenctor Framework version | Example ES version | Outcome |
-| ------------------------- |-------------------------------------|--------------------| ------- |
-| Versions are the same.    | 8.15.1                              | 8.15.1             | 💚 OK      |
-| ES patch number is newer. | 8.15.__0__                          | 8.15.__1__         | ⚠️ Logged warning      |
-| ES minor number is newer. | 8.__14__.2                          | 8.__15__.0         | ⚠️ Logged warning      |
-| ES major number is newer. | __8__.15.1                          | __9__.0.0          | 🚫 Fatal error      |
-| ES patch number is older. | 8.15.__1__                          | 8.15.__0__         | ⚠️ Logged warning      |
-| ES minor number is older. | 8.__15__.1                          | 8.__14__.2         | 🚫 Fatal error      |
-| ES major number is older. | __9__.0.0                           | __8__.15.1         | 🚫 Fatal error      |
+| Situation                       | Example Connector Framework version | Example ES version | Outcome |
+|---------------------------------|-------------------------------------|--------------------| ------- |
+| Versions are the same.          | 8.15.1.0                            | 8.15.1             | 💚 OK      |
+| Connectors has a build version. | 8.15.1.3                            | 8.15.1             | 💚 OK      |
+| ES patch number is newer.       | 8.15.__0__.0                        | 8.15.__1__         | ⚠️ Logged warning      |
+| ES minor number is newer.       | 8.__14__.2.0                        | 8.__15__.0         | ⚠️ Logged warning      |
+| ES major number is newer.       | __8__.15.1.0                        | __9__.0.0          | 🚫 Fatal error      |
+| ES patch number is older.       | 8.15.__1__.0                        | 8.15.__0__         | ⚠️ Logged warning      |
+| ES minor number is older.       | 8.__15__.1.0                        | 8.__14__.2         | 🚫 Fatal error      |
+| ES major number is older.       | __9__.0.0.0                         | __8__.15.1         | 🚫 Fatal error      |
