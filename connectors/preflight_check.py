@@ -79,9 +79,7 @@ class PreflightCheck:
             )
             return True, is_serverless
 
-        versions_compatible = await self._versions_compatible(
-            version.get("number")
-        )
+        versions_compatible = await self._versions_compatible(version.get("number"))
         return versions_compatible, is_serverless
 
     async def _versions_compatible(self, es_version):
