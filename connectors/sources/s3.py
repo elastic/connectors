@@ -45,8 +45,6 @@ class S3Client:
             aws_access_key_id=self.configuration["aws_access_key_id"],
             aws_secret_access_key=self.configuration["aws_secret_access_key"],
         )
-        set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
-        set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.config = AioConfig(
             read_timeout=self.configuration["read_timeout"],
             connect_timeout=self.configuration["connect_timeout"],
