@@ -140,8 +140,6 @@ def sync_orchestrator_mock():
         sync_orchestrator_mock.has_active_license_enabled = AsyncMock(
             return_value=(True, License.PLATINUM)
         )
-        sync_orchestrator_mock._extractor_task = Mock()
-        sync_orchestrator_mock._sink_task = Mock()
         sync_orchestrator_klass_mock.return_value = sync_orchestrator_mock
 
         yield sync_orchestrator_mock
