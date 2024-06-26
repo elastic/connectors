@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import logging
 import os
 from contextlib import AsyncExitStack
 from functools import partial
@@ -12,7 +11,6 @@ from functools import partial
 import aioboto3
 import fastjsonschema
 from aiobotocore.config import AioConfig
-from aiobotocore.utils import logger as aws_logger
 from botocore.exceptions import ClientError
 from fastjsonschema import JsonSchemaValueException
 
@@ -20,7 +18,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger, set_extra_logger
+from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import hash_id
 
@@ -45,8 +43,6 @@ class S3Client:
             aws_access_key_id=self.configuration["aws_access_key_id"],
             aws_secret_access_key=self.configuration["aws_secret_access_key"],
         )
-        set_extra_logger(aws_logger, log_level=logging.DEBUG, prefix="S3")
-        set_extra_logger("aioboto3.resources", log_level=logging.INFO, prefix="S3")
         self.config = AioConfig(
             read_timeout=self.configuration["read_timeout"],
             connect_timeout=self.configuration["connect_timeout"],
