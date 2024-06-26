@@ -74,6 +74,19 @@ class TemporaryConnectorApiWrapper(ESClient):
             },
         )
 
+    async def connector_sync_job_update_stats(
+        self, sync_job_id, ingestion_stats, metadata
+    ):
+        await self.client.perform_request(
+            "PUT",
+            f"/_connector/_sync_job/{sync_job_id}/_stats",
+            headers={"accept": "application/json", "Content-Type": "application/json"},
+            body={
+                **ingestion_stats,
+                **({"metadata": metadata} if metadata else {}),
+            },
+        )
+
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -118,6 +131,18 @@ class ESApi(ESClient):
                 connector_id,
                 job_type,
                 trigger_method,
+            )
+        )
+
+    async def connector_sync_job_update_stats(
+        self, sync_job_id, ingestion_stats, metadata
+    ):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self._api_wrapper.connector_sync_job_update_stats,
+                sync_job_id,
+                ingestion_stats,
+                metadata,
             )
         )
 
