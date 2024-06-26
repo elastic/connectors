@@ -101,15 +101,15 @@ class PreflightCheck:
             return False
 
         # minor
-        if es_version_parts[1] > connector_version_parts[1]:
+        if es_version_parts[1] < connector_version_parts[1]:
             logger.critical(
-                f"Elasticsearch {es_version} and Connectors {self.version} are incompatible: Elasticsearch minor version is higher than Connectors"
+                f"Elasticsearch {es_version} and Connectors {self.version} are incompatible: Elasticsearch minor version is older than Connectors"
             )
             return False
 
-        if es_version_parts[1] < connector_version_parts[1]:
+        if es_version_parts[1] > connector_version_parts[1]:
             logger.warning(
-                f"Elasticsearch {es_version} minor version is lower than Connectors {self.version} which can lead to unexpected behavior"
+                f"Elasticsearch {es_version} minor version is newer than Connectors {self.version} which can lead to unexpected behavior"
             )
             return True
 
