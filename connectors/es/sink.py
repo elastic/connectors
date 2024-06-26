@@ -889,7 +889,7 @@ class SyncOrchestrator:
             self._sink_task.cancel()
         else:
             self._logger.debug(
-                "Orchetrator cancel() called, but sink task is not running"
+                "Orchestrator cancel() called, but sink task is not running"
             )
 
         if self._extractor_task_running():
@@ -899,7 +899,7 @@ class SyncOrchestrator:
             self._extractor_task.cancel()
         else:
             self._logger.debug(
-                "Orchetrator cancel() called, but extractor task is not running"
+                "Orchestrator cancel() called, but extractor task is not running"
             )
 
         self.canceled = True
