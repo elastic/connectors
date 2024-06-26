@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import logging
 import os
 from contextlib import AsyncExitStack
 from functools import partial
@@ -12,7 +11,6 @@ from functools import partial
 import aioboto3
 import fastjsonschema
 from aiobotocore.config import AioConfig
-from aiobotocore.utils import logger as aws_logger
 from botocore.exceptions import ClientError
 from fastjsonschema import JsonSchemaValueException
 
@@ -20,7 +18,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.logger import logger, set_extra_logger
+from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import hash_id
 
