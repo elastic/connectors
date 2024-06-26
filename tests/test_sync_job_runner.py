@@ -140,6 +140,8 @@ def sync_orchestrator_mock():
         sync_orchestrator_mock.has_active_license_enabled = AsyncMock(
             return_value=(True, License.PLATINUM)
         )
+        sync_orchestrator_mock._extractor_task = Mock()
+        sync_orchestrator_mock._sink_task = Mock()
         sync_orchestrator_klass_mock.return_value = sync_orchestrator_mock
 
         yield sync_orchestrator_mock
@@ -410,6 +412,7 @@ async def test_invalid_filtering(job_type, sync_orchestrator_mock):
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=SYNC_CURSOR
     )
+    sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -438,6 +441,7 @@ async def test_invalid_filtering_access_control_sync_still_executed(
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=None
     )
+    sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -475,6 +479,7 @@ async def test_async_bulk_error(job_type, sync_cursor, sync_orchestrator_mock):
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+    sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -509,6 +514,7 @@ async def test_access_control_sync_fails_with_insufficient_license(
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=None
     )
+    sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -542,6 +548,7 @@ async def test_sync_job_runner(job_type, sync_cursor, sync_orchestrator_mock):
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+    sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -580,6 +587,7 @@ async def test_sync_job_runner_suspend(job_type, sync_cursor, sync_orchestrator_
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+    sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
 
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
