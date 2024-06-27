@@ -80,6 +80,7 @@ def catch_stdout():
 @pytest.fixture
 def patch_logger(request):
     from connectors.logger import logger
+
     class PatchedLogger(Logger):
         def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
             super(PatchedLogger, self).info(msg, *args)
@@ -91,7 +92,7 @@ def patch_logger(request):
         if request:
             silent = request.param
     except AttributeError:
-        pass # patch_logger may not be parametrized
+        pass  # patch_logger may not be parametrized
 
     new_logger = PatchedLogger(silent)
 

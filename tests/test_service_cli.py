@@ -56,7 +56,11 @@ def test_version_action(option):
     assert __version__ in result.output
 
 
-@pytest.mark.parametrize(["sig", 'patch_logger'], [[signal.SIGINT, False], [signal.SIGTERM, False]], indirect=["patch_logger"])
+@pytest.mark.parametrize(
+    ["sig", "patch_logger"],
+    [[signal.SIGINT, False], [signal.SIGTERM, False]],
+    indirect=["patch_logger"],
+)
 @patch("connectors.service_cli.PreflightCheck")
 def test_shutdown_called_on_shutdown_signal(
     patch_preflight_check, sig, patch_logger, mock_responses, set_env
