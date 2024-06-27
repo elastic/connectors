@@ -36,7 +36,7 @@ from connectors.utils import (
 )
 
 RETRY_INTERVAL = 2
-LIMIT = 100
+LIMIT = 50
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
