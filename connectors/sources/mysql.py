@@ -489,7 +489,7 @@ class MySqlDataSource(BaseDataSource):
                 query = query_info.get("query", "")
                 id_columns = query_info.get("id_columns", [])
                 self._logger.debug(
-                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query."
+                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query and given ID column '{id_columns}'."
                 )
 
                 async for row in self.fetch_documents(tables, query, id_columns):
@@ -573,9 +573,7 @@ class MySqlDataSource(BaseDataSource):
         )
         column_names = await client.get_column_names_for_query(query=query)
 
-        if not set(primary_key_columns) - set(column_names):
-            pass
-        else:
+        if set(primary_key_columns) - set(column_names):
             self._logger.warning(
                 f"Skipping query {query} for tables {', '.join(tables)} as primary key column name/id_column is not present in query."
             )

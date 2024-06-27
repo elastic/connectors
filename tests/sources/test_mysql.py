@@ -864,10 +864,146 @@ async def test_validate_config_when_host_empty_then_raise_error():
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(
+async def test_advanced_rules_validation_when_id_in_source_available(
     tables_present_in_source,
     advanced_rules,
     id_in_source,
+    expected_validation_result,
+    patch_ping,
+):
+    async with create_source(MySqlDataSource) as source:
+        client = await setup_mysql_source(source, DATABASE)
+        client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
+
+        source.mysql_client = as_async_context_manager_mock(client)
+
+        validation_result = await MySQLAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
+
+        assert validation_result == expected_validation_result
+
+
+@pytest.mark.parametrize(
+    "tables_present_in_source, advanced_rules, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            [],
+            {},
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom query
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *"}],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom queries
+            [TABLE_ONE, TABLE_TWO],
+            [
+                {"tables": [TABLE_ONE], "query": "SELECT * FROM *"},
+                {"tables": [TABLE_ONE, TABLE_TWO], "query": "SELECT * FROM *"},
+            ],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: additional property present
+            [TABLE_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "additional_property": True,
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables field missing
+            [TABLE_ONE],
+            [{"query": "SELECT * FROM *"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: query field missing
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE]}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: query empty
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "query": ""}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables empty
+            [TABLE_ONE],
+            [{"tables": [], "query": "SELECT * FROM *"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: table missing in source
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE, TABLE_TWO], "query": "SELECT * FROM *"}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            [TABLE_ONE],
+            [[]],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation(
+    tables_present_in_source,
+    advanced_rules,
     expected_validation_result,
     patch_ping,
 ):
