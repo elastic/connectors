@@ -42,7 +42,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 
-LIMIT = 100
+LIMIT = 50
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
