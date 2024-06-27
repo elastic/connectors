@@ -57,6 +57,9 @@ class ConfluenceAPI:
         self.attachments = {}
 
         self.app.route("/rest/api/space", methods=["GET"])(self.get_spaces)
+        self.app.route("/rest/api/content/<string:label_id>/label", methods=["GET"])(
+            self.get_label
+        )
         self.app.route("/rest/api/content/search", methods=["GET"])(self.get_content)
         self.app.route(
             "/rest/api/content/<string:content_id>/child/attachment", methods=["GET"]
@@ -120,6 +123,21 @@ class ConfluenceAPI:
             self.space_page_limit = self.space_page_limit + spaces["limit"]
         return spaces
 
+    def get_label(self, label_id):
+        return {
+            "results": [
+                {
+                    "prefix": "global",
+                    "name": "label-xyz",
+                    "id": f"{label_id}",
+                    "label": "label-xyz",
+                }
+            ],
+            "start": 0,
+            "limit": 5,
+            "size": 1,
+        }
+
     def get_content(self):
         """Function to handle get content calls
 
@@ -142,7 +160,11 @@ class ConfluenceAPI:
                     "id": f"{document_type}_{content_count}",
                     "title": f"ES-scrum_{content_count}",
                     "type": document_type,
-                    "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+                    "history": {
+                        "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                        "createdDate": "2023-01-03T09:24:50.633Z",
+                        "createdBy": {"publicName": "user1", "username": "user1"},
+                    },
                     "children": {"attachment": {"size": ATTACHMENT_COUNT}},
                     "body": {"storage": {"value": f"This is a test {document_type}"}},
                     "space": {"name": "Demo Space 0"},

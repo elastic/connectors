@@ -19,7 +19,7 @@ steps:
           DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-debian"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_amd64"
-        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
+        artifact_paths: ".artifacts/*.tar.gz"
       - label: "Testing amd64 Docker image"
         agents:
           provider: aws
@@ -51,7 +51,7 @@ steps:
           DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-debian"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_arm64"
-        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
+        artifact_paths: ".artifacts/*.tar.gz"
       - label: "Testing arm64 Docker image"
         agents:
           provider: aws
@@ -105,7 +105,7 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
+          image: "docker.elastic.co/ci-agent-images/drivah:0.25.0"
           ephemeralStorage: "20G"
           memory: "4G"
         command: ".buildkite/publish/build-multiarch-docker.sh"
@@ -132,7 +132,7 @@ steps:
           DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_amd64_wolfi"
-        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
+        artifact_paths: ".artifacts/*.tar.gz"
       - label: "Testing amd64 Docker image based on Wolfi"
         agents:
           provider: aws
@@ -169,7 +169,7 @@ steps:
           DOCKER_ARTIFACT_KEY: "elastic-connectors-docker-wolfi"
         command: ".buildkite/publish/build-docker.sh"
         key: "build_docker_image_arm64_wolfi"
-        artifact_paths: ".artifacts/${DOCKER_ARTIFACT_KEY}-*.tar.gz"
+        artifact_paths: ".artifacts/*.tar.gz"
       - label: "Testing arm64 Docker image based on Wolfi"
         agents:
           provider: aws
@@ -228,7 +228,7 @@ steps:
           - ".buildkite/publish/push-docker.sh"
       - label: "Build and push multiarch Docker image based on Wolfi"
         agents:
-          image: "docker.elastic.co/ci-agent-images/drivah:0.24.3"
+          image: "docker.elastic.co/ci-agent-images/drivah:0.25.0"
           ephemeralStorage: "20G"
           memory: "4G"
         env:

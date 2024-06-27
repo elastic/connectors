@@ -76,6 +76,11 @@ SPACE = {
             "operation": {"operation": "read", "targetType": "space"},
         }
     ],
+    "history": {
+        "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "createdBy": {"publicName": "user1"},
+    },
 }
 
 RESPONSE_PAGE = {
@@ -84,13 +89,18 @@ RESPONSE_PAGE = {
             "id": 4779,
             "title": "ES-scrum",
             "type": "page",
-            "history": {"lastUpdated": {"when": "2023-01-24T04:07:19.672Z"}},
+            "history": {
+                "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                "createdDate": "2023-01-03T09:24:50.633Z",
+                "createdBy": {"publicName": "user1"},
+            },
             "children": {"attachment": {"size": 2}},
             "body": {"storage": {"value": "This is a test page"}},
             "space": {"name": "DEMO"},
             "_links": {
                 "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
             },
+            "ancestors": [{"title": "parent_title"}],
         }
     ],
     "start": 0,
@@ -100,13 +110,17 @@ RESPONSE_PAGE = {
 }
 
 EXPECTED_PAGE = {
-    "_id": 4779,
+    "_id": "4779",
     "type": "page",
     "_timestamp": "2023-01-24T04:07:19.672Z",
     "title": "ES-scrum",
+    "ancestors": [{"title": "parent_title"}],
     "body": "This is a test page",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/pages/4779/ES-scrum",
+    "labels": [None],
+    "author": "user1",
+    "createdDate": "2023-01-03T09:24:50.633Z",
 }
 
 EXPECTED_SPACE = {
@@ -115,6 +129,8 @@ EXPECTED_SPACE = {
     "title": "DEMO",
     "_timestamp": "2024-04-02T09:53:15.818621+00:00",
     "url": "http://127.0.0.1:9696/spaces/DM",
+    "createdDate": "2023-01-03T09:24:50.633Z",
+    "author": "user1",
 }
 
 RESPONSE_ATTACHMENT = {
@@ -124,6 +140,7 @@ RESPONSE_ATTACHMENT = {
             "title": "demo.py",
             "type": "attachment",
             "version": {"when": "2023-01-03T09:24:50.633Z"},
+            "history": {"createdDate": "2023-01-03T09:24:50.633Z"},
             "extensions": {"fileSize": 230},
             "_links": {
                 "download": "/download/attachments/1113/demo.py?version=1&modificationDate=1672737890633&cacheVersion=1&api=v2",
@@ -146,6 +163,7 @@ EXPECTED_ATTACHMENT = {
     "space": "DEMO",
     "page": "ES-scrum",
     "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+    "createdDate": "2023-01-03T09:24:50.633Z",
 }
 
 RESPONSE_CONTENT = "# This is the dummy file"
@@ -187,6 +205,8 @@ EXPECTED_BLOG = {
     "body": "This is a test blog",
     "space": "DEMO",
     "url": f"{HOST_URL}/spaces/~1234abc/blogposts/4779/demo-blog",
+    "createdDate": "2023-01-03T09:24:50.633Z",
+    "author": "user1",
 }
 
 EXPECTED_BLOG_ATTACHMENT = {
@@ -198,6 +218,8 @@ EXPECTED_BLOG_ATTACHMENT = {
     "space": "DEMO",
     "blog": "demo-blog",
     "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=1113&preview=demo.py",
+    "createdDate": "2023-01-03T09:24:50.633Z",
+    "author": "user1",
 }
 
 RESPONSE_SEARCH_RESULT = {
@@ -207,12 +229,26 @@ RESPONSE_SEARCH_RESULT = {
                 "id": "983046",
                 "type": "page",
                 "space": {"name": "Software Development"},
+                "body": {
+                    "storage": {
+                        "value": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
+                        "representation": "storage",
+                        "embeddedContent": [],
+                        "_expandable": {"content": "/rest/api/content/6455384"},
+                    },
+                },
+                "history": {
+                    "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                    "createdDate": "2023-01-03T09:24:50.633Z",
+                    "createdBy": {"publicName": "user1", "username": "user1"},
+                },
             },
             "title": "Product Details",
             "excerpt": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
             "url": "/spaces/SD/pages/983046/Product+Details",
             "lastModified": "2022-12-19T13:06:18.000Z",
             "entityType": "content",
+            "ancestors": [{"title": "page1"}],
         },
         {
             "content": {
@@ -223,31 +259,52 @@ RESPONSE_SEARCH_RESULT = {
                     "fileSize": 1119256,
                 },
                 "space": {"name": "Software Development"},
+                "body": {
+                    "storage": {
+                        "value": "",
+                        "representation": "storage",
+                        "embeddedContent": [],
+                        "_expandable": {"content": "/rest/api/content"},
+                    },
+                },
                 "container": {"type": "page", "title": "Product Details"},
                 "_links": {"download": "/download/attachments/196717/Potential.pdf"},
+                "history": {
+                    "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                    "createdDate": "2023-01-03T09:24:50.633Z",
+                    "createdBy": {"publicName": "user1", "username": "user1"},
+                },
             },
             "title": "Potential.pdf",
             "excerpt": "Evaluation Overview",
             "url": "/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
             "lastModified": "2023-01-24T03:34:38.000Z",
             "entityType": "content",
+            "ancestors": [],
         },
         {
             "space": {
-                "id": 196612,
+                "id": "196612",
                 "key": "SD",
                 "type": "global",
+                "history": {
+                    "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                    "createdDate": "2023-01-03T09:24:50.633Z",
+                    "createdBy": {"publicName": "user1", "username": "user1"},
+                },
             },
             "title": "Software Development",
             "excerpt": "",
             "url": "/spaces/SD",
             "lastModified": "2022-12-13T09:49:01.000Z",
             "entityType": "space",
+            "ancestors": [],
         },
     ]
 }
 
-EXPECTED_SEARCH_RESULT = [
+
+EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD = [
     {
         "_id": "983046",
         "title": "Product Details",
@@ -256,6 +313,8 @@ EXPECTED_SEARCH_RESULT = [
         "type": "page",
         "space": "Software Development",
         "url": f"{HOST_URL}/spaces/SD/pages/983046/Product+Details",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
     },
     {
         "_id": "att4587521",
@@ -266,16 +325,56 @@ EXPECTED_SEARCH_RESULT = [
         "space": "Software Development",
         "size": 1119256,
         "page": "Product Details",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
     },
     {
-        "_id": 196612,
+        "_id": "196612",
         "title": "Software Development",
         "_timestamp": "2022-12-13T09:49:01.000Z",
-        "body": "",
+        "body": None,
+        "type": "space",
+        "url": f"{HOST_URL}/spaces/SD",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
+    },
+]
+
+
+EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER = [
+    {
+        "_id": "983046",
+        "title": "Product Details",
+        "_timestamp": "2022-12-19T13:06:18.000Z",
+        "body": "Confluence Connector currently supports below objects for ingestion of data in ElasticSearch.\nBlogs\nAttachments\nPages\nSpaces",
+        "type": "page",
+        "url": f"{HOST_URL}/spaces/SD/pages/983046/Product+Details",
+        "space": "Software Development",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
+    },
+    {
+        "_id": "att4587521",
+        "title": "Potential.pdf",
+        "_timestamp": "2023-01-24T03:34:38.000Z",
+        "type": "attachment",
+        "url": f"{HOST_URL}/pages/viewpageattachments.action?pageId=196717&preview=%2F196717%2F4587521%2FPotential.pdf",
+        "space": "Software Development",
+        "size": 1119256,
+        "page": "Product Details",
+        "createdDate": "2023-01-03T09:24:50.633Z",
+        "author": "user1",
+    },
+    {
+        "_id": "196612",
+        "title": "Software Development",
+        "_timestamp": "2022-12-13T09:49:01.000Z",
+        "body": None,
         "type": "space",
         "url": f"{HOST_URL}/spaces/SD",
     },
 ]
+
 
 SPACE_PERMISSION_RESPONSE = [
     {
@@ -350,6 +449,18 @@ PAGE_RESTRICTION_RESPONSE = {
         "size": 2,
     },
     "group": {"results": [], "size": 0},
+}
+
+EXPECTED_QUERY_RESPONSE = {
+    "content": {
+        "id": "983041",
+        "type": "page",
+    },
+    "title": "page 3",
+    "excerpt": "page 3 excerpt",
+    "url": "/spaces/space1/pages/983041/page+3",
+    "entityType": "content",
+    "lastModified": "2024-04-24T08:43:17.000Z",
 }
 
 
@@ -681,6 +792,7 @@ async def test_get_with_429_status():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
     async with create_confluence_source() as source:
         with patch(
             "aiohttp.ClientSession.get",
@@ -705,6 +817,7 @@ async def test_get_with_429_status_without_retry_after_header():
     payload = {"value": "Test rate limit"}
 
     retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
     with patch("connectors.sources.confluence.DEFAULT_RETRY_SECONDS", 0):
         async with create_confluence_source() as source:
             with patch(
@@ -775,7 +888,8 @@ async def test_fetch_documents():
     async with create_confluence_source() as source:
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
-
+        source.confluence_client.index_labels = True
+        source.confluence_client.data_source_type = "confluence_cloud"
         # Execute
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response, _, _, _, _ in source.fetch_documents(api_query=""):
@@ -809,13 +923,14 @@ async def test_search_by_query():
         async_response.__aenter__ = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
         )
+        source.confluence_client.data_source_type = "confluence_cloud"
         documents = []
         with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
             async for response, _ in source.search_by_query(
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING_CLOUD
 
 
 @pytest.mark.asyncio
@@ -832,7 +947,7 @@ async def test_search_by_query_for_datacenter():
                 query="type in ('space', 'page', 'attachment') AND space.key ='SD'"
             ):
                 documents.append(response)
-        assert documents == EXPECTED_SEARCH_RESULT
+        assert documents == EXPECTED_SEARCH_RESULT_FOR_FILTERING_DATA_CENTER
 
 
 @pytest.mark.asyncio
@@ -1477,3 +1592,37 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
             with pytest.raises(Exception):
                 await source._attachment_coro(document=EXPECTED_PAGE, access_control=[])
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_blog_documents_with_labels():
+    async with create_confluence_source() as source:
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(RESPONSE_PAGE))
+        with mock.patch(
+            "aiohttp.ClientSession.get", return_value=async_response
+        ), patch.object(
+            ConfluenceClient, "fetch_label", return_value=["label1", "label2"]
+        ):
+            source.confluence_client.index_labels = True
+            async for response, _ in source.confluence_client.fetch_page_blog_documents(
+                api_query="type in ('blogpost', 'page')"
+            ):
+                assert response == {
+                    "id": 4779,
+                    "title": "ES-scrum",
+                    "type": "page",
+                    "history": {
+                        "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                        "createdDate": "2023-01-03T09:24:50.633Z",
+                        "createdBy": {"publicName": "user1"},
+                    },
+                    "children": {"attachment": {"size": 2}},
+                    "body": {"storage": {"value": "This is a test page"}},
+                    "space": {"name": "DEMO"},
+                    "_links": {
+                        "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
+                    },
+                    "ancestors": [{"title": "parent_title"}],
+                    "labels": ["label1", "label2"],
+                }

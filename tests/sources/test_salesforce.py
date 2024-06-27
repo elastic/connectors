@@ -825,8 +825,12 @@ async def test_generate_token_with_bad_credentials_raises_error(
             },
             repeat=True,
         )
-        with pytest.raises(InvalidCredentialsException):
+        with pytest.raises(InvalidCredentialsException) as error:
             await source.salesforce_client.api_token.token()
+        assert (
+            str(error.value)
+            == "The `client_id` and `client_secret` provided could not be used to generate a token. Status: 400, message: Bad Request, details: invalid_client, description: Invalid client credentials"
+        )
 
 
 @pytest.mark.asyncio
