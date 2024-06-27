@@ -56,7 +56,7 @@ def test_version_action(option):
     assert __version__ in result.output
 
 
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
+@pytest.mark.parametrize(["sig", 'patch_logger'], [[signal.SIGINT, False], [signal.SIGTERM, False]], indirect=["patch_logger"])
 @patch("connectors.service_cli.PreflightCheck")
 def test_shutdown_called_on_shutdown_signal(
     patch_preflight_check, sig, patch_logger, mock_responses, set_env
@@ -64,13 +64,12 @@ def test_shutdown_called_on_shutdown_signal(
     patch_preflight_check.return_value.run = AsyncMock()
 
     async def emit_shutdown_signal():
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(1)
         os.kill(os.getpid(), sig)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.create_task(emit_shutdown_signal())
-
     CliRunner().invoke(main, [])
 
     patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")

@@ -22,8 +22,6 @@ class Logger:
         self.silent = silent
 
     def debug(self, msg, exc_info=False):
-        if not self.silent:
-            print(msg)  # noqa: T201
         self.logs.append(msg)
         if exc_info:
             self.logs.append(traceback.format_exc())
@@ -80,12 +78,20 @@ def catch_stdout():
 
 
 @pytest.fixture
-def patch_logger(silent=True):
+def patch_logger(request):
+    from connectors.logger import logger
     class PatchedLogger(Logger):
         def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
             super(PatchedLogger, self).info(msg, *args)
+            if not self.silent:
+                logger._old_info(msg, *args)
 
-    from connectors.logger import logger
+    silent = True
+    try:
+        if request:
+            silent = request.param
+    except AttributeError:
+        pass # patch_logger may not be parametrized
 
     new_logger = PatchedLogger(silent)
 

@@ -3,7 +3,7 @@
 PYTHON=python3.10
 ARCH=$(shell uname -m)
 PERF8?=no
-SLOW_TEST_THRESHOLD=1 # seconds
+SLOW_TEST_THRESHOLD=2 # seconds
 VERSION=$(shell cat connectors/VERSION)
 
 DOCKER_IMAGE_NAME?=docker.elastic.co/enterprise-search/elastic-connectors
