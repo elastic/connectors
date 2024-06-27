@@ -9,7 +9,7 @@ import itertools
 import json
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from elasticsearch import ApiError, BadRequestError
@@ -91,6 +91,7 @@ def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
     )
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses,
@@ -118,12 +119,15 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
     )
 
     es = SyncOrchestrator(config)
+    es._sink = Mock()
+    es._extractor = Mock()
 
     with pytest.raises(BadRequestError):
         await es.prepare_content_index(index_name)
     await es.close()
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_create_index(
     mock_responses,
@@ -157,6 +161,8 @@ async def test_prepare_content_index_create_index(
     )
 
     es = SyncOrchestrator(config)
+    es._sink = Mock()
+    es._extractor = Mock()
 
     create_index_result = asyncio.Future()
     create_index_result.set_result({"acknowledged": True})
@@ -173,6 +179,7 @@ async def test_prepare_content_index_create_index(
         create_index_mock.assert_called_with(index_name, language_code)
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
     language_code = "en"
@@ -212,6 +219,8 @@ async def test_prepare_content_index(mock_responses):
     )
 
     es = SyncOrchestrator(config)
+    es._sink = Mock()
+    es._extractor = Mock()
     with mock.patch.object(
         es.es_management_client,
         "ensure_content_index_mappings",
@@ -309,6 +318,7 @@ def set_responses(mock_responses, ts=None):
     )
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -1212,6 +1222,7 @@ async def test_batch_bulk_with_errors(patch_logger):
         patch_logger.assert_present(f"operation index failed, {error}")
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.parametrize(
     "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [
@@ -1227,22 +1238,33 @@ async def test_batch_bulk_with_errors(patch_logger):
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_orchestrator_done(
+async def test_sync_orchestrator_done_and_cleanup(
     extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
     if extractor_task is not None:
+        extractor_task.cancel = Mock()
         extractor_task.done.return_value = extractor_task_done
     if sink_task is not None:
+        sink_task.cancel = Mock()
         sink_task.done.return_value = sink_task_done
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     es = SyncOrchestrator(config)
+    es._extractor = Mock()
+    es._extractor.error = None
+    es._sink = Mock()
+    es._sink.error = None
     es._extractor_task = extractor_task
     es._sink_task = sink_task
 
     assert es.done() == expected_result
 
     await es.close()
+
+    if extractor_task and not extractor_task_done:
+        extractor_task.cancel.assert_called_once()
+    if sink_task and not sink_task_done:
+        sink_task.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
