@@ -36,8 +36,6 @@ from connectors.utils import (
 )
 
 RETRY_INTERVAL = 2
-DEFAULT_RETRY_SECONDS = 30
-
 LIMIT = 50
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
