@@ -13,7 +13,6 @@ from elasticsearch import AsyncElasticsearch
 from connectors.config import load_config
 
 DEFAULT_CONFIG = os.path.join(os.path.dirname(__file__), "..", "config.yml")
-SERVERLESS = "SERVERLESS" in os.environ
 
 
 async def verify(service_type, index_name, size, config):
@@ -22,7 +21,10 @@ async def verify(service_type, index_name, size, config):
     auth = config["username"], config["password"]
     client = AsyncElasticsearch(hosts=[host], basic_auth=auth, request_timeout=120)
 
-    if not SERVERLESS:
+    client_info = await client.info()
+    client_version = client_info.get("version", {}) or {}
+
+    if not client_version.get("build_flavor") == "serverless":
         await client.indices.refresh(index=index_name)
 
     try:
