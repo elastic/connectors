@@ -42,14 +42,6 @@ class TemporaryConnectorApiWrapper(ESClient):
             body={"error": error},
         )
 
-    async def connector_update_status(self, connector_id, status):
-        await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_status",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={"status": status},
-        )
-
     async def connector_update_last_sync_info(self, connector_id, last_sync_info):
         await self.client.perform_request(
             "PUT",
@@ -125,11 +117,6 @@ class ESApi(ESClient):
     async def connector_update_error(self, connector_id, error):
         await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_update_error, connector_id, error)
-        )
-
-    async def connector_update_status(self, connector_id, status):
-        await self._retrier.execute_with_retry(
-            partial(self._api_wrapper.connector_update_status, connector_id, status)
         )
 
     async def connector_update_last_sync_info(self, connector_id, last_sync_info):
