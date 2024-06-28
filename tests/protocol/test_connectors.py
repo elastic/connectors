@@ -491,7 +491,6 @@ async def test_sync_starts_with_connector_api(job_type, last_sync_info, status, 
     connector_doc = {"_id": doc_id}
     index = Mock()
     index.api.connector_update_error = AsyncMock()
-    index.api.connector_update_status = AsyncMock()
     index.api.connector_update_last_sync_info = AsyncMock()
     index.feature_use_connectors_api = True
 
@@ -499,9 +498,6 @@ async def test_sync_starts_with_connector_api(job_type, last_sync_info, status, 
     await connector.sync_starts(job_type)
     index.api.connector_update_last_sync_info.assert_called_with(
         connector_id=connector.id, last_sync_info=last_sync_info
-    )
-    index.api.connector_update_status.assert_called_with(
-        connector_id=connector.id, status=status
     )
     index.api.connector_update_error.assert_called_with(
         connector_id=connector.id, error=error
@@ -531,15 +527,11 @@ async def test_connector_error_with_connector_api():
     error = "something wrong"
     index = Mock()
     index.api.connector_update_error = AsyncMock()
-    index.api.connector_update_status = AsyncMock()
     index.feature_use_connectors_api = True
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.error(error)
     index.api.connector_update_error.assert_called_with(
         connector_id=connector.id, error=error
-    )
-    index.api.connector_update_status.assert_called_with(
-        connector_id=connector.id, status=Status.ERROR.value
     )
 
 
@@ -849,7 +841,6 @@ async def test_sync_done_with_connector_api(job, last_sync_info, error, status):
     index = Mock()
     index.feature_use_connectors_api = True
     index.api.connector_update_error = AsyncMock()
-    index.api.connector_update_status = AsyncMock()
     index.api.connector_update_last_sync_info = AsyncMock()
     connector = Connector(elastic_index=index, doc_source=connector_doc)
     await connector.sync_done(job=job, cursor=SYNC_CURSOR)
@@ -857,7 +848,6 @@ async def test_sync_done_with_connector_api(job, last_sync_info, error, status):
         connector_id=connector.id, doc=last_sync_info
     )
     index.api.connector_update_error(connector_id=connector.id, error=error)
-    index.api.connector_update_status(connector_id=connector.id, status=status)
 
 
 mock_next_run = iso_utc()

@@ -751,14 +751,11 @@ class Connector(ESDocument):
             raise ValueError(msg)
 
         if self.index.feature_use_connectors_api:
-            await self.index.api.connector_update_last_sync_info(
-                connector_id=self.id, last_sync_info=last_sync_information
-            )
-            await self.index.api.connector_update_status(
-                connector_id=self.id, status=Status.CONNECTED.value
-            )
             await self.index.api.connector_update_error(
                 connector_id=self.id, error=None
+            )
+            await self.index.api.connector_update_last_sync_info(
+                connector_id=self.id, last_sync_info=last_sync_information
             )
         else:
             doc = {
@@ -777,9 +774,6 @@ class Connector(ESDocument):
         if self.index.feature_use_connectors_api:
             await self.index.api.connector_update_error(
                 connector_id=self.id, error=error
-            )
-            await self.index.api.connector_update_status(
-                connector_id=self.id, status=Status.ERROR.value
             )
         else:
             doc = {
@@ -836,9 +830,6 @@ class Connector(ESDocument):
             doc["last_deleted_document_count"] = job.deleted_document_count
 
         if self.index.feature_use_connectors_api:
-            await self.index.api.connector_update_status(
-                connector_id=self.id, status=connector_status.value
-            )
             await self.index.api.connector_update_error(
                 connector_id=self.id, error=job_error
             )
