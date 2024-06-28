@@ -343,16 +343,23 @@ class SyncJob(ESDocument):
     async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
         try:
             ingestion_stats = filter_ingestion_stats(ingestion_stats)
-            if connector_metadata is None:
-                connector_metadata = {}
+            if self.index.feature_use_connectors_api:
+                await self.index.api.connector_sync_job_update_stats(
+                    sync_job_id=self.id,
+                    ingestion_stats=ingestion_stats,
+                    metadata=connector_metadata,
+                )
+            else:
+                if connector_metadata is None:
+                    connector_metadata = {}
 
-            doc = {
-                "last_seen": iso_utc(),
-            }
-            doc.update(ingestion_stats)
-            if len(connector_metadata) > 0:
-                doc["metadata"] = connector_metadata
-            await self.index.update(doc_id=self.id, doc=doc)
+                doc = {
+                    "last_seen": iso_utc(),
+                }
+                doc.update(ingestion_stats)
+                if len(connector_metadata) > 0:
+                    doc["metadata"] = connector_metadata
+                await self.index.update(doc_id=self.id, doc=doc)
         except Exception as e:
             self._wrap_errors("update metadata and stats", e)
 
