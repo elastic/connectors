@@ -70,7 +70,7 @@ def test_shutdown_called_on_shutdown_signal(
                 patch_logger.assert_regex("Job Scheduling Service started.*")
                 os.kill(pid, sig)
                 break
-            except Exception:
+            except AssertionError:
                 await asyncio.sleep(0.1)
 
     loop = asyncio.new_event_loop()
