@@ -64,8 +64,14 @@ def test_shutdown_called_on_shutdown_signal(
     patch_preflight_check.return_value.run = AsyncMock()
 
     async def emit_shutdown_signal():
-        await asyncio.sleep(0.2)
-        os.kill(os.getpid(), sig)
+        pid = os.getpid()
+        while True:
+            try:
+                patch_logger.assert_regex("Job Scheduling Service started.*")
+                os.kill(pid, sig)
+                break
+            except Exception:
+                await asyncio.sleep(0.2)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

@@ -43,6 +43,16 @@ class Logger:
                 if isinstance(log, str) and msg in log:
                     raise AssertionError(f"'{msg}' found in {self.logs}")
 
+    def assert_regex(self, regex):
+        found = False
+        compiled_regex = re.compile(regex)
+        for log in self.logs:
+            if isinstance(log, str) and compiled_regex.match(log):
+                found = True
+                break
+        if not found:
+            raise AssertionError(f"'{msg}' not found in {self.logs}")
+
     def assert_present(self, lines):
         if isinstance(lines, str):
             lines = [lines]
