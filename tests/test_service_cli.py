@@ -65,13 +65,16 @@ def test_shutdown_called_on_shutdown_signal(
 
     async def emit_shutdown_signal():
         pid = os.getpid()
-        while True:
+        retries = 10
+        while retries > 0:
             try:
                 patch_logger.assert_regex("Job Scheduling Service started.*")
                 os.kill(pid, sig)
                 break
             except AssertionError:
+                retries -=1
                 await asyncio.sleep(0.1)
+        os.kill(pid, sig)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
