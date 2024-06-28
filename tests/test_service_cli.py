@@ -71,7 +71,7 @@ def test_shutdown_called_on_shutdown_signal(
                 os.kill(pid, sig)
                 break
             except Exception:
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.1)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
