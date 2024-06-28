@@ -51,7 +51,7 @@ class Logger:
                 found = True
                 break
         if not found:
-            raise AssertionError(f"'{msg}' not found in {self.logs}")
+            raise AssertionError(f"r'{regex}' not found in {self.logs}")
 
     def assert_present(self, lines):
         if isinstance(lines, str):
