@@ -480,7 +480,7 @@ async def test_close_with_client_session():
         await source.s3_client.client()
 
         await source.close()
-        with pytest.raises(HTTPClientError):
+        with pytest.raises(ClientError):
             await source.ping()
 
 
