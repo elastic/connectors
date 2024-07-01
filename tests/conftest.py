@@ -80,7 +80,7 @@ def catch_stdout():
 
 
 @pytest.fixture
-def patch_logger(silent=True):
+def patch_logger(silent=False):
     class PatchedLogger(Logger):
         def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
             super(PatchedLogger, self).info(msg, *args)
