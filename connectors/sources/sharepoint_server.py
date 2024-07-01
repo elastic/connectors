@@ -163,6 +163,7 @@ class SharepointServerClient:
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
 
         self.session = aiohttp.ClientSession(
+            trust_env=True,
             auth=aiohttp.BasicAuth(
                 login=self.configuration["username"],
                 password=self.configuration["password"],

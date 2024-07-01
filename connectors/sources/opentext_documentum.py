@@ -98,6 +98,7 @@ class OpentextDocumentumClient:
         auth = aiohttp.BasicAuth(login=login, password=password)
         timeout = aiohttp.ClientTimeout(total=None)
         return aiohttp.ClientSession(
+            trust_env=True,
             auth=auth,
             headers={
                 "content-type": "application/vnd.emc.documentum+json",

@@ -231,7 +231,11 @@ class DropboxClient:
         self._logger.debug("Generating aiohttp client session")
         timeout = aiohttp.ClientTimeout(total=None)
 
-        return aiohttp.ClientSession(timeout=timeout, raise_for_status=True)
+        return aiohttp.ClientSession(
+            trust_env=True,
+            timeout=timeout,
+            raise_for_status=True
+        )
 
     async def close(self):
         self._sleeps.cancel()

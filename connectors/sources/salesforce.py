@@ -200,6 +200,7 @@ class SalesforceClient:
     @cached_property
     def session(self):
         return aiohttp.ClientSession(
+            trust_env=True,
             timeout=aiohttp.ClientTimeout(total=None),
         )
 

@@ -43,6 +43,7 @@ class SlackClient:
     def __init__(self, configuration):
         self.token = configuration["token"]
         self._http_session = aiohttp.ClientSession(
+            trust_env=True,
             headers=self._headers(),
             timeout=aiohttp.ClientTimeout(total=None),
             raise_for_status=True,

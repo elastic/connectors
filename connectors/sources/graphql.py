@@ -97,6 +97,7 @@ class GraphQLClient:
                 }
             )
             return aiohttp.ClientSession(
+                trust_env=True,
                 headers=self.headers,
                 timeout=timeout,
                 raise_for_status=True,
@@ -107,6 +108,7 @@ class GraphQLClient:
                 password=self.configuration["password"],
             )
             return aiohttp.ClientSession(
+                trust_env=True,
                 auth=basic_auth,
                 headers=self.headers,
                 timeout=timeout,
@@ -114,6 +116,7 @@ class GraphQLClient:
             )
         else:
             return aiohttp.ClientSession(
+                trust_env=True,
                 headers=self.headers,
                 timeout=timeout,
                 raise_for_status=True,

@@ -173,6 +173,7 @@ class JiraClient:
         basic_auth = aiohttp.BasicAuth(login=login, password=password)
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
         self.session = aiohttp.ClientSession(
+            trust_env=True,
             auth=basic_auth,
             headers={
                 "accept": "application/json",

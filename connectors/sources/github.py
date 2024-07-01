@@ -737,6 +737,7 @@ class GitHubClient:
         connector = aiohttp.TCPConnector(ssl=self.ssl_ctx)
         timeout = aiohttp.ClientTimeout(total=None)
         return aiohttp.ClientSession(
+            trust_env=True,
             timeout=timeout,
             raise_for_status=True,
             connector=connector,

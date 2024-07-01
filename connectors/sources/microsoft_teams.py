@@ -364,6 +364,7 @@ class MicrosoftTeamsClient:
     def __init__(self, tenant_id, client_id, client_secret, username, password):
         self._sleeps = CancellableSleeps()
         self._http_session = aiohttp.ClientSession(
+            trust_env=True,
             headers={
                 "accept": "application/json",
                 "content-type": "application/json",
