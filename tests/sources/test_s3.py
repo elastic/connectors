@@ -11,7 +11,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import aioboto3
 import aiofiles
 import pytest
-from botocore.exceptions import ClientError, HTTPClientError
+from botocore.exceptions import ClientError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
