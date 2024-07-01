@@ -1,7 +1,4 @@
-elasticsearch:
-  host: http://localhost:9200
-  username: elastic
-  password: changeme
+service.idling: 1
 
 connectors:
   -
