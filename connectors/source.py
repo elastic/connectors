@@ -590,6 +590,7 @@ class BaseDataSource:
             yield
             self.error_monitor.track_success()
         except Exception as ex:
+            self._logger.error(ex)
             self.error_monitor.track_error(ex)
 
     async def get_docs(self, filtering=None):
