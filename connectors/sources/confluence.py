@@ -12,7 +12,10 @@ from functools import partial
 from urllib.parse import urljoin
 
 import aiohttp
-from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from aiohttp.client_exceptions import (
+    ClientResponseError,
+    ServerDisconnectedError,
+)
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
@@ -41,6 +44,8 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
+API_FAILURE_THRESHOLD = 0.10
+MIN_API_CALL = 1000
 
 LIMIT = 50
 SPACE = "space"
@@ -103,6 +108,10 @@ class NotFound(Exception):
     pass
 
 
+class SyncFailure(Exception):
+    pass
+
+
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
@@ -116,6 +125,8 @@ class ConfluenceClient:
         self.certificate = self.configuration["ssl_ca"]
         self.retry_count = self.configuration["retry_count"]
         self.index_labels = self.configuration["index_labels"]
+        self.api_total_count = 0
+        self.api_failed_count = 0
         if self.data_source_type == CONFLUENCE_CLOUD:
             self.host_url = os.path.join(self.host_url, "wiki")
 
@@ -203,6 +214,23 @@ class ConfluenceClient:
         else:
             raise
 
+    async def _handle_api_call_error(self, url, exception):
+        known_errors = {
+            ServerDisconnectedError,
+            ClientResponseError,
+            ThrottledError,
+            NotFound,
+            InternalServerError,
+        }
+
+        if isinstance(exception, tuple(known_errors)):
+            # Re-raising the error as it is not handled explicitly by retryable
+            raise
+        else:
+            self._logger.error(
+                f"Error encountered. Skipping data for {url}. Exception: {exception}. Pagination terminated early."
+            )
+
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
@@ -222,6 +250,8 @@ class ConfluenceClient:
             response: Client response
         """
         self._logger.debug(f"Making a GET call for url: {url}")
+        if url != os.path.join(self.host_url, PING_URL):
+            self.api_total_count += 1
         try:
             async with self._get_session().get(
                 url=url,
@@ -233,6 +263,12 @@ class ConfluenceClient:
             raise
         except ClientResponseError as exception:
             await self._handle_client_errors(url=url, exception=exception)
+        except Exception as exception:
+            self.api_failed_count += 1
+            self._logger.debug(
+                f"Incrementing error count due to exception: {exception}. Failed API count: {self.api_failed_count}"
+            )
+            raise
 
     async def paginated_api_call(self, url_name, **url_kwargs):
         """Make a paginated API call for Confluence objects using the passed url_name.
@@ -259,10 +295,15 @@ class ConfluenceClient:
                         self.host_url,
                         links.get("next")[1:],
                     )
-            except Exception as exception:
-                self._logger.warning(
-                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
-                )
+            except (
+                ServerDisconnectedError,
+                ClientResponseError,
+                ThrottledError,
+                NotFound,
+                InternalServerError,
+                Exception,
+            ) as exception:
+                await self._handle_api_call_error(url, exception)
                 break
 
     async def paginated_api_call_for_datacenter_syncrule(self, url_name, **url_kwargs):
@@ -290,10 +331,15 @@ class ConfluenceClient:
                     url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
-            except Exception as exception:
-                self._logger.warning(
-                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
-                )
+            except (
+                ServerDisconnectedError,
+                ClientResponseError,
+                ThrottledError,
+                NotFound,
+                InternalServerError,
+                Exception,
+            ) as exception:
+                await self._handle_api_call_error(url, exception)
                 break
 
     async def search_by_query(self, query):
@@ -329,11 +375,15 @@ class ConfluenceClient:
             ):
                 permission = await permissions.json()
                 return permission
-        except ClientResponseError as exception:
-            self._logger.warning(
-                f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
-            )
-            return {}
+        except (
+            ServerDisconnectedError,
+            ClientResponseError,
+            ThrottledError,
+            NotFound,
+            InternalServerError,
+            Exception,
+        ) as exception:
+            await self._handle_api_call_error(url, exception)
 
     async def fetch_page_blog_documents(self, api_query):
         async for response in self.paginated_api_call(
@@ -381,20 +431,43 @@ class ConfluenceClient:
             url = urljoin(self.host_url, URLS[USERS_FOR_SERVER])
 
         while True:
-            url_ = url.format(start=start_at, limit=limit)
-            async for users in self.api_call(url=url_):
-                response = await users.json()
-                if len(response.get(key)) == 0:
-                    return
-                yield response.get(key)
-                start_at += limit
+            try:
+                url_ = url.format(start=start_at, limit=limit)
+                async for users in self.api_call(url=url_):
+                    response = await users.json()
+                    if len(response.get(key)) == 0:
+                        return
+                    yield response.get(key)
+                    start_at += limit
+            except (
+                ServerDisconnectedError,
+                ClientResponseError,
+                ThrottledError,
+                NotFound,
+                InternalServerError,
+                Exception,
+            ) as exception:
+                await self._handle_api_call_error(url, exception)
+                break
 
     async def fetch_label(self, label_id):
-        async for label_data in self.api_call(
-            url=os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
-        ):
-            labels = await label_data.json()
-            return [label.get("name") for label in labels["results"]]
+        url = os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
+        try:
+            async for label_data in self.api_call(
+                url=url,
+            ):
+                labels = await label_data.json()
+                return [label.get("name") for label in labels["results"]]
+
+        except (
+            ServerDisconnectedError,
+            ClientResponseError,
+            ThrottledError,
+            NotFound,
+            InternalServerError,
+            Exception,
+        ) as exception:
+            await self._handle_api_call_error(url, exception)
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -1037,18 +1110,28 @@ class ConfluenceDataSource(BaseDataSource):
 
         self._logger.info(f"Downloading content for file: {filename}")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        return await self.download_and_extract_file(
-            document,
-            filename,
-            file_extension,
-            partial(
-                self.generic_chunked_download_func,
+        try:
+            return await self.download_and_extract_file(
+                document,
+                filename,
+                file_extension,
                 partial(
-                    self.confluence_client.api_call,
-                    url=os.path.join(self.confluence_client.host_url, url),
+                    self.generic_chunked_download_func,
+                    partial(
+                        self.confluence_client.api_call,
+                        url=os.path.join(self.confluence_client.host_url, url),
+                    ),
                 ),
-            ),
-        )
+            )
+        except (
+            ServerDisconnectedError,
+            ClientResponseError,
+            ThrottledError,
+            NotFound,
+            InternalServerError,
+            Exception,
+        ) as exception:
+            await self.confluence_client._handle_api_call_error(url, exception)
 
     async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content
@@ -1213,6 +1296,20 @@ class ConfluenceDataSource(BaseDataSource):
             else:
                 yield item
 
+    def check_api_exceptions_and_raise(self):
+        failed_percentage = round(
+            (
+                self.confluence_client.api_failed_count
+                / self.confluence_client.api_total_count
+            )
+            * 100,
+            2,
+        )
+        if failed_percentage >= API_FAILURE_THRESHOLD * 100:
+            msg = f"High percentage of API exceptions {failed_percentage}% is greater than or equal to the default threshold {API_FAILURE_THRESHOLD*100}%. This calculation is done at the end of the synchronization process. Please review the logs for more details."
+            self._logger.error(msg)
+            raise SyncFailure(msg)
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch Confluence content in async manner.
 
@@ -1266,3 +1363,6 @@ class ConfluenceDataSource(BaseDataSource):
             async for item in self._consumer():
                 yield item
             await self.fetchers.join()
+
+        if self.confluence_client.api_total_count > MIN_API_CALL:
+            self.check_api_exceptions_and_raise()
