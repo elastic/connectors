@@ -9,7 +9,7 @@
 import asyncio
 import importlib
 import re
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -32,6 +32,7 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
+    ErrorMonitor,
     convert_to_b64,
     epoch_timestamp_zulu,
     get_file_extension,
@@ -409,6 +410,7 @@ class BaseDataSource:
 
         # this will be overwritten by set_framework_config()
         self.framework_config = DataSourceFrameworkConfig.Builder().build()
+        self.error_monitor = ErrorMonitor()
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
@@ -581,6 +583,14 @@ class BaseDataSource:
         Each document is a dictionary containing permission data indexed into a corresponding permissions index.
         """
         raise NotImplementedError
+
+    @contextmanager
+    def with_error_monitoring(self):
+        try:
+            yield
+            self.error_monitor.track_success()
+        except Exception as ex:
+            self.error_monitor.track_error(ex)
 
     async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend
