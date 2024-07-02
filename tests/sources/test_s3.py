@@ -11,7 +11,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import aioboto3
 import aiofiles
 import pytest
-from botocore.exceptions import ClientError, HTTPClientError
+from botocore.exceptions import ClientError
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
@@ -480,7 +480,7 @@ async def test_close_with_client_session():
         await source.s3_client.client()
 
         await source.close()
-        with pytest.raises(HTTPClientError):
+        with pytest.raises(ClientError):
             await source.ping()
 
 
