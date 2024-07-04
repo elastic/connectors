@@ -1285,12 +1285,7 @@ async def test_extractor_put_doc():
     doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
-    extractor = Extractor(
-        None,
-        queue,
-        INDEX,
-        error_monitor=Mock()
-    )
+    extractor = Extractor(None, queue, INDEX, error_monitor=Mock())
 
     await extractor.put_doc(doc)
     queue.put.assert_awaited_once_with(doc)
@@ -1329,12 +1324,7 @@ async def test_force_canceled_extractor_put_doc():
     doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
-    extractor = Extractor(
-        None,
-        queue,
-        INDEX,
-        error_monitor=Mock()
-    )
+    extractor = Extractor(None, queue, INDEX, error_monitor=Mock())
 
     extractor.force_cancel()
     with pytest.raises(ForceCanceledError):
@@ -1510,12 +1500,7 @@ async def test_extractor_run_when_mem_full_is_raised():
     # instances
     doc_generator = AsyncIterator([(doc, None, "") for doc in docs_from_source])
 
-    extractor = Extractor(
-        es_client,
-        queue,
-        INDEX,
-        error_monitor=Mock()
-    )
+    extractor = Extractor(es_client, queue, INDEX, error_monitor=Mock())
 
     await extractor.run(doc_generator, JobType.FULL)
 
