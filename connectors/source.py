@@ -32,7 +32,6 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
-    ErrorMonitor,
     convert_to_b64,
     epoch_timestamp_zulu,
     get_file_extension,
@@ -410,7 +409,7 @@ class BaseDataSource:
 
         # this will be overwritten by set_framework_config()
         self.framework_config = DataSourceFrameworkConfig.Builder().build()
-        self.error_monitor = ErrorMonitor()
+        self.error_monitor = None
 
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
@@ -418,6 +417,9 @@ class BaseDataSource:
     def set_logger(self, logger_):
         self._logger = logger_
         self._set_internal_logger()
+
+    def set_error_monitor(self, error_monitor):
+        self.error_monitor = error_monitor
 
     def _set_internal_logger(self):
         # no op for BaseDataSource
@@ -778,12 +780,14 @@ class BaseDataSource:
                 doc = await self.handle_file_content_extraction(
                     doc, source_filename, temp_filename
                 )
+            self.error_monitor.track_success()
             return doc
         except Exception as e:
             self._logger.warning(
                 f"File download and extraction or conversion for file {source_filename} failed: {e}",
                 exc_info=True,
             )
+            self.error_monitor.track_error(e)
             if return_doc_if_failed:
                 return doc
             else:

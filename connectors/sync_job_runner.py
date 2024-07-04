@@ -35,7 +35,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.source import BaseDataSource
-from connectors.utils import truncate_id
+from connectors.utils import ErrorMonitor, truncate_id
 
 UTF_8 = "utf-8"
 
@@ -113,6 +113,8 @@ class SyncJobRunner:
         self.es_config = es_config
         self.service_config = service_config
         self.sync_orchestrator = None
+        error_monitor_config = service_config.get("error_monitor", {})
+        self.error_monitor = ErrorMonitor(**error_monitor_config)
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None
@@ -149,6 +151,7 @@ class SyncJobRunner:
                 configuration=self.sync_job.configuration
             )
             self.data_provider.set_logger(self.sync_job.logger)
+            self.data_provider.set_error_monitor(self.error_monitor)
             self.data_provider.set_framework_config(
                 self._data_source_framework_config()
             )
@@ -183,7 +186,7 @@ class SyncJobRunner:
                 await self._update_native_connector_authentication()
 
             self.sync_orchestrator = SyncOrchestrator(
-                self.es_config, self.sync_job.logger
+                self.es_config, self.error_monitor, self.sync_job.logger
             )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:

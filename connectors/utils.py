@@ -1009,7 +1009,7 @@ class ErrorMonitor:
         max_consecutive_errors=10,
         max_error_rate=0.15,
         error_window_size=100,
-        error_queue_size=20,
+        error_queue_size=10,
     ):
         self.max_error_rate = max_error_rate
         self.error_window_size = error_window_size
@@ -1082,13 +1082,13 @@ class ErrorMonitor:
 
     def _raise_if_necessary(self):
         if self.consecutive_error_count > self.max_consecutive_errors:
-            msg = f"Exceeded maximum consecutive errors - saw {self.consecutive_error_count} errors in a row"
+            msg = f"Exceeded maximum consecutive errors - saw {self.consecutive_error_count} errors in a row. Last error: {self.last_error}"
             raise TooManyErrors(msg) from self.last_error
         elif self.total_error_count > self.max_total_errors:
-            msg = f"Exceeded maximum total error count - saw {self.total_error_count} errors"
+            msg = f"Exceeded maximum total error count - saw {self.total_error_count} errors. Last error: {self.last_error}"
             raise TooManyErrors(msg) from self.last_error
         elif self.error_window_size > 0:
             error_rate = self._error_window_error_rate()
             if error_rate > self.max_error_rate:
-                msg = f"Exceeded maximum error ratio of {self.max_error_rate} for last {self.error_window_size} operations."
+                msg = f"Exceeded maximum error ratio of {self.max_error_rate} for last {self.error_window_size} operations. Last error: {self.last_error}"
                 raise TooManyErrors(msg) from self.last_error

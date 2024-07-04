@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from contextlib import asynccontextmanager
+from unittest.mock import Mock
 
 from connectors.source import DEFAULT_CONFIGURATION, DataSourceConfiguration
 
@@ -18,6 +19,7 @@ async def create_source(klass, **extras):
             config[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
 
     source = klass(configuration=DataSourceConfiguration(config))
+    source.set_error_monitor(Mock())
     try:
         yield source
     finally:

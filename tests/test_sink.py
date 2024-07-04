@@ -119,7 +119,7 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
         status=400,
     )
 
-    es = SyncOrchestrator(config)
+    es = SyncOrchestrator(config, error_monitor=Mock())
     es._sink = Mock()
     es._extractor = Mock()
 
@@ -161,7 +161,7 @@ async def test_prepare_content_index_create_index(
         headers=headers,
     )
 
-    es = SyncOrchestrator(config)
+    es = SyncOrchestrator(config, error_monitor=Mock())
     es._sink = Mock()
     es._extractor = Mock()
 
@@ -219,7 +219,7 @@ async def test_prepare_content_index(mock_responses):
         body='{"acknowledged": True}',
     )
 
-    es = SyncOrchestrator(config)
+    es = SyncOrchestrator(config, error_monitor=Mock())
     es._sink = Mock()
     es._extractor = Mock()
     with mock.patch.object(
@@ -325,7 +325,7 @@ async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
-    es = SyncOrchestrator(config)
+    es = SyncOrchestrator(config, error_monitor=Mock())
     pipeline = Pipeline({})
 
     async def get_docs():
@@ -487,6 +487,7 @@ async def setup_extractor(
         ESManagementClient(config),
         queue,
         INDEX,
+        error_monitor=Mock(),
         filter_=filter_mock,
         content_extraction_enabled=content_extraction_enabled,
     )
@@ -1140,6 +1141,7 @@ def test_bulk_populate_stats(res, expected_result):
     sink = Sink(
         client=None,
         queue=None,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline=None,
         chunk_mem_size=0,
@@ -1175,6 +1177,7 @@ async def test_batch_bulk_with_retry():
     sink = Sink(
         client=client,
         queue=None,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1209,6 +1212,7 @@ async def test_batch_bulk_with_errors(patch_logger):
     sink = Sink(
         client=client,
         queue=None,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1258,7 +1262,7 @@ async def test_sync_orchestrator_done_and_cleanup(
         sink_task.done.return_value = sink_task_done
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = SyncOrchestrator(config)
+    es = SyncOrchestrator(config, error_monitor=Mock())
     es._extractor = Mock()
     es._extractor.error = None
     es._sink = Mock()
@@ -1285,6 +1289,7 @@ async def test_extractor_put_doc():
         None,
         queue,
         INDEX,
+        error_monitor=Mock()
     )
 
     await extractor.put_doc(doc)
@@ -1328,6 +1333,7 @@ async def test_force_canceled_extractor_put_doc():
         None,
         queue,
         INDEX,
+        error_monitor=Mock()
     )
 
     extractor.force_cancel()
@@ -1344,6 +1350,7 @@ async def test_force_canceled_extractor_with_other_errors(patch_logger):
         None,
         queue,
         INDEX,
+        error_monitor=Mock(),
     )
     generator = AsyncMock(side_effect=Exception("a non-ForceCanceledError"))
 
@@ -1363,6 +1370,7 @@ async def test_sink_fetch_doc():
     sink = Sink(
         None,
         queue,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1384,6 +1392,7 @@ async def test_force_canceled_sink_fetch_doc():
     sink = Sink(
         None,
         queue,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1405,6 +1414,7 @@ async def test_force_canceled_sink_with_other_errors(patch_logger):
     sink = Sink(
         None,
         queue,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1449,7 +1459,7 @@ async def test_force_canceled_sink_with_other_errors(patch_logger):
 @pytest.mark.asyncio
 async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
-    es = SyncOrchestrator(config)
+    es = SyncOrchestrator(config, error_monitor=Mock())
     es._extractor = Mock()
     es._extractor.force_cancel = Mock()
 
@@ -1504,6 +1514,7 @@ async def test_extractor_run_when_mem_full_is_raised():
         es_client,
         queue,
         INDEX,
+        error_monitor=Mock()
     )
 
     await extractor.run(doc_generator, JobType.FULL)
@@ -1526,6 +1537,7 @@ async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1609,6 +1621,7 @@ async def test_should_log_bulk_operations_if_doc_id_tracing_is_enabled(
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1639,6 +1652,7 @@ async def test_should_log_error_when_id_is_missing(patch_logger):
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1674,6 +1688,7 @@ async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,

@@ -110,6 +110,10 @@ class ElasticsearchOverloadedError(Exception):
         self.__cause__ = cause
 
 
+class DocumentIngestionError(Exception):
+    pass
+
+
 class Sink:
     """Send bulk operations in batches by consuming a queue.
 
@@ -136,6 +140,7 @@ class Sink:
         max_concurrency,
         max_retries,
         retry_interval,
+        error_monitor,
         logger_=None,
         enable_bulk_operations_logging=False,
     ):
@@ -145,6 +150,7 @@ class Sink:
         self.pipeline = pipeline
         self.chunk_mem_size = chunk_mem_size * 1024 * 1024
         self.bulk_tasks = ConcurrentTasks(max_concurrency=max_concurrency)
+        self.error_monitor = error_monitor
         self.max_retires = max_retries
         self.retry_interval = retry_interval
         self.error = None
@@ -272,18 +278,19 @@ class Sink:
             successful_result = result in SUCCESSFUL_RESULTS
             if not successful_result:
                 if "error" in item[action_item]:
+                    message = f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
+                    self.error_monitor.track_error(DocumentIngestionError(message))
                     if do_log:
-                        self._logger.debug(
-                            f"Failed to execute '{action_item}' on document with id '{doc_id}'. Error: {item[action_item].get('error')}"
-                        )
+                        self._logger.debug(message)
                     self.counters.increment(RESULT_ERROR, namespace=BULK_RESPONSES)
                 else:
+                    message = f"Executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
+                    self.error_monitor.track_error(DocumentIngestionError(message))
                     if do_log:
-                        self._logger.debug(
-                            f"Executed '{action_item}' on document with id '{doc_id}', but got non-successful result: {result}"
-                        )
+                        self._logger.debug(message)
                     self.counters.increment(RESULT_UNDEFINED, namespace=BULK_RESPONSES)
             else:
+                self.error_monitor.track_success()
                 if do_log:
                     self._logger.debug(
                         f"Successfully executed '{action_item}' on document with id '{doc_id}'. Result: {result}"
@@ -424,6 +431,7 @@ class Extractor:
         client,
         queue,
         index,
+        error_monitor,
         filter_=None,
         sync_rules_enabled=False,
         content_extraction_enabled=True,
@@ -449,27 +457,37 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
+        self.error_monitor = error_monitor
         self.skip_unchanged_documents = skip_unchanged_documents
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
-        data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
+        try:
+            data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
-        if data is not None:
-            self.counters.increment(BIN_DOCS_DOWNLOADED)
-            data.pop("_id", None)
-            data.pop(TIMESTAMP_FIELD, None)
-            doc.update(data)
+            if data is not None:
+                self.counters.increment(BIN_DOCS_DOWNLOADED)
+                data.pop("_id", None)
+                data.pop(TIMESTAMP_FIELD, None)
+                doc.update(data)
 
-        doc.pop("_original_filename", None)
+            doc.pop("_original_filename", None)
 
-        await self.put_doc(
-            {
-                "_op_type": operation,
-                "_index": self.index,
-                "_id": doc_id,
-                "doc": doc,
-            }
-        )
+            await self.put_doc(
+                {
+                    "_op_type": operation,
+                    "_index": self.index,
+                    "_id": doc_id,
+                    "doc": doc,
+                }
+            )
+            self.error_monitor.track_success()
+        except ForceCanceledError:
+            raise
+        except Exception as ex:
+            self._logger.error(
+                f"Failed to do deferred index operation for doc {doc_id}: {ex}"
+            )
+            self.error_monitor.track_error(ex)
 
     def force_cancel(self):
         self._canceled = True
@@ -600,6 +618,8 @@ class Extractor:
                     )
                 # We try raising every loop to not miss a moment when
                 # too many errors happened when downloading
+                lazy_downloads.raise_any_exception()
+
                 lazy_downloads.raise_any_exception()
 
                 await asyncio.sleep(0)
@@ -813,7 +833,8 @@ class SyncOrchestrator:
     - once they are both over, returns totals
     """
 
-    def __init__(self, elastic_config, logger_=None):
+    def __init__(self, elastic_config, error_monitor, logger_=None):
+        self.error_monitor = error_monitor
         self._logger = logger_ or logger
         self._logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
         self.es_management_client = ESManagementClient(elastic_config)
@@ -1013,6 +1034,7 @@ class SyncOrchestrator:
             self.es_management_client,
             stream,
             index,
+            error_monitor=self.error_monitor,
             filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
@@ -1039,6 +1061,7 @@ class SyncOrchestrator:
             max_concurrency=max_concurrency,
             max_retries=max_bulk_retries,
             retry_interval=retry_interval,
+            error_monitor=self.error_monitor,
             logger_=self._logger,
             enable_bulk_operations_logging=enable_bulk_operations_logging,
         )

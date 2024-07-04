@@ -87,6 +87,13 @@ def _default_config():
             "preflight_idle": 30,
             "max_errors": 20,
             "max_errors_span": 600,
+            "error_monitor": {
+                "max_total_errors": 1000,
+                "max_consecutive_errors": 10,
+                "max_error_rate": 0.15,
+                "error_window_size": 100,
+                "error_queue_size": 10,
+            },
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
