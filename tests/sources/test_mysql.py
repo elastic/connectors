@@ -735,7 +735,6 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: additional property present
             [TABLE_ONE],
-            [ID_ONE],
             [
                 {
                     "tables": [TABLE_ONE],
@@ -744,6 +743,7 @@ async def test_validate_config_when_host_empty_then_raise_error():
                     "additional_property": True,
                 }
             ],
+            [ID_ONE],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -753,8 +753,8 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: tables field missing
             [TABLE_ONE],
-            [ID_ONE],
             [{"query": "SELECT * FROM *", "id_columns": [ID_ONE]}],
+            [ID_ONE],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -764,8 +764,8 @@ async def test_validate_config_when_host_empty_then_raise_error():
         (
             # invalid: query field missing
             [TABLE_ONE],
-            [ID_ONE],
             [{"tables": [TABLE_ONE], "id_columns": [ID_ONE]}],
+            [ID_ONE],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
@@ -773,21 +773,19 @@ async def test_validate_config_when_host_empty_then_raise_error():
             ),
         ),
         (
-            # invalid: id_columns field missing
+            # valid: id_columns field missing
             [TABLE_ONE],
-            [ID_ONE],
             [{"tables": [TABLE_ONE], "query": "SELECT * FROM *"}],
-            SyncRuleValidationResult(
-                SyncRuleValidationResult.ADVANCED_RULES,
-                is_valid=False,
-                validation_message=ANY,
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
             ),
         ),
         (
             # invalid: query empty
             [TABLE_ONE],
-            [ID_ONE],
             [{"tables": [TABLE_ONE], "query": "", "id_columns": [ID_ONE]}],
+            [ID_ONE],
             SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
