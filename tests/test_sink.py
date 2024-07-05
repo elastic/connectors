@@ -42,6 +42,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
+from connectors.utils import ErrorMonitor, TooManyErrors
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -474,6 +475,7 @@ async def setup_extractor(
     basic_rule_engine=None,
     sync_rules_enabled=False,
     content_extraction_enabled=False,
+    error_monitor=None,
 ):
     config = {
         "username": "elastic",
@@ -487,7 +489,7 @@ async def setup_extractor(
         ESManagementClient(config),
         queue,
         INDEX,
-        error_monitor=Mock(),
+        error_monitor=error_monitor or Mock(),
         filter_=filter_mock,
         content_extraction_enabled=content_extraction_enabled,
     )
@@ -1201,6 +1203,68 @@ async def test_batch_bulk_with_retry():
 
 
 @pytest.mark.asyncio
+async def test_batch_bulk_with_error_monitor():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=ErrorMonitor(max_consecutive_errors=10),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    def _create_response(num_successful, num_failed):
+        call_result = {"items": []}
+        for id_ in range(num_successful):
+            call_result["items"].append(
+                {OP_UPDATE: {"_id": str(id_), "result": "updated"}}
+            )
+
+        for id_ in range(num_failed):
+            call_result["items"].append(
+                {
+                    OP_UPDATE: {
+                        "_id": str(num_successful + id_),
+                        "result": "failed",
+                        "error": "something went wrong",
+                    }
+                }
+            )
+
+        return call_result
+
+    # First add 45 successful items and 5 failed
+    first_call_result = _create_response(45, 5)
+
+    # Then add 40 successful items and 10 failed
+    second_call_result = _create_response(40, 10)
+
+    # Lastly add 0 successful items and 1 failed
+    # This should fail the test as max consecutive_error_count=10
+    # 10 errors came last in second call, and this one just triggers it
+    third_call_result = _create_response(0, 1)
+
+    client.client.bulk = AsyncMock(
+        side_effect=[first_call_result, second_call_result, third_call_result]
+    )
+
+    await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+    await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+    with pytest.raises(TooManyErrors):
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+
+
+@pytest.mark.asyncio
 async def test_batch_bulk_with_errors(patch_logger):
     config = {
         "username": "elastic",
@@ -1330,6 +1394,37 @@ async def test_force_canceled_extractor_put_doc():
     with pytest.raises(ForceCanceledError):
         await extractor.put_doc(doc)
         queue.put.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
+async def test_extractor_get_docs_when_downloads_fail(
+    yield_existing_documents_metadata,
+):
+    queue = await queue_mock()
+
+    yield_existing_documents_metadata.return_value = AsyncIterator([])
+
+    docs_from_source = [
+        (DOC_ONE, crashing_lazy_download_fake(), "index"),
+        (DOC_TWO, crashing_lazy_download_fake(), "index"),
+        (DOC_THREE, crashing_lazy_download_fake(), "index"),
+        (DOC_FOUR, crashing_lazy_download_fake(), "index"),
+    ]
+    # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+    extractor = await setup_extractor(
+        queue,
+        content_extraction_enabled=True,
+        error_monitor=ErrorMonitor(max_total_errors=2),
+    )
+
+    await extractor.run(doc_generator, JobType.FULL)
+    assert isinstance(extractor.error, TooManyErrors)
 
 
 @pytest.mark.asyncio
