@@ -92,7 +92,6 @@ def _default_config():
                 "max_consecutive_errors": 10,
                 "max_error_rate": 0.15,
                 "error_window_size": 100,
-                "error_queue_size": 10,
             },
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
