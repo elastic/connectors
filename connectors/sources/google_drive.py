@@ -173,7 +173,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         )
         if last_sync_time is None:
             list_query = "trashed=false"
-        elif last_sync_time:
+        else:
             list_query = f"trashed=true or modifiedTime > '{last_sync_time}'"
         async for file in self.api_call_paged(
             resource="files",
