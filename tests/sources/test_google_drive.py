@@ -17,8 +17,16 @@ from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
 
 from connectors.access_control import DLS_QUERY
-from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from connectors.sources.google_drive import RETRIES, GoogleDriveDataSource
+from connectors.source import (
+    CURSOR_SYNC_TIMESTAMP,
+    ConfigurableFieldValueError,
+    DataSourceConfiguration,
+)
+from connectors.sources.google_drive import (
+    RETRIES,
+    GoogleDriveDataSource,
+    SyncCursorEmpty,
+)
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
@@ -155,6 +163,7 @@ async def test_ping_for_failed_connection():
                             "parents": ["0APU6durKUAiqUk9PVA"],
                             "size": "28",
                             "modifiedTime": "2023-06-28T07:46:28.000Z",
+                            "trashed": False,
                         }
                     ],
                 }
@@ -171,6 +180,7 @@ async def test_ping_for_failed_connection():
                     "file_extension": None,
                     "url": None,
                     "type": "file",
+                    "trashed": False,
                 }
             ],
         )
@@ -206,6 +216,7 @@ async def test_prepare_files(files, expected_files):
                 "parents": ["0APU6durKUAiqUk9PVA"],
                 "size": "28",
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": False,
             },
             {
                 "_id": "id1",
@@ -218,6 +229,7 @@ async def test_prepare_files(files, expected_files):
                 "file_extension": None,
                 "url": None,
                 "type": "file",
+                "trashed": False,
             },
         ),
         (
@@ -229,6 +241,7 @@ async def test_prepare_files(files, expected_files):
                 "parents": ["0APU6durKUAiqUk9PVA"],
                 "size": None,
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": False,
             },
             {
                 "_id": "id1",
@@ -241,6 +254,7 @@ async def test_prepare_files(files, expected_files):
                 "file_extension": None,
                 "url": None,
                 "type": "file",
+                "trashed": False,
             },
         ),
         (
@@ -252,6 +266,7 @@ async def test_prepare_files(files, expected_files):
                 "parents": ["0APU6durKUAiqUk9PVA"],
                 "size": None,
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": False,
                 "owners": [
                     {
                         "displayName": "Test User",
@@ -275,6 +290,7 @@ async def test_prepare_files(files, expected_files):
                 "author": "Test User",
                 "created_by": "Test User",
                 "created_by_email": "user@test.com",
+                "trashed": False,
             },
         ),
         (
@@ -286,6 +302,7 @@ async def test_prepare_files(files, expected_files):
                 "parents": ["folderId4"],
                 "size": None,
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": False,
                 "owners": [
                     {
                         "displayName": "Test User",
@@ -319,6 +336,7 @@ async def test_prepare_files(files, expected_files):
                 "updated_by_email": "user2@test.com",
                 "updated_by_photo_url": "dummy_link",
                 "path": "Drive3/Folder4/test.txt",
+                "trashed": False,
             },
         ),
     ],
@@ -575,6 +593,7 @@ async def test_get_docs_with_domain_wide_delegation():
                     "parents": ["0APU6durKUAiqUk9PVA"],
                     "size": "28",
                     "modifiedTime": "2023-06-28T07:46:28.000Z",
+                    "trashed": False,
                 }
             ],
         }
@@ -589,6 +608,7 @@ async def test_get_docs_with_domain_wide_delegation():
             "file_extension": None,
             "url": None,
             "type": "file",
+            "trashed": False,
         }
 
         mock_gdrive_client = mock.MagicMock()
@@ -628,6 +648,7 @@ async def test_get_docs():
                     "parents": ["0APU6durKUAiqUk9PVA"],
                     "size": "28",
                     "modifiedTime": "2023-06-28T07:46:28.000Z",
+                    "trashed": False,
                 }
             ],
         }
@@ -642,6 +663,7 @@ async def test_get_docs():
             "file_extension": None,
             "url": None,
             "type": "file",
+            "trashed": False,
         }
         dummy_url = "https://www.googleapis.com/drive/v3/files"
 
@@ -1205,6 +1227,7 @@ async def test_api_call_list_drives_retries(
                 "size": "28",
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
                 "driveId": "drive1",
+                "trashed": False,
             },
             [
                 {"type": "user", "emailAddress": "user@xd.com"},
@@ -1224,6 +1247,7 @@ async def test_api_call_list_drives_retries(
                 "url": None,
                 "type": "file",
                 "shared_drive": "drive1",
+                "trashed": False,
                 "_allow_access_control": [
                     "user:user@xd.com",
                     "group:group@xd.com",
@@ -1242,6 +1266,7 @@ async def test_api_call_list_drives_retries(
                 "size": None,
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
                 "driveId": "drive1",
+                "trashed": False,
             },
             [
                 {"type": "user", "emailAddress": "user2@xd.com"},
@@ -1261,6 +1286,7 @@ async def test_api_call_list_drives_retries(
                 "url": None,
                 "type": "file",
                 "shared_drive": "drive1",
+                "trashed": False,
                 "_allow_access_control": [
                     "user:user2@xd.com",
                     "group:group2@xd.com",
@@ -1317,6 +1343,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                 "parents": ["0APU6durKUAiqUk9PVA"],
                 "size": "28",
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": False,
                 "permissions": [
                     {"type": "user", "emailAddress": "user@xd.com"},
                     {"type": "group", "emailAddress": "group@xd.com"},
@@ -1335,6 +1362,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                 "file_extension": None,
                 "url": None,
                 "type": "file",
+                "trashed": False,
                 "_allow_access_control": [
                     "user:user@xd.com",
                     "group:group@xd.com",
@@ -1352,6 +1380,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                 "parents": ["0APU6durKUAiqUk9PVA"],
                 "size": None,
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": False,
                 "permissions": [
                     {"type": "user", "emailAddress": "user2@xd.com"},
                     {"type": "group", "emailAddress": "group2@xd.com"},
@@ -1370,6 +1399,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                 "file_extension": None,
                 "url": None,
                 "type": "file",
+                "trashed": False,
                 "_allow_access_control": [
                     "user:user2@xd.com",
                     "group:group2@xd.com",
@@ -1626,3 +1656,211 @@ async def test_get_google_workspace_admin_email_with_dls_delegation():
         source._dls_enabled = mock.MagicMock(return_value=True)
         email = source._get_google_workspace_admin_email()
         assert email == test_email
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sync_cursor", [None, {}])
+async def test_get_docs_incrementally_with_empty_sync_cursor(sync_cursor):
+    async with create_gdrive_source() as source:
+        with pytest.raises(SyncCursorEmpty):
+            await anext(source.get_docs_incrementally(sync_cursor=sync_cursor))
+
+
+@pytest.mark.asyncio
+async def test_get_docs_incrementally():
+    """Tests the module responsible to fetch and yield files documents from Google Drive."""
+
+    async with create_gdrive_source() as source:
+        sync_cursor = {CURSOR_SYNC_TIMESTAMP: "2023-06-28T05:46:28Z"}
+        expected_response = {
+            "kind": "drive#fileList",
+            "files": [
+                # This is the file that was deleted from google drive
+                # Hence this file will be deleted from elasticsearch when incremental sync is run
+                {
+                    "kind": "drive#file",
+                    "mimeType": "text/plain",
+                    "id": "id1",
+                    "name": "test.txt",
+                    "parents": ["0APU6durKUAiqUk9PVA"],
+                    "size": "28",
+                    "modifiedTime": "2024-06-28T03:46:28.000Z",
+                    "trashed": True,
+                },
+                # This file was added to google drive after full sync was run
+                # Hence this file will be added to elasticearch when incremental sync is run
+                {
+                    "kind": "drive#file",
+                    "mimeType": "text/plain",
+                    "id": "id2",
+                    "name": "test1.txt",
+                    "parents": ["0APU6durKUAiqUk9PVA"],
+                    "size": "50",
+                    "modifiedTime": "2024-06-28T07:46:28.000Z",
+                    "trashed": False,
+                },
+            ],
+        }
+        expected_file_document = [
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2024-06-28T03:46:28.000Z",
+                    "name": "test.txt",
+                    "size": "28",
+                    "_timestamp": "2024-06-28T03:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": True,
+                },
+                "download_func",
+                "delete",
+            ),
+            (
+                {
+                    "_id": "id2",
+                    "created_at": None,
+                    "last_updated": "2024-06-28T07:46:28.000Z",
+                    "name": "test1.txt",
+                    "size": "50",
+                    "_timestamp": "2024-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": False,
+                },
+                "download_func",
+                "index",
+            ),
+        ]
+
+        dummy_url = "https://www.googleapis.com/drive/v3/files"
+
+        expected_response_object = Response(
+            status_code=200,
+            url=dummy_url,
+            json=expected_response,
+            req=Request(method="GET", url=dummy_url),
+        )
+        file_document_list = []
+        with mock.patch.object(
+            Aiogoogle, "as_service_account", return_value=expected_response_object
+        ):
+            with mock.patch.object(ServiceAccountManager, "refresh"):
+                async for file_document, _, operation in source.get_docs_incrementally(
+                    sync_cursor=sync_cursor
+                ):
+                    file_document_list.append(
+                        (file_document, "download_func", operation)
+                    )
+                assert file_document_list == expected_file_document
+
+
+@pytest.mark.asyncio
+async def test_get_docs_incrementally_with_domain_wide_delegation():
+    """Tests the method responsible to yield files from Google Drive."""
+
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync="admin@email.com"
+    ) as source:
+        sync_cursor = {CURSOR_SYNC_TIMESTAMP: "2023-06-28T05:46:28Z"}
+        source._get_google_workspace_admin_email = mock.MagicMock(
+            return_value="admin@email.com"
+        )
+        source.google_admin_directory_client.users = mock.MagicMock(
+            return_value=AsyncIterator([{"primaryEmail": "some@email.com"}])
+        )
+
+        source._domain_wide_delegation_sync_enabled = mock.MagicMock(return_value=True)
+        expected_response = {
+            "kind": "drive#fileList",
+            "files": [
+                # This is the file that was deleted from google drive
+                # Hence this file will be deleted from elasticsearch when incremental sync is run
+                {
+                    "kind": "drive#file",
+                    "mimeType": "text/plain",
+                    "id": "id1",
+                    "name": "test.txt",
+                    "parents": ["0APU6durKUAiqUk9PVA"],
+                    "size": "28",
+                    "modifiedTime": "2024-06-28T03:46:28.000Z",
+                    "trashed": True,
+                },
+                # This file was added to google drive after full sync was run
+                # Hence this file will be added to elasticearch when incremental sync is run
+                {
+                    "kind": "drive#file",
+                    "mimeType": "text/plain",
+                    "id": "id2",
+                    "name": "test1.txt",
+                    "parents": ["0APU6durKUAiqUk9PVA"],
+                    "size": "50",
+                    "modifiedTime": "2024-06-28T07:46:28.000Z",
+                    "trashed": False,
+                },
+            ],
+        }
+        expected_file_document = [
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2024-06-28T03:46:28.000Z",
+                    "name": "test.txt",
+                    "size": "28",
+                    "_timestamp": "2024-06-28T03:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": True,
+                },
+                "download_func",
+                "delete",
+            ),
+            (
+                {
+                    "_id": "id2",
+                    "created_at": None,
+                    "last_updated": "2024-06-28T07:46:28.000Z",
+                    "name": "test1.txt",
+                    "size": "50",
+                    "_timestamp": "2024-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": False,
+                },
+                "download_func",
+                "index",
+            ),
+        ]
+        file_document_list = []
+        mock_gdrive_client = mock.MagicMock()
+        mock_gdrive_client.list_files_from_my_drive = mock.MagicMock(
+            return_value=AsyncIterator([expected_response])
+        )
+
+        mock_empty_response_future = asyncio.Future()
+        mock_empty_response_future.set_result({})
+
+        mock_gdrive_client.get_all_folders = mock.MagicMock(
+            return_value=mock_empty_response_future
+        )
+        mock_gdrive_client.get_all_drives = mock.MagicMock(
+            return_value=mock_empty_response_future
+        )
+
+        source.google_drive_client = mock.MagicMock(return_value=mock_gdrive_client)
+
+        async for file_document, _, operation in source.get_docs_incrementally(
+            sync_cursor=sync_cursor
+        ):
+            file_document_list.append((file_document, "download_func", operation))
+        assert file_document_list == expected_file_document
