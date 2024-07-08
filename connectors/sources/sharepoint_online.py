@@ -321,8 +321,8 @@ def retryable_aiohttp_call(retries):
             retry = 1
             while retry <= retries:
                 try:
-                    async for item in func(*args, **kwargs, retry_count=retry):
-                        yield item
+                    result = await func(*args, **kwargs, retry_count=retry)
+                    yield result
                     break
                 except (NotFound, BadRequestError):
                     raise
@@ -913,8 +913,9 @@ class SharepointOnlineClient:
 
             for attachment in list_item["AttachmentFiles"]:
                 yield attachment
-        except NotFound:
+        except (NotFound, BadRequestError):
             # We can safely ignore cause Sharepoint can return 404 in case List Item is of specific types that do not support/have attachments
+            # 400 is sometimes returned for weird cases when Sharepoint Server responds with incorrect Content-Length header
             # Yes, makes no sense to me either.
             return
 
