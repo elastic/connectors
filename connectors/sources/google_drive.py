@@ -209,14 +209,14 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 
         if fetch_permissions and last_sync_time:
             files_fields = DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
-            list_query = f"trashed=true and modifiedTime > '{last_sync_time}' and 'me' in writers"
+            list_query = f"(trashed=true or modifiedTime > '{last_sync_time}') and 'me' in writers"
         elif fetch_permissions and not last_sync_time:
             files_fields = DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
             # Google Drive API required write access to fetch file's permissions
             list_query = "trashed=false and 'me' in writers"
         elif not fetch_permissions and last_sync_time:
             files_fields = DRIVE_ITEMS_FIELDS
-            list_query = f"trashed=true and modifiedTime > '{last_sync_time}'"
+            list_query = f"trashed=true or modifiedTime > '{last_sync_time}'"
         else:
             files_fields = DRIVE_ITEMS_FIELDS
             list_query = "trashed=false"
