@@ -89,5 +89,6 @@ bin/package-dev: requirements/package-dev.txt
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/package-dev.txt
 
-generate_wrappers: bin/package-dev
-	bin/python scripts/codegen/generate_wrappers.py
+generate_connector_package: bin/package-dev
+	bin/python scripts/codegen/generate_connectors.py
+	bin/python scripts/codegen/generate_connectors_init.py
