@@ -27,7 +27,6 @@ bin/elastic-ingest: bin/python
 bin/black: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/tests.txt
-	
 
 bin/pytest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
@@ -85,3 +84,10 @@ docker-run:
 
 docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
+
+bin/package-dev: requirements/package-dev.txt
+	bin/pip install -r requirements/$(ARCH).txt
+	bin/pip install -r requirements/package-dev.txt
+
+generate_wrappers: bin/package-dev
+	bin/python scripts/codegen/generate_wrappers.py

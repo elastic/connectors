@@ -1,0 +1,30 @@
+from application.base import BaseDataSource
+
+class {{ class_name }}({{ base_class_name }}):
+    """
+    {{ class_name }} class generated for connecting to the data source.
+
+    Args:
+    {% for param, value in params %}
+        {{ param }} ({{ config[param]['type'] }}): {{ config[param].label }}{% if config[param].tooltip %}
+            - {{ config[param].tooltip }}{% endif %}
+    {% endfor %}
+    """
+    def __init__(self, {% for param, value in params %}{{ param }}={% if value is none %}None{% elif value is boolean %}{{ value }}{% else %}'{{ value }}'{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}):
+        configuration = self.get_default_configuration()
+
+        # Apply the user provided configuration in the class constructor
+        args = locals()
+        for key in configuration.keys():
+            if args[key] is not None:
+                configuration[key]['value'] = args[key]
+
+        # Check if all fields marked as 'required' in config are present with values, if not raise an exception
+        for key, value in configuration.items():
+            if value['value'] is None and value.get('required', True):
+                raise ValueError(f"Missing required configuration field: {key}")
+
+        super().__init__(configuration)
+
+        {% for key in config.keys() %}self.{{ key }} = {{ key }}
+        {% endfor %}
