@@ -570,7 +570,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
+                f"Something went wrong while fetching document for query '{query}' and tables {', '.join(tables)}. Error: {exception}"
             )
 
     async def _yield_docs_custom_query(self, tables, query, id_columns):
