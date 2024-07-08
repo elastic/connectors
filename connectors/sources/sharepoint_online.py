@@ -321,8 +321,8 @@ def retryable_aiohttp_call(retries):
             retry = 1
             while retry <= retries:
                 try:
-                    result = await func(*args, **kwargs, retry_count=retry)
-                    yield result
+                    async for item in func(*args, **kwargs, retry_count=retry):
+                        yield item
                     break
                 except (NotFound, BadRequestError):
                     raise
