@@ -42,6 +42,7 @@ from connectors.utils import (
 
 WILDCARD = "*"
 BLOB = "blob"
+FILE = "file"
 GITHUB_CLOUD = "github_cloud"
 GITHUB_SERVER = "github_server"
 PERSONAL_ACCESS_TOKEN = "personal_access_token"  # noqa: S105
@@ -57,12 +58,20 @@ REVIEWS_COUNT = 45
 
 SUPPORTED_EXTENSION = [".markdown", ".md", ".rst"]
 
-FILE_SCHEMA = {
+FILE_TREE_SCHEMA = {
     "name": "name",
     "size": "size",
     "type": "type",
     "path": "path",
     "mode": "mode",
+    "extension": "extension",
+    "_timestamp": "_timestamp",
+}
+FILE_SCHEMA = {
+    "name": "name",
+    "size": "size",
+    "type": "type",
+    "path": "path",
     "extension": "extension",
     "_timestamp": "_timestamp",
 }
@@ -623,6 +632,7 @@ class ObjectType(Enum):
     PULL_REQUEST = "Pull request"
     PR = "pr"
     BRANCH = "branch"
+    PATH = "path"
 
 
 class UnauthorizedException(Exception):
@@ -656,11 +666,13 @@ class GitHubClient:
             self.endpoints = {
                 "TREE": "/repos/{repo_name}/git/trees/{default_branch}?recursive=1",
                 "COMMITS": "/repos/{repo_name}/commits?path={path}",
+                "PATH": "/repos/{repo_name}/contents/{path}",
             }
         else:
             self.endpoints = {
                 "TREE": "/api/v3/repos/{repo_name}/git/trees/{default_branch}?recursive=1",
                 "COMMITS": "api/v3/repos/{repo_name}/commits?path={path}",
+                "PATH": "api/v3/repos/{repo_name}/contents/{path}",
             }
         if ssl_enabled and ssl_ca:
             self.ssl_ctx = ssl_context(certificate=ssl_ca)
@@ -867,9 +879,8 @@ class GitHubClient:
             accept=sansio.accept_format(),
             oauth_token=self._access_token(),
         )
-        _, headers, _ = await self._get_client._request(
-            "HEAD", self.base_url, request_headers
-        )
+        url = f"{self.base_url}/graphql"
+        _, headers, _ = await self._get_client._request("HEAD", url, request_headers)
         scopes = headers.get("X-OAuth-Scopes")
         if not scopes or not scopes.strip():
             self._logger.warning(f"Couldn't find 'X-OAuth-Scopes' in headers {headers}")
@@ -1010,6 +1021,7 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
                     ObjectType.ISSUE.value.lower(): {"type": "string", "minLength": 1},
                     ObjectType.PR.value: {"type": "string", "minLength": 1},
                     ObjectType.BRANCH.value: {"type": "string", "minLength": 1},
+                    ObjectType.PATH.value: {"type": "string", "minLength": 1},
                 },
                 "minProperties": 1,
                 "additionalProperties": False,
@@ -1310,7 +1322,7 @@ class GitHubDataSource(BaseDataSource):
             cached_repo = self.org_repos
         else:
             if owner not in self.user_repos:
-                # get repos for a user cna cached it in self.user_repos
+                # get repos for a user can cached it in self.user_repos
                 async for _ in self._get_personal_repos(owner):
                     pass
 
@@ -1834,19 +1846,25 @@ class GitHubDataSource(BaseDataSource):
         )
         return commit["commit"]["committer"]["date"]
 
-    async def _fetch_files(self, repo_name, default_branch):
+    async def _fetch_files(self, repo_name, path_branch, path=False):
         self._logger.info(
-            f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')"
+            f"Fetching files from repo: '{repo_name}' (branch or path: '{path_branch}')"
         )
         try:
             file_tree = await self.github_client.get_github_item(
                 resource=self.github_client.endpoints["TREE"].format(
-                    repo_name=repo_name, default_branch=default_branch
+                    repo_name=repo_name, default_branch=path_branch
+                )
+                if not path
+                else self.github_client.endpoints["PATH"].format(
+                    repo_name=repo_name, path=path_branch
                 )
             )
-
-            for repo_object in file_tree.get("tree", []):
-                if repo_object["type"] == BLOB:
+            files = file_tree if path else file_tree.get("tree", [])
+            for repo_object in files:
+                if repo_object["type"] == BLOB or (
+                    repo_object["type"] == FILE and path
+                ):
                     file_name = repo_object["path"].split("/")[-1]
                     file_extension = (
                         file_name[file_name.rfind(".") :]  # noqa
@@ -1867,7 +1885,8 @@ class GitHubDataSource(BaseDataSource):
                         )
 
                         document = self.adapt_gh_doc_to_es_doc(
-                            github_document=repo_object, schema=FILE_SCHEMA
+                            github_document=repo_object,
+                            schema=FILE_SCHEMA if path else FILE_TREE_SCHEMA,
                         )
 
                         document["_id"] = f"{repo_name}/{repo_object['path']}"
@@ -2050,9 +2069,21 @@ class GitHubDataSource(BaseDataSource):
 
                 if branch := rule["filter"].get(ObjectType.BRANCH.value):
                     async for file_document, attachment_metadata in self._fetch_files(
-                        repo_name=repo_name, default_branch=branch
+                        repo_name=repo_name, path_branch=branch
                     ):
                         if file_document["type"] == BLOB:
+                            yield file_document, partial(
+                                self.get_content, attachment=attachment_metadata
+                            )
+                        else:
+                            yield file_document, None
+
+                if path := rule["filter"].get(ObjectType.PATH.value):
+                    async for file_document, attachment_metadata in self._fetch_files(
+                        repo_name=repo_name, path_branch=path, path=True
+                    ):
+                        if file_document["type"] == FILE:
+                            attachment_metadata["url"] = attachment_metadata["git_url"]
                             yield file_document, partial(
                                 self.get_content, attachment=attachment_metadata
                             )
@@ -2109,7 +2140,7 @@ class GitHubDataSource(BaseDataSource):
 
                 if default_branch:
                     async for file_document, attachment_metadata in self._fetch_files(
-                        repo_name=repo_name, default_branch=default_branch
+                        repo_name=repo_name, path_branch=default_branch
                     ):
                         if file_document["type"] == BLOB:
                             if needs_access_control:
