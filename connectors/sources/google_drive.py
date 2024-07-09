@@ -174,7 +174,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         if last_sync_time is None:
             list_query = "trashed=false"
         else:
-            list_query = f"trashed=true or modifiedTime > '{last_sync_time}'"
+            list_query = f"trashed=true or modifiedTime > '{last_sync_time}' or createdTime > '{last_sync_time}'"
         async for file in self.api_call_paged(
             resource="files",
             method="list",
@@ -209,14 +209,14 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 
         if fetch_permissions and last_sync_time:
             files_fields = DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
-            list_query = f"(trashed=true or modifiedTime > '{last_sync_time}') and 'me' in writers"
+            list_query = f"(trashed=true or modifiedTime > '{last_sync_time}' or createdTime > '{last_sync_time}') and 'me' in writers"
         elif fetch_permissions and not last_sync_time:
             files_fields = DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS
             # Google Drive API required write access to fetch file's permissions
             list_query = "trashed=false and 'me' in writers"
         elif not fetch_permissions and last_sync_time:
             files_fields = DRIVE_ITEMS_FIELDS
-            list_query = f"trashed=true or modifiedTime > '{last_sync_time}'"
+            list_query = f"trashed=true or modifiedTime > '{last_sync_time}' or createdTime > '{last_sync_time}'"
         else:
             files_fields = DRIVE_ITEMS_FIELDS
             list_query = "trashed=false"
@@ -704,9 +704,9 @@ class GoogleDriveDataSource(BaseDataSource):
         user_email = user.get("primaryEmail")
         user_domain = _get_domain_from_email(user_email)
         user_groups = []
-        async for groups_page in self.google_admin_directory_client.list_groups_for_user(
-            user_id
-        ):
+        async for (
+            groups_page
+        ) in self.google_admin_directory_client.list_groups_for_user(user_id):
             for group in groups_page.get("groups", []):
                 user_groups.append(group.get("email"))
 
