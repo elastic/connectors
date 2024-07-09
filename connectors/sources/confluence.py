@@ -222,20 +222,18 @@ class ConfluenceClient:
             response: Client response
         """
         self._logger.debug(f"Making a GET call for url: {url}")
-        
-        while True:
-            try:
-                async with self._get_session().get(
-                    url=url,
-                    ssl=self.ssl_ctx,
-                ) as response:
-                    yield response
-                    break
-            except ServerDisconnectedError:
-                await self.close_session()
-                raise
-            except ClientResponseError as exception:
-                await self._handle_client_errors(url=url, exception=exception)
+
+        try:
+            async with self._get_session().get(
+                url=url,
+                ssl=self.ssl_ctx,
+            ) as response:
+                yield response
+        except ServerDisconnectedError:
+            await self.close_session()
+            raise
+        except ClientResponseError as exception:
+            await self._handle_client_errors(url=url, exception=exception)
 
     async def paginated_api_call(self, url_name, **url_kwargs):
         """Make a paginated API call for Confluence objects using the passed url_name.
@@ -250,18 +248,16 @@ class ConfluenceClient:
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    links = json_response.get("_links")
-                    yield json_response
-                    if links.get("next") is None:
-                        return
-                    url = os.path.join(
-                        self.host_url,
-                        links.get("next")[1:],
-                    )
+                response = await anext(self.api_call(url=url))
+                json_response = await response.json()
+                links = json_response.get("_links")
+                yield json_response
+                if links.get("next") is None:
+                    return
+                url = os.path.join(
+                    self.host_url,
+                    links.get("next")[1:],
+                )
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
@@ -282,15 +278,13 @@ class ConfluenceClient:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    yield json_response
+                response = await anext(self.api_call(url=url))
+                json_response = await response.json()
+                yield json_response
 
-                    start = url_kwargs.get("start", 0)
-                    start += LIMIT
-                    url_kwargs["start"] = start
+                start = url_kwargs.get("start", 0)
+                start += LIMIT
+                url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
             except Exception as exception:

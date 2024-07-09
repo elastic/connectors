@@ -798,10 +798,10 @@ async def test_get_with_429_status():
             "aiohttp.ClientSession.get",
             side_effect=[initial_response, retried_response],
         ):
-            async for response in source.confluence_client.api_call(
-                url="http://localhost:1000/sample"
-            ):
-                result = await response.json()
+            response = await anext(
+                source.confluence_client.api_call(url="http://localhost:1000/sample")
+            )
+            result = await response.json()
 
     assert result == payload
 
@@ -824,10 +824,12 @@ async def test_get_with_429_status_without_retry_after_header():
                 "aiohttp.ClientSession.get",
                 side_effect=[initial_response, retried_response],
             ):
-                async for response in source.confluence_client.api_call(
-                    url="http://localhost:1000/sample"
-                ):
-                    result = await response.json()
+                response = await anext(
+                    source.confluence_client.api_call(
+                        url="http://localhost:1000/sample"
+                    )
+                )
+                result = await response.json()
 
         assert result == payload
 
@@ -843,10 +845,10 @@ async def test_get_with_404_status():
             side_effect=error,
         ):
             with pytest.raises(NotFound):
-                async for response in source.confluence_client.api_call(
-                    url="http://localhost:1000/err"
-                ):
-                    await response.json()
+                response = await anext(
+                    source.confluence_client.api_call(url="http://localhost:1000/err")
+                )
+                await response.json()
 
 
 @pytest.mark.asyncio
@@ -861,10 +863,10 @@ async def test_get_with_500_status():
             side_effect=error,
         ):
             with pytest.raises(InternalServerError):
-                async for response in source.confluence_client.api_call(
-                    url="http://localhost:1000/err"
-                ):
-                    await response.json()
+                response = await anext(
+                    source.confluence_client.api_call(url="http://localhost:1000/err")
+                )
+                await response.json()
 
 
 @freeze_time("2023-01-24T04:07:19")
