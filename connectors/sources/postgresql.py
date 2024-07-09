@@ -83,6 +83,7 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "tables": {"type": "array", "minItems": 1},
             "query": {"type": "string", "minLength": 1},
+            "id_columns": {"type": "array", "minItems": 1},
         },
         "required": ["tables", "query"],
         "additionalProperties": False,
@@ -548,7 +549,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table '{table}'. Error: {exception}"
             )
 
-    async def fetch_documents_from_query(self, tables, query):
+    async def fetch_documents_from_query(self, tables, query, id_columns):
         """Fetches all the data from the given query and format them in Elasticsearch documents
 
         Args:
@@ -562,7 +563,9 @@ class PostgreSQLDataSource(BaseDataSource):
             f"Fetching records for {tables} tables using custom query: {query}"
         )
         try:
-            docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
+            docs_generator = self._yield_docs_custom_query(
+                tables=tables, query=query, id_columns=id_columns
+            )
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
@@ -570,23 +573,29 @@ class PostgreSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for query '{query}' and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query):
+    async def _yield_docs_custom_query(self, tables, query, id_columns):
         primary_key_columns, _ = await self.get_primary_key(tables=tables)
+
+        if id_columns:
+            primary_key_columns = id_columns
+
         if not primary_key_columns:
             self._logger.warning(
                 f"Skipping tables {', '.join(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
             )
             return
 
-        last_update_times = list(
-            filter(
-                lambda update_time: update_time is not None,
-                [
+        last_update_times = []
+        for table in tables:
+            try:
+                last_update_time = (
                     await self.postgresql_client.get_table_last_update_time(table)
-                    for table in tables
-                ],
-            )
-        )
+                )
+                last_update_times.append(last_update_time)
+            except Exception:
+                self._logger.warning("Last update time is not found for Table: {table}")
+                last_update_times.append(iso_utc())
+
         last_update_time = (
             max(last_update_times) if len(last_update_times) else iso_utc()
         )
@@ -598,7 +607,10 @@ class PostgreSQLDataSource(BaseDataSource):
 
             yield self.serialize(
                 doc=self.row2doc(
-                    row=row, doc_id=doc_id, table=tables, timestamp=last_update_time
+                    row=row,
+                    doc_id=doc_id,
+                    table=tables,
+                    timestamp=last_update_time or iso_utc(),
                 )
             )
 
@@ -669,7 +681,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 yield row
         else:
             self._logger.warning(
-                f"Skipping query {query} for tables {', '.join(tables)} as primary key column name is not present in query."
+                f"Skipping query {query} for tables {', '.join(tables)} as primary key column or unique ID column name is not present in query."
             )
 
     async def get_docs(self, filtering=None):
@@ -687,9 +699,14 @@ class PostgreSQLDataSource(BaseDataSource):
             for rule in advanced_rules:
                 query = rule.get("query")
                 tables = rule.get("tables")
-
+                id_columns = rule.get("id_columns")
+                if id_columns:
+                    id_columns = [
+                        f"{self.schema}_{'_'.join(sorted(tables))}_{column}"
+                        for column in id_columns
+                    ]
                 async for row in self.fetch_documents_from_query(
-                    tables=tables, query=query
+                    tables=tables, query=query, id_columns=id_columns
                 ):
                     yield row, None
 
