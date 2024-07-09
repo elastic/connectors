@@ -210,7 +210,7 @@
 ##    ignoring transient errors while ingesting the data. For example, failing to download or ingest a single
 ##    document should not stop the sync. Failing to ingest some meaningful number of documents, however,
 ##    should stop the sync.
-##    Parameters in this section are responsible for how many transient errors the error monitor will swallow
+##    Parameters in this section are responsible for how many transient errors the error monitor will move past
 ##    before marking the sync as failed because too many transient errors happened.
 ##    Errors that are handled include:
 ##      - Errors while ingesting documents into Elasticsearch (per document not ingested)
