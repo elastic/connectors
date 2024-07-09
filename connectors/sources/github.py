@@ -1861,36 +1861,39 @@ class GitHubDataSource(BaseDataSource):
                 )
             )
             files = file_tree if path else file_tree.get("tree", [])
-            for repo_object in files:
-                if repo_object["type"] == BLOB or (
-                    repo_object["type"] == FILE and path
-                ):
-                    file_name = repo_object["path"].split("/")[-1]
-                    file_extension = (
-                        file_name[file_name.rfind(".") :]  # noqa
-                        if "." in file_name
-                        else ""
-                    )
-                    if file_extension.lower() in SUPPORTED_EXTENSION:
-                        last_commit_timestamp = await self._fetch_last_commit_timestamp(
-                            repo_name=repo_name, path=repo_object["path"]
+            if files:
+                for repo_object in files:
+                    if repo_object["type"] == BLOB or (
+                        repo_object["type"] == FILE and path
+                    ):
+                        file_name = repo_object["path"].split("/")[-1]
+                        file_extension = (
+                            file_name[file_name.rfind(".") :]  # noqa
+                            if "." in file_name
+                            else ""
                         )
-                        repo_object.update(
-                            {
-                                "_timestamp": last_commit_timestamp,
-                                "repo_name": repo_name,
-                                "name": file_name,
-                                "extension": file_extension,
-                            }
-                        )
+                        if file_extension.lower() in SUPPORTED_EXTENSION:
+                            last_commit_timestamp = (
+                                await self._fetch_last_commit_timestamp(
+                                    repo_name=repo_name, path=repo_object["path"]
+                                )
+                            )
+                            repo_object.update(
+                                {
+                                    "_timestamp": last_commit_timestamp,
+                                    "repo_name": repo_name,
+                                    "name": file_name,
+                                    "extension": file_extension,
+                                }
+                            )
 
-                        document = self.adapt_gh_doc_to_es_doc(
-                            github_document=repo_object,
-                            schema=FILE_SCHEMA if path else FILE_TREE_SCHEMA,
-                        )
+                            document = self.adapt_gh_doc_to_es_doc(
+                                github_document=repo_object,
+                                schema=FILE_SCHEMA if path else FILE_TREE_SCHEMA,
+                            )
 
-                        document["_id"] = f"{repo_name}/{repo_object['path']}"
-                        yield document, repo_object
+                            document["_id"] = f"{repo_name}/{repo_object['path']}"
+                            yield document, repo_object
         except UnauthorizedException:
             raise
         except ForbiddenException:
