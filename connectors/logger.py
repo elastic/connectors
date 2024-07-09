@@ -11,7 +11,7 @@ import datetime
 import inspect
 import logging
 import time
-from functools import cached_property, wraps
+from functools import wraps
 from typing import AsyncGenerator
 
 import ecs_logging
@@ -49,7 +49,7 @@ class ColorFormatter(logging.Formatter):
             s = dt.strftime(datefmt)
         else:
             try:
-                s = dt.isoformat(timespec='milliseconds')
+                s = dt.isoformat(timespec="milliseconds")
             except TypeError:
                 s = dt.isoformat()
         return s
