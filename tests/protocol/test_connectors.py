@@ -797,7 +797,7 @@ async def test_sync_job_claim():
 
 
 @pytest.mark.asyncio
-async def test_sync_job_claim_with_connector_api():
+async def test_sync_job_claim_with_connector_api(set_env):
     source = {"_id": "1"}
     index = Mock()
     index.api.connector_sync_job_claim = AsyncMock(return_value={"result": "updated"})
@@ -837,6 +837,7 @@ async def test_sync_job_claim_fails():
 async def test_sync_job_update_metadata():
     source = {"_id": "1"}
     index = Mock()
+    index.feature_use_connectors_api = False
     index.update = AsyncMock(return_value=1)
     ingestion_stats = {
         "indexed_document_count": 1,
@@ -859,6 +860,33 @@ async def test_sync_job_update_metadata():
     )
 
     index.update.assert_called_with(doc_id=sync_job.id, doc=expected_doc_source_update)
+
+
+@pytest.mark.asyncio
+async def test_sync_job_update_metadata_with_connector_api():
+    source = {"_id": "1"}
+    index = Mock()
+    index.feature_use_connectors_api = True
+    index.api.connector_sync_job_update_stats = AsyncMock()
+    ingestion_stats = {
+        "indexed_document_count": 1,
+        "indexed_document_volume": 13,
+        "deleted_document_count": 0,
+    }
+    connector_metadata = {"foo": "bar"}
+
+    sync_job = SyncJob(elastic_index=index, doc_source=source)
+
+    await sync_job.update_metadata(
+        ingestion_stats=ingestion_stats | {"blah": 0},
+        connector_metadata=connector_metadata,
+    )
+
+    index.api.connector_sync_job_update_stats.assert_called_with(
+        sync_job_id=sync_job.id,
+        ingestion_stats=ingestion_stats,
+        metadata=connector_metadata,
+    )
 
 
 @pytest.mark.asyncio
@@ -1564,7 +1592,7 @@ async def test_connector_validate_filtering_with_race_condition():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_invalid_with_connector_api():
+async def test_connector_validate_filtering_invalid_with_connector_api(set_env):
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.api.connector_update_filtering_draft_validation = AsyncMock()
@@ -1590,7 +1618,7 @@ async def test_connector_validate_filtering_invalid_with_connector_api():
 
 
 @pytest.mark.asyncio
-async def test_connector_validate_filtering_valid_with_connector_api():
+async def test_connector_validate_filtering_valid_with_connector_api(set_env):
     doc_source = deepcopy(DOC_SOURCE_WITH_EDITED_FILTERING)
     index = Mock()
     index.api.connector_update_filtering_draft_validation = AsyncMock()
@@ -1997,7 +2025,7 @@ async def test_create_job(index_method, trigger_method, set_env):
         (JobTriggerMethod.SCHEDULED, JobType.ACCESS_CONTROL),
     ],
 )
-async def test_create_job_with_connector_api(trigger_method, job_type):
+async def test_create_job_with_connector_api(trigger_method, job_type, set_env):
     connector = Mock()
     connector.id = "id"
     config = load_config(CONFIG)
