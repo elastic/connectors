@@ -7,6 +7,7 @@
 Logger -- sets the logging and provides a `logger` global object.
 """
 import contextlib
+import datetime
 import inspect
 import logging
 import time
@@ -14,6 +15,8 @@ from functools import cached_property, wraps
 from typing import AsyncGenerator
 
 import ecs_logging
+import pytz
+import tzlocal
 
 from connectors import __version__
 
@@ -32,41 +35,38 @@ class ColorFormatter(logging.Formatter):
 
     def __init__(self, prefix):
         self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
-        super().__init__()
+        super().__init__(datefmt=self.DATE_FMT)
 
-    @cached_property
-    def debug_formatter(self):
-        return logging.Formatter(
-            fmt=self.GREY + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
+    def converter(self, timestamp):
+        tzinfo = tzlocal.get_localzone()
+        dt = datetime.datetime.fromtimestamp(timestamp, tzinfo)
+        return dt.astimezone(pytz.UTC)
 
-    @cached_property
-    def info_formatter(self):
-        return logging.Formatter(
-            fmt=self.GREEN + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
-
-    @cached_property
-    def warning_formatter(self):
-        return logging.Formatter(
-            fmt=self.YELLOW + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
-
-    @cached_property
-    def error_formatter(self):
-        return logging.Formatter(
-            fmt=self.RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
-
-    @cached_property
-    def critical_formatter(self):
-        return logging.Formatter(
-            fmt=self.BOLD_RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
+    # override logging.Formatter to use an aware datetime object
+    def formatTime(self, record, datefmt=None):
+        dt = self.converter(record.created)
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            try:
+                s = dt.isoformat(timespec='milliseconds')
+            except TypeError:
+                s = dt.isoformat()
+        return s
 
     def format(self, record):  # noqa: A003
-        formatter = getattr(self, f"{record.levelname.lower()}_formatter")
-        return formatter.format(record)
+        # record.asctime = self.formatTime(record, self.DATE_FMT)
+        if record.levelno == logging.DEBUG:
+            self._style._fmt = self.GREY + self.custom_format + self.RESET
+        elif record.levelno == logging.INFO:
+            self._style._fmt = self.GREEN + self.custom_format + self.RESET
+        elif record.levelno == logging.WARNING:
+            self._style._fmt = self.YELLOW + self.custom_format + self.RESET
+        elif record.levelno == logging.ERROR:
+            self._style._fmt = self.RED + self.custom_format + self.RESET
+        elif record.levelno == logging.CRITICAL:
+            self._style._fmt = self.BOLD_RED + self.custom_format + self.RESET
+        return super().format(record)
 
 
 class DocumentLogger:
