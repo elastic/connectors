@@ -211,7 +211,7 @@
 ##    document should not stop the sync. Failing to ingest some meaningful number of documents, however,
 ##    should stop the sync.
 ##    Parameters in this section are responsible for how many transient errors the error monitor will move past
-##    before marking the sync as failed because too many transient errors happened.
+##    before marking the sync as failed because too many transient/minor errors happened.
 ##    Errors that are handled include:
 ##      - Errors while ingesting documents into Elasticsearch (per document not ingested)
 ##      - Errors while downloading attachments per attachment
