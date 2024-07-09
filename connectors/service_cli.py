@@ -40,12 +40,16 @@ async def _start_service(actions, config, loop):
     - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
-    preflight = PreflightCheck(config)
+    preflight = PreflightCheck(config, __version__)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
     try:
-        if not await preflight.run():
+        success, is_serverless = await preflight.run()
+        if not success:
             return -1
+
+        # injecting this value into the config allows us to avoid checking the server again before requests
+        config["elasticsearch"]["serverless"] = is_serverless
     finally:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
