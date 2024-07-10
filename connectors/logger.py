@@ -7,16 +7,15 @@
 Logger -- sets the logging and provides a `logger` global object.
 """
 import contextlib
-import datetime
 import inspect
 import logging
 import time
+from datetime import datetime, timezone
 from functools import wraps
 from typing import AsyncGenerator
 
 import ecs_logging
-import pytz
-import tzlocal
+from dateutil.tz import tzlocal
 
 from connectors import __version__
 
@@ -38,9 +37,8 @@ class ColorFormatter(logging.Formatter):
         super().__init__(datefmt=self.DATE_FMT)
 
     def converter(self, timestamp):
-        tzinfo = tzlocal.get_localzone()
-        dt = datetime.datetime.fromtimestamp(timestamp, tzinfo)
-        return dt.astimezone(pytz.UTC)
+        dt = datetime.fromtimestamp(timestamp, tzlocal())
+        return dt.astimezone(timezone.utc)
 
     # override logging.Formatter to use an aware datetime object
     def formatTime(self, record, datefmt=None):
@@ -55,7 +53,6 @@ class ColorFormatter(logging.Formatter):
         return s
 
     def format(self, record):  # noqa: A003
-        # record.asctime = self.formatTime(record, self.DATE_FMT)
         if record.levelno == logging.DEBUG:
             self._style._fmt = self.GREY + self.custom_format + self.RESET
         elif record.levelno == logging.INFO:
