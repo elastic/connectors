@@ -29,15 +29,23 @@ class ColorFormatter(logging.Formatter):
     RED = "\x1b[31;20m"
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
+    COLORS = {
+        logging.DEBUG: GREY,
+        logging.INFO: GREEN,
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
+        logging.CRITICAL: BOLD_RED,
+    }
 
     DATE_FMT = "%H:%M:%S"
 
     def __init__(self, prefix):
         self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
         super().__init__(datefmt=self.DATE_FMT)
+        self.local_tz = tzlocal()
 
     def converter(self, timestamp):
-        dt = datetime.fromtimestamp(timestamp, tzlocal())
+        dt = datetime.fromtimestamp(timestamp, self.local_tz)
         return dt.astimezone(timezone.utc)
 
     # override logging.Formatter to use an aware datetime object
@@ -53,16 +61,7 @@ class ColorFormatter(logging.Formatter):
         return s
 
     def format(self, record):  # noqa: A003
-        if record.levelno == logging.DEBUG:
-            self._style._fmt = self.GREY + self.custom_format + self.RESET
-        elif record.levelno == logging.INFO:
-            self._style._fmt = self.GREEN + self.custom_format + self.RESET
-        elif record.levelno == logging.WARNING:
-            self._style._fmt = self.YELLOW + self.custom_format + self.RESET
-        elif record.levelno == logging.ERROR:
-            self._style._fmt = self.RED + self.custom_format + self.RESET
-        elif record.levelno == logging.CRITICAL:
-            self._style._fmt = self.BOLD_RED + self.custom_format + self.RESET
+        self._style._fmt = self.COLORS[record.levelno] + self.custom_format + self.RESET
         return super().format(record)
 
 
