@@ -59,6 +59,7 @@ class GitHubConnector(ConnectorBase):
         ssl_enabled=False,
         ssl_ca=None,
         retry_count=3,
+        **kwargs
     ):
 
         configuration = GitHubDataSource.get_default_configuration()
@@ -71,7 +72,9 @@ class GitHubConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=GitHubDataSource(connector_configuration))
+        super().__init__(
+            data_provider=GitHubDataSource(connector_configuration), **kwargs
+        )
 
         self.data_source = data_source
         self.host = host

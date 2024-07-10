@@ -28,7 +28,7 @@ class SalesforceConnector(ConnectorBase):
 
     """
 
-    def __init__(self, domain=None, client_id=None, client_secret=None):
+    def __init__(self, domain=None, client_id=None, client_secret=None, **kwargs):
 
         configuration = SalesforceDataSource.get_default_configuration()
 
@@ -40,7 +40,9 @@ class SalesforceConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=SalesforceDataSource(connector_configuration))
+        super().__init__(
+            data_provider=SalesforceDataSource(connector_configuration), **kwargs
+        )
 
         self.domain = domain
         self.client_id = client_id

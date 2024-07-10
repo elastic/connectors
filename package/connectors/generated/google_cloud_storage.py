@@ -23,7 +23,7 @@ class GoogleCloudStorageConnector(ConnectorBase):
 
     """
 
-    def __init__(self, buckets=None, service_account_credentials=None):
+    def __init__(self, buckets=None, service_account_credentials=None, **kwargs):
 
         configuration = GoogleCloudStorageDataSource.get_default_configuration()
 
@@ -36,7 +36,8 @@ class GoogleCloudStorageConnector(ConnectorBase):
         connector_configuration = DataSourceConfiguration(configuration)
 
         super().__init__(
-            data_provider=GoogleCloudStorageDataSource(connector_configuration)
+            data_provider=GoogleCloudStorageDataSource(connector_configuration),
+            **kwargs
         )
 
         self.buckets = buckets

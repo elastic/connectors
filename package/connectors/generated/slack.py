@@ -37,6 +37,7 @@ class SlackConnector(ConnectorBase):
         fetch_last_n_days=None,
         auto_join_channels=False,
         sync_users=True,
+        **kwargs
     ):
 
         configuration = SlackDataSource.get_default_configuration()
@@ -49,7 +50,9 @@ class SlackConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=SlackDataSource(connector_configuration))
+        super().__init__(
+            data_provider=SlackDataSource(connector_configuration), **kwargs
+        )
 
         self.token = token
         self.fetch_last_n_days = fetch_last_n_days

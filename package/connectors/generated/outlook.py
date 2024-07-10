@@ -57,6 +57,7 @@ class OutlookConnector(ConnectorBase):
         domain=None,
         ssl_enabled=False,
         ssl_ca=None,
+        **kwargs
     ):
 
         configuration = OutlookDataSource.get_default_configuration()
@@ -69,7 +70,9 @@ class OutlookConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=OutlookDataSource(connector_configuration))
+        super().__init__(
+            data_provider=OutlookDataSource(connector_configuration), **kwargs
+        )
 
         self.data_source = data_source
         self.tenant_id = tenant_id

@@ -61,6 +61,7 @@ class SharepointOnlineConnector(ConnectorBase):
         fetch_unique_page_permissions=True,
         fetch_unique_list_permissions=True,
         fetch_unique_list_item_permissions=True,
+        **kwargs
     ):
 
         configuration = SharepointOnlineDataSource.get_default_configuration()
@@ -74,7 +75,7 @@ class SharepointOnlineConnector(ConnectorBase):
         connector_configuration = DataSourceConfiguration(configuration)
 
         super().__init__(
-            data_provider=SharepointOnlineDataSource(connector_configuration)
+            data_provider=SharepointOnlineDataSource(connector_configuration), **kwargs
         )
 
         self.tenant_id = tenant_id

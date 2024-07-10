@@ -65,6 +65,7 @@ class ConfluenceConnector(ConnectorBase):
         ssl_ca=None,
         retry_count=3,
         concurrent_downloads=50,
+        **kwargs
     ):
 
         configuration = ConfluenceDataSource.get_default_configuration()
@@ -77,7 +78,9 @@ class ConfluenceConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=ConfluenceDataSource(connector_configuration))
+        super().__init__(
+            data_provider=ConfluenceDataSource(connector_configuration), **kwargs
+        )
 
         self.data_source = data_source
         self.username = username

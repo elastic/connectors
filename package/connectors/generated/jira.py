@@ -62,6 +62,7 @@ class JiraConnector(ConnectorBase):
         ssl_ca=None,
         retry_count=3,
         concurrent_downloads=100,
+        **kwargs
     ):
 
         configuration = JiraDataSource.get_default_configuration()
@@ -74,7 +75,9 @@ class JiraConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=JiraDataSource(connector_configuration))
+        super().__init__(
+            data_provider=JiraDataSource(connector_configuration), **kwargs
+        )
 
         self.data_source = data_source
         self.username = username

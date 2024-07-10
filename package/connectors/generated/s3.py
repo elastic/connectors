@@ -43,6 +43,7 @@ class S3Connector(ConnectorBase):
         connect_timeout=90,
         max_attempts=5,
         page_size=100,
+        **kwargs
     ):
 
         configuration = S3DataSource.get_default_configuration()
@@ -55,7 +56,7 @@ class S3Connector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=S3DataSource(connector_configuration))
+        super().__init__(data_provider=S3DataSource(connector_configuration), **kwargs)
 
         self.buckets = buckets
         self.aws_access_key_id = aws_access_key_id

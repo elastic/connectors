@@ -36,6 +36,7 @@ class MicrosoftTeamsConnector(ConnectorBase):
         secret_value=None,
         username=None,
         password=None,
+        **kwargs
     ):
 
         configuration = MicrosoftTeamsDataSource.get_default_configuration()
@@ -49,7 +50,7 @@ class MicrosoftTeamsConnector(ConnectorBase):
         connector_configuration = DataSourceConfiguration(configuration)
 
         super().__init__(
-            data_provider=MicrosoftTeamsDataSource(connector_configuration)
+            data_provider=MicrosoftTeamsDataSource(connector_configuration), **kwargs
         )
 
         self.tenant_id = tenant_id

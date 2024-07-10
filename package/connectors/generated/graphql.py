@@ -63,6 +63,7 @@ class GraphQLConnector(ConnectorBase):
         pagination_model="no_pagination",
         pagination_key=None,
         connection_timeout=300,
+        **kwargs
     ):
 
         configuration = GraphQLDataSource.get_default_configuration()
@@ -75,7 +76,9 @@ class GraphQLConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=GraphQLDataSource(connector_configuration))
+        super().__init__(
+            data_provider=GraphQLDataSource(connector_configuration), **kwargs
+        )
 
         self.http_endpoint = http_endpoint
         self.http_method = http_method

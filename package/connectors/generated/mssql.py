@@ -58,6 +58,7 @@ class MSSQLConnector(ConnectorBase):
         ssl_enabled=False,
         ssl_ca=None,
         validate_host=False,
+        **kwargs
     ):
 
         configuration = MSSQLDataSource.get_default_configuration()
@@ -70,7 +71,9 @@ class MSSQLConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=MSSQLDataSource(connector_configuration))
+        super().__init__(
+            data_provider=MSSQLDataSource(connector_configuration), **kwargs
+        )
 
         self.host = host
         self.port = port

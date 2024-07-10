@@ -40,6 +40,7 @@ class ServiceNowConnector(ConnectorBase):
         services="*",
         retry_count=3,
         concurrent_downloads=10,
+        **kwargs
     ):
 
         configuration = ServiceNowDataSource.get_default_configuration()
@@ -52,7 +53,9 @@ class ServiceNowConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=ServiceNowDataSource(connector_configuration))
+        super().__init__(
+            data_provider=ServiceNowDataSource(connector_configuration), **kwargs
+        )
 
         self.url = url
         self.username = username

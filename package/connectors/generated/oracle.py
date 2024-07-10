@@ -61,6 +61,7 @@ class OracleConnector(ConnectorBase):
         oracle_protocol="TCP",
         oracle_home="",
         wallet_configuration_path="",
+        **kwargs
     ):
 
         configuration = OracleDataSource.get_default_configuration()
@@ -73,7 +74,9 @@ class OracleConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=OracleDataSource(connector_configuration))
+        super().__init__(
+            data_provider=OracleDataSource(connector_configuration), **kwargs
+        )
 
         self.host = host
         self.port = port

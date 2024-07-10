@@ -39,6 +39,7 @@ class BoxConnector(ConnectorBase):
         refresh_token=None,
         enterprise_id=None,
         concurrent_downloads=15,
+        **kwargs
     ):
 
         configuration = BoxDataSource.get_default_configuration()
@@ -51,7 +52,7 @@ class BoxConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=BoxDataSource(connector_configuration))
+        super().__init__(data_provider=BoxDataSource(connector_configuration), **kwargs)
 
         self.is_enterprise = is_enterprise
         self.client_id = client_id

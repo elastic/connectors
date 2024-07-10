@@ -36,6 +36,7 @@ class OneDriveConnector(ConnectorBase):
         tenant_id=None,
         retry_count=3,
         concurrent_downloads=15,
+        **kwargs
     ):
 
         configuration = OneDriveDataSource.get_default_configuration()
@@ -48,7 +49,9 @@ class OneDriveConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=OneDriveDataSource(connector_configuration))
+        super().__init__(
+            data_provider=OneDriveDataSource(connector_configuration), **kwargs
+        )
 
         self.client_id = client_id
         self.client_secret = client_secret

@@ -42,6 +42,7 @@ class NASConnector(ConnectorBase):
         drive_path=None,
         drive_type="windows",
         identity_mappings=None,
+        **kwargs
     ):
 
         configuration = NASDataSource.get_default_configuration()
@@ -54,7 +55,7 @@ class NASConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=NASDataSource(connector_configuration))
+        super().__init__(data_provider=NASDataSource(connector_configuration), **kwargs)
 
         self.username = username
         self.password = password

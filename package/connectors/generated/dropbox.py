@@ -44,6 +44,7 @@ class DropboxConnector(ConnectorBase):
         retry_count=3,
         concurrent_downloads=100,
         include_inherited_users_and_groups=False,
+        **kwargs
     ):
 
         configuration = DropboxDataSource.get_default_configuration()
@@ -56,7 +57,9 @@ class DropboxConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=DropboxDataSource(connector_configuration))
+        super().__init__(
+            data_provider=DropboxDataSource(connector_configuration), **kwargs
+        )
 
         self.path = path
         self.app_key = app_key

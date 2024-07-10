@@ -51,6 +51,7 @@ class MySqlConnector(ConnectorBase):
         ssl_ca=None,
         fetch_size=50,
         retry_count=3,
+        **kwargs
     ):
 
         configuration = MySqlDataSource.get_default_configuration()
@@ -63,7 +64,9 @@ class MySqlConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=MySqlDataSource(connector_configuration))
+        super().__init__(
+            data_provider=MySqlDataSource(connector_configuration), **kwargs
+        )
 
         self.host = host
         self.port = port

@@ -53,6 +53,7 @@ class RedisConnector(ConnectorBase):
         mutual_tls_enabled=False,
         tls_certfile=None,
         tls_keyfile=None,
+        **kwargs
     ):
 
         configuration = RedisDataSource.get_default_configuration()
@@ -65,7 +66,9 @@ class RedisConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=RedisDataSource(connector_configuration))
+        super().__init__(
+            data_provider=RedisDataSource(connector_configuration), **kwargs
+        )
 
         self.host = host
         self.port = port

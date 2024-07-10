@@ -38,6 +38,7 @@ class ZoomConnector(ConnectorBase):
         client_secret=None,
         fetch_past_meeting_details=False,
         recording_age=None,
+        **kwargs
     ):
 
         configuration = ZoomDataSource.get_default_configuration()
@@ -50,7 +51,9 @@ class ZoomConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=ZoomDataSource(connector_configuration))
+        super().__init__(
+            data_provider=ZoomDataSource(connector_configuration), **kwargs
+        )
 
         self.account_id = account_id
         self.client_id = client_id

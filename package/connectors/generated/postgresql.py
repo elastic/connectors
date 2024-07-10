@@ -55,6 +55,7 @@ class PostgreSQLConnector(ConnectorBase):
         retry_count=3,
         ssl_enabled=False,
         ssl_ca=None,
+        **kwargs
     ):
 
         configuration = PostgreSQLDataSource.get_default_configuration()
@@ -67,7 +68,9 @@ class PostgreSQLConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=PostgreSQLDataSource(connector_configuration))
+        super().__init__(
+            data_provider=PostgreSQLDataSource(connector_configuration), **kwargs
+        )
 
         self.host = host
         self.port = port

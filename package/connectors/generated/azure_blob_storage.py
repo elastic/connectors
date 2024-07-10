@@ -39,6 +39,7 @@ class AzureBlobStorageConnector(ConnectorBase):
         containers=None,
         retry_count=3,
         concurrent_downloads=100,
+        **kwargs
     ):
 
         configuration = AzureBlobStorageDataSource.get_default_configuration()
@@ -52,7 +53,7 @@ class AzureBlobStorageConnector(ConnectorBase):
         connector_configuration = DataSourceConfiguration(configuration)
 
         super().__init__(
-            data_provider=AzureBlobStorageDataSource(connector_configuration)
+            data_provider=AzureBlobStorageDataSource(connector_configuration), **kwargs
         )
 
         self.account_name = account_name

@@ -50,6 +50,7 @@ class SharepointServerConnector(ConnectorBase):
         retry_count=3,
         fetch_unique_list_permissions=True,
         fetch_unique_list_item_permissions=True,
+        **kwargs
     ):
 
         configuration = SharepointServerDataSource.get_default_configuration()
@@ -63,7 +64,7 @@ class SharepointServerConnector(ConnectorBase):
         connector_configuration = DataSourceConfiguration(configuration)
 
         super().__init__(
-            data_provider=SharepointServerDataSource(connector_configuration)
+            data_provider=SharepointServerDataSource(connector_configuration), **kwargs
         )
 
         self.username = username

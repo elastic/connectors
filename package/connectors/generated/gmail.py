@@ -36,6 +36,7 @@ class GMailConnector(ConnectorBase):
         subject=None,
         customer_id=None,
         include_spam_and_trash=False,
+        **kwargs
     ):
 
         configuration = GMailDataSource.get_default_configuration()
@@ -48,7 +49,9 @@ class GMailConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=GMailDataSource(connector_configuration))
+        super().__init__(
+            data_provider=GMailDataSource(connector_configuration), **kwargs
+        )
 
         self.service_account_credentials = service_account_credentials
         self.subject = subject

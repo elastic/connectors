@@ -37,6 +37,7 @@ class NotionConnector(ConnectorBase):
         pages=None,
         index_comments=False,
         concurrent_downloads=30,
+        **kwargs
     ):
 
         configuration = NotionDataSource.get_default_configuration()
@@ -49,7 +50,9 @@ class NotionConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=NotionDataSource(connector_configuration))
+        super().__init__(
+            data_provider=NotionDataSource(connector_configuration), **kwargs
+        )
 
         self.notion_secret_key = notion_secret_key
         self.databases = databases

@@ -24,7 +24,10 @@ class DirectoryConnector(ConnectorBase):
     """
 
     def __init__(
-        self, directory="/Users/jedr/connectors/connectors/sources", pattern="**/*.*"
+        self,
+        directory="/Users/jedr/connectors/connectors/sources",
+        pattern="**/*.*",
+        **kwargs
     ):
 
         configuration = DirectoryDataSource.get_default_configuration()
@@ -37,7 +40,9 @@ class DirectoryConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=DirectoryDataSource(connector_configuration))
+        super().__init__(
+            data_provider=DirectoryDataSource(connector_configuration), **kwargs
+        )
 
         self.directory = directory
         self.pattern = pattern

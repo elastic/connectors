@@ -51,6 +51,7 @@ class MongoConnector(ConnectorBase):
         ssl_enabled=False,
         ssl_ca=None,
         tls_insecure=False,
+        **kwargs
     ):
 
         configuration = MongoDataSource.get_default_configuration()
@@ -63,7 +64,9 @@ class MongoConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=MongoDataSource(connector_configuration))
+        super().__init__(
+            data_provider=MongoDataSource(connector_configuration), **kwargs
+        )
 
         self.host = host
         self.user = user

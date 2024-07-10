@@ -45,6 +45,7 @@ class GoogleDriveConnector(ConnectorBase):
         google_workspace_email_for_shared_drives_sync=None,
         google_workspace_admin_email=None,
         max_concurrency=25,
+        **kwargs
     ):
 
         configuration = GoogleDriveDataSource.get_default_configuration()
@@ -57,7 +58,9 @@ class GoogleDriveConnector(ConnectorBase):
 
         connector_configuration = DataSourceConfiguration(configuration)
 
-        super().__init__(data_provider=GoogleDriveDataSource(connector_configuration))
+        super().__init__(
+            data_provider=GoogleDriveDataSource(connector_configuration), **kwargs
+        )
 
         self.service_account_credentials = service_account_credentials
         self.use_domain_wide_delegation_for_sync = use_domain_wide_delegation_for_sync
