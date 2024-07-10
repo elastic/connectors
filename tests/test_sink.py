@@ -1419,11 +1419,11 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
     es._sink = Mock()
     es._sink.force_cancel = Mock()
 
-    es._extractor_task = Mock()
+    es._extractor_task = mock.create_autospec(asyncio.Task)
     es._extractor_task.cancel = Mock()
     es._extractor_task.done = Mock(side_effect=extractor_task_done)
 
-    es._sink_task = Mock()
+    es._sink_task = mock.create_autospec(asyncio.Task)
     es._sink_task.cancel = Mock()
     es._sink_task.done = Mock(side_effect=sink_task_done)
 
