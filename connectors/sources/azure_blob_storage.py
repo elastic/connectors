@@ -126,16 +126,17 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with Azure Blob Storage"""
-        self._logger.info("Generating connection string...")
+        self._logger.debug("Generating connection string...")
         self.connection_string = self._configure_connection_string()
         try:
             async with BlobServiceClient.from_connection_string(
                 conn_str=self.connection_string, retry_total=self.retry_count
             ) as azure_base_client:
                 await azure_base_client.get_account_information()
-                self._logger.info("Successfully connected to the Azure Blob Storage.")
         except Exception:
-            self._logger.exception("Error while connecting to the Azure Blob Storage.")
+            self._logger.warn(
+                "Error while connecting to the Azure Blob Storage. Please check the configurations"
+            )
             raise
 
     async def close(self):
@@ -245,6 +246,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Container document with name & metadata
         """
+        self._logger.info("Fetching containers")
         container_set = set(container_list)
         async with BlobServiceClient.from_connection_string(
             conn_str=self.connection_string, retry_total=self.retry_count
@@ -280,15 +282,22 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Formatted blob document
         """
+        self._logger.info(f"Fetching blobs for container '{container['name']}'")
         container_client = self._get_container_client(container["name"])
+        blob_count = 0
         try:
             async for blob in container_client.list_blobs(include=["metadata"]):
+                blob_count += 1
                 yield self.prepare_blob_doc(
                     blob=blob, container_metadata=container["metadata"]
                 )
         except Exception as exception:
             self._logger.warning(
                 f"Something went wrong while fetching blobs from {container['name']}. Error: {exception}"
+            )
+        finally:
+            self._logger.info(
+                f"Fetched {blob_count} blobs from '{container['name']}' container"
             )
 
     async def get_docs(self, filtering=None):
@@ -297,6 +306,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Azure Blob Storage
         """
+        self._logger.info("Successfully connected to the Azure Blob Storage.")
         async for container_data in self.get_container(container_list=self.containers):
             if container_data:
                 async for blob in self.get_blob(container=container_data):
