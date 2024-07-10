@@ -366,6 +366,7 @@ class SyncJobRunner:
                 ] = await self.connector.document_count()
 
             if sync_status == JobStatus.ERROR:
+                self.sync_job.log_error(f"Terminated with error: {sync_error}")
                 await self.sync_job.fail(sync_error, ingestion_stats=persisted_stats)
             elif sync_status == JobStatus.SUSPENDED:
                 await self.sync_job.suspend(ingestion_stats=persisted_stats)
