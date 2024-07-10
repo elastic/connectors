@@ -7,5 +7,5 @@
 # Run `make generate_connector_package` to update.
 
 {% for module, class_name in imports %}
-from .generated.{{ module }} import {{ class_name }}
+from .connectors.generated.{{ module }} import {{ class_name }}
 {% endfor %}

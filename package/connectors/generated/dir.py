@@ -25,7 +25,7 @@ class DirectoryConnector(ConnectorBase):
 
     def __init__(
         self,
-        directory="/Users/jedr/connectors/connectors/sources",
+        directory="/Users/jedr/connectors/lib/python3.10/site-packages/connectors/sources",
         pattern="**/*.*",
         **kwargs
     ):

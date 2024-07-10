@@ -30,6 +30,6 @@ def generate_init_file(output_dir, template_env):
 
 
 if __name__ == "__main__":
-    connectors_dir = os.path.join("package", "connectors")
+    package_dir = os.path.join("package")
     env = Environment(loader=FileSystemLoader("scripts/codegen/templates"))
-    generate_init_file(connectors_dir, env)
+    generate_init_file(package_dir, env)
