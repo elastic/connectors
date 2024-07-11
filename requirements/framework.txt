@@ -38,5 +38,5 @@ redis==5.0.1
 simple-term-menu==1.6.4
 graphql-core==3.2.3
 notion-client==2.2.1
-certifi==2023.7.22
+certifi==2024.7.4
 aioboto3==12.4.0
