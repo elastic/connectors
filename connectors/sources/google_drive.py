@@ -155,7 +155,9 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 
         return folders
 
-    async def list_files(self, fetch_permissions=False, last_sync_time=None):
+    async def list_files(
+        self, fetch_permissions=False, last_sync_time=None, syncing_shared_drives=False
+    ):
         """Get files from Google Drive. Files can have any type.
 
         Args:
@@ -171,6 +173,8 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             if fetch_permissions
             else DRIVE_ITEMS_FIELDS
         )
+        if syncing_shared_drives:
+            files_fields += ",trashedTime"
         if last_sync_time is None:
             list_query = "trashed=false"
         else:
@@ -704,9 +708,9 @@ class GoogleDriveDataSource(BaseDataSource):
         user_email = user.get("primaryEmail")
         user_domain = _get_domain_from_email(user_email)
         user_groups = []
-        async for (
-            groups_page
-        ) in self.google_admin_directory_client.list_groups_for_user(user_id):
+        async for groups_page in self.google_admin_directory_client.list_groups_for_user(
+            user_id
+        ):
             for group in groups_page.get("groups", []):
                 user_groups.append(group.get("email"))
 
@@ -1007,7 +1011,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return processed_permissions
 
-    async def prepare_file(self, client, file, paths):
+    async def prepare_file(self, client, file, paths, is_shared_drive_file):
         """Apply key mappings to the file document.
 
         Args:
@@ -1088,10 +1092,14 @@ class GoogleDriveDataSource(BaseDataSource):
                         self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
+        if is_shared_drive_file:
+            return file_document, file.get("trashedTime", "")
+        else:
+            return file_document
 
-        return file_document
-
-    async def prepare_files(self, client, files_page, paths, seen_ids):
+    async def prepare_files(
+        self, client, files_page, paths, seen_ids, is_shared_drive_file=False
+    ):
         """Generate file document.
 
         Args:
@@ -1106,7 +1114,13 @@ class GoogleDriveDataSource(BaseDataSource):
         new_files = [file for file in files if file.get("id") not in seen_ids]
 
         prepared_files = await self._process_items_concurrently(
-            new_files, lambda f: self.prepare_file(client=client, file=f, paths=paths)
+            new_files,
+            lambda f: self.prepare_file(
+                client=client,
+                file=f,
+                paths=paths,
+                is_shared_drive_file=is_shared_drive_file,
+            ),
         )
 
         for file in prepared_files:
@@ -1259,14 +1273,18 @@ class GoogleDriveDataSource(BaseDataSource):
             async for files_page in shared_drives_client.list_files(
                 fetch_permissions=self._dls_enabled(),
                 last_sync_time=self.last_sync_time(),
+                syncing_shared_drives=True,
             ):
-                async for file in self.prepare_files(
+                async for file, trashedTime in self.prepare_files(
                     client=shared_drives_client,
                     files_page=files_page,
                     paths=resolved_paths,
                     seen_ids=seen_ids,
+                    is_shared_drive_file=True,
                 ):
-                    if file.get("trashed") is True:
+                    if (
+                        trashedTime > self.last_sync_time() or trashedTime == ""
+                    ) and file.get("trashed") is True:
                         yield file, partial(
                             self.get_content, shared_drives_client, file
                         ), OP_DELETE

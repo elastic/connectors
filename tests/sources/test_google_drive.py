@@ -205,7 +205,7 @@ async def test_prepare_files(files, expected_files):
 
 
 @pytest.mark.parametrize(
-    "file, expected_file",
+    "file, expected_file, is_shared_drive_file",
     [
         (
             {
@@ -231,6 +231,7 @@ async def test_prepare_files(files, expected_files):
                 "type": "file",
                 "trashed": False,
             },
+            False,
         ),
         (
             {
@@ -256,6 +257,7 @@ async def test_prepare_files(files, expected_files):
                 "type": "file",
                 "trashed": False,
             },
+            False,
         ),
         (
             {
@@ -292,6 +294,7 @@ async def test_prepare_files(files, expected_files):
                 "created_by_email": "user@test.com",
                 "trashed": False,
             },
+            False,
         ),
         (
             {
@@ -338,11 +341,41 @@ async def test_prepare_files(files, expected_files):
                 "path": "Drive3/Folder4/test.txt",
                 "trashed": False,
             },
+            False,
+        ),
+        (
+            {
+                "driveId": "sd1",
+                "kind": "drive#file",
+                "mimeType": "text/plain",
+                "id": "id1",
+                "name": "test.txt",
+                "parents": ["0APU6durKUAiqUk9PVA"],
+                "size": "28",
+                "modifiedTime": "2023-06-28T07:46:28.000Z",
+                "trashed": True,
+                "trashedTime": "2023-06-28T12:46:28.000Z",
+            },
+            {
+                "_id": "id1",
+                "created_at": None,
+                "last_updated": "2023-06-28T07:46:28.000Z",
+                "name": "test.txt",
+                "size": "28",
+                "_timestamp": "2023-06-28T07:46:28.000Z",
+                "mime_type": "text/plain",
+                "file_extension": None,
+                "url": None,
+                "type": "file",
+                "trashed": True,
+                "shared_drive": "SharedDrive",
+            },
+            True,
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_prepare_file(file, expected_file):
+async def test_prepare_file(file, expected_file, is_shared_drive_file):
     """Test the method that formats the file metadata from Google Drive API"""
 
     async with create_gdrive_source() as source:
@@ -351,12 +384,25 @@ async def test_prepare_file(file, expected_file):
                 "name": "Folder4",
                 "parents": ["driveId3"],
                 "path": "Drive3/Folder4",
-            }
+            },
+            "sd1": {
+                "name": "SharedDrive",
+                "parents": [],
+                "path": "SharedDrive",
+            },
         }
 
-        assert expected_file == await source.prepare_file(
-            client=source.google_drive_client(), file=file, paths=dummy_paths
+        actual_output = await source.prepare_file(
+            client=source.google_drive_client(),
+            file=file,
+            paths=dummy_paths,
+            is_shared_drive_file=is_shared_drive_file,
         )
+        if is_shared_drive_file:
+            assert actual_output[0] == expected_file
+            assert actual_output[1] == "2023-06-28T12:46:28.000Z"
+        else:
+            assert actual_output == expected_file
 
 
 @pytest.mark.asyncio
@@ -1327,7 +1373,10 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 assert expected_file == await source.prepare_file(
-                    client=source.google_drive_client(), file=file, paths=dummy_paths
+                    client=source.google_drive_client(),
+                    file=file,
+                    paths=dummy_paths,
+                    is_shared_drive_file=False,
                 )
 
 
@@ -1426,7 +1475,10 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
         }
 
         assert expected_file == await source.prepare_file(
-            client=source.google_drive_client(), file=file, paths=dummy_paths
+            client=source.google_drive_client(),
+            file=file,
+            paths=dummy_paths,
+            is_shared_drive_file=False,
         )
 
 
