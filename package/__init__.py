@@ -7,60 +7,93 @@
 # Run `make generate_connector_package` to update.
 
 
-from .connectors.generated.azure_blob_storage import AzureBlobStorageConnector
+from .generated.azure_blob_storage import AzureBlobStorageConnector
 
-from .connectors.generated.box import BoxConnector
+from .generated.box import BoxConnector
 
-from .connectors.generated.confluence import ConfluenceConnector
+from .generated.confluence import ConfluenceConnector
 
-from .connectors.generated.dir import DirectoryConnector
+from .generated.dir import DirectoryConnector
 
-from .connectors.generated.dropbox import DropboxConnector
+from .generated.dropbox import DropboxConnector
 
-from .connectors.generated.github import GitHubConnector
+from .generated.github import GitHubConnector
 
-from .connectors.generated.gmail import GMailConnector
+from .generated.gmail import GMailConnector
 
-from .connectors.generated.google_cloud_storage import GoogleCloudStorageConnector
+from .generated.google_cloud_storage import GoogleCloudStorageConnector
 
-from .connectors.generated.google_drive import GoogleDriveConnector
+from .generated.google_drive import GoogleDriveConnector
 
-from .connectors.generated.graphql import GraphQLConnector
+from .generated.graphql import GraphQLConnector
 
-from .connectors.generated.jira import JiraConnector
+from .generated.jira import JiraConnector
 
-from .connectors.generated.microsoft_teams import MicrosoftTeamsConnector
+from .generated.microsoft_teams import MicrosoftTeamsConnector
 
-from .connectors.generated.mongodb import MongoConnector
+from .generated.mongodb import MongoConnector
 
-from .connectors.generated.mssql import MSSQLConnector
+from .generated.mssql import MSSQLConnector
 
-from .connectors.generated.mysql import MySqlConnector
+from .generated.mysql import MySqlConnector
 
-from .connectors.generated.network_drive import NASConnector
+from .generated.network_drive import NASConnector
 
-from .connectors.generated.notion import NotionConnector
+from .generated.notion import NotionConnector
 
-from .connectors.generated.onedrive import OneDriveConnector
+from .generated.onedrive import OneDriveConnector
 
-from .connectors.generated.oracle import OracleConnector
+from .generated.oracle import OracleConnector
 
-from .connectors.generated.outlook import OutlookConnector
+from .generated.outlook import OutlookConnector
 
-from .connectors.generated.postgresql import PostgreSQLConnector
+from .generated.postgresql import PostgreSQLConnector
 
-from .connectors.generated.redis import RedisConnector
+from .generated.redis import RedisConnector
 
-from .connectors.generated.s3 import S3Connector
+from .generated.s3 import S3Connector
 
-from .connectors.generated.salesforce import SalesforceConnector
+from .generated.salesforce import SalesforceConnector
 
-from .connectors.generated.servicenow import ServiceNowConnector
+from .generated.servicenow import ServiceNowConnector
 
-from .connectors.generated.sharepoint_online import SharepointOnlineConnector
+from .generated.sharepoint_online import SharepointOnlineConnector
 
-from .connectors.generated.sharepoint_server import SharepointServerConnector
+from .generated.sharepoint_server import SharepointServerConnector
 
-from .connectors.generated.slack import SlackConnector
+from .generated.slack import SlackConnector
 
-from .connectors.generated.zoom import ZoomConnector
+from .generated.zoom import ZoomConnector
+
+
+__all__ = [
+    "AzureBlobStorageConnector",
+    "BoxConnector",
+    "ConfluenceConnector",
+    "DirectoryConnector",
+    "DropboxConnector",
+    "GitHubConnector",
+    "GMailConnector",
+    "GoogleCloudStorageConnector",
+    "GoogleDriveConnector",
+    "GraphQLConnector",
+    "JiraConnector",
+    "MicrosoftTeamsConnector",
+    "MongoConnector",
+    "MSSQLConnector",
+    "MySqlConnector",
+    "NASConnector",
+    "NotionConnector",
+    "OneDriveConnector",
+    "OracleConnector",
+    "OutlookConnector",
+    "PostgreSQLConnector",
+    "RedisConnector",
+    "S3Connector",
+    "SalesforceConnector",
+    "ServiceNowConnector",
+    "SharepointOnlineConnector",
+    "SharepointServerConnector",
+    "SlackConnector",
+    "ZoomConnector",
+]

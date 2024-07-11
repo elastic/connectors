@@ -1,6 +1,12 @@
-import os
-from setuptools import setup, find_packages
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 
+import os
+
+from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
 
 try:
@@ -10,18 +16,6 @@ except Exception as e:
     print(  # noqa: T201
         f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
     )
-
-
-# We feed install_requires with `requirements.txt` but we unpin versions so we
-# don't enforce them and trap folks into dependency hell. (only works with `==` here)
-#
-# A proper production installation will do the following sequence:
-#
-# $ pip install -r requirements/`uname -n`.txt
-# $ pip install elasticsearch-connectors
-#
-# Because the *pinned* dependencies is what we tested
-#
 
 
 def extract_req(req):
@@ -60,20 +54,37 @@ def read_reqs(req_file):
     return deps
 
 
-install_requires = read_reqs(
-    os.path.join(os.path.dirname(__file__), f"../requirements/{ARCH}.txt")
+framework_reqs = read_reqs(
+    os.path.join("elastic_connectors", "requirements", f"{ARCH}.txt")
+)
+package_reqs = read_reqs(
+    os.path.join("elastic_connectors", "requirements", "package.txt")
 )
 
-print(find_packages(include=["elastic_connectors", "elastic_connectors.*"]))
+install_requires = framework_reqs + package_reqs
+
+
+with open("README.md") as f:
+    long_description = f.read()
 
 setup(
-    name="test-elastic-connectors",
-    version="0.1.3",
-    packages=find_packages(),
+    name="elastic-connectors",
+    version="0.1.0",
+    description="Elastic connectors",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    author="Jedr Blaszyk",
+    author_email="jedr.blaszyk@elastic.co",
+    url="https://github.com/elastic/connectors",
+    packages=find_packages(include=["elastic_connectors", "elastic_connectors.*"]),
     install_requires=install_requires,
     include_package_data=True,
-    package_data={"elastic_connectors": ["../connectors/*"]},
-    package_dir={
-        "elastic_connectors": ".",
+    package_data={
+        "elastic_connectors": ["connectors/VERSION"],
     },
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Operating System :: OS Independent",
+    ],
+    python_requires=">=3.10",
 )
