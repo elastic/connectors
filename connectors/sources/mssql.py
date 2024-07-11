@@ -615,6 +615,11 @@ class MSSQLDataSource(BaseDataSource):
                 ],
             )
         )
+
+        last_update_times = [
+            time_value for time_value in last_update_times if time_value is not None
+        ]
+
         last_update_time = (
             max(last_update_times) if len(last_update_times) else iso_utc()
         )
