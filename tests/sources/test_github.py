@@ -701,30 +701,6 @@ EXPECTED_ACCESS_CONTROL_GITHUB_APP = [
         },
     },
 ]
-EXPECTED_TREE_FILE = (
-    {
-        "name": "source.md",
-        "size": 30,
-        "type": "blob",
-        "path": "source/source.md",
-        "mode": "100644",
-        "extension": ".md",
-        "_timestamp": "2023-04-17T12:55:01Z",
-        "_id": "demo_repo/source/source.md",
-    },
-    {
-        "path": "source/source.md",
-        "mode": "100644",
-        "type": "blob",
-        "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
-        "size": 30,
-        "url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
-        "_timestamp": "2023-04-17T12:55:01Z",
-        "repo_name": "demo_repo",
-        "name": "source.md",
-        "extension": ".md",
-    },
-)
 EXPECTED_FILE = (
     {
         "name": "source.md",
@@ -1497,22 +1473,53 @@ async def test_fetch_pull_requests_with_deleted_users():
                 assert pull == expected_pull_response_deleted_user
 
 
-@pytest.mark.parametrize(
-    "expected_response, mock_response, path",
-    [
-        (EXPECTED_FILE, [MOCK_FILE, MOCK_COMMITS], True),
-        (EXPECTED_TREE_FILE, [MOCK_TREE, MOCK_COMMITS], False),
-    ],
-)
 @pytest.mark.asyncio
-async def test_fetch_files(expected_response, mock_response, path):
+async def test_fetch_path():
     async with create_github_source() as source:
         with patch.object(
             source.github_client,
             "get_github_item",
-            side_effect=mock_response,
+            side_effect=[MOCK_FILE, MOCK_COMMITS],
         ):
-            async for document in source._fetch_files("demo_repo", "main", path=path):
+            async for document in source._fetch_files_by_path(
+                "demo_repo", "/demo_path"
+            ):
+                assert EXPECTED_FILE == document
+
+
+@pytest.mark.asyncio
+async def test_fetch_files():
+    expected_response = (
+        {
+            "name": "source.md",
+            "size": 30,
+            "type": "blob",
+            "path": "source/source.md",
+            "mode": "100644",
+            "extension": ".md",
+            "_timestamp": "2023-04-17T12:55:01Z",
+            "_id": "demo_repo/source/source.md",
+        },
+        {
+            "path": "source/source.md",
+            "mode": "100644",
+            "type": "blob",
+            "sha": "36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
+            "size": 30,
+            "url": "https://api.github.com/repos/demo_user/demo_repo/git/blobs/36888b54c2a2f75tfbf2b7e7e95f68d0g8911ccb",
+            "_timestamp": "2023-04-17T12:55:01Z",
+            "repo_name": "demo_repo",
+            "name": "source.md",
+            "extension": ".md",
+        },
+    )
+    async with create_github_source() as source:
+        with patch.object(
+            source.github_client,
+            "get_github_item",
+            side_effect=[MOCK_TREE, MOCK_COMMITS],
+        ):
+            async for document in source._fetch_files("demo_repo", "main"):
                 assert expected_response == document
 
 

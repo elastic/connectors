@@ -58,7 +58,7 @@ REVIEWS_COUNT = 45
 
 SUPPORTED_EXTENSION = [".markdown", ".md", ".rst"]
 
-FILE_TREE_SCHEMA = {
+FILE_SCHEMA = {
     "name": "name",
     "size": "size",
     "type": "type",
@@ -67,7 +67,7 @@ FILE_TREE_SCHEMA = {
     "extension": "extension",
     "_timestamp": "_timestamp",
 }
-FILE_SCHEMA = {
+PATH_SCHEMA = {
     "name": "name",
     "size": "size",
     "type": "type",
@@ -1846,54 +1846,75 @@ class GitHubDataSource(BaseDataSource):
         )
         return commit["commit"]["committer"]["date"]
 
-    async def _fetch_files(self, repo_name, path_branch, path=False):
+    async def _format_file_document(self, repo_object, repo_name, schema):
+        file_name = repo_object["path"].split("/")[-1]
+        file_extension = (
+            file_name[file_name.rfind(".") :] if "." in file_name else ""  # noqa
+        )
+        if file_extension.lower() in SUPPORTED_EXTENSION:
+            last_commit_timestamp = await self._fetch_last_commit_timestamp(
+                repo_name=repo_name, path=repo_object["path"]
+            )
+            repo_object.update(
+                {
+                    "_timestamp": last_commit_timestamp,
+                    "repo_name": repo_name,
+                    "name": file_name,
+                    "extension": file_extension,
+                }
+            )
+
+            document = self.adapt_gh_doc_to_es_doc(
+                github_document=repo_object, schema=schema
+            )
+
+            document["_id"] = f"{repo_name}/{repo_object['path']}"
+            yield document, repo_object
+
+    async def _fetch_files(self, repo_name, default_branch):
         self._logger.info(
-            f"Fetching files from repo: '{repo_name}' (branch or path: '{path_branch}')"
+            f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')"
         )
         try:
             file_tree = await self.github_client.get_github_item(
                 resource=self.github_client.endpoints["TREE"].format(
-                    repo_name=repo_name, default_branch=path_branch
-                )
-                if not path
-                else self.github_client.endpoints["PATH"].format(
-                    repo_name=repo_name, path=path_branch
+                    repo_name=repo_name, default_branch=default_branch
                 )
             )
-            files = file_tree if path else file_tree.get("tree", [])
+
+            for repo_object in file_tree.get("tree", []):
+                if repo_object["type"] == BLOB:
+                    async for document, file_repo_object in self._format_file_document(
+                        repo_object=repo_object, repo_name=repo_name, schema=FILE_SCHEMA
+                    ):
+                        yield document, file_repo_object
+        except UnauthorizedException:
+            raise
+        except ForbiddenException:
+            raise
+        except Exception as exception:
+            self._logger.warning(
+                f"Something went wrong while fetching the files of {repo_name}. Exception: {exception}",
+                exc_info=True,
+            )
+
+    async def _fetch_files_by_path(self, repo_name, path):
+        self._logger.info(f"Fetching files from repo: '{repo_name}' (path: '{path}')")
+        try:
+            files = await self.github_client.get_github_item(
+                resource=self.github_client.endpoints["PATH"].format(
+                    repo_name=repo_name, path=path
+                )
+            )
             if files:
                 for repo_object in files:
-                    if repo_object["type"] == BLOB or (
-                        repo_object["type"] == FILE and path
-                    ):
-                        file_name = repo_object["path"].split("/")[-1]
-                        file_extension = (
-                            file_name[file_name.rfind(".") :]  # noqa
-                            if "." in file_name
-                            else ""
-                        )
-                        if file_extension.lower() in SUPPORTED_EXTENSION:
-                            last_commit_timestamp = (
-                                await self._fetch_last_commit_timestamp(
-                                    repo_name=repo_name, path=repo_object["path"]
-                                )
-                            )
-                            repo_object.update(
-                                {
-                                    "_timestamp": last_commit_timestamp,
-                                    "repo_name": repo_name,
-                                    "name": file_name,
-                                    "extension": file_extension,
-                                }
-                            )
-
-                            document = self.adapt_gh_doc_to_es_doc(
-                                github_document=repo_object,
-                                schema=FILE_SCHEMA if path else FILE_TREE_SCHEMA,
-                            )
-
-                            document["_id"] = f"{repo_name}/{repo_object['path']}"
-                            yield document, repo_object
+                    if repo_object["type"] == FILE:
+                        async for document, file_repo_object in self._format_file_document(
+                            repo_object=repo_object,
+                            repo_name=repo_name,
+                            schema=PATH_SCHEMA,
+                        ):
+                            yield document, file_repo_object
         except UnauthorizedException:
             raise
         except ForbiddenException:
@@ -2072,7 +2093,7 @@ class GitHubDataSource(BaseDataSource):
 
                 if branch := rule["filter"].get(ObjectType.BRANCH.value):
                     async for file_document, attachment_metadata in self._fetch_files(
-                        repo_name=repo_name, path_branch=branch
+                        repo_name=repo_name, default_branch=branch
                     ):
                         if file_document["type"] == BLOB:
                             yield file_document, partial(
@@ -2082,8 +2103,8 @@ class GitHubDataSource(BaseDataSource):
                             yield file_document, None
 
                 if path := rule["filter"].get(ObjectType.PATH.value):
-                    async for file_document, attachment_metadata in self._fetch_files(
-                        repo_name=repo_name, path_branch=path, path=True
+                    async for file_document, attachment_metadata in self._fetch_files_by_path(
+                        repo_name=repo_name, path=path
                     ):
                         if file_document["type"] == FILE:
                             attachment_metadata["url"] = attachment_metadata["git_url"]
@@ -2143,7 +2164,7 @@ class GitHubDataSource(BaseDataSource):
 
                 if default_branch:
                     async for file_document, attachment_metadata in self._fetch_files(
-                        repo_name=repo_name, path_branch=default_branch
+                        repo_name=repo_name, default_branch=default_branch
                     ):
                         if file_document["type"] == BLOB:
                             if needs_access_control:
