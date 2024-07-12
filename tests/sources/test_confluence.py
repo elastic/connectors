@@ -1358,11 +1358,13 @@ async def test_get_access_control_dls_enabled_for_server():
 @pytest.mark.asyncio
 async def test_fetch_confluence_server_users():
     async with create_confluence_source() as source:
-        source.confluence_client.api_call = AsyncIterator(
-            [JSONAsyncMock({"start": 0, "users": []})]
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(
+            return_value=JSONAsyncMock({"start": 0, "users": []})
         )
-        async for user in source.confluence_client.fetch_confluence_server_users():
-            assert user is None
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            async for user in source.confluence_client.fetch_confluence_server_users():
+                assert user is None
 
 
 @pytest.mark.asyncio
@@ -1544,14 +1546,21 @@ async def test_fetch_server_space_permission():
                 }
             },
         }
-        source.confluence_client.api_call = AsyncIterator([JSONAsyncMock(payload)])
-        expected_response = await source.fetch_server_space_permission(space_key="key")
-        if expected_response is not None:
-            assert expected_response == {
-                "permissions": {
-                    "VIEWSPACE": {"groups": ["confluence-users"], "users": ["admin"]}
+        async_response = AsyncMock()
+        async_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+        with mock.patch("aiohttp.ClientSession.get", return_value=async_response):
+            expected_response = await source.fetch_server_space_permission(
+                space_key="key"
+            )
+            if expected_response is not None:
+                assert expected_response == {
+                    "permissions": {
+                        "VIEWSPACE": {
+                            "groups": ["confluence-users"],
+                            "users": ["admin"],
+                        }
+                    }
                 }
-            }
 
 
 @pytest.mark.asyncio

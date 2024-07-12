@@ -321,11 +321,9 @@ class ConfluenceClient:
 
     async def fetch_server_space_permission(self, url):
         try:
-            async for permissions in self.api_call(
-                url=os.path.join(self.host_url, url),
-            ):
-                permission = await permissions.json()
-                return permission
+            permissions = await self.api_call(url=os.path.join(self.host_url, url))
+            permission = await permissions.json()
+            return permission
         except ClientResponseError as exception:
             self._logger.warning(
                 f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
@@ -377,12 +375,12 @@ class ConfluenceClient:
 
         while True:
             url_ = url.format(start=start_at, limit=limit)
-            async for users in self.api_call(url=url_):
-                response = await users.json()
-                if len(response.get(key)) == 0:
-                    return
-                yield response.get(key)
-                start_at += limit
+            users = await self.api_call(url=url_)
+            response = await users.json()
+            if len(response.get(key)) == 0:
+                return
+            yield response.get(key)
+            start_at += limit
 
     async def fetch_label(self, label_id):
         url = os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
