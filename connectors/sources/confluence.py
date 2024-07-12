@@ -42,7 +42,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 
-LIMIT = 50
+LIMIT = 100
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
@@ -228,7 +228,7 @@ class ConfluenceClient:
                 url=url,
                 ssl=self.ssl_ctx,
             ) as response:
-                yield response
+                return response
         except ServerDisconnectedError:
             await self.close_session()
             raise
@@ -248,7 +248,7 @@ class ConfluenceClient:
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
-                response = await anext(self.api_call(url=url))
+                response = await self.api_call(url=url)
                 json_response = await response.json()
                 links = json_response.get("_links")
                 yield json_response
@@ -278,7 +278,7 @@ class ConfluenceClient:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
-                response = await anext(self.api_call(url=url))
+                response = await self.api_call(url=url)
                 json_response = await response.json()
                 yield json_response
 
@@ -360,10 +360,8 @@ class ConfluenceClient:
                 yield attachment
 
     async def ping(self):
-        await anext(
-            self.api_call(
-                url=os.path.join(self.host_url, PING_URL),
-            )
+        await self.api_call(
+            url=os.path.join(self.host_url, PING_URL),
         )
 
     async def fetch_confluence_server_users(self):
@@ -387,11 +385,10 @@ class ConfluenceClient:
                 start_at += limit
 
     async def fetch_label(self, label_id):
-        async for label_data in self.api_call(
-            url=os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
-        ):
-            labels = await label_data.json()
-            return [label.get("name") for label in labels["results"]]
+        url = os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
+        label_data = await self.api_call(url=url)
+        labels = await label_data.json()
+        return [label.get("name") for label in labels["results"]]
 
 
 class ConfluenceDataSource(BaseDataSource):
