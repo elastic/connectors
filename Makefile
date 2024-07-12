@@ -89,12 +89,12 @@ bin/package-dev: requirements/package-dev.txt
 	bin/pip install -r requirements/$(ARCH).txt
 	bin/pip install -r requirements/package-dev.txt
 
-generate_connector_package_code: bin/package-dev
+generate-connector-package-code: bin/package-dev
 	bin/python scripts/package/codegen/generate_connectors.py
 	bin/python scripts/package/codegen/generate_connectors_init.py
 
 # Move everything under `elastic_connectors` temporary folder
-generate_connector_package: generate_connector_package_code
+generate-connector-package: generate-connector-package-code
 	mkdir -p package/elastic_connectors
 	cp -r package/* package/elastic_connectors
 	rm -rf package/elastic_connectors/elastic_connectors
@@ -102,12 +102,15 @@ generate_connector_package: generate_connector_package_code
 	bin/python scripts/package/update_imports.py
 
 # Clean temporary folder and distribution files
-clean_connector_package:
+clean-connector-package:
 	cd package && rm -rf elastic_connectors build dist *.egg-info
 
+generate-connector-package-docs:
+	PYTHONPATH=./package lazydocs generated --remove-package-prefix --no-watermark --output-path package/docs --overview-file README
+
 # Build the connector package
-build_connector_package: clean_connector_package generate_connector_package
+build-connector-package: clean-connector-package generate-connector-package generate-connector-package-docs
 	cd package && ../bin/python setup.py sdist bdist_wheel
 
-publish_connector_package: build_connector_package
+publish-connector-package: build-connector-package
 	cd package && twine upload --repository testpypi dist/*

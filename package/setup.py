@@ -69,7 +69,7 @@ with open("README.md") as f:
 
 setup(
     name="elastic-connectors",
-    version="0.1.0",
+    version="0.2.0",
     description="Elastic connectors",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

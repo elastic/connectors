@@ -13,7 +13,7 @@ from tika import parser
 from connectors.es.settings import TIMESTAMP_FIELD
 
 
-def extract_content_with_tika(b64_content: str) -> str:
+def _extract_content_with_tika(b64_content: str) -> str:
     """
     Extracts text content from a base64-encoded binary content using Tika.
 
@@ -111,7 +111,7 @@ class ConnectorBase:
                     # binary to string conversion
                     binary_data = data.get("_attachment", None)
 
-                    text = extract_content_with_tika(binary_data)
+                    text = _extract_content_with_tika(binary_data)
 
                     doc.update({"body": text})
                 except Exception as e:
