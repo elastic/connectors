@@ -513,9 +513,10 @@ class JiraDataSource(BaseDataSource):
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
-                "label": "Jira Cloud service account id",
+                "label": "Jira Cloud email address",
                 "order": 6,
                 "type": "str",
+                "tooltip": "Email address associated with Jira Cloud account. E.g. jane.doe@gmail.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],

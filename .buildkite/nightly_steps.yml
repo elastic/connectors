@@ -132,8 +132,3 @@ steps:
       - ".buildkite/run_nigthly.sh graphql"
     artifact_paths:
       - "perf8-report-*/**/*"
-  - label: "🔨 Opentext Documentum"
-    command:
-      - ".buildkite/run_nigthly.sh opentext_documentum"
-    artifact_paths:
-      - "perf8-report-*/**/*"
