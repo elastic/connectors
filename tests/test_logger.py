@@ -10,6 +10,7 @@ import time
 from contextlib import contextmanager
 
 import pytest
+from freezegun import freeze_time
 
 import connectors.logger
 from connectors.logger import ColorFormatter, logger, set_logger, tracer
@@ -172,6 +173,24 @@ def test_colored_logging(log_level, color):
 
         assert len(logs) == 1
         assert logs[0].startswith(color)
+
+
+# first param is UTC time, second param is offset we run with
+@freeze_time("2024-07-10 12:00:00", tz_offset=-7)
+def test_timestamp_is_utc():
+    with unset_logger():
+        logger = set_logger(logging.DEBUG, filebeat=False)
+        logs = []
+
+        def _w(msg):
+            logs.append(msg)
+
+        logger.handlers[0].stream.write = _w
+        logger.debug("test")
+        assert len(logs) == 1
+        assert (
+            "[12:00:00]" in logs[0]
+        )  # if the local time was respected, this would be 05:00:00
 
 
 def test_colored_logging_with_filebeat():
