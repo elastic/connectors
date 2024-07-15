@@ -13,8 +13,9 @@ from urllib.parse import urljoin
 
 import aiohttp
 from aiohttp.client_exceptions import (
+    ClientPayloadError,
     ClientResponseError,
-    ServerDisconnectedError,
+    ServerConnectionError,
 )
 
 from connectors.access_control import ACCESS_CONTROL
@@ -112,6 +113,14 @@ class SyncFailure(Exception):
     pass
 
 
+class UnauthorizedException(Exception):
+    pass
+
+
+class Forbidden(Exception):
+    pass
+
+
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
@@ -205,6 +214,17 @@ class ConfluenceClient:
 
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
+        elif exception.status == 400:
+            self._logger.error(f"Bad Request Error (400). Exception: {exception}.")
+            raise UnauthorizedException
+        elif exception.status == 401:
+            self._logger.error(f"Authentication error (401). Exception: {exception}.")
+            raise UnauthorizedException
+        elif exception.status == 403:
+            self._logger.error(
+                f"Provided token does not have the necessary permissions to perform the request for the URL: {url}"
+            )
+            raise Forbidden
         elif exception.status == 404:
             self._logger.error(f"Getting Not Found Error for url: {url}")
             raise NotFound
@@ -214,10 +234,26 @@ class ConfluenceClient:
         else:
             raise
 
+    async def _handle_client_payload_error(self, exception):
+        retry_seconds = DEFAULT_RETRY_SECONDS
+        response_headers = exception.headers or {}
+        if "Retry-After" in response_headers:
+            try:
+                retry_seconds = int(response_headers["Retry-After"])
+            except (TypeError, ValueError) as exception:
+                self._logger.error(
+                    f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                )
+        await self._sleeps.sleep(retry_seconds)
+        raise
+
     async def _handle_api_call_error(self, url, exception):
         known_errors = {
-            ServerDisconnectedError,
+            ServerConnectionError,
             ClientResponseError,
+            ClientPayloadError,
+            Forbidden,
+            UnauthorizedException,
             ThrottledError,
             NotFound,
             InternalServerError,
@@ -228,7 +264,7 @@ class ConfluenceClient:
             raise
         else:
             self._logger.error(
-                f"Error encountered. Skipping data for {url}. Exception: {exception}. Pagination terminated early."
+                f"Error encountered and the data for {url} skipped. Exception: {exception} caused the pagination to end prematurely."
             )
 
     @retryable(
@@ -258,11 +294,13 @@ class ConfluenceClient:
                 ssl=self.ssl_ctx,
             ) as response:
                 yield response
-        except ServerDisconnectedError:
+        except ServerConnectionError:
             await self.close_session()
             raise
         except ClientResponseError as exception:
             await self._handle_client_errors(url=url, exception=exception)
+        except ClientPayloadError as exception:
+            await self._handle_client_payload_error(exception)
         except Exception as exception:
             self.api_failed_count += 1
             self._logger.debug(
@@ -296,8 +334,11 @@ class ConfluenceClient:
                         links.get("next")[1:],
                     )
             except (
-                ServerDisconnectedError,
+                ServerConnectionError,
                 ClientResponseError,
+                ClientPayloadError,
+                Forbidden,
+                UnauthorizedException,
                 ThrottledError,
                 NotFound,
                 InternalServerError,
@@ -332,8 +373,11 @@ class ConfluenceClient:
                 if len(json_response.get("results", [])) < LIMIT:
                     break
             except (
-                ServerDisconnectedError,
+                ServerConnectionError,
                 ClientResponseError,
+                ClientPayloadError,
+                Forbidden,
+                UnauthorizedException,
                 ThrottledError,
                 NotFound,
                 InternalServerError,
@@ -376,8 +420,11 @@ class ConfluenceClient:
                 permission = await permissions.json()
                 return permission
         except (
-            ServerDisconnectedError,
+            ServerConnectionError,
             ClientResponseError,
+            ClientPayloadError,
+            Forbidden,
+            UnauthorizedException,
             ThrottledError,
             NotFound,
             InternalServerError,
@@ -440,8 +487,11 @@ class ConfluenceClient:
                     yield response.get(key)
                     start_at += limit
             except (
-                ServerDisconnectedError,
+                ServerConnectionError,
                 ClientResponseError,
+                ClientPayloadError,
+                Forbidden,
+                UnauthorizedException,
                 ThrottledError,
                 NotFound,
                 InternalServerError,
@@ -460,8 +510,11 @@ class ConfluenceClient:
                 return [label.get("name") for label in labels["results"]]
 
         except (
-            ServerDisconnectedError,
+            ServerConnectionError,
             ClientResponseError,
+            ClientPayloadError,
+            Forbidden,
+            UnauthorizedException,
             ThrottledError,
             NotFound,
             InternalServerError,
@@ -1124,8 +1177,11 @@ class ConfluenceDataSource(BaseDataSource):
                 ),
             )
         except (
-            ServerDisconnectedError,
+            ServerConnectionError,
             ClientResponseError,
+            ClientPayloadError,
+            Forbidden,
+            UnauthorizedException,
             ThrottledError,
             NotFound,
             InternalServerError,

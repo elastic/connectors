@@ -13,7 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 from aiohttp import StreamReader
-from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from aiohttp.client_exceptions import (
+    ClientPayloadError,
+    ClientResponseError,
+    ServerConnectionError,
+)
 from freezegun import freeze_time
 
 from connectors.access_control import DLS_QUERY
@@ -25,10 +29,12 @@ from connectors.sources.confluence import (
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
+    Forbidden,
     InternalServerError,
     NotFound,
     SyncFailure,
     ThrottledError,
+    UnauthorizedException,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -805,6 +811,26 @@ async def test_get_with_429_status():
             ):
                 result = await response.json()
 
+    assert result == payload
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_call_api_with_client_payload_error():
+    initial_response = ClientPayloadError(None, None)
+    retried_response = AsyncMock()
+    payload = {"value": "Test rate limit"}
+    retried_response.__aenter__ = AsyncMock(return_value=JSONAsyncMock(payload))
+    retried_response.__aexit__ = AsyncMock(return_value=None)
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=[initial_response, retried_response],
+        ):
+            async for response in source.confluence_client.api_call(
+                url="http://localhost:1000/sample"
+            ):
+                result = await response.json()
     assert result == payload
 
 
@@ -1630,7 +1656,7 @@ async def test_fetch_page_blog_documents_with_labels():
                 }
 
 
-@pytest.mark.parametrize("exception", [ServerDisconnectedError, Exception])
+@pytest.mark.parametrize("exception", [ServerConnectionError, Exception])
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_confluence_client_api_call_with_server_disconnected_error(exception):
@@ -1663,7 +1689,14 @@ def exception_function_params():
 @exception_function_params()
 @pytest.mark.parametrize(
     "exception",
-    [ServerDisconnectedError, ThrottledError, NotFound, InternalServerError],
+    [
+        ServerConnectionError,
+        ThrottledError,
+        NotFound,
+        InternalServerError,
+        UnauthorizedException,
+        Forbidden,
+    ],
 )
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
@@ -1726,7 +1759,7 @@ async def test_check_api_exceptions_percentage_below_threshold():
 
 @pytest.mark.asyncio
 async def test_handle_api_call_error_known_errors():
-    error = ServerDisconnectedError("Server disconnected")
+    error = ServerConnectionError("Server disconnected")
     async with create_confluence_source() as source:
         with pytest.raises(Exception):
             await source.confluence_client._handle_api_call_error(
