@@ -1,0 +1,38 @@
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+#
+# This is a generated code. Do not modify directly.
+# Run `make generate_connector_package` to update.
+
+from elastic_connectors.connectors.source import DataSourceConfiguration
+from elastic_connectors.{{ data_source_module }} import {{ data_source_class }}
+from elastic_connectors.connector_base import ConnectorBase
+
+class {{ class_name }}(ConnectorBase):
+    """
+    {{ class_name }} class generated for connecting to the data source.
+
+    Args:
+    {% for param, value in params %}
+        {{ param }} ({{ config[param]['type'] }}): {{ config[param].label }}{% if config[param].tooltip %}
+            - {{ config[param].tooltip }}{% endif %}
+    {% endfor %}
+    """
+    def __init__(self, {% for param, value in params %}{{ param }}={% if value is none %}None{% elif value is string %}'{{ value }}'{% else %}{{ value }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}, **kwargs):
+
+        configuration = {{ data_source_class }}.get_default_configuration()
+
+        # Apply the user provided configuration in the class constructor
+        args = locals()
+        for key in configuration.keys():
+            if args.get(key) is not None:
+                configuration[key]['value'] = args[key]
+
+        connector_configuration = DataSourceConfiguration(configuration)
+
+        super().__init__(data_provider={{ data_source_class }}(connector_configuration), **kwargs)
+
+        {% for key in config.keys() %}self.{{ key }} = {{ key }}
+        {% endfor %}

@@ -18,3 +18,7 @@ config.yml
 
 **/venv
 scripts/stack/connectors-config
+
+# package related
+package/elastic_connectors
+package/dist
