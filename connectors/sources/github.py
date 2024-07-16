@@ -1869,7 +1869,7 @@ class GitHubDataSource(BaseDataSource):
             )
 
             document["_id"] = f"{repo_name}/{repo_object['path']}"
-            yield document, repo_object
+            return document, repo_object
 
     async def _fetch_files(self, repo_name, default_branch):
         self._logger.info(
@@ -1884,10 +1884,10 @@ class GitHubDataSource(BaseDataSource):
 
             for repo_object in file_tree.get("tree", []):
                 if repo_object["type"] == BLOB:
-                    async for document, file_repo_object in self._format_file_document(
+                    if document := await self._format_file_document(
                         repo_object=repo_object, repo_name=repo_name, schema=FILE_SCHEMA
                     ):
-                        yield document, file_repo_object
+                        yield document
         except UnauthorizedException:
             raise
         except ForbiddenException:
@@ -1901,20 +1901,18 @@ class GitHubDataSource(BaseDataSource):
     async def _fetch_files_by_path(self, repo_name, path):
         self._logger.info(f"Fetching files from repo: '{repo_name}' (path: '{path}')")
         try:
-            files = await self.github_client.get_github_item(
+            for repo_object in await self.github_client.get_github_item(
                 resource=self.github_client.endpoints["PATH"].format(
                     repo_name=repo_name, path=path
                 )
-            )
-            if files:
-                for repo_object in files:
-                    if repo_object["type"] == FILE:
-                        async for document, file_repo_object in self._format_file_document(
-                            repo_object=repo_object,
-                            repo_name=repo_name,
-                            schema=PATH_SCHEMA,
-                        ):
-                            yield document, file_repo_object
+            ):  # pyright: ignore
+                if repo_object["type"] == FILE:
+                    if document := await self._format_file_document(
+                        repo_object=repo_object,
+                        repo_name=repo_name,
+                        schema=PATH_SCHEMA,
+                    ):
+                        yield document
         except UnauthorizedException:
             raise
         except ForbiddenException:
