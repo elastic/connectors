@@ -89,6 +89,10 @@ CONFLUENCE_DATA_CENTER = "confluence_data_center"
 WILDCARD = "*"
 
 
+class InvalidConfluenceDataSourceTypeError(ValueError):
+    pass
+
+
 class ThrottledError(Exception):
     """Internal exception class to indicate that request was throttled by the API"""
 
@@ -137,7 +141,7 @@ class ConfluenceClient:
         if self.session:
             return self.session
 
-        self._logger.debug("Creating a client session")
+        self._logger.debug(f"Creating a '{self.data_source_type}' client session")
         if self.data_source_type == CONFLUENCE_CLOUD:
             auth = (
                 self.configuration["account_email"],
@@ -148,11 +152,16 @@ class ConfluenceClient:
                 self.configuration["username"],
                 self.configuration["password"],
             )
-        else:
+        elif self.data_source_type == CONFLUENCE_DATA_CENTER:
             auth = (
                 self.configuration["data_center_username"],
                 self.configuration["data_center_password"],
             )
+        else:
+            msg = f"Unknown data source type '{self.data_source_type}' for Confluence connector"
+            self._logger.error(msg)
+
+            raise InvalidConfluenceDataSourceTypeError(msg)
 
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -198,9 +207,10 @@ class ConfluenceClient:
             self._logger.error(f"Getting Not Found Error for url: {url}")
             raise NotFound
         elif exception.status == 500:
-            self._logger.error("Internal Server Error occurred")
+            self._logger.error(f"Internal Server Error occurred for URL: {url}")
             raise InternalServerError
         else:
+            self._logger.error(f"Error while making a GET call for URL: {url}")
             raise
 
     @retryable(
@@ -229,6 +239,9 @@ class ConfluenceClient:
             ) as response:
                 yield response
         except ServerDisconnectedError:
+            self._logger.error(
+                f"Server Disconnected Error occurred for URL: {url}. Closing the session"
+            )
             await self.close_session()
             raise
         except ClientResponseError as exception:
@@ -241,12 +254,10 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url}"
-        )
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
+                self._logger.debug(f"Started paginating throught the API: {url}")
                 async for response in self.api_call(
                     url=url,
                 ):
@@ -272,13 +283,14 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> start: 0, limit: {LIMIT}"
-        )
+        start = 0
         while True:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
+                self._logger.debug(
+                    f"Pagination is happening for API endpoint: {URLS[url_name].format(**url_kwargs)} to host: {self.host_url} with the pagination parameters -> start: {start}, limit: {LIMIT}"
+                )
                 async for response in self.api_call(
                     url=url,
                 ):
@@ -842,9 +854,8 @@ class ConfluenceDataSource(BaseDataSource):
         """Verify the connection with Confluence"""
         try:
             await self.confluence_client.ping()
-            self._logger.info("Successfully connected to Confluence")
         except Exception:
-            self._logger.exception("Error while connecting to Confluence")
+            self._logger.warning("Error while connecting to Confluence")
             raise
 
     def get_permission(self, permission):
@@ -864,9 +875,7 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
-        self._logger.debug(
-            f"Fetching permissions for space '{space_key} from Confluence server'"
-        )
+        self._logger.info(f"Fetching permissions for '{space_key}' space")
         return await self.confluence_client.fetch_server_space_permission(url=url)
 
     async def fetch_documents(self, api_query):
@@ -932,7 +941,7 @@ class ConfluenceDataSource(BaseDataSource):
             String: Download link to get the content of the attachment
         """
         self._logger.info(
-            f"Fetching attachments for '{parent_name}' from '{parent_space}' space"
+            f"Fetching attachments for '{parent_name}' {parent_type} from '{parent_space}' space"
         )
         async for attachment in self.confluence_client.fetch_attachments(
             content_id=content_id,
@@ -1035,7 +1044,7 @@ class ConfluenceDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
-        self._logger.info(f"Downloading content for file: {filename}")
+        self._logger.debug(f"Downloading content for file: {filename}")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
         return await self.download_and_extract_file(
             document,
@@ -1221,11 +1230,14 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
+        self._logger.info("Successfully connected to Confluence")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             for query_info in advanced_rules:
                 query = query_info.get("query")
-                logger.debug(f"Fetching confluence content using custom query: {query}")
+                self._logger.debug(
+                    f"Fetching confluence content using custom query: {query}"
+                )
                 async for document, download_link in self.search_by_query(query):
                     if download_link:
                         yield document, partial(
