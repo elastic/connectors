@@ -224,11 +224,10 @@ class ConfluenceClient:
         self._logger.debug(f"Making a GET call for url: {url}")
 
         try:
-            async with self._get_session().get(
+            return await self._get_session().get(
                 url=url,
                 ssl=self.ssl_ctx,
-            ) as response:
-                return response
+            )
         except ServerDisconnectedError:
             await self.close_session()
             raise
@@ -292,6 +291,9 @@ class ConfluenceClient:
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
                 break
+
+    async def download_func(self, url):
+        yield await self.api_call(url)
 
     async def search_by_query(self, query):
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
@@ -1036,7 +1038,7 @@ class ConfluenceDataSource(BaseDataSource):
             partial(
                 self.generic_chunked_download_func,
                 partial(
-                    self.confluence_client.api_call,
+                    self.confluence_client.download_func,
                     url=os.path.join(self.confluence_client.host_url, url),
                 ),
             ),
