@@ -609,6 +609,7 @@ class Extractor:
         except Exception as ex:
             self._logger.error(f"Extractor failed with an error: {ex}")
             lazy_downloads.cancel()
+            raise
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
