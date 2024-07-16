@@ -883,9 +883,7 @@ class SyncOrchestrator:
 
     async def cancel(self):
         if self._sink_task_running():
-            self._logger.info(
-                f"Cancling the Sink task: {self._sink_task.name}"  # pyright: ignore
-            )
+            self._logger.info(f"Canceling the Sink task: {self._sink_task.get_name()}")
             self._sink_task.cancel()
         else:
             self._logger.debug(
@@ -894,7 +892,7 @@ class SyncOrchestrator:
 
         if self._extractor_task_running():
             self._logger.info(
-                f"Canceling the Extractor task: {self._extractor_task.name}"  # pyright: ignore
+                f"Canceling the Extractor task: {self._extractor_task.get_name()}"
             )
             self._extractor_task.cancel()
         else:

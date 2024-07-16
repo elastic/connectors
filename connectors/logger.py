@@ -10,10 +10,12 @@ import contextlib
 import inspect
 import logging
 import time
-from functools import cached_property, wraps
+from datetime import datetime, timezone
+from functools import wraps
 from typing import AsyncGenerator
 
 import ecs_logging
+from dateutil.tz import tzlocal
 
 from connectors import __version__
 
@@ -27,46 +29,40 @@ class ColorFormatter(logging.Formatter):
     RED = "\x1b[31;20m"
     BOLD_RED = "\x1b[31;1m"
     RESET = "\x1b[0m"
+    COLORS = {
+        logging.DEBUG: GREY,
+        logging.INFO: GREEN,
+        logging.WARNING: YELLOW,
+        logging.ERROR: RED,
+        logging.CRITICAL: BOLD_RED,
+    }
 
     DATE_FMT = "%H:%M:%S"
 
     def __init__(self, prefix):
         self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
-        super().__init__()
+        super().__init__(datefmt=self.DATE_FMT)
+        self.local_tz = tzlocal()
 
-    @cached_property
-    def debug_formatter(self):
-        return logging.Formatter(
-            fmt=self.GREY + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
+    def converter(self, timestamp):
+        dt = datetime.fromtimestamp(timestamp, self.local_tz)
+        return dt.astimezone(timezone.utc)
 
-    @cached_property
-    def info_formatter(self):
-        return logging.Formatter(
-            fmt=self.GREEN + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
-
-    @cached_property
-    def warning_formatter(self):
-        return logging.Formatter(
-            fmt=self.YELLOW + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
-
-    @cached_property
-    def error_formatter(self):
-        return logging.Formatter(
-            fmt=self.RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
-
-    @cached_property
-    def critical_formatter(self):
-        return logging.Formatter(
-            fmt=self.BOLD_RED + self.custom_format + self.RESET, datefmt=self.DATE_FMT
-        )
+    # override logging.Formatter to use an aware datetime object
+    def formatTime(self, record, datefmt=None):
+        dt = self.converter(record.created)
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            try:
+                s = dt.isoformat(timespec="milliseconds")
+            except TypeError:
+                s = dt.isoformat()
+        return s
 
     def format(self, record):  # noqa: A003
-        formatter = getattr(self, f"{record.levelname.lower()}_formatter")
-        return formatter.format(record)
+        self._style._fmt = self.COLORS[record.levelno] + self.custom_format + self.RESET
+        return super().format(record)
 
 
 class DocumentLogger:
