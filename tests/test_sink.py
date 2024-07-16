@@ -433,6 +433,7 @@ def lazy_download_fake(doc):
 
     return lazy_download
 
+
 def crashing_lazy_download_fake():
     async def lazy_download(**kwargs):
         msg = "Could not download"
@@ -1294,9 +1295,7 @@ async def test_extractor_put_doc():
 @mock.patch(
     "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
 )
-@mock.patch(
-    "connectors.utils.ConcurrentTasks.cancel"
-)
+@mock.patch("connectors.utils.ConcurrentTasks.cancel")
 async def test_extractor_get_docs_when_downloads_fail(
     yield_existing_documents_metadata, concurrent_tasks_cancel
 ):
@@ -1314,14 +1313,11 @@ async def test_extractor_get_docs_when_downloads_fail(
     # instances
     doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
 
-    extractor = await setup_extractor(
-        queue,
-        content_extraction_enabled=True
-    )
+    extractor = await setup_extractor(queue, content_extraction_enabled=True)
 
     await extractor.run(doc_generator, JobType.FULL)
     concurrent_tasks_cancel.assert_called_once()
-    
+
 
 @pytest.mark.asyncio
 async def test_force_canceled_extractor_put_doc():
