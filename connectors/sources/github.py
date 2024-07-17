@@ -12,7 +12,7 @@ from functools import cached_property, partial
 import aiohttp
 import fastjsonschema
 from aiohttp.client_exceptions import ClientResponseError
-from gidgethub import RateLimitExceeded, sansio
+from gidgethub import QueryError, RateLimitExceeded, sansio
 from gidgethub.abc import (
     BadGraphQLRequest,
     GraphQLAuthorizationFailure,
@@ -673,14 +673,12 @@ class GitHubClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    def get_rate_limit_encountered(self, status_code, message):
-        return status_code == FORBIDDEN and "rate limit" in str(message).lower()
+    def get_rate_limit_encountered(self, status_code, rate_limit_remaining):
+        return status_code == FORBIDDEN and not int(rate_limit_remaining)
 
     async def _get_retry_after(self, resource_type):
         current_time = time.time()
-        response = await self._get_client.getitem(
-            "/rate_limit", oauth_token=self._access_token()
-        )
+        response = await self.get_github_item("/rate_limit")
         reset = nested_get_from_dict(
             response, ["resources", resource_type, "reset"], default=current_time
         )
@@ -789,11 +787,20 @@ class GitHubClient:
             msg = "Your Github token is either expired or revoked. Please check again."
             raise UnauthorizedException(msg) from exception
         except BadGraphQLRequest as exception:
-            if self.get_rate_limit_encountered(exception.status_code, exception):
-                await self._put_to_sleep(resource_type="graphql")
-            elif exception.status == FORBIDDEN:
+            if exception.status_code == FORBIDDEN:
                 msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {url} and query: {query}."
                 raise ForbiddenException(msg) from exception
+            else:
+                raise
+        except QueryError as exception:
+            for error in exception.response.get("errors"):
+                if (
+                    error.get("type").lower() == "rate_limited"
+                    and "api rate limit exceeded" in error.get("message").lower()
+                ):
+                    await self._put_to_sleep(resource_type="graphql")
+            msg = f"Error while executing query. Exception: {exception.response.get('errors')}"
+            raise Exception(msg) from exception
         except Exception:
             raise
 
@@ -828,6 +835,10 @@ class GitHubClient:
                     raise
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
+            elif self.get_rate_limit_encountered(
+                exception.status, exception.headers.get("X-RateLimit-Remaining")
+            ):
+                await self._put_to_sleep(resource_type="core")
             elif exception.status == FORBIDDEN:
                 msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {resource}."
                 raise ForbiddenException(msg) from exception
@@ -861,20 +872,37 @@ class GitHubClient:
     def get_repo_details(self, repo_name):
         return repo_name.split("/")
 
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=UnauthorizedException,
+    )
     async def get_personal_access_token_scopes(self):
-        request_headers = sansio.create_headers(
-            self._get_client.requester,
-            accept=sansio.accept_format(),
-            oauth_token=self._access_token(),
-        )
-        _, headers, _ = await self._get_client._request(
-            "HEAD", self.base_url, request_headers
-        )
-        scopes = headers.get("X-OAuth-Scopes")
-        if not scopes or not scopes.strip():
-            self._logger.warning(f"Couldn't find 'X-OAuth-Scopes' in headers {headers}")
-            return set()
-        return {scope.strip() for scope in scopes.split(",")}
+        try:
+            request_headers = sansio.create_headers(
+                self._get_client.requester,
+                accept=sansio.accept_format(),
+                oauth_token=self._access_token(),
+            )
+            _, headers, _ = await self._get_client._request(
+                "HEAD", self.base_url, request_headers
+            )
+            scopes = headers.get("X-OAuth-Scopes")
+            if not scopes or not scopes.strip():
+                self._logger.warning(
+                    f"Couldn't find 'X-OAuth-Scopes' in headers {headers}"
+                )
+                return set()
+            return {scope.strip() for scope in scopes.split(",")}
+        except Exception as exception:
+            if self.get_rate_limit_encountered(
+                exception.status, exception.headers.get("X-RateLimit-Remaining")
+            ):
+                await self._put_to_sleep(resource_type="core")
+            elif exception.status == FORBIDDEN:
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {self.base_url}."
+                raise ForbiddenException(msg) from exception
 
     @retryable(
         retries=RETRIES,
@@ -1279,17 +1307,22 @@ class GitHubDataSource(BaseDataSource):
                 self.configured_repos,
             )
         )
+        try:
+            for full_repo_name in self.configured_repos:
+                if full_repo_name in invalid_repos:
+                    continue
+                owner, repo_name = self.github_client.get_repo_details(
+                    repo_name=full_repo_name
+                )
+                if await self._get_repo_object_for_github_app(owner, repo_name) is None:
+                    invalid_repos.add(full_repo_name)
 
-        for full_repo_name in self.configured_repos:
-            if full_repo_name in invalid_repos:
-                continue
-            owner, repo_name = self.github_client.get_repo_details(
-                repo_name=full_repo_name
-            )
-            if await self._get_repo_object_for_github_app(owner, repo_name) is None:
-                invalid_repos.add(full_repo_name)
-
-        return list(invalid_repos)
+            return list(invalid_repos)
+        except Exception as exception:
+            if self.github_client.get_rate_limit_encountered(
+                exception.status, exception.headers.get("X-RateLimit-Remaining")
+            ):
+                await self._put_to_sleep(resource_type="graphql")
 
     async def _get_repo_object_for_github_app(self, owner, repo_name):
         await self._fetch_installations()
@@ -1310,7 +1343,7 @@ class GitHubDataSource(BaseDataSource):
             cached_repo = self.org_repos
         else:
             if owner not in self.user_repos:
-                # get repos for a user cna cached it in self.user_repos
+                # get repos for a user can cached it in self.user_repos
                 async for _ in self._get_personal_repos(owner):
                     pass
 
