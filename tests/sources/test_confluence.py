@@ -7,7 +7,6 @@
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
-from typing import Any, Iterator
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -490,12 +489,6 @@ class JSONAsyncMock(AsyncMock):
         return self._json
 
 
-class AwaitableAsyncMock(AsyncMock):
-    def __await__(self) -> Iterator[Any]:
-        self.await_count += 1
-        return iter([])
-
-
 class StreamReaderAsyncMock(AsyncMock):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -866,7 +859,7 @@ async def test_fetch_spaces():
     # Setup
     async with create_confluence_source() as source:
         async_response = AsyncMock()
-        async_response.json.return_value = AwaitableAsyncMock(RESPONSE_SPACE)
+        async_response.json.return_value = RESPONSE_SPACE
 
         source.confluence_client.api_call = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_SPACE)
