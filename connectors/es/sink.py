@@ -598,8 +598,18 @@ class Extractor:
                             "doc": doc,
                         }
                     )
+                # We try raising every loop to not miss a moment when
+                # too many errors happened when downloading
+                lazy_downloads.raise_any_exception()
 
                 await asyncio.sleep(0)
+
+            # Sit and wait until an error happens
+            await lazy_downloads.join(raise_on_error=True)
+        except Exception as ex:
+            self._logger.error(f"Extractor failed with an error: {ex}")
+            lazy_downloads.cancel()
+            raise
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
