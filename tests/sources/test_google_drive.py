@@ -169,19 +169,22 @@ async def test_ping_for_failed_connection():
                 }
             ],
             [
-                {
-                    "_id": "id1",
-                    "created_at": None,
-                    "last_updated": "2023-06-28T07:46:28.000Z",
-                    "name": "test.txt",
-                    "size": "28",
-                    "_timestamp": "2023-06-28T07:46:28.000Z",
-                    "mime_type": "text/plain",
-                    "file_extension": None,
-                    "url": None,
-                    "type": "file",
-                    "trashed": False,
-                }
+                (
+                    {
+                        "_id": "id1",
+                        "created_at": None,
+                        "last_updated": "2023-06-28T07:46:28.000Z",
+                        "name": "test.txt",
+                        "size": "28",
+                        "_timestamp": "2023-06-28T07:46:28.000Z",
+                        "mime_type": "text/plain",
+                        "file_extension": None,
+                        "url": None,
+                        "type": "file",
+                        "trashed": False,
+                    },
+                    "",
+                )
             ],
         )
     ],
@@ -205,7 +208,7 @@ async def test_prepare_files(files, expected_files):
 
 
 @pytest.mark.parametrize(
-    "file, expected_file, is_shared_drive_file",
+    "file, expected_file",
     [
         (
             {
@@ -218,20 +221,22 @@ async def test_prepare_files(files, expected_files):
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
                 "trashed": False,
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": "28",
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "trashed": False,
-            },
-            False,
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": "28",
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": False,
+                },
+                "",
+            ),
         ),
         (
             {
@@ -244,20 +249,22 @@ async def test_prepare_files(files, expected_files):
                 "modifiedTime": "2023-06-28T07:46:28.000Z",
                 "trashed": False,
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": 0,
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "trashed": False,
-            },
-            False,
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": 0,
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": False,
+                },
+                "",
+            ),
         ),
         (
             {
@@ -278,23 +285,25 @@ async def test_prepare_files(files, expected_files):
                     }
                 ],
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": 0,
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "author": "Test User",
-                "created_by": "Test User",
-                "created_by_email": "user@test.com",
-                "trashed": False,
-            },
-            False,
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": 0,
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "author": "Test User",
+                    "created_by": "Test User",
+                    "created_by_email": "user@test.com",
+                    "trashed": False,
+                },
+                "",
+            ),
         ),
         (
             {
@@ -321,27 +330,29 @@ async def test_prepare_files(files, expected_files):
                     "photoLink": "dummy_link",
                 },
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": 0,
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "author": "Test User",
-                "created_by": "Test User",
-                "created_by_email": "user@test.com",
-                "updated_by": "Test User 2",
-                "updated_by_email": "user2@test.com",
-                "updated_by_photo_url": "dummy_link",
-                "path": "Drive3/Folder4/test.txt",
-                "trashed": False,
-            },
-            False,
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": 0,
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "author": "Test User",
+                    "created_by": "Test User",
+                    "created_by_email": "user@test.com",
+                    "updated_by": "Test User 2",
+                    "updated_by_email": "user2@test.com",
+                    "updated_by_photo_url": "dummy_link",
+                    "path": "Drive3/Folder4/test.txt",
+                    "trashed": False,
+                },
+                "",
+            ),
         ),
         (
             {
@@ -356,26 +367,28 @@ async def test_prepare_files(files, expected_files):
                 "trashed": True,
                 "trashedTime": "2023-06-28T12:46:28.000Z",
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": "28",
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "trashed": True,
-                "shared_drive": "SharedDrive",
-            },
-            True,
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": "28",
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": True,
+                    "shared_drive": "SharedDrive",
+                },
+                "2023-06-28T12:46:28.000Z",
+            ),
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_prepare_file(file, expected_file, is_shared_drive_file):
+async def test_prepare_file(file, expected_file):
     """Test the method that formats the file metadata from Google Drive API"""
 
     async with create_gdrive_source() as source:
@@ -393,16 +406,9 @@ async def test_prepare_file(file, expected_file, is_shared_drive_file):
         }
 
         actual_output = await source.prepare_file(
-            client=source.google_drive_client(),
-            file=file,
-            paths=dummy_paths,
-            is_shared_drive_file=is_shared_drive_file,
+            client=source.google_drive_client(), file=file, paths=dummy_paths
         )
-        if is_shared_drive_file:
-            assert actual_output[0] == expected_file
-            assert actual_output[1] == "2023-06-28T12:46:28.000Z"
-        else:
-            assert actual_output == expected_file
+        assert actual_output == expected_file
 
 
 @pytest.mark.asyncio
@@ -1281,26 +1287,29 @@ async def test_api_call_list_drives_retries(
                 {"type": "domain", "domain": "xd.com"},
                 {"type": "anyone"},
             ],
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": "28",
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "shared_drive": "drive1",
-                "trashed": False,
-                "_allow_access_control": [
-                    "user:user@xd.com",
-                    "group:group@xd.com",
-                    "domain:xd.com",
-                    "anyone",
-                ],
-            },
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": "28",
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "shared_drive": "drive1",
+                    "trashed": False,
+                    "_allow_access_control": [
+                        "user:user@xd.com",
+                        "group:group@xd.com",
+                        "domain:xd.com",
+                        "anyone",
+                    ],
+                },
+                "",
+            ),
         ),
         (
             {
@@ -1320,26 +1329,29 @@ async def test_api_call_list_drives_retries(
                 {"type": "domain", "domain": "xd.com"},
                 {"type": "anyone"},
             ],
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": 0,
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "shared_drive": "drive1",
-                "trashed": False,
-                "_allow_access_control": [
-                    "user:user2@xd.com",
-                    "group:group2@xd.com",
-                    "domain:xd.com",
-                    "anyone",
-                ],
-            },
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": 0,
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "shared_drive": "drive1",
+                    "trashed": False,
+                    "_allow_access_control": [
+                        "user:user2@xd.com",
+                        "group:group2@xd.com",
+                        "domain:xd.com",
+                        "anyone",
+                    ],
+                },
+                "",
+            ),
         ),
     ],
 )
@@ -1373,10 +1385,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
         ):
             with mock.patch.object(ServiceAccountManager, "refresh"):
                 assert expected_file == await source.prepare_file(
-                    client=source.google_drive_client(),
-                    file=file,
-                    paths=dummy_paths,
-                    is_shared_drive_file=False,
+                    client=source.google_drive_client(), file=file, paths=dummy_paths
                 )
 
 
@@ -1400,25 +1409,28 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                     {"type": "anyone"},
                 ],
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": "28",
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "trashed": False,
-                "_allow_access_control": [
-                    "user:user@xd.com",
-                    "group:group@xd.com",
-                    "domain:xd.com",
-                    "anyone",
-                ],
-            },
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": "28",
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": False,
+                    "_allow_access_control": [
+                        "user:user@xd.com",
+                        "group:group@xd.com",
+                        "domain:xd.com",
+                        "anyone",
+                    ],
+                },
+                "",
+            ),
         ),
         (
             {
@@ -1437,25 +1449,28 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                     {"type": "anyone"},
                 ],
             },
-            {
-                "_id": "id1",
-                "created_at": None,
-                "last_updated": "2023-06-28T07:46:28.000Z",
-                "name": "test.txt",
-                "size": 0,
-                "_timestamp": "2023-06-28T07:46:28.000Z",
-                "mime_type": "text/plain",
-                "file_extension": None,
-                "url": None,
-                "type": "file",
-                "trashed": False,
-                "_allow_access_control": [
-                    "user:user2@xd.com",
-                    "group:group2@xd.com",
-                    "domain:xd.com",
-                    "anyone",
-                ],
-            },
+            (
+                {
+                    "_id": "id1",
+                    "created_at": None,
+                    "last_updated": "2023-06-28T07:46:28.000Z",
+                    "name": "test.txt",
+                    "size": 0,
+                    "_timestamp": "2023-06-28T07:46:28.000Z",
+                    "mime_type": "text/plain",
+                    "file_extension": None,
+                    "url": None,
+                    "type": "file",
+                    "trashed": False,
+                    "_allow_access_control": [
+                        "user:user2@xd.com",
+                        "group:group2@xd.com",
+                        "domain:xd.com",
+                        "anyone",
+                    ],
+                },
+                "",
+            ),
         ),
     ],
 )
@@ -1475,10 +1490,7 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
         }
 
         assert expected_file == await source.prepare_file(
-            client=source.google_drive_client(),
-            file=file,
-            paths=dummy_paths,
-            is_shared_drive_file=False,
+            client=source.google_drive_client(), file=file, paths=dummy_paths
         )
 
 
@@ -1916,3 +1928,41 @@ async def test_get_docs_incrementally_with_domain_wide_delegation():
         ):
             file_document_list.append((file_document, "download_func", operation))
         assert file_document_list == expected_file_document
+
+
+@pytest.mark.asyncio
+async def test_users():
+    async with create_gdrive_source(
+        google_workspace_admin_email_for_data_sync="admin@email.com"
+    ) as source:
+        source._get_google_workspace_admin_email = mock.MagicMock(
+            return_value="admin@email.com"
+        )
+        response_users = {
+            "kind": "admin#directory#users",
+            "users": [
+                {
+                    "id": "123456",
+                    "primaryEmail": "example.name@domain.com",
+                    "name": {
+                        "givenName": "example",
+                        "familyName": "name",
+                        "fullName": "Example Name",
+                    },
+                }
+            ],
+        }
+        expected_users = {
+            "id": "123456",
+            "primaryEmail": "example.name@domain.com",
+            "name": {
+                "givenName": "example",
+                "familyName": "name",
+                "fullName": "Example Name",
+            },
+        }
+        source.google_admin_directory_client.list_users = AsyncIterator(
+            [response_users]
+        )
+        async for user in source.google_admin_directory_client.users():
+            assert user == expected_users

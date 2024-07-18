@@ -45,7 +45,7 @@ DRIVE_API_TIMEOUT = 1 * 60  # 1 min
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
-DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,parents,trashed"
+DRIVE_ITEMS_FIELDS = "id,createdTime,driveId,modifiedTime,name,size,mimeType,fileExtension,webViewLink,owners,parents,trashed,trashedTime"
 DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS = f"{DRIVE_ITEMS_FIELDS},permissions"
 
 # Export Google Workspace documents to TIKA compatible format, prefer 'text/plain' where possible to be
@@ -155,9 +155,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 
         return folders
 
-    async def list_files(
-        self, fetch_permissions=False, last_sync_time=None, syncing_shared_drives=False
-    ):
+    async def list_files(self, fetch_permissions=False, last_sync_time=None):
         """Get files from Google Drive. Files can have any type.
 
         Args:
@@ -173,8 +171,6 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             if fetch_permissions
             else DRIVE_ITEMS_FIELDS
         )
-        if syncing_shared_drives:
-            files_fields += ",trashedTime"
         if last_sync_time is None:
             list_query = "trashed=false"
         else:
@@ -1011,7 +1007,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return processed_permissions
 
-    async def prepare_file(self, client, file, paths, is_shared_drive_file):
+    async def prepare_file(self, client, file, paths):
         """Apply key mappings to the file document.
 
         Args:
@@ -1092,14 +1088,12 @@ class GoogleDriveDataSource(BaseDataSource):
                         self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
-        if is_shared_drive_file:
+        if file_document.get("shared_drive"):
             return file_document, file.get("trashedTime", "")
         else:
-            return file_document
+            return file_document, ""
 
-    async def prepare_files(
-        self, client, files_page, paths, seen_ids, is_shared_drive_file=False
-    ):
+    async def prepare_files(self, client, files_page, paths, seen_ids):
         """Generate file document.
 
         Args:
@@ -1119,7 +1113,6 @@ class GoogleDriveDataSource(BaseDataSource):
                 client=client,
                 file=f,
                 paths=paths,
-                is_shared_drive_file=is_shared_drive_file,
             ),
         )
 
@@ -1153,7 +1146,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 async for files_page in google_drive_client.list_files_from_my_drive(
                     fetch_permissions=self._dls_enabled()
                 ):
-                    async for file in self.prepare_files(
+                    async for file, _ in self.prepare_files(
                         client=google_drive_client,
                         files_page=files_page,
                         paths={},
@@ -1181,7 +1174,7 @@ class GoogleDriveDataSource(BaseDataSource):
             async for files_page in shared_drives_client.list_files(
                 fetch_permissions=self._dls_enabled()
             ):
-                async for file in self.prepare_files(
+                async for file, _ in self.prepare_files(
                     client=shared_drives_client,
                     files_page=files_page,
                     paths=resolved_paths,
@@ -1199,7 +1192,7 @@ class GoogleDriveDataSource(BaseDataSource):
             async for files_page in google_drive_client.list_files(
                 fetch_permissions=self._dls_enabled()
             ):
-                async for file in self.prepare_files(
+                async for file, _ in self.prepare_files(
                     client=google_drive_client,
                     files_page=files_page,
                     paths=resolved_paths,
@@ -1238,7 +1231,7 @@ class GoogleDriveDataSource(BaseDataSource):
                     fetch_permissions=self._dls_enabled(),
                     last_sync_time=self.last_sync_time(),
                 ):
-                    async for file in self.prepare_files(
+                    async for file, _ in self.prepare_files(
                         client=google_drive_client,
                         files_page=files_page,
                         paths={},
@@ -1273,14 +1266,12 @@ class GoogleDriveDataSource(BaseDataSource):
             async for files_page in shared_drives_client.list_files(
                 fetch_permissions=self._dls_enabled(),
                 last_sync_time=self.last_sync_time(),
-                syncing_shared_drives=True,
             ):
                 async for file, trashedTime in self.prepare_files(
                     client=shared_drives_client,
                     files_page=files_page,
                     paths=resolved_paths,
                     seen_ids=seen_ids,
-                    is_shared_drive_file=True,
                 ):
                     if (
                         trashedTime > self.last_sync_time() or trashedTime == ""
@@ -1288,6 +1279,11 @@ class GoogleDriveDataSource(BaseDataSource):
                         yield file, partial(
                             self.get_content, shared_drives_client, file
                         ), OP_DELETE
+                    elif (
+                        trashedTime < self.last_sync_time()
+                        and file.get("trashed") is True
+                    ):
+                        continue
                     else:
                         yield file, partial(
                             self.get_content, shared_drives_client, file
@@ -1304,16 +1300,23 @@ class GoogleDriveDataSource(BaseDataSource):
                 fetch_permissions=self._dls_enabled(),
                 last_sync_time=self.last_sync_time(),
             ):
-                async for file in self.prepare_files(
+                async for file, trashedTime in self.prepare_files(
                     client=google_drive_client,
                     files_page=files_page,
                     paths=resolved_paths,
                     seen_ids=seen_ids,
                 ):
-                    if file.get("trashed") is True:
+                    if (
+                        trashedTime > self.last_sync_time() or trashedTime == ""
+                    ) and file.get("trashed") is True:
                         yield file, partial(
                             self.get_content, google_drive_client, file
                         ), OP_DELETE
+                    elif (
+                        trashedTime < self.last_sync_time()
+                        and file.get("trashed") is True
+                    ):
+                        continue
                     else:
                         yield file, partial(
                             self.get_content, google_drive_client, file
