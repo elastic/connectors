@@ -289,11 +289,10 @@ class ConfluenceClient:
         if url != os.path.join(self.host_url, PING_URL):
             self.api_total_count += 1
         try:
-            async with self._get_session().get(
+            return await self._get_session().get(
                 url=url,
                 ssl=self.ssl_ctx,
-            ) as response:
-                yield response
+            )
         except ServerConnectionError:
             await self.close_session()
             raise
@@ -321,18 +320,16 @@ class ConfluenceClient:
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    links = json_response.get("_links")
-                    yield json_response
-                    if links.get("next") is None:
-                        return
-                    url = os.path.join(
-                        self.host_url,
-                        links.get("next")[1:],
-                    )
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                links = json_response.get("_links")
+                yield json_response
+                if links.get("next") is None:
+                    return
+                url = os.path.join(
+                    self.host_url,
+                    links.get("next")[1:],
+                )
             except (
                 ServerConnectionError,
                 ClientResponseError,
@@ -361,15 +358,13 @@ class ConfluenceClient:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    yield json_response
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                yield json_response
 
-                    start = url_kwargs.get("start", 0)
-                    start += LIMIT
-                    url_kwargs["start"] = start
+                start = url_kwargs.get("start", 0)
+                start += LIMIT
+                url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
             except (
@@ -385,6 +380,9 @@ class ConfluenceClient:
             ) as exception:
                 await self._handle_api_call_error(url, exception)
                 break
+
+    async def download_func(self, url):
+        yield await self.api_call(url)
 
     async def search_by_query(self, query):
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
@@ -414,11 +412,9 @@ class ConfluenceClient:
 
     async def fetch_server_space_permission(self, url):
         try:
-            async for permissions in self.api_call(
-                url=os.path.join(self.host_url, url),
-            ):
-                permission = await permissions.json()
-                return permission
+            permissions = await self.api_call(url=os.path.join(self.host_url, url))
+            permission = await permissions.json()
+            return permission
         except (
             ServerConnectionError,
             ClientResponseError,
@@ -460,10 +456,8 @@ class ConfluenceClient:
                 yield attachment
 
     async def ping(self):
-        await anext(
-            self.api_call(
-                url=os.path.join(self.host_url, PING_URL),
-            )
+        await self.api_call(
+            url=os.path.join(self.host_url, PING_URL),
         )
 
     async def fetch_confluence_server_users(self):
@@ -480,12 +474,12 @@ class ConfluenceClient:
         while True:
             try:
                 url_ = url.format(start=start_at, limit=limit)
-                async for users in self.api_call(url=url_):
-                    response = await users.json()
-                    if len(response.get(key)) == 0:
-                        return
-                    yield response.get(key)
-                    start_at += limit
+                users = await self.api_call(url=url_)
+                response = await users.json()
+                if len(response.get(key)) == 0:
+                    return
+                yield response.get(key)
+                start_at += limit
             except (
                 ServerConnectionError,
                 ClientResponseError,
@@ -503,11 +497,9 @@ class ConfluenceClient:
     async def fetch_label(self, label_id):
         url = os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
         try:
-            async for label_data in self.api_call(
-                url=url,
-            ):
-                labels = await label_data.json()
-                return [label.get("name") for label in labels["results"]]
+            label_data = await self.api_call(url=url)
+            labels = await label_data.json()
+            return [label.get("name") for label in labels["results"]]
 
         except (
             ServerConnectionError,
@@ -1163,31 +1155,18 @@ class ConfluenceDataSource(BaseDataSource):
 
         self._logger.info(f"Downloading content for file: {filename}")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
-        try:
-            return await self.download_and_extract_file(
-                document,
-                filename,
-                file_extension,
+        return await self.download_and_extract_file(
+            document,
+            filename,
+            file_extension,
+            partial(
+                self.generic_chunked_download_func,
                 partial(
-                    self.generic_chunked_download_func,
-                    partial(
-                        self.confluence_client.api_call,
-                        url=os.path.join(self.confluence_client.host_url, url),
-                    ),
+                    self.confluence_client.api_call,
+                    url=os.path.join(self.confluence_client.host_url, url),
                 ),
-            )
-        except (
-            ServerConnectionError,
-            ClientResponseError,
-            ClientPayloadError,
-            Forbidden,
-            UnauthorizedException,
-            ThrottledError,
-            NotFound,
-            InternalServerError,
-            Exception,
-        ) as exception:
-            await self.confluence_client._handle_api_call_error(url, exception)
+            ),
+        )
 
     async def _attachment_coro(self, document, access_control):
         """Coroutine to add attachments to Queue and download content
