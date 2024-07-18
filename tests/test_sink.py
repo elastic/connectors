@@ -60,6 +60,7 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
 DOC_THREE = {"_id": 3, "_timestamp": TIMESTAMP}
+DOC_FOUR = {"_id": 4, "_timestamp": TIMESTAMP}
 
 BULK_ACTION_ERROR = "some error"
 
@@ -429,6 +430,14 @@ def lazy_download_fake(doc):
     async def lazy_download(**kwargs):
         # also deepcopy to prevent side effects as docs get mutated in get_docs
         return deepcopy(doc)
+
+    return lazy_download
+
+
+def crashing_lazy_download_fake():
+    async def lazy_download(**kwargs):
+        msg = "Could not download"
+        raise Exception(msg)
 
     return lazy_download
 
@@ -1283,6 +1292,34 @@ async def test_extractor_put_doc():
 
 
 @pytest.mark.asyncio
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
+@mock.patch("connectors.utils.ConcurrentTasks.cancel")
+async def test_extractor_get_docs_when_downloads_fail(
+    yield_existing_documents_metadata, concurrent_tasks_cancel
+):
+    queue = await queue_mock()
+
+    yield_existing_documents_metadata.return_value = AsyncIterator([])
+
+    docs_from_source = [
+        (DOC_ONE, crashing_lazy_download_fake(), "index"),
+        (DOC_TWO, crashing_lazy_download_fake(), "index"),
+        (DOC_THREE, crashing_lazy_download_fake(), "index"),
+        (DOC_FOUR, crashing_lazy_download_fake(), "index"),
+    ]
+    # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+    extractor = await setup_extractor(queue, content_extraction_enabled=True)
+
+    await extractor.run(doc_generator, JobType.FULL)
+    concurrent_tasks_cancel.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_force_canceled_extractor_put_doc():
     doc = {"id": 123}
     queue = Mock()
@@ -1419,11 +1456,11 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
     es._sink = Mock()
     es._sink.force_cancel = Mock()
 
-    es._extractor_task = Mock()
+    es._extractor_task = mock.create_autospec(asyncio.Task)
     es._extractor_task.cancel = Mock()
     es._extractor_task.done = Mock(side_effect=extractor_task_done)
 
-    es._sink_task = Mock()
+    es._sink_task = mock.create_autospec(asyncio.Task)
     es._sink_task.cancel = Mock()
     es._sink_task.done = Mock(side_effect=sink_task_done)
 
