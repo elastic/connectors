@@ -1162,7 +1162,7 @@ class ConfluenceDataSource(BaseDataSource):
             partial(
                 self.generic_chunked_download_func,
                 partial(
-                    self.confluence_client.api_call,
+                    self.confluence_client.download_func,
                     url=os.path.join(self.confluence_client.host_url, url),
                 ),
             ),
