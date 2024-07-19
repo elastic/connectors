@@ -61,8 +61,15 @@ def inject_lines(table, cursor, lines):
         rows = []
         batch_size = min(BATCH_SIZE, lines - inserted)
         for row_id in range(batch_size):
-            rows.append((fake_provider.fake.name(), row_id, fake_provider.get_text()))
-        sql_query = f"INSERT INTO customers_{table} (name, age, description) VALUES (%s, %s, %s)"
+            rows.append(
+                (
+                    fake_provider.fake.name(),
+                    row_id,
+                    fake_provider.get_text(),
+                    "14:30:00",
+                )
+            )
+        sql_query = f"INSERT INTO customers_{table} (name, age, description, record_time) VALUES (%s, %s, %s, %s)"
         cursor.executemany(sql_query, rows)
         inserted += batch_size
         print(f"Inserted batch #{batch} of {batch_size} documents.")
@@ -89,7 +96,7 @@ async def load():
 
     for table in range(NUM_TABLES):
         print(f"Adding data to table customers_{table}...")
-        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age int, description TEXT, PRIMARY KEY (id))"
+        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age int, description TEXT, record_time TIME, PRIMARY KEY (id))"
         cursor.execute(sql_query)
         inject_lines(table, cursor, RECORD_COUNT)
     database.commit()
