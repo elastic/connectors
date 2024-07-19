@@ -897,10 +897,11 @@ class GitHubClient:
             return {scope.strip() for scope in scopes.split(",")}
         except Exception as exception:
             if self.get_rate_limit_encountered(
-                exception.status, exception.headers.get("X-RateLimit-Remaining")
+                exception.status,  # pyright: ignore
+                exception.headers.get("X-RateLimit-Remaining"),  # pyright: ignore
             ):
                 await self._put_to_sleep(resource_type="core")
-            elif exception.status == FORBIDDEN:
+            elif exception.status == FORBIDDEN:  # pyright: ignore
                 msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {self.base_url}."
                 raise ForbiddenException(msg) from exception
 
@@ -1320,9 +1321,10 @@ class GitHubDataSource(BaseDataSource):
             return list(invalid_repos)
         except Exception as exception:
             if self.github_client.get_rate_limit_encountered(
-                exception.status, exception.headers.get("X-RateLimit-Remaining")
+                exception.status,  # pyright: ignore
+                exception.headers.get("X-RateLimit-Remaining"),  # pyright: ignore
             ):
-                await self._put_to_sleep(resource_type="graphql")
+                await self.github_client._put_to_sleep(resource_type="graphql")
 
     async def _get_repo_object_for_github_app(self, owner, repo_name):
         await self._fetch_installations()
@@ -1465,7 +1467,7 @@ class GitHubDataSource(BaseDataSource):
         if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
             return
 
-        scopes = await self.github_client.get_personal_access_token_scopes()
+        scopes = await self.github_client.get_personal_access_token_scopes() or set()
         required_scopes = {"repo", "user", "read:org"}
 
         for scope in ["write:org", "admin:org"]:
