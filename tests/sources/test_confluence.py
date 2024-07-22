@@ -1230,8 +1230,12 @@ async def test_get_access_control_dls_enabled():
         source._dls_enabled = MagicMock(return_value=True)
         source.confluence_client.data_source_type = "confluence_cloud"
 
-        source.atlassian_access_control.fetch_all_users = AsyncIterator([mock_users])
-        source.atlassian_access_control.fetch_user = AsyncIterator([mock_user1])
+        source.atlassian_access_control.fetch_all_users_for_confluence = AsyncIterator(
+            [mock_users]
+        )
+        source.atlassian_access_control.fetch_user_for_confluence = AsyncIterator(
+            [mock_user1]
+        )
 
         user_documents = []
         async for user_doc in source.get_access_control():

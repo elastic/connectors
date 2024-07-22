@@ -698,13 +698,15 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def get_user(self):
         url = os.path.join(self.configuration["confluence_url"], URLS[USER])
-        async for users in self.atlassian_access_control.fetch_all_users(url=url):
+        async for users in self.atlassian_access_control.fetch_all_users_for_confluence(
+            url=url
+        ):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
             )
             tasks = [
                 anext(
-                    self.atlassian_access_control.fetch_user(
+                    self.atlassian_access_control.fetch_user_for_confluence(
                         url=f"{user_info.get('self')}&{USER_QUERY}"
                     )
                 )
