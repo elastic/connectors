@@ -1014,7 +1014,8 @@ class GoogleDriveDataSource(BaseDataSource):
             file (dict): File metadata returned from the Drive.
 
         Returns:
-            dict: Formatted file metadata.
+            file_document, trashedTime (tuple): Formatted file metadata along with trashedTime for files deleted from shared drive
+            file_document, empty_string (tuple): Formatted file metadata along with empty string as there is no trashedTime property for files other than shared drive files
         """
 
         file_id, file_name = file.get("id"), file.get("name")
@@ -1231,6 +1232,7 @@ class GoogleDriveDataSource(BaseDataSource):
                     fetch_permissions=self._dls_enabled(),
                     last_sync_time=self.last_sync_time(),
                 ):
+                    # personal drive files have no property called trashedTime(time when file was deleted)
                     async for file, _ in self.prepare_files(
                         client=google_drive_client,
                         files_page=files_page,
@@ -1267,6 +1269,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 fetch_permissions=self._dls_enabled(),
                 last_sync_time=self.last_sync_time(),
             ):
+                # trashedTime(time when file was deleted) is a property exclusive to files present in shared drive
                 async for file, trashedTime in self.prepare_files(
                     client=shared_drives_client,
                     files_page=files_page,
@@ -1296,6 +1299,8 @@ class GoogleDriveDataSource(BaseDataSource):
             google_drive_client = self.google_drive_client()
 
             # sync anything shared with the service account
+            # shared drives can also be shared with service account
+            # making it possible to sync shared drives without domain wide delegation
             async for files_page in google_drive_client.list_files(
                 fetch_permissions=self._dls_enabled(),
                 last_sync_time=self.last_sync_time(),
