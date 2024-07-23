@@ -205,7 +205,7 @@
 #
 ## ------------------------------- Service  Error Monitor ----------------------------------
 #
-##  Configirations related to Error Monitor functionality of the syncs.
+##  Configurations related to Error Monitor functionality of the syncs.
 ##    Each running sync has an error monitor attached to it. Error monitor is taking care of
 ##    ignoring transient errors while ingesting the data. For example, failing to download or ingest a single
 ##    document should not stop the sync. Failing to ingest some meaningful number of documents, however,
@@ -216,6 +216,10 @@
 ##      - Errors while ingesting documents into Elasticsearch (per document not ingested)
 ##      - Errors while downloading attachments per attachment
 ##      - Transient errors in connector, depending on connector implementation
+#
+##  Switch for enabling/disabling error monitor
+##  When disabled, errors are only counted - they never cause failures (legacy behavior)
+#service.error_monitor.enabled: true
 #
 ##  Total number of errors that will be tolerated per sync.
 ##  Once number of errors exceed this number, the sync will terminate.

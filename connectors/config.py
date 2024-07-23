@@ -88,6 +88,7 @@ def _default_config():
             "max_errors": 20,
             "max_errors_span": 600,
             "error_monitor": {
+                "enabled": True,
                 "max_total_errors": 1000,
                 "max_consecutive_errors": 10,
                 "max_error_rate": 0.15,

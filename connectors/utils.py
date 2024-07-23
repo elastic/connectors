@@ -1005,12 +1005,16 @@ class TooManyErrors(Exception):
 class ErrorMonitor:
     def __init__(
         self,
+        enabled=True,
         max_total_errors=1000,
         max_consecutive_errors=10,
         max_error_rate=0.15,
         error_window_size=100,
         error_queue_size=10,
     ):
+        # When disabled, only track errors
+        self.enabled = enabled
+
         self.max_error_rate = max_error_rate
         self.error_window_size = error_window_size
         self.error_window = [False] * error_window_size
@@ -1081,6 +1085,9 @@ class ErrorMonitor:
         return error_rate
 
     def _raise_if_necessary(self):
+        if not self.enabled:
+            return
+
         if self.consecutive_error_count > self.max_consecutive_errors:
             msg = f"Exceeded maximum consecutive errors - saw {self.consecutive_error_count} errors in a row. Last error: {self.last_error}"
             raise TooManyErrors(msg) from self.last_error

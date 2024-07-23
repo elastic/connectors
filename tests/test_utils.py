@@ -1369,7 +1369,7 @@ def test_error_monitor_raises_when_errors_were_reported_before():
         error_monitor.track_error(InvalidIndexNameError("Can't use this name"))
 
 
-def test_when_error_monitor_reports_too_many_consecutive_errors():
+def test_error_monitor_when_reports_too_many_consecutive_errors():
     error_monitor = ErrorMonitor(max_consecutive_errors=3)
 
     error_monitor.track_error(Exception("first"))
@@ -1380,7 +1380,7 @@ def test_when_error_monitor_reports_too_many_consecutive_errors():
         error_monitor.track_error(Exception("fourth"))
 
 
-def test_when_error_monitor_reports_too_many_total_errors():
+def test_error_monitor_when_reports_too_many_total_errors():
     error_monitor = ErrorMonitor(
         max_total_errors=100, max_consecutive_errors=999, max_error_rate=1
     )
@@ -1398,7 +1398,7 @@ def test_when_error_monitor_reports_too_many_total_errors():
         error_monitor.track_error(Exception("third"))
 
 
-def test_when_error_monitor_reports_too_many_errors_in_window():
+def test_error_monitor_when_reports_too_many_errors_in_window():
     error_monitor = ErrorMonitor(error_window_size=100, max_error_rate=0.05)
 
     # rate is 0.04
@@ -1420,7 +1420,7 @@ def test_when_error_monitor_reports_too_many_errors_in_window():
         error_monitor.track_error(Exception("last"))
 
 
-def test_when_errors_are_tracked_last_x_errors_are_stored():
+def test_error_monitor_when_errors_are_tracked_last_x_errors_are_stored():
     error_monitor = ErrorMonitor(error_queue_size=5)
 
     for _ in range(5):
@@ -1439,3 +1439,12 @@ def test_when_errors_are_tracked_last_x_errors_are_stored():
     assert str(errors[2]) == "second_part"
     assert str(errors[3]) == "second_part"
     assert str(errors[4]) == "second_part"
+
+
+def test_error_monitor_when_disabled():
+    error_monitor = ErrorMonitor(
+        enabled=False, max_total_errors=1, max_consecutive_errors=1, max_error_rate=0.01
+    )
+
+    for _ in range(9999):
+        error_monitor.track_error(Exception("second_part"))

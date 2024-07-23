@@ -1418,7 +1418,7 @@ async def test_force_canceled_extractor_put_doc():
 @mock.patch(
     "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
 )
-async def test_extractor_get_docs_when_downloads_fail(
+async def test_extractor_get_docs_when_downloads_fail_because_of_error_monitor(
     yield_existing_documents_metadata,
 ):
     queue = await queue_mock()
