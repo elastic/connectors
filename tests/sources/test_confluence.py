@@ -109,6 +109,32 @@ RESPONSE_PAGE = {
     "_links": {},
 }
 
+RESPONSE_PAGE_WITH_HTML = {
+    "results": [
+        {
+            "id": 4779,
+            "title": "ES-scrum",
+            "type": "page",
+            "history": {
+                "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                "createdDate": "2023-01-03T09:24:50.633Z",
+                "createdBy": {"publicName": "user1"},
+            },
+            "children": {"attachment": {"size": 2}},
+            "body": {"storage": {"value": "<p>This is a test page</p>"}},
+            "space": {"name": "DEMO"},
+            "_links": {
+                "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
+            },
+            "ancestors": [{"title": "parent_title"}],
+        }
+    ],
+    "start": 0,
+    "limit": 1,
+    "size": 1,
+    "_links": {},
+}
+
 EXPECTED_PAGE = {
     "_id": "4779",
     "type": "page",
@@ -1630,3 +1656,14 @@ async def test_fetch_page_blog_documents_with_labels():
                     "ancestors": [{"title": "parent_title"}],
                     "labels": ["label1", "label2"],
                 }
+
+
+@pytest.mark.asyncio
+async def test_fetch_documents_with_html():
+    async with create_confluence_source() as source:
+        source.confluence_client._get_session().get = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_PAGE_WITH_HTML)
+        )
+        source.confluence_client.index_labels = True
+        async for response, _, _, _, _ in source.fetch_documents(api_query=""):
+            assert response == EXPECTED_PAGE
