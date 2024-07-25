@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>elastic/renovate-config",
+    "github>elastic/renovate-config:only-chainguard"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "docker.elastic.co/wolfi/python"
+      ],
+      "matchCurrentValue": "/3\\.10(-dev)?/",
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    }
+  ]
+}
