@@ -317,26 +317,15 @@ class MSSQLClient:
 
     async def get_table_last_update_time(self, table):
         self._logger.debug(f"Fetching last updated time for table: {table}")
-        try:
-            [last_update_time] = await anext(
-                fetch(
-                    cursor_func=partial(
-                        self.get_cursor,
-                        self.queries.table_last_update_time(
-                            schema=self.schema,
-                            table=table,
-                        ),
-                    ),
-                    fetch_size=1,
-                    retry_count=self.retry_count,
-                )
-            )
-            self._logger.debug(
-                f'Last updated time for table "{table}" is {last_update_time}'
-            )
+        async for [last_update_time] in fetch(
+            cursor_func=partial(
+                self.get_cursor,
+                self.queries.table_last_update_time(schema=self.schema, table=table),
+            ),
+            fetch_size=1,
+            retry_count=self.retry_count,
+        ):
             return last_update_time
-        except Exception:
-            return None
 
     async def data_streamer(self, table=None, query=None):
         """Streaming data from a table
@@ -693,11 +682,13 @@ class MSSQLDataSource(BaseDataSource):
                 tables = rule.get("tables")
                 id_columns = rule.get("id_columns", [])
 
-                id_columns = [
-                    f"{self.schema}_{table}_{column}"
-                    for column in id_columns
-                    for table in tables
-                ]
+                id_columns_str = ""
+                for i, table in enumerate(tables):
+                    if i == 0:
+                        id_columns_str = f"{self.schema}_{table}"
+                    else:
+                        id_columns_str = f"{id_columns_str}_{table}"
+                id_columns = [f"{id_columns_str}_{column}" for column in id_columns]
 
                 async for row in self.fetch_documents_from_query(
                     tables=tables, query=query, id_columns=id_columns
