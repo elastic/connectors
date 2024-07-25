@@ -633,7 +633,7 @@ cli.add_command(job)
 
 
 def main(args=None):
-    cli()
+    cli()  # pyright: ignore
 
 
 if __name__ == "__main__":
