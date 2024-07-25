@@ -1015,7 +1015,6 @@ class GoogleDriveDataSource(BaseDataSource):
 
         Returns:
             file_document, trashedTime (tuple): Formatted file metadata along with trashedTime for files deleted from shared drive
-            file_document, empty_string (tuple): Formatted file metadata along with empty string as there is no trashedTime property for files other than shared drive files
         """
 
         file_id, file_name = file.get("id"), file.get("name")
@@ -1089,10 +1088,7 @@ class GoogleDriveDataSource(BaseDataSource):
                         self._logger.error(exception_log_msg)
 
             file_document[ACCESS_CONTROL] = self._process_permissions(permissions)
-        if file_document.get("shared_drive"):
-            return file_document, file.get("trashedTime", "")
-        else:
-            return file_document, ""
+        return file_document, file.get("trashedTime")
 
     async def prepare_files(self, client, files_page, paths, seen_ids):
         """Generate file document.
@@ -1277,15 +1273,14 @@ class GoogleDriveDataSource(BaseDataSource):
                     seen_ids=seen_ids,
                 ):
                     if (
-                        trashedTime > self.last_sync_time() or trashedTime == ""
+                        trashedTime is None or trashedTime > self.last_sync_time()
                     ) and file.get("trashed") is True:
                         yield file, partial(
                             self.get_content, shared_drives_client, file
                         ), OP_DELETE
                     elif (
-                        trashedTime < self.last_sync_time()
-                        and file.get("trashed") is True
-                    ):
+                        trashedTime is not None and trashedTime < self.last_sync_time()
+                    ) and file.get("trashed") is True:
                         continue
                     else:
                         yield file, partial(
@@ -1312,15 +1307,14 @@ class GoogleDriveDataSource(BaseDataSource):
                     seen_ids=seen_ids,
                 ):
                     if (
-                        trashedTime > self.last_sync_time() or trashedTime == ""
+                        trashedTime is None or trashedTime > self.last_sync_time()
                     ) and file.get("trashed") is True:
                         yield file, partial(
                             self.get_content, google_drive_client, file
                         ), OP_DELETE
                     elif (
-                        trashedTime < self.last_sync_time()
-                        and file.get("trashed") is True
-                    ):
+                        trashedTime is not None and trashedTime < self.last_sync_time()
+                    ) and file.get("trashed") is True:
                         continue
                     else:
                         yield file, partial(

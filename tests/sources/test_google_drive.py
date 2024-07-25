@@ -183,7 +183,7 @@ async def test_ping_for_failed_connection():
                         "type": "file",
                         "trashed": False,
                     },
-                    "",
+                    None,
                 )
             ],
         )
@@ -235,7 +235,7 @@ async def test_prepare_files(files, expected_files):
                     "type": "file",
                     "trashed": False,
                 },
-                "",
+                None,
             ),
         ),
         (
@@ -263,7 +263,7 @@ async def test_prepare_files(files, expected_files):
                     "type": "file",
                     "trashed": False,
                 },
-                "",
+                None,
             ),
         ),
         (
@@ -302,7 +302,7 @@ async def test_prepare_files(files, expected_files):
                     "created_by_email": "user@test.com",
                     "trashed": False,
                 },
-                "",
+                None,
             ),
         ),
         (
@@ -351,7 +351,7 @@ async def test_prepare_files(files, expected_files):
                     "path": "Drive3/Folder4/test.txt",
                     "trashed": False,
                 },
-                "",
+                None,
             ),
         ),
         (
@@ -1308,7 +1308,7 @@ async def test_api_call_list_drives_retries(
                         "anyone",
                     ],
                 },
-                "",
+                None,
             ),
         ),
         (
@@ -1350,7 +1350,7 @@ async def test_api_call_list_drives_retries(
                         "anyone",
                     ],
                 },
-                "",
+                None,
             ),
         ),
     ],
@@ -1429,7 +1429,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                         "anyone",
                     ],
                 },
-                "",
+                None,
             ),
         ),
         (
@@ -1469,7 +1469,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
                         "anyone",
                     ],
                 },
-                "",
+                None,
             ),
         ),
     ],
