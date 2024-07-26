@@ -22,6 +22,7 @@ from connectors.source import (
     ConfigurableFieldValueError,
     DataSourceConfiguration,
 )
+from connectors.sources.google import GoogleServiceAccountClient
 from connectors.sources.google_drive import (
     RETRIES,
     GoogleDriveDataSource,
@@ -1966,3 +1967,256 @@ async def test_users():
         )
         async for user in source.google_admin_directory_client.users():
             assert user == expected_users
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fetch_permissions, last_sync_time, api_response, expected_response",
+    [
+        (
+            False,
+            None,
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id1",
+                        "name": "file1.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id1",
+                        "name": "file1.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                    },
+                ],
+            },
+        ),
+        (
+            True,
+            None,
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id2",
+                        "name": "file2.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                        "permissions": [
+                            {"type": "user", "emailAddress": "user2@xd.com"},
+                            {"type": "group", "emailAddress": "group2@xd.com"},
+                            {"type": "domain", "domain": "xd.com"},
+                            {"type": "anyone"},
+                        ],
+                    },
+                ],
+            },
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id2",
+                        "name": "file2.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                        "permissions": [
+                            {"type": "user", "emailAddress": "user2@xd.com"},
+                            {"type": "group", "emailAddress": "group2@xd.com"},
+                            {"type": "domain", "domain": "xd.com"},
+                            {"type": "anyone"},
+                        ],
+                    },
+                ],
+            },
+        ),
+        (
+            False,
+            "2024-01-01T12:00:00.000Z",
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id3",
+                        "name": "file3.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                    },
+                ],
+            },
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id3",
+                        "name": "file3.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                    },
+                ],
+            },
+        ),
+        (
+            True,
+            "2024-01-01T12:00:00.000Z",
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id4",
+                        "name": "file4.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                        "permissions": [
+                            {"type": "user", "emailAddress": "user2@xd.com"},
+                            {"type": "group", "emailAddress": "group2@xd.com"},
+                            {"type": "domain", "domain": "xd.com"},
+                            {"type": "anyone"},
+                        ],
+                    },
+                ],
+            },
+            {
+                "kind": "drive#fileList",
+                "files": [
+                    {
+                        "kind": "drive#file",
+                        "mimeType": "text/plain",
+                        "id": "id4",
+                        "name": "file4.txt",
+                        "parents": ["0APU6durKUAiqUk9PVA"],
+                        "size": "28",
+                        "modifiedTime": "2024-06-28T03:46:28.000Z",
+                        "createdTime": "2024-06-28T03:46:28.000Z",
+                        "trashed": False,
+                        "owners": [
+                            {
+                                "displayName": "User 2",
+                                "kind": "drive#user",
+                                "emailAddress": "user2@xd.com",
+                                "photoLink": "dummy_link",
+                            }
+                        ],
+                        "permissions": [
+                            {"type": "user", "emailAddress": "user2@xd.com"},
+                            {"type": "group", "emailAddress": "group2@xd.com"},
+                            {"type": "domain", "domain": "xd.com"},
+                            {"type": "anyone"},
+                        ],
+                    },
+                ],
+            },
+        ),
+    ],
+)
+async def test_list_files_from_my_drive(
+    fetch_permissions, last_sync_time, api_response, expected_response
+):
+    async with create_gdrive_source() as source:
+        with mock.patch.object(
+            GoogleServiceAccountClient,
+            "api_call_paged",
+            return_value=AsyncIterator([api_response]),
+        ):
+            async for file in source.google_drive_client().list_files_from_my_drive(
+                fetch_permissions, last_sync_time
+            ):
+                assert file == expected_response
