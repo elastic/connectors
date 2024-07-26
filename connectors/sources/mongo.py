@@ -240,9 +240,8 @@ class MongoDataSource(BaseDataSource):
                 value = _serialize(value.as_doc().to_dict())
             return value
 
-        with self.with_error_monitoring():
-            for key, value in doc.items():
-                doc[key] = _serialize(value)
+        for key, value in doc.items():
+            doc[key] = _serialize(value)
 
         return doc
 

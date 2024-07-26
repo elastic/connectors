@@ -109,7 +109,7 @@ def _default_config():
                     "error_window_size": 100,
                     "error_queue_size": 10,
                 },
-            }
+            },
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",

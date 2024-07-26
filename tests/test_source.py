@@ -27,6 +27,7 @@ from connectors.source import (
     get_source_klass,
     get_source_klasses,
 )
+from connectors.utils import ErrorMonitor, TooManyErrors
 
 CONFIG = {
     "host": {
@@ -927,3 +928,19 @@ async def test_validate_config_fields_when_invalid_raises_error():
     ds = DataSource(configuration=DataSourceConfiguration(configuration))
     with pytest.raises(MalformedConfigurationError):
         ds.validate_config_fields()
+
+
+@pytest.mark.asyncio
+async def test_download_and_extract_file_when_error_monitor_threshold_triggers():
+    with mock.patch.object(
+        BaseDataSource, "get_default_configuration", return_value={}
+    ):
+        error_monitor = ErrorMonitor(max_total_errors=5)
+        source = BaseDataSource(DataSourceConfiguration(CONFIG))
+        source.set_error_monitor(error_monitor)
+        def download_func():
+            raise Exception("Could not do it :(")
+
+        with pytest.raises(TooManyErrors):
+            for i in range(6):
+                _ = await source.download_and_extract_file({}, "some_file.txt", "txt", download_func, True)
