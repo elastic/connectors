@@ -586,15 +586,6 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    @contextmanager
-    def with_error_monitoring(self):
-        try:
-            yield
-            self.error_monitor.track_success()
-        except Exception as ex:
-            self._logger.error(ex)
-            self.error_monitor.track_error(ex)
-
     async def get_docs(self, filtering=None):
         """Returns an iterator on all documents present in the backend
 

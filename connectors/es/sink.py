@@ -47,6 +47,7 @@ from connectors.utils import (
     DEFAULT_QUEUE_SIZE,
     ConcurrentTasks,
     Counters,
+    ErrorMonitor,
     MemQueue,
     aenumerate,
     get_size,
@@ -431,7 +432,6 @@ class Extractor:
         client,
         queue,
         index,
-        error_monitor,
         filter_=None,
         sync_rules_enabled=False,
         content_extraction_enabled=True,
@@ -457,7 +457,6 @@ class Extractor:
         self.concurrent_downloads = concurrent_downloads
         self._logger = logger_ or logger
         self._canceled = False
-        self.error_monitor = error_monitor
         self.skip_unchanged_documents = skip_unchanged_documents
 
     async def _deferred_index(self, lazy_download, doc_id, doc, operation):
@@ -480,14 +479,12 @@ class Extractor:
                     "doc": doc,
                 }
             )
-            self.error_monitor.track_success()
         except ForceCanceledError:
             raise
         except Exception as ex:
             self._logger.error(
                 f"Failed to do deferred index operation for doc {doc_id}: {ex}"
             )
-            self.error_monitor.track_error(ex)
 
     def force_cancel(self):
         self._canceled = True
@@ -836,8 +833,7 @@ class SyncOrchestrator:
     - once they are both over, returns totals
     """
 
-    def __init__(self, elastic_config, error_monitor, logger_=None):
-        self.error_monitor = error_monitor
+    def __init__(self, elastic_config, logger_=None):
         self._logger = logger_ or logger
         self._logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
         self.es_management_client = ESManagementClient(elastic_config)
@@ -848,6 +844,8 @@ class SyncOrchestrator:
         self._sink_task = None
         self.error = None
         self.canceled = False
+        error_monitor_config = elastic_config.get("bulk", {}).get("error_monitor", {})
+        self.error_monitor = ErrorMonitor(error_monitor_config)
 
     async def close(self):
         await self.es_management_client.close()
@@ -1039,7 +1037,6 @@ class SyncOrchestrator:
             self.es_management_client,
             stream,
             index,
-            error_monitor=self.error_monitor,
             filter_=filter_,
             sync_rules_enabled=sync_rules_enabled,
             content_extraction_enabled=content_extraction_enabled,
