@@ -5,11 +5,6 @@ set -o pipefail
 NAME=$1
 PERF8=$2
 
-# add a flag for serverless
-if [[ "$NAME" == *"serverless"* ]]; then
-  export SERVERLESS="yup"
-fi
-
 SERVICE_TYPE=${NAME%"_serverless"}
 INDEX_NAME=search-${NAME%"_serverless"}
 
@@ -24,7 +19,7 @@ export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
-export VERSION='8.15.0-SNAPSHOT'
+export VERSION='8.16.0-SNAPSHOT'
 
 if [ "$PERF8_TRACE" == true ]; then
     echo 'Tracing is enabled, memray stats will be delivered'

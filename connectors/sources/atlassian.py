@@ -108,15 +108,13 @@ class AtlassianAccessControl:
         return es_access_control_query(access_control)
 
     async def fetch_all_users(self, url):
-        from connectors.sources.confluence import CONFLUENCE_CLOUD
         from connectors.sources.jira import JIRA_CLOUD
 
         start_at = 0
         while True:
             url_ = (
                 f"{url}?startAt={start_at}"
-                if self.source.configuration["data_source"]
-                in [JIRA_CLOUD, CONFLUENCE_CLOUD]
+                if self.source.configuration["data_source"] == JIRA_CLOUD
                 else url.format(start_at=start_at, max_results=NON_CLOUD_USER_BATCH)
             )
             async for users in self.client.api_call(url=url_):
@@ -124,17 +122,38 @@ class AtlassianAccessControl:
                 if len(response) == 0:
                     return
                 yield response
-                if self.source.configuration["data_source"] not in [
-                    JIRA_CLOUD,
-                    CONFLUENCE_CLOUD,
-                ]:
+                if self.source.configuration["data_source"] != JIRA_CLOUD:
                     start_at += NON_CLOUD_USER_BATCH
                 else:
                     start_at += CLOUD_USER_BATCH
 
+    async def fetch_all_users_for_confluence(self, url):
+        from connectors.sources.confluence import CONFLUENCE_CLOUD
+
+        start_at = 0
+        while True:
+            url_ = (
+                f"{url}?startAt={start_at}"
+                if self.source.configuration["data_source"] == CONFLUENCE_CLOUD
+                else url.format(start_at=start_at, max_results=NON_CLOUD_USER_BATCH)
+            )
+            users = await self.client.api_call(url=url_)
+            response = await users.json()
+            if len(response) == 0:
+                return
+            yield response
+            if self.source.configuration["data_source"] != CONFLUENCE_CLOUD:
+                start_at += NON_CLOUD_USER_BATCH
+            else:
+                start_at += CLOUD_USER_BATCH
+
     async def fetch_user(self, url):
         async for user in self.client.api_call(url=url):
             yield await user.json()
+
+    async def fetch_user_for_confluence(self, url):
+        user = await self.client.api_call(url=url)
+        yield await user.json()
 
     async def user_access_control_doc(self, user):
         """Generate a user access control document.
