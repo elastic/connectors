@@ -203,9 +203,9 @@
 #service.job_cleanup_interval: 300
 #
 #
-## ------------------------------- Service  Error Monitor ----------------------------------
+## ------------------------------- Service Extraction Error Monitor ----------------------------------
 #
-##  Configurations related to Error Monitor functionality of the syncs.
+##  Configurations related to Error Monitor functionality of the syncs when file extraction happens.
 ##    Each running sync has an error monitor attached to it. Error monitor is taking care of
 ##    ignoring transient errors while ingesting the data. For example, failing to download or ingest a single
 ##    document should not stop the sync. Failing to ingest some meaningful number of documents, however,
@@ -219,23 +219,23 @@
 #
 ##  Switch for enabling/disabling error monitor
 ##  When disabled, errors are only counted - they never cause failures (legacy behavior)
-#service.error_monitor.enabled: true
+#service.extraction.error_monitor.enabled: true
 #
 ##  Total number of errors that will be tolerated per sync.
 ##  Once number of errors exceed this number, the sync will terminate.
-#service.error_monitor.max_total_errors: 1000
+#service.extraction.error_monitor.max_total_errors: 1000
 #
 ##  Maximum number of consecutive errors that will be tolerated per sync.
 ##  Once number of consecutive errors exceed this number, the sync will terminate.
-#service.error_monitor.max_consecutive_errors: 10
+#service.extraction.error_monitor.max_consecutive_errors: 10
 #
 ##  Maximum error rate within the window size that will be tolerated per sync.
 ##  Once error rate exceeds this number, the sync will terminate.
 ##  Once number of errors exceed this number, the sync will terminate.
-#service.error_monitor.max_error_rate: 0.15
+#service.extraction.error_monitor.max_error_rate: 0.15
 #
 ##  Number of last operations used for tracking the error rate.
-#service.error_monitor.error_window_size: 100
+#service.extraction.error_monitor.error_window_size: 100
 #
 #
 ##  Connector service log level.
