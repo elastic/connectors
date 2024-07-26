@@ -888,7 +888,7 @@ class SharepointOnlineClient:
             return response.get("value", False)
         except NotFound:
             return False
-        except BadRequestError:
+        except (BadRequestError, UnexpectedClientError):
             self._logger.warning(
                 f"Received error response when retrieving `{list_item_id}` from list: `{site_list_name}` in site: `{site_web_url}`"
             )
