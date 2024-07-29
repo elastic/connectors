@@ -188,7 +188,7 @@ class SyncJobRunner:
                 await self._update_native_connector_authentication()
 
             self.sync_orchestrator = SyncOrchestrator(
-                self.es_config, self.error_monitor, self.sync_job.logger
+                self.es_config, self.sync_job.logger
             )
 
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
