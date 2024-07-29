@@ -214,7 +214,7 @@ def get_list_and_items(parent_site_url, list_id):
     """
     args = request.args
     parent_site_id = parent_site_url.replace("/", "-")
-    if args.get("$expand", "") == "AttachmentFiles":
+    if args.get("$expand", "") == "AttachmentFiles,Author,Editor":
         item = {
             "value": [
                 {
