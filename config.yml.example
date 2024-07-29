@@ -231,38 +231,6 @@
 #service.job_cleanup_interval: 300
 #
 #
-## ------------------------------- Content Extraction Error Monitor ----------------------------------
-#
-##  Configurations related to Error Monitor functionality of the syncs when file extraction happens.
-##  When files are downloaded from 3rd-party systems, errors can happen. Error monitor in this section
-##  is taking care of this by ignoring transient errors while downloading the content.
-##  If any of the thresholds defined in this section are exceeded, then the whole sync is failed.
-#
-##  Switch for enabling/disabling error monitor
-##  When disabled, errors are only counted - they never cause failures (legacy behavior)
-#service.extraction.error_monitor.enabled: true
-#
-##  Total number of errors that will be tolerated per sync.
-##  Once number of errors exceed this number, the sync will terminate.
-#service.extraction.error_monitor.max_total_errors: 1000
-#
-##  Maximum number of consecutive errors that will be tolerated per sync.
-##  Once number of consecutive errors exceed this number, the sync will terminate.
-#service.extraction.error_monitor.max_consecutive_errors: 10
-#
-##  Maximum error rate within the window size that will be tolerated per sync.
-##  Once error rate exceeds this number, the sync will terminate.
-##  Once number of errors exceed this number, the sync will terminate.
-#service.extraction.error_monitor.max_error_rate: 0.15
-#
-##  Number of last operations used for tracking the error rate.
-#service.extraction.error_monitor.error_window_size: 100
-#
-#
-##  Connector service log level.
-#service.log_level: INFO
-#
-#
 ## ------------------------------- Extraction Service ----------------------------------
 #
 ##  Local extraction service-related configurations.

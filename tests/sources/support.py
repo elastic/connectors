@@ -19,7 +19,6 @@ async def create_source(klass, **extras):
             config[k] = DEFAULT_CONFIGURATION.copy() | {"value": v}
 
     source = klass(configuration=DataSourceConfiguration(config))
-    source.set_error_monitor(Mock())
     try:
         yield source
     finally:
