@@ -41,10 +41,13 @@ def test_main_exits_on_sigterm(mock_responses):
         os.kill(os.getpid(), signal.SIGTERM)
 
     loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.create_task(kill())
+    try:
+        asyncio.set_event_loop(loop)
+        loop.create_task(kill())
 
-    CliRunner().invoke(main, [])
+        CliRunner().invoke(main, [])
+    finally:
+        loop.close()
 
 
 @pytest.mark.parametrize("option", ["-v", "--version"])
@@ -68,13 +71,16 @@ def test_shutdown_called_on_shutdown_signal(
         os.kill(os.getpid(), sig)
 
     loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.create_task(emit_shutdown_signal())
+    try:
+        asyncio.set_event_loop(loop)
+        loop.create_task(emit_shutdown_signal())
 
-    CliRunner().invoke(main, [])
+        CliRunner().invoke(main, [])
 
-    patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
-    patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
+        patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
+        patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
+    finally:
+        loop.close()
 
 
 def test_list_action(set_env):
