@@ -938,9 +938,13 @@ async def test_download_and_extract_file_when_error_monitor_threshold_triggers()
         error_monitor = ErrorMonitor(max_total_errors=5)
         source = BaseDataSource(DataSourceConfiguration(CONFIG))
         source.set_error_monitor(error_monitor)
+
         def download_func():
-            raise Exception("Could not do it :(")
+            msg = "Could not do it :("
+            raise Exception(msg)
 
         with pytest.raises(TooManyErrors):
-            for i in range(6):
-                _ = await source.download_and_extract_file({}, "some_file.txt", "txt", download_func, True)
+            for _i in range(6):
+                _ = await source.download_and_extract_file(
+                    {}, "some_file.txt", "txt", download_func, True
+                )
