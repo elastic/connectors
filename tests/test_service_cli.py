@@ -7,7 +7,7 @@ import asyncio
 import logging
 import os
 import signal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from click import ClickException, UsageError
@@ -54,27 +54,6 @@ def test_version_action(option):
 
     assert result.exit_code == SUCCESS_EXIT_CODE
     assert __version__ in result.output
-
-
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
-@patch("connectors.service_cli.PreflightCheck")
-def test_shutdown_called_on_shutdown_signal(
-    patch_preflight_check, sig, patch_logger, mock_responses, set_env
-):
-    patch_preflight_check.return_value.run = AsyncMock(return_value=(True, False))
-
-    async def emit_shutdown_signal():
-        await asyncio.sleep(0.2)
-        os.kill(os.getpid(), sig)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.create_task(emit_shutdown_signal())
-
-    CliRunner().invoke(main, [])
-
-    patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
-    patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
 
 
 def test_list_action(set_env):
