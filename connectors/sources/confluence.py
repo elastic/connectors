@@ -32,6 +32,7 @@ from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
+    html_to_text,
     iso_utc,
     nested_get_from_dict,
     retryable,
@@ -222,12 +223,12 @@ class ConfluenceClient:
             response: Client response
         """
         self._logger.debug(f"Making a GET call for url: {url}")
+
         try:
-            async with self._get_session().get(
+            return await self._get_session().get(
                 url=url,
                 ssl=self.ssl_ctx,
-            ) as response:
-                yield response
+            )
         except ServerDisconnectedError:
             await self.close_session()
             raise
@@ -247,18 +248,16 @@ class ConfluenceClient:
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    links = json_response.get("_links")
-                    yield json_response
-                    if links.get("next") is None:
-                        return
-                    url = os.path.join(
-                        self.host_url,
-                        links.get("next")[1:],
-                    )
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                links = json_response.get("_links")
+                yield json_response
+                if links.get("next") is None:
+                    return
+                url = os.path.join(
+                    self.host_url,
+                    links.get("next")[1:],
+                )
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
@@ -279,15 +278,13 @@ class ConfluenceClient:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    yield json_response
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                yield json_response
 
-                    start = url_kwargs.get("start", 0)
-                    start += LIMIT
-                    url_kwargs["start"] = start
+                start = url_kwargs.get("start", 0)
+                start += LIMIT
+                url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
             except Exception as exception:
@@ -295,6 +292,9 @@ class ConfluenceClient:
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
                 break
+
+    async def download_func(self, url):
+        yield await self.api_call(url)
 
     async def search_by_query(self, query):
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
@@ -324,11 +324,9 @@ class ConfluenceClient:
 
     async def fetch_server_space_permission(self, url):
         try:
-            async for permissions in self.api_call(
-                url=os.path.join(self.host_url, url),
-            ):
-                permission = await permissions.json()
-                return permission
+            permissions = await self.api_call(url=os.path.join(self.host_url, url))
+            permission = await permissions.json()
+            return permission
         except ClientResponseError as exception:
             self._logger.warning(
                 f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
@@ -363,10 +361,8 @@ class ConfluenceClient:
                 yield attachment
 
     async def ping(self):
-        await anext(
-            self.api_call(
-                url=os.path.join(self.host_url, PING_URL),
-            )
+        await self.api_call(
+            url=os.path.join(self.host_url, PING_URL),
         )
 
     async def fetch_confluence_server_users(self):
@@ -382,19 +378,18 @@ class ConfluenceClient:
 
         while True:
             url_ = url.format(start=start_at, limit=limit)
-            async for users in self.api_call(url=url_):
-                response = await users.json()
-                if len(response.get(key)) == 0:
-                    return
-                yield response.get(key)
-                start_at += limit
+            users = await self.api_call(url=url_)
+            response = await users.json()
+            if len(response.get(key)) == 0:
+                return
+            yield response.get(key)
+            start_at += limit
 
     async def fetch_label(self, label_id):
-        async for label_data in self.api_call(
-            url=os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
-        ):
-            labels = await label_data.json()
-            return [label.get("name") for label in labels["results"]]
+        url = os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
+        label_data = await self.api_call(url=url)
+        labels = await label_data.json()
+        return [label.get("name") for label in labels["results"]]
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -703,13 +698,15 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def get_user(self):
         url = os.path.join(self.configuration["confluence_url"], URLS[USER])
-        async for users in self.atlassian_access_control.fetch_all_users(url=url):
+        async for users in self.atlassian_access_control.fetch_all_users_for_confluence(
+            url=url
+        ):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
             )
             tasks = [
                 anext(
-                    self.atlassian_access_control.fetch_user(
+                    self.atlassian_access_control.fetch_user_for_confluence(
                         url=f"{user_info.get('self')}&{USER_QUERY}"
                     )
                 )
@@ -899,7 +896,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "title": document.get("title"),
                 "ancestors": ancestor_title,
                 "space": document["space"]["name"],
-                "body": document["body"]["storage"]["value"],
+                "body": html_to_text(document["body"]["storage"]["value"]),
                 "url": document_url,
                 "author": document["history"]["createdBy"][self.authorkey],
                 "createdDate": document["history"]["createdDate"],
@@ -970,7 +967,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
                 "_timestamp": entity.get("lastModified"),
-                "body": entity_details.get("body", {}).get("storage", {}).get("value"),
+                "body": html_to_text(
+                    entity_details.get("body", {}).get("storage", {}).get("value")
+                ),
                 "type": entity.get("entityType"),
                 "url": os.path.join(
                     self.confluence_client.host_url, entity.get("url")[1:]
@@ -1044,7 +1043,7 @@ class ConfluenceDataSource(BaseDataSource):
             partial(
                 self.generic_chunked_download_func,
                 partial(
-                    self.confluence_client.api_call,
+                    self.confluence_client.download_func,
                     url=os.path.join(self.confluence_client.host_url, url),
                 ),
             ),
