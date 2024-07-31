@@ -21,11 +21,11 @@ import click
 from click import ClickException, UsageError
 
 from connectors import __version__
-from connectors.config import load_config
+from connectors.config import load_config, load_config_agentless
 from connectors.content_extraction import ContentExtraction
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
-from connectors.services import get_services
+from connectors.services import get_services, get_raw_services
 from connectors.source import get_source_klass, get_source_klasses
 
 __all__ = ["main"]
@@ -92,6 +92,14 @@ def get_event_loop(uvloop=False):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     return loop
+
+
+def get_connector_services(config, log_level=logging.INFO):
+    config = load_config_agentless(config)
+    set_logger(log_level)
+    actions = ["schedule", "sync_content", "sync_access_control", "cleanup"]
+    multi_service = get_raw_services(actions, config)
+    return multi_service
 
 
 def run(action, config_file, log_level, filebeat, service_type, uvloop):
