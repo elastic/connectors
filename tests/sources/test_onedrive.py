@@ -186,6 +186,7 @@ EXPECTED_USER1_FILES = [
         "type": "folder",
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
         "size": 10484,
+        "mime_type": None,
     },
     {
         "created_at": "2023-05-01T09:09:31Z",
@@ -195,6 +196,7 @@ EXPECTED_USER1_FILES = [
         "type": "file",
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
         "size": 10484,
+        "mime_type": "application/python",
     },
 ]
 
@@ -234,6 +236,7 @@ EXPECTED_USER2_FILES = [
         "type": "folder",
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
         "size": 10484,
+        "mime_type": None,
     },
     {
         "created_at": "2023-05-01T09:09:31Z",
@@ -243,6 +246,7 @@ EXPECTED_USER2_FILES = [
         "type": "file",
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
         "size": 10484,
+        "mime_type": "plain/text",
     },
 ]
 
@@ -343,6 +347,7 @@ EXPECTED_USER1_FILES_PERMISSION = [
         "created_at": "2023-05-01T09:09:19Z",
         "size": 10484,
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+        "mime_type": None,
         "_allow_access_control": [
             "group:group_id_1",
             "user_id:user_id_1",
@@ -357,6 +362,7 @@ EXPECTED_USER1_FILES_PERMISSION = [
         "created_at": "2023-05-01T09:09:31Z",
         "size": 10484,
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=34680133F84%7&file=doit.py&action=default&mobileredirect=true",
+        "mime_type": "application/python",
         "_allow_access_control": [
             "group:group_id_1",
             "user_id:user_id_1",
@@ -373,6 +379,7 @@ EXPECTED_USER2_FILES_PERMISSION = [
         "created_at": "2023-05-01T09:09:19Z",
         "size": 10484,
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder4",
+        "mime_type": None,
         "_allow_access_control": [
             "group:group_id_2",
             "user_id:user_id_3",
@@ -387,6 +394,7 @@ EXPECTED_USER2_FILES_PERMISSION = [
         "created_at": "2023-05-01T09:09:31Z",
         "size": 10484,
         "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/_layouts/15/mac.txt?sourcedoc=34680133F84%7&file=mac.txt&action=default&mobileredirect=true",
+        "mime_type": "plain/text",
         "_allow_access_control": [
             "group:group_id_2",
             "user_id:user_id_3",
