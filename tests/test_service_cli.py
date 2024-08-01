@@ -61,7 +61,7 @@ def test_version_action(option):
 def test_shutdown_called_on_shutdown_signal(
     patch_preflight_check, sig, patch_logger, mock_responses, set_env
 ):
-    patch_preflight_check.return_value.run = AsyncMock()
+    patch_preflight_check.return_value.run = AsyncMock(return_value=(True, False))
 
     async def emit_shutdown_signal():
         await asyncio.sleep(0.2)

@@ -9,7 +9,7 @@ import itertools
 import json
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, call
+from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from elasticsearch import ApiError, BadRequestError
@@ -60,6 +60,7 @@ DOC_ONE_DIFFERENT_TIMESTAMP = {
 
 DOC_TWO = {"_id": 2, "_timestamp": TIMESTAMP}
 DOC_THREE = {"_id": 3, "_timestamp": TIMESTAMP}
+DOC_FOUR = {"_id": 4, "_timestamp": TIMESTAMP}
 
 BULK_ACTION_ERROR = "some error"
 
@@ -91,6 +92,7 @@ def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
     )
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_creation_failed(
     mock_responses,
@@ -118,12 +120,15 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
     )
 
     es = SyncOrchestrator(config)
+    es._sink = Mock()
+    es._extractor = Mock()
 
     with pytest.raises(BadRequestError):
         await es.prepare_content_index(index_name)
     await es.close()
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_create_index(
     mock_responses,
@@ -157,6 +162,8 @@ async def test_prepare_content_index_create_index(
     )
 
     es = SyncOrchestrator(config)
+    es._sink = Mock()
+    es._extractor = Mock()
 
     create_index_result = asyncio.Future()
     create_index_result.set_result({"acknowledged": True})
@@ -173,6 +180,7 @@ async def test_prepare_content_index_create_index(
         create_index_mock.assert_called_with(index_name, language_code)
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index(mock_responses):
     language_code = "en"
@@ -212,6 +220,8 @@ async def test_prepare_content_index(mock_responses):
     )
 
     es = SyncOrchestrator(config)
+    es._sink = Mock()
+    es._extractor = Mock()
     with mock.patch.object(
         es.es_management_client,
         "ensure_content_index_mappings",
@@ -309,6 +319,7 @@ def set_responses(mock_responses, ts=None):
     )
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_async_bulk(mock_responses):
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -419,6 +430,14 @@ def lazy_download_fake(doc):
     async def lazy_download(**kwargs):
         # also deepcopy to prevent side effects as docs get mutated in get_docs
         return deepcopy(doc)
+
+    return lazy_download
+
+
+def crashing_lazy_download_fake():
+    async def lazy_download(**kwargs):
+        msg = "Could not download"
+        raise Exception(msg)
 
     return lazy_download
 
@@ -1212,6 +1231,7 @@ async def test_batch_bulk_with_errors(patch_logger):
         patch_logger.assert_present(f"operation index failed, {error}")
 
 
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.parametrize(
     "extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result",
     [
@@ -1227,22 +1247,33 @@ async def test_batch_bulk_with_errors(patch_logger):
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_orchestrator_done(
+async def test_sync_orchestrator_done_and_cleanup(
     extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
 ):
     if extractor_task is not None:
+        extractor_task.cancel = Mock()
         extractor_task.done.return_value = extractor_task_done
     if sink_task is not None:
+        sink_task.cancel = Mock()
         sink_task.done.return_value = sink_task_done
 
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     es = SyncOrchestrator(config)
+    es._extractor = Mock()
+    es._extractor.error = None
+    es._sink = Mock()
+    es._sink.error = None
     es._extractor_task = extractor_task
     es._sink_task = sink_task
 
     assert es.done() == expected_result
 
     await es.close()
+
+    if extractor_task and not extractor_task_done:
+        extractor_task.cancel.assert_called_once()
+    if sink_task and not sink_task_done:
+        sink_task.cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1258,6 +1289,34 @@ async def test_extractor_put_doc():
 
     await extractor.put_doc(doc)
     queue.put.assert_awaited_once_with(doc)
+
+
+@pytest.mark.asyncio
+@mock.patch(
+    "connectors.es.management_client.ESManagementClient.yield_existing_documents_metadata"
+)
+@mock.patch("connectors.utils.ConcurrentTasks.cancel")
+async def test_extractor_get_docs_when_downloads_fail(
+    yield_existing_documents_metadata, concurrent_tasks_cancel
+):
+    queue = await queue_mock()
+
+    yield_existing_documents_metadata.return_value = AsyncIterator([])
+
+    docs_from_source = [
+        (DOC_ONE, crashing_lazy_download_fake(), "index"),
+        (DOC_TWO, crashing_lazy_download_fake(), "index"),
+        (DOC_THREE, crashing_lazy_download_fake(), "index"),
+        (DOC_FOUR, crashing_lazy_download_fake(), "index"),
+    ]
+    # deep copying docs is needed as get_docs mutates the document ids which has side effects on other test
+    # instances
+    doc_generator = AsyncIterator([deepcopy(doc) for doc in docs_from_source])
+
+    extractor = await setup_extractor(queue, content_extraction_enabled=True)
+
+    await extractor.run(doc_generator, JobType.FULL)
+    concurrent_tasks_cancel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -1397,11 +1456,11 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
     es._sink = Mock()
     es._sink.force_cancel = Mock()
 
-    es._extractor_task = Mock()
+    es._extractor_task = mock.create_autospec(asyncio.Task)
     es._extractor_task.cancel = Mock()
     es._extractor_task.done = Mock(side_effect=extractor_task_done)
 
-    es._sink_task = Mock()
+    es._sink_task = mock.create_autospec(asyncio.Task)
     es._sink_task.cancel = Mock()
     es._sink_task.done = Mock(side_effect=sink_task_done)
 

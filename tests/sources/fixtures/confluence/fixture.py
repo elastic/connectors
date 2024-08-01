@@ -166,7 +166,7 @@ class ConfluenceAPI:
                         "createdBy": {"publicName": "user1", "username": "user1"},
                     },
                     "children": {"attachment": {"size": ATTACHMENT_COUNT}},
-                    "body": {"storage": {"value": f"This is a test {document_type}"}},
+                    "body": {"storage": {"value": fake_provider.get_html()}},
                     "space": {"name": "Demo Space 0"},
                     "_links": {
                         "webui": f"/spaces/space0/{document_type}/{document_type}_{content_count}/ES-scrum_{content_count}",

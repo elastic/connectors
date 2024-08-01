@@ -240,7 +240,7 @@ class Connector:
         metadata = {"created_by": "Connectors CLI"}
         role_descriptors = {
             f"{name}-connector-role": {
-                "cluster": ["monitor"],
+                "cluster": ["monitor", "manage_connector"],
                 "index": [
                     {
                         "names": [
