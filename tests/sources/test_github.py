@@ -998,28 +998,26 @@ async def test_get_retry_after():
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.parametrize(
-    "exceptions",
+    "exceptions, raises",
     [
-        {
-            "exception": BadGraphQLRequest(
+        (
+            BadGraphQLRequest(
                 status_code=HTTPStatus.FORBIDDEN, response={"message": None}
             ),
-            "raises": ForbiddenException,
-        },
-        {
-            "exception": BadGraphQLRequest(
+            ForbiddenException,
+        ),
+        (
+            BadGraphQLRequest(
                 status_code=HTTPStatus.CONFLICT, response={"message": None}
             ),
-            "raises": BadGraphQLRequest,
-        },
+            BadGraphQLRequest,
+        ),
     ],
 )
-async def test_graphql_with_BadGraphQLRequest(exceptions):
+async def test_graphql_with_BadGraphQLRequest(exceptions, raises):
     async with create_github_source() as source:
-        source.github_client._get_client.graphql = Mock(
-            side_effect=exceptions.get("exception")
-        )
-        with pytest.raises(exceptions.get("raises")):
+        source.github_client._get_client.graphql = Mock(side_effect=exceptions)
+        with pytest.raises(raises):
             await source.github_client.graphql(
                 {"variable": {"owner": "demo_user"}, "query": "QUERY"}
             )
@@ -1028,10 +1026,10 @@ async def test_graphql_with_BadGraphQLRequest(exceptions):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.parametrize(
-    "exceptions",
+    "exceptions, raises, is_raised",
     [
-        {
-            "exception": QueryError(
+        (
+            QueryError(
                 {
                     "errors": [
                         {
@@ -1041,29 +1039,27 @@ async def test_graphql_with_BadGraphQLRequest(exceptions):
                     ]
                 }
             ),
-            "raises": Exception,
-            "is_raised": False,
-        },
-        {
-            "exception": QueryError(
+            Exception,
+            False,
+        ),
+        (
+            QueryError(
                 {
                     "errors": [
                         {"type": "SOME_QUERY_ERROR", "message": "Some query error."}
                     ]
                 }
             ),
-            "raises": Exception,
-            "is_raised": True,
-        },
+            Exception,
+            True,
+        ),
     ],
 )
-async def test_graphql_with_QueryError(exceptions):
+async def test_graphql_with_QueryError(exceptions, raises, is_raised):
     async with create_github_source() as source:
-        source.github_client._get_client.graphql = Mock(
-            side_effect=exceptions.get("exception")
-        )
-        if exceptions.get("is_raised"):
-            with pytest.raises(exceptions.get("raises")):
+        source.github_client._get_client.graphql = Mock(side_effect=exceptions)
+        if is_raised:
+            with pytest.raises(raises):
                 await source.github_client.graphql(
                     {"variable": {"owner": "demo_user"}, "query": "QUERY"}
                 )
@@ -1071,7 +1067,7 @@ async def test_graphql_with_QueryError(exceptions):
             with patch.object(
                 GitHubClient, "_get_retry_after", AsyncMock(return_value=0)
             ):
-                with pytest.raises(exceptions.get("raises")):
+                with pytest.raises(raises):
                     await source.github_client.graphql(
                         {"variable": {"owner": "demo_user"}, "query": "QUERY"}
                     )
@@ -1590,6 +1586,19 @@ async def test_fetch_files():
         ):
             async for document in source._fetch_files("demo_repo", "main"):
                 assert expected_response == document
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_files_when_error_occurs(exception):
+    async with create_github_source() as source:
+        source.github_client.get_github_item = Mock(side_effect=exception())
+        with pytest.raises(exception):
+            async for _ in source._fetch_files("demo_repo", "main"):
+                pass
 
 
 @pytest.mark.asyncio
@@ -2242,3 +2251,51 @@ async def test_update_installation_access_token_when_error_occurs():
         )
         with pytest.raises(Exception):
             await source.github_client._update_installation_access_token()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.parametrize(
+    "exceptions, raises",
+    [
+        (
+            ClientResponseError(
+                status=403,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                headers={"X-RateLimit-Remaining": 4000},
+                history=None,
+            ),
+            ForbiddenException,
+        ),
+        (
+            ClientResponseError(
+                status=401,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                headers={"X-RateLimit-Remaining": 4000},
+                history=None,
+            ),
+            UnauthorizedException,
+        ),
+        (
+            ClientResponseError(
+                status=404,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                headers={"X-RateLimit-Remaining": 4000},
+                history=None,
+            ),
+            ClientResponseError,
+        ),
+        (Exception(), Exception),
+    ],
+)
+async def test_get_github_item_when_error_occurs(exceptions, raises):
+    async with create_github_source() as source:
+        source.github_client._get_client.getitem = Mock(side_effect=exceptions)
+        with pytest.raises(raises):
+            await source.github_client.get_github_item("/core")
