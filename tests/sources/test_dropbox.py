@@ -1444,7 +1444,7 @@ async def test_add_document_to_list():
         )
         documents = []
         async for item, _ in source.add_document_to_list(
-            func=source._fetch_files_folders, account_id=1, folder_id=2
+            func=source._fetch_files_folders, account_id=1
         ):
             documents.append(item)
         assert documents == EXPECTED_DOCUMENT_TUPLE
@@ -1469,7 +1469,7 @@ async def test_add_document_to_list_with_exclude_inherited_users_and_groups():
         )
         documents = []
         async for item, _ in source.add_document_to_list(
-            func=source._fetch_files_folders, account_id=1, folder_id=2
+            func=source._fetch_files_folders, account_id=1
         ):
             documents.append(item)
         assert documents == EXPECTED_DOCUMENT_TUPLE
