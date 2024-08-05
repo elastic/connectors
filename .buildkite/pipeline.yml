@@ -1,5 +1,8 @@
 agents:
   provider: "gcp"
+  machineType: "n1-standard-2"
+  useVault: true
+  image: family/enterprise-search-ubuntu-2204-connectors-py
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
@@ -10,11 +13,7 @@ steps:
     timeout_in_minutes: 5
 
   - label: ":pytest: Test"
-    command: "make test"
-    timeout_in_minutes: 5
-
-  - label: ":shipit: Smoke test"
-    command: "PYTHON=python{{ matrix.python }} make ftest NAME=dir DATA_SIZE=small"
+    command: "apt install python{{ matrix.python }} PYTHON=python{{ matrix.python }} make ftest NAME=dir DATA_SIZE=small"
     timeout_in_minutes: 30
     matrix:
       setup:
@@ -22,6 +21,12 @@ steps:
           - "3.10"
           - "3.11"
           - "3.12"
+
+  - label: ":shipit: Smoke test"
+    command: "make ftest NAME=dir DATA_SIZE=small"
+    timeout_in_minutes: 45
+    agents:
+      machineType: "n1-standard-8"
 
   - label: ":sweating: Checking for changes in connectors"
     plugins:
