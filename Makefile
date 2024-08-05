@@ -35,7 +35,7 @@ bin/pytest: bin/python
 	bin/pip install -r requirements/ftest.txt
 
 clean:
-	rm -rf bin lib include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python3.10.greenlet
+	rm -rf bin lib include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet
 
 lint: bin/python bin/black bin/elastic-ingest
 	bin/black --check connectors
