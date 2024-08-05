@@ -4,10 +4,12 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
+import base64
 import os
 import random
 
 import pytds
+from faker import Faker
 
 from tests.commons import WeightedFakeProvider
 
@@ -23,6 +25,8 @@ PASSWORD = "Password_123"
 fake_provider = WeightedFakeProvider(
     weights=[0.65, 0.3, 0.05, 0]
 )  # SQL does not like huge blobs
+
+faked = Faker()
 
 BATCH_SIZE = 1000
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
@@ -45,6 +49,17 @@ def get_num_docs():
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
+def generate_valid_wkt():
+    """Generates a valid WKT geometry"""
+
+    geometries = [
+        "POINT (30 10)",
+        "LINESTRING (30 10, 10 30, 40 40)",
+        "POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10))",
+    ]
+    return faked.random_element(elements=geometries)
+
+
 def inject_lines(table, cursor, lines):
     """Ingest rows in table
 
@@ -63,13 +78,84 @@ def inject_lines(table, cursor, lines):
         for row_id in range(batch_size):
             rows.append(
                 (
-                    fake_provider.fake.name(),
-                    row_id,
-                    fake_provider.get_text(),
-                    "14:30:00",
+                    fake_provider.fake.name(),  # name
+                    row_id,  # age
+                    fake_provider.get_text(),  # description
+                    faked.date_time(),  # record_time
+                    faked.pydecimal(left_digits=10, right_digits=2),  # balance
+                    faked.random_letter(),  # initials
+                    faked.boolean(),  # active
+                    faked.random_int(),  # points
+                    faked.pydecimal(left_digits=10, right_digits=2),  # salary
+                    faked.pydecimal(
+                        left_digits=8,
+                        right_digits=4,
+                        min_value=-214748,
+                        max_value=214748,
+                    ),  # bonus
+                    faked.random_int(),  # score
+                    faked.pydecimal(left_digits=2, right_digits=1),  # rating
+                    faked.pydecimal(left_digits=2, right_digits=2),  # discount
+                    faked.date(),  # birthdate
+                    faked.date_time(),  # appointment
+                    faked.date_time(),  # created_at
+                    faked.date_time(),  # updated_at
+                    faked.date_time(),  # last_login
+                    faked.date_time(),  # expiration
+                    faked.random_element(elements=("A", "I")),  # status
+                    faked.text(max_nb_chars=100),  # notes
+                    faked.text(max_nb_chars=100),  # additional_info
+                    generate_valid_wkt(),  # shape
+                    "/1/2/3/",  # org_structure
+                    faked.uuid4(),  # unique_key
+                    faked.json(),  # config
+                    faked.random_int(min=1, max=10),  # small_age
+                    base64.b64encode(
+                        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x00\x00\x10\x08\x06\x00\x00\x00\x1f\xf3\xff\xa6\x00\x00\x00"
+                    ).decode(
+                        "utf-8"
+                    ),  # profile_pic
                 )
             )
-        sql_query = f"INSERT INTO customers_{table} (name, age, description, record_time) VALUES (%s, %s, %s, %s)"
+
+        columns = [
+            "name",
+            "age",
+            "description",
+            "record_time",
+            "balance",
+            "initials",
+            "active",
+            "points",
+            "salary",
+            "bonus",
+            "score",
+            "rating",
+            "discount",
+            "birthdate",
+            "appointment",
+            "created_at",
+            "updated_at",
+            "last_login",
+            "expiration",
+            "status",
+            "notes",
+            "additional_info",
+            "shape",
+            "org_structure",
+            "unique_key",
+            "config",
+            "small_age",
+            "profile_pic",
+        ]
+
+        placeholders = ", ".join(["%s"] * len(columns))
+        column_names = ", ".join(columns)
+
+        sql_query = (
+            f"INSERT INTO customers_{table} ({column_names}) VALUES ({placeholders})"
+        )
+
         cursor.executemany(sql_query, rows)
         inserted += batch_size
         print(f"Inserted batch #{batch} of {batch_size} documents.")
@@ -96,7 +182,7 @@ async def load():
 
     for table in range(NUM_TABLES):
         print(f"Adding data to table customers_{table}...")
-        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age int, description TEXT, record_time TIME, PRIMARY KEY (id))"
+        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age SMALLINT, description TEXT, record_time TIME, balance DECIMAL(18, 2), initials CHAR(3), active BIT, points BIGINT, salary MONEY, bonus SMALLMONEY, score NUMERIC(10, 2), rating FLOAT, discount REAL, birthdate DATE, appointment TIME, created_at DATETIME2, updated_at DATETIMEOFFSET, last_login DATETIME, expiration SMALLDATETIME, status CHAR(1), notes VARCHAR(1000), additional_info NTEXT, shape GEOMETRY, org_structure HIERARCHYID , unique_key UNIQUEIDENTIFIER, config XML, small_age TINYINT, profile_pic nvarchar(max), PRIMARY KEY (id))"
         cursor.execute(sql_query)
         inject_lines(table, cursor, RECORD_COUNT)
     database.commit()
