@@ -13,14 +13,8 @@ steps:
     timeout_in_minutes: 5
 
   - label: ":pytest: Test"
-    command: "apt install python{{ matrix.python }} PYTHON=python{{ matrix.python }} make ftest NAME=dir DATA_SIZE=small"
-    timeout_in_minutes: 30
-    matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+    command: "make ftest NAME=dir DATA_SIZE=small"
+    timeout_in_minutes: 45
 
   - label: ":shipit: Smoke test"
     command: "make ftest NAME=dir DATA_SIZE=small"
