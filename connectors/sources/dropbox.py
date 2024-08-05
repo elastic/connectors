@@ -880,12 +880,14 @@ class DropboxDataSource(BaseDataSource):
             else:
                 raise
         _json = await response.json()
-        self.dropbox_client.member_id = _json.get("admin_profile", {}).get(
-            "team_member_id"
-        )
-        self.dropbox_client.root_namespace_id = _json.get("root_info", {}).get(
-            "root_namespace_id"
-        ) or _json.get("admin_profile", {}).get("root_folder_id")
+
+        admin_profile = _json.get("admin_profile", {}) or {}
+        root_info = _json.get("root_info", {}) or {}
+
+        self.dropbox_client.member_id = admin_profile.get("team_member_id")
+        self.dropbox_client.root_namespace_id = admin_profile.get(
+            "root_folder_id"
+        ) or root_info.get("root_namespace_id")
 
     async def get_content(
         self, attachment, is_shared=False, folder_id=None, timestamp=None, doit=False
