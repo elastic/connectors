@@ -287,6 +287,7 @@ class MySQLClient:
     ):
         updated_query = ""
         has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
+        # Checking if custom query has a semicolon at the end or not
         if query.endswith(";"):
             query = query[:-1]
         if has_orderby:

@@ -987,18 +987,22 @@ def test_row2doc(
 @pytest.mark.parametrize(
     "query, updated_query",
     [
+        # Query without ORDER BY and semicolon
         (
             "SELECT id, name FROM table_name",
             "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
         ),
+        # Query with semicolon but without ORDER BY
         (
             "SELECT id, name FROM table_name;",
             "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
         ),
+        # Query with ORDER BY but without semicolon
         (
             "SELECT id, name FROM table_name ORDER BY marks",
             "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
         ),
+        # Query with ORDER BY and semicolon
         (
             "SELECT id, name FROM table_name ORDER BY marks;",
             "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
