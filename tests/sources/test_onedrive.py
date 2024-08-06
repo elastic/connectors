@@ -908,6 +908,34 @@ async def test_get_content_with_extraction_service():
 
 
 @pytest.mark.asyncio
+async def test_prepare_doc_when_file_none():
+    async with create_onedrive_source() as source:
+        mock_response = {
+            "createdDateTime": "2023-05-01T09:09:19Z",
+            "eTag": '"{FF3F899A-2CBB-4D06-AE16-BBBBF5C35C4E},1"',
+            "id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+            "lastModifiedDateTime": "2023-05-01T09:09:19Z",
+            "name": "folder1",
+            "webUrl": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+            "cTag": '"c:{FF3F899A-2CBB-4D06-AE16-BBBBF5C35C4E},0"',
+            "parentReference": {"path": "root"},
+            "size": 10484,
+            "file": None,
+        }
+        result = source.prepare_doc(mock_response)
+        assert result == {
+            "type": "folder",
+            "title": "folder1",
+            "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
+            "_timestamp": "2023-05-01T09:09:19Z",
+            "created_at": "2023-05-01T09:09:19Z",
+            "size": 10484,
+            "url": "https://w076v-my.sharepoint.com/personal/adel_w076v_onmicrosoft_com/Documents/folder1",
+            "mime_type": None,
+        }
+
+
+@pytest.mark.asyncio
 async def test_lookup_request_by_id():
     async with create_onedrive_source() as source:
         requests = [
