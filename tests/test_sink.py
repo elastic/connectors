@@ -1228,7 +1228,7 @@ async def test_batch_bulk_with_errors(patch_logger):
         }
         client.client.bulk = AsyncMock(return_value=mock_result)
         await sink._batch_bulk([], {OP_INDEX: {"1": 20}, OP_UPDATE: {}, OP_DELETE: {}})
-        patch_logger.assert_present(f"operation index failed, {error}")
+        patch_logger.assert_present(f"operation index failed for doc 1, {error}")
 
 
 @patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
