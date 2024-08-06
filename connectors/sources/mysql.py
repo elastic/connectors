@@ -78,6 +78,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "tables": {"type": "array", "minItems": 1},
             "query": {"type": "string", "minLength": 1},
+            "id_columns": {"type": "array", "minItems": 1},
         },
         "required": ["tables", "query"],
         "additionalProperties": False,
@@ -538,12 +539,12 @@ class MySqlDataSource(BaseDataSource):
             for query_info in advanced_rules:
                 tables = query_info.get("tables", [])
                 query = query_info.get("query", "")
-
+                id_columns = query_info.get("id_columns", [])
                 self._logger.debug(
-                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query."
+                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query and given ID column '{id_columns}'."
                 )
 
-                async for row in self.fetch_documents(tables, query):
+                async for row in self.fetch_documents(tables, query, id_columns):
                     yield row, None
 
                 await self._sleeps.sleep(0)
@@ -553,7 +554,7 @@ class MySqlDataSource(BaseDataSource):
             async for row in self.fetch_documents(tables):
                 yield row, None
 
-    async def fetch_documents(self, tables, query=None):
+    async def fetch_documents(self, tables, query=None, id_columns=None):
         """If query is not present it fetches all rows from all tables.
         Otherwise, the custom query is executed.
 
@@ -569,7 +570,7 @@ class MySqlDataSource(BaseDataSource):
 
         async with self.mysql_client() as client:
             docs_generator = (
-                self._yield_docs_custom_query(client, tables, query)
+                self._yield_docs_custom_query(client, tables, query, id_columns)
                 if query is not None
                 else self._yield_all_docs_from_tables(client, tables)
             )
@@ -605,13 +606,16 @@ class MySqlDataSource(BaseDataSource):
                     timestamp=last_update_time,
                 )
 
-    async def _yield_docs_custom_query(self, client, tables, query):
+    async def _yield_docs_custom_query(self, client, tables, query, id_columns):
         primary_key_columns = [
             await client.get_primary_key_column_names(table) for table in tables
         ]
         primary_key_columns = sorted(
             [column for columns in primary_key_columns for column in columns]
         )
+
+        if id_columns:
+            primary_key_columns = id_columns
 
         if not primary_key_columns:
             self._logger.warning(
@@ -626,6 +630,12 @@ class MySqlDataSource(BaseDataSource):
             )
         )
         column_names = await client.get_column_names_for_query(query=query)
+
+        if set(primary_key_columns) - set(column_names):
+            self._logger.warning(
+                f"Skipping query {query} for tables {', '.join(tables)} as primary key column name/id_column is not present in query."
+            )
+            return
 
         async for row in client.yield_rows_for_query(query):
             yield row2doc(
