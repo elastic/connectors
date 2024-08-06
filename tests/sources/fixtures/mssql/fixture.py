@@ -105,8 +105,6 @@ def inject_lines(table, cursor, lines):
                     faked.random_element(elements=("A", "I")),  # status
                     faked.text(max_nb_chars=100),  # notes
                     faked.text(max_nb_chars=100),  # additional_info
-                    generate_valid_wkt(),  # shape
-                    "/1/2/3/",  # org_structure
                     faked.uuid4(),  # unique_key
                     faked.json(),  # config
                     faked.random_int(min=1, max=10),  # small_age
@@ -141,8 +139,6 @@ def inject_lines(table, cursor, lines):
             "status",
             "notes",
             "additional_info",
-            "shape",
-            "org_structure",
             "unique_key",
             "config",
             "small_age",
@@ -182,7 +178,7 @@ async def load():
 
     for table in range(NUM_TABLES):
         print(f"Adding data to table customers_{table}...")
-        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age SMALLINT, description TEXT, record_time TIME, balance DECIMAL(18, 2), initials CHAR(3), active BIT, points BIGINT, salary MONEY, bonus SMALLMONEY, score NUMERIC(10, 2), rating FLOAT, discount REAL, birthdate DATE, appointment TIME, created_at DATETIME2, updated_at DATETIMEOFFSET, last_login DATETIME, expiration SMALLDATETIME, status CHAR(1), notes VARCHAR(1000), additional_info NTEXT, shape GEOMETRY, org_structure HIERARCHYID , unique_key UNIQUEIDENTIFIER, config XML, small_age TINYINT, profile_pic nvarchar(max), PRIMARY KEY (id))"
+        sql_query = f"CREATE TABLE customers_{table} (id INT IDENTITY(1,1), name VARCHAR(255), age SMALLINT, description TEXT, record_time TIME, balance DECIMAL(18, 2), initials CHAR(3), active BIT, points BIGINT, salary MONEY, bonus SMALLMONEY, score NUMERIC(10, 2), rating FLOAT, discount REAL, birthdate DATE, appointment TIME, created_at DATETIME2, updated_at DATETIMEOFFSET, last_login DATETIME, expiration SMALLDATETIME, status CHAR(1), notes VARCHAR(1000), additional_info NTEXT, unique_key UNIQUEIDENTIFIER, config XML, small_age TINYINT, profile_pic nvarchar(max), PRIMARY KEY (id))"
         cursor.execute(sql_query)
         inject_lines(table, cursor, RECORD_COUNT)
     database.commit()
