@@ -1263,7 +1263,7 @@ async def test_yield_docs_custom_query_with_no_primary_key(patch_connection_pool
 
         async with client:
             async for docs in source._yield_docs_custom_query(
-                client, "table", "SELECT * FROM table"
+                client, "table", "SELECT * FROM table", []
             ):
                 assert None is docs
 
