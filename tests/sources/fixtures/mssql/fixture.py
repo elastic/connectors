@@ -49,17 +49,6 @@ def get_num_docs():
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-def generate_valid_wkt():
-    """Generates a valid WKT geometry"""
-
-    geometries = [
-        "POINT (30 10)",
-        "LINESTRING (30 10, 10 30, 40 40)",
-        "POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10))",
-    ]
-    return faked.random_element(elements=geometries)
-
-
 def inject_lines(table, cursor, lines):
     """Ingest rows in table
 
