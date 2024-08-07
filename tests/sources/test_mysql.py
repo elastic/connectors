@@ -259,6 +259,16 @@ def mock_cursor_fetchmany(rows_per_batch=None):
     return mock_cursor
 
 
+def mock_cursor_fetchall():
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchall.side_effect = AsyncMock(
+        return_value=[DOC_ONE, DOC_TWO, DOC_THREE]
+    )
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    return mock_cursor
+
+
 @pytest.mark.asyncio
 async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool):
     client = await setup_mysql_client()
@@ -364,46 +374,43 @@ async def test_client_get_last_update_time(patch_connection_pool):
 
 @pytest.mark.asyncio
 async def test_client_yield_rows_for_table(patch_connection_pool):
-    rows_per_batch = [[DOC_ONE], [DOC_TWO], [DOC_THREE]]
-    mock_cursor = mock_cursor_fetchmany(rows_per_batch)
+    rows = [DOC_ONE, DOC_TWO, DOC_THREE]
+    mock_cursor = mock_cursor_fetchall()
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
 
     client = await setup_mysql_client()
-    client.fetch_size = 1
+    client.fetch_size = 3
 
     async with client:
         yielded_docs = []
 
-        async for doc in client.yield_rows_for_table("table"):
+        async for doc in client.yield_rows_for_table(
+            "table", primary_keys=["id"], table_row_count=3
+        ):
             yielded_docs.append(doc)
 
-        # 3 batches with rows, 4th batch empty
-        num_batches = len(rows_per_batch) / client.fetch_size + 1
-
-        assert len(yielded_docs) == len(rows_per_batch)
-        assert mock_cursor.fetchmany.call_count == num_batches
+        assert len(yielded_docs) == len(rows)
 
 
 @pytest.mark.asyncio
 async def test_client_yield_rows_for_query(patch_connection_pool):
-    rows_per_batch = [[DOC_ONE]]
-    mock_cursor = mock_cursor_fetchmany(rows_per_batch)
+    rows = [DOC_ONE, DOC_TWO, DOC_THREE]
+    mock_cursor = mock_cursor_fetchall()
+    mock_cursor.fetchone = AsyncMock(return_value=(3, None))
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
 
     client = await setup_mysql_client()
-    client.fetch_size = 1
+    client.fetch_size = 3
 
     async with client:
         yielded_docs = []
 
-        async for doc in client.yield_rows_for_query("SELECT * FROM db.table"):
+        async for doc in client.yield_rows_for_query(
+            "SELECT * FROM db.table", primary_key_columns=["id"]
+        ):
             yielded_docs.append(doc)
 
-        # 1 batch with rows, 2nd batch empty
-        num_batches = len(rows_per_batch) / client.fetch_size + 1
-
-        assert len(yielded_docs) == len(rows_per_batch)
-        assert mock_cursor.fetchmany.call_count == num_batches
+        assert len(yielded_docs) == len(rows)
 
 
 @pytest.mark.asyncio
@@ -1190,3 +1197,85 @@ def test_row2doc(
     )
 
     assert doc == expected_doc
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query, updated_query",
+    [
+        # Query without ORDER BY and semicolon
+        (
+            "SELECT id, name FROM table_name",
+            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with semicolon but without ORDER BY
+        (
+            "SELECT id, name FROM table_name;",
+            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with ORDER BY but without semicolon
+        (
+            "SELECT id, name FROM table_name ORDER BY marks",
+            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with ORDER BY and semicolon
+        (
+            "SELECT id, name FROM table_name ORDER BY marks;",
+            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+        ),
+    ],
+)
+async def test_update_query_with_pagination_attributes(query, updated_query):
+    client = await setup_mysql_client()
+    expected_updated_query = client._update_query_with_pagination_attributes(
+        query=query, offset=0, primary_key_columns=["id"]
+    )
+    assert expected_updated_query == updated_query
+
+
+@pytest.mark.asyncio
+async def test_get_table_row_count_for_query(patch_connection_pool):
+    table_row_count_for_query = 100
+    custom_query = "SELECT id, name FROM my_table WHERE marks > 100;"
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchone = AsyncMock(return_value=(table_row_count_for_query, None))
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        assert (
+            await client._get_table_row_count_for_query(query=custom_query)
+            == table_row_count_for_query
+        )
+
+
+@pytest.mark.asyncio
+async def test_yield_docs_custom_query_with_no_primary_key(patch_connection_pool):
+    async with create_source(MySqlDataSource) as source:
+        mock_cursor = mock_cursor_fetchall()
+        mock_cursor.fetchall = AsyncMock(return_value=[])
+        patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+        client = await setup_mysql_client()
+
+        async with client:
+            async for docs in source._yield_docs_custom_query(
+                client, "table", "SELECT * FROM table", []
+            ):
+                assert None is docs
+
+
+@pytest.mark.asyncio
+async def test_get_primary_key_column_names(patch_connection_pool):
+    mock_cursor = mock_cursor_fetchall()
+    mock_cursor.fetchall = AsyncMock(return_value=[("id1", None), ("id2", None)])
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        primary_keys = await client.get_primary_key_column_names("table")
+        assert primary_keys == ["id1", "id2"]
