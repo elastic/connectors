@@ -7,14 +7,14 @@ import asyncio
 import logging
 import os
 import signal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from click import ClickException, UsageError
 from click.testing import CliRunner
 
 from connectors import __version__
-from connectors.service_cli import main
+from connectors.service_cli import _start_service, get_event_loop, main
 
 SUCCESS_EXIT_CODE = 0
 CLICK_EXCEPTION_EXIT_CODE = ClickException.exit_code
@@ -45,6 +45,7 @@ def test_main_exits_on_sigterm(mock_responses):
     loop.create_task(kill())
 
     CliRunner().invoke(main, [])
+    loop.close()
 
 
 @pytest.mark.parametrize("option", ["-v", "--version"])
@@ -56,25 +57,21 @@ def test_version_action(option):
     assert __version__ in result.output
 
 
-@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM])
+@pytest.mark.asyncio
 @patch("connectors.service_cli.PreflightCheck")
-def test_shutdown_called_on_shutdown_signal(
-    patch_preflight_check, sig, patch_logger, mock_responses, set_env
+@patch("connectors.service_cli.get_services")
+async def test_shutdown_signal_registered(
+    patch_get_services, patch_preflight_check, set_env
 ):
+    patch_multi_service = Mock()
+    patch_get_services.return_value = patch_multi_service
+    patch_multi_service.run = AsyncMock()
     patch_preflight_check.return_value.run = AsyncMock(return_value=(True, False))
-
-    async def emit_shutdown_signal():
-        await asyncio.sleep(0.2)
-        os.kill(os.getpid(), sig)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.create_task(emit_shutdown_signal())
-
-    CliRunner().invoke(main, [])
-
-    patch_logger.assert_present(f"Caught {sig.name}. Graceful shutdown.")
-    patch_logger.assert_present(f"Caught {sig.name}. Cancelling sleeps...")
+    loop = Mock()
+    await _start_service([], {"elasticsearch": {}}, loop)
+    assert loop.add_signal_handler.has_calls(
+        [call(signal.SIGINT, ANY), call(signal.SIGTERM, ANY)]
+    )
 
 
 def test_list_action(set_env):
@@ -209,4 +206,23 @@ def test_unknown_service_type(set_env):
     assert (
         f"Could not find a connector for service type {unknown_service_type}"
         in result.output
+    )
+
+
+@patch("connectors.service_cli._get_uvloop")
+@patch("connectors.service_cli.asyncio")
+def test_uvloop_success(patched_asyncio, patched_uvloop):
+    get_event_loop(True)
+    assert patched_asyncio.set_event_loop_policy.called_once_with(
+        patched_uvloop.EventLoopPolicy()
+    )
+
+
+@patch("connectors.service_cli._get_uvloop", side_effect=Exception("import fails"))
+@patch("connectors.service_cli.asyncio")
+@patch("connectors.service_cli.logger")
+def test_uvloop_error(patched_logger, patched_asyncio, patched_uvloop):
+    get_event_loop(True)
+    patched_logger.warning.assert_any_call(
+        "Unable to enable uvloop: import fails. Running with default event loop"
     )

@@ -8,11 +8,11 @@
 import ssl
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import aiohttp
+import httpx
 import pytest
-from aiohttp import StreamReader
+from httpx import ByteStream
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
@@ -56,6 +56,7 @@ class MockResponse:
     def __init__(self, json, status):
         self._json = json
         self.status = status
+        self.is_success = True
 
     async def json(self):
         """This Method is used to return a json response"""
@@ -71,11 +72,11 @@ class MockResponse:
 
 
 class MockObjectResponse:
-    """Class to mock object response of aiohttp session.get method"""
+    """Class to mock object response of httpx session.get method"""
 
     def __init__(self):
         """Setup a streamReader object"""
-        self.content = StreamReader
+        self.content = ByteStream
 
     async def __aexit__(self, exc_type, exc, tb):
         """Closes an async with block"""
@@ -115,9 +116,9 @@ async def test_ping_for_failed_connection_exception():
         mock_response = {"access_token": "test2344", "expires_in": "1234555"}
         async_response = MockResponse(mock_response, 200)
         with patch.object(
-            aiohttp, "ClientSession", side_effect=Exception(EXCEPTION_MESSAGE)
+            httpx, "AsyncClient", side_effect=Exception(EXCEPTION_MESSAGE)
         ):
-            with patch("aiohttp.request", return_value=async_response):
+            with patch("httpx.get", return_value=async_response):
                 with pytest.raises(Exception):
                     await source.ping()
 
@@ -169,7 +170,7 @@ async def test_api_call_for_exception():
     """This function test _api_call when credentials are incorrect"""
     async with create_sps_source(retry_count=0) as source:
         with patch.object(
-            aiohttp, "ClientSession", side_effect=Exception(EXCEPTION_MESSAGE)
+            httpx, "AsyncClient", side_effect=Exception(EXCEPTION_MESSAGE)
         ):
             with pytest.raises(Exception):
                 await source.sharepoint_client._api_call(url_name="lists", url="abc")
@@ -207,7 +208,9 @@ async def test_prepare_drive_items_doc():
             "editor_id": 1,
         }
 
-        target_response = source.format_drive_item(item=list_items)
+        target_response = source.format_drive_item(
+            item=list_items, site_url=f"{HOST_URL}/site", server_relative_url="/site"
+        )
         assert target_response == expected_response
 
 
@@ -235,10 +238,10 @@ async def test_prepare_list_items_doc():
             "file_name": "filename",
             "size": 0,
             "title": "dummy",
-            "author_id": 123,
-            "editor_id": 123,
             "author": "system",
             "editor": "system",
+            "author_id": 123,
+            "editor_id": 123,
             "creation_time": "2023-01-30T12:48:31Z",
             "_timestamp": "2023-01-30T12:48:31Z",
             "url": f"{HOST_URL}/site%5E",
@@ -368,7 +371,7 @@ async def test_get_list_items():
             "AuthorId": 1073741823,
             "Attachments": False,
             "GUID": "111111122222222-adfa-4e4f-93c4-bfedddda8510",
-            "url": f"{HOST_URL}/sites/enterprise/site1%5E/DispForm.aspx?ID=1&Source={HOST_URL}/sites/enterprise/site1%5E/AllItems.aspx&ContentTypeId=12345",
+            "url": f"{HOST_URL}/sites/collection1/ctest/Lists/ctestlist/DispForm.aspx?ID=1&Source={HOST_URL}/sites/collection1/ctest/Lists/ctestlist/AllItems.aspx&ContentTypeId=12345",
         },
     ]
     attachment_response = {"UniqueId": "1"}
@@ -382,8 +385,9 @@ async def test_get_list_items():
         expected_response = []
         async for item, _ in source.sharepoint_client.get_list_items(
             list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
-            site_url="/sites/enterprise/ctest",
-            server_relative_url="/sites/enterprise/site1^",
+            site_url=f"{HOST_URL}/sites/collection1/ctest",
+            server_relative_url="/sites/collection1/ctest",
+            list_relative_url="/Lists/ctestlist",
             selected_field="",
         ):
             expected_response.append(item)
@@ -480,6 +484,14 @@ async def test_get_drive_items():
 async def test_get_docs_list_items():
     """Test get docs method for list items"""
 
+    site_content_response = {
+        "Title": "ctest",
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "Url": f"{HOST_URL}/sites/enterprise/ctest",
+        "ServerRelativeUrl": "/sites/enterprise/ctest",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "Created": "2023-03-19T05:02:52Z",
+    }
     item_content_response = {
         "RootFolder": {
             "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
@@ -510,24 +522,28 @@ async def test_get_docs_list_items():
         source.sharepoint_client._fetch_data_with_query = Mock(
             return_value=AsyncIterator([])
         )
-        source.get_lists = AsyncIterator([(item_content_response, [])])
+        source.sharepoint_client.get_site = AsyncIterator([site_content_response])
+        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
         source.sharepoint_client.get_list_items = AsyncIterator(
-            [
-                (
-                    list_content_response,
-                    None,
-                )
-            ]
+            [(list_content_response, None)]
         )
         async for document, _ in source.get_docs():
             actual_response.append(document)
-        assert len(actual_response) == 2
+        assert len(actual_response) == 3
 
 
 @pytest.mark.asyncio
 async def test_get_docs_list_items_when_relativeurl_is_not_none():
     """Test get docs method for list items"""
 
+    site_content_response = {
+        "Title": "ctest",
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "Url": f"{HOST_URL}/sites/enterprise/ctest",
+        "ServerRelativeUrl": "/sites/enterprise/ctest",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "Created": "2023-03-19T05:02:52Z",
+    }
     item_content_response = {
         "RootFolder": {
             "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
@@ -556,25 +572,29 @@ async def test_get_docs_list_items_when_relativeurl_is_not_none():
     actual_response = []
     async with create_sps_source() as source:
         source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
-        source.get_lists = AsyncIterator([(item_content_response, [])])
+        source.sharepoint_client.get_site = AsyncIterator([site_content_response])
+        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
         source.sharepoint_client.get_list_items = AsyncIterator(
-            [
-                (
-                    list_content_response,
-                    None,
-                )
-            ]
+            [(list_content_response, "/sites/enterprise/ctest/_api")]
         )
 
         async for document, _ in source.get_docs():
             actual_response.append(document)
-        assert len(actual_response) == 2
+        assert len(actual_response) == 3
 
 
 @pytest.mark.asyncio
 async def test_get_docs_drive_items():
     """Test get docs method for drive items"""
 
+    site_content_response = {
+        "Title": "ctest",
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "Url": f"{HOST_URL}/sites/enterprise/ctest",
+        "ServerRelativeUrl": "/sites/enterprise/ctest",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "Created": "2023-03-19T05:02:52Z",
+    }
     item_content_response = {
         "RootFolder": {
             "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
@@ -605,18 +625,27 @@ async def test_get_docs_drive_items():
     actual_response = []
     async with create_sps_source() as source:
         source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
-        source.get_lists = AsyncIterator([(item_content_response, [])])
+        source.sharepoint_client.get_site = AsyncIterator([site_content_response])
+        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
         source.sharepoint_client.get_drive_items = AsyncIterator(
             [(drive_content_response, None)]
         )
 
         async for document, _ in source.get_docs():
             actual_response.append(document)
-        assert len(actual_response) == 2
+        assert len(actual_response) == 3
 
 
 @pytest.mark.asyncio
 async def test_get_docs_drive_items_for_web_pages():
+    site_content_response = {
+        "Title": "ctest",
+        "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
+        "Url": f"{HOST_URL}/sites/enterprise/ctest",
+        "ServerRelativeUrl": "/sites/enterprise/ctest",
+        "LastItemModifiedDate": "2023-03-19T05:02:52Z",
+        "Created": "2023-03-19T05:02:52Z",
+    }
     item_content_response = {
         "RootFolder": {
             "ServerRelativeUrl": "/sites/enterprise/ctest/_api",
@@ -647,13 +676,14 @@ async def test_get_docs_drive_items_for_web_pages():
     actual_response = []
     async with create_sps_source() as source:
         source.sharepoint_client._fetch_data_with_query = AsyncIterator([])
-        source.get_lists = AsyncIterator([(item_content_response, [])])
+        source.sharepoint_client.get_site = AsyncIterator([site_content_response])
+        source.sharepoint_client.get_lists = AsyncIterator([item_content_response])
         source.sharepoint_client.get_drive_items = AsyncIterator(
             [(drive_content_response, None)]
         )
         async for document, _ in source.get_docs():
             actual_response.append(document)
-        assert len(actual_response) == 2
+        assert len(actual_response) == 3
 
 
 @pytest.mark.asyncio
@@ -662,6 +692,7 @@ async def test_get_docs_when_no_site_available():
 
     async with create_sps_source() as source:
         actual_response = []
+        source.sharepoint_client.get_site = AsyncIterator([])
         source.sharepoint_client._fetch_data_with_query = Mock(
             return_value=AsyncIterator([])
         )
@@ -676,7 +707,6 @@ async def test_get_docs_when_no_site_available():
 @pytest.mark.asyncio
 async def test_get_content():
     """Test the get content method"""
-    async_response = MockObjectResponse()
 
     response_content = "This is a dummy sharepoint body response"
     expected_attachment = {
@@ -692,18 +722,17 @@ async def test_get_content():
         "_attachment": "VGhpcyBpcyBhIGR1bW15IHNoYXJlcG9pbnQgYm9keSByZXNwb25zZQ==",
         "_timestamp": "2022-06-20T10:37:44Z",
     }
+    async_response = MockObjectResponse()
+    async_response.aiter_bytes = AsyncIterator([bytes(response_content, "utf-8")])
+
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = AsyncIterator([async_response])
-        with mock.patch(
-            "aiohttp.StreamReader.iter_chunked",
-            return_value=AsyncIterator([bytes(response_content, "utf-8")]),
-        ):
-            response_content = await source.get_content(
-                document=expected_attachment,
-                file_relative_url="abc.com",
-                site_url="/site",
-                doit=True,
-            )
+        response_content = await source.get_content(
+            document=expected_attachment,
+            file_relative_url="abc.com",
+            site_url="/site",
+            doit=True,
+        )
 
         assert response_content == expected_content
 
@@ -719,6 +748,7 @@ async def test_get_content_with_content_extraction():
         return_value={"host": "http://localhost:8090"},
     ):
         async_response = MockObjectResponse()
+        async_response.aiter_bytes = AsyncIterator([bytes(response_content, "utf-8")])
         expected_attachment = {
             "id": 1,
             "server_relative_url": "/url",
@@ -734,16 +764,12 @@ async def test_get_content_with_content_extraction():
         }
         async with create_sps_source(use_text_extraction_service=True) as source:
             source.sharepoint_client._api_call = AsyncIterator([async_response])
-            with mock.patch(
-                "aiohttp.StreamReader.iter_chunked",
-                return_value=AsyncIterator([bytes(response_content, "utf-8")]),
-            ):
-                response_content = await source.get_content(
-                    document=expected_attachment,
-                    file_relative_url="abc.com",
-                    site_url="/site",
-                    doit=True,
-                )
+            response_content = await source.get_content(
+                document=expected_attachment,
+                file_relative_url="abc.com",
+                site_url="/site",
+                doit=True,
+            )
 
             assert response_content == expected_content
 
@@ -931,7 +957,7 @@ async def test_fetch_data_with_next_url_list_items():
 class ClientSession:
     """Mock Client Session Class"""
 
-    async def close(self):
+    async def aclose(self):
         """Close method of Mock Client Session Class"""
         pass
 
@@ -962,7 +988,7 @@ async def test_api_call_negative(patch_default_wait_multiplier):
 
     async with create_sps_source(retry_count=2) as source:
         with patch.object(
-            aiohttp.ClientSession, "get", side_effect=Exception(EXCEPTION_MESSAGE)
+            httpx.AsyncClient, "get", side_effect=Exception(EXCEPTION_MESSAGE)
         ):
             source.sharepoint_client.session = source.sharepoint_client._get_session()
             with pytest.raises(Exception):
@@ -979,14 +1005,14 @@ async def test_api_call_successfully():
         async_response = MockResponse(mocked_response, 200)
         async_response_token = MockResponse(mock_token, 200)
 
-        with patch("aiohttp.ClientSession.get", return_value=async_response), patch(
-            "aiohttp.request", return_value=async_response_token
+        with patch("httpx.AsyncClient.get", return_value=async_response), patch(
+            "httpx.request", return_value=async_response_token
         ):
             source.sharepoint_client._get_session()
             async for response in source.sharepoint_client._api_call(
-                url_name="ping", parent_site_url="abc", host_url="sharepoint.com"
+                url_name="ping", site_url="abc", host_url="sharepoint.com"
             ):
-                assert response == [{"name": "dummy_project", "id": "test123"}]
+                assert await response == [{"name": "dummy_project", "id": "test123"}]
 
 
 @pytest.fixture
@@ -1009,13 +1035,11 @@ async def test_api_call_when_status_429_exception(
         caplog.set_level("WARN")
 
         with patch.object(
-            aiohttp.ClientSession,
+            httpx.AsyncClient,
             "get",
-            side_effect=aiohttp.ClientResponseError(
-                history="history", request_info=ClientErrorException
-            ),
+            side_effect=httpx.HTTPError("error"),
         ):
-            with patch("aiohttp.request", return_value=async_response):
+            with patch("httpx.get", return_value=async_response):
                 source.sharepoint_client._get_session()
                 async for _ in source.sharepoint_client._api_call(
                     url_name="attachment", url="abc.com"
@@ -1031,11 +1055,11 @@ async def test_api_call_when_server_is_down(patch_default_wait_multiplier, caplo
         async_response = MockResponse(mock_response, 200)
         caplog.set_level("WARN")
         with patch.object(
-            aiohttp.ClientSession,
+            httpx.AsyncClient,
             "get",
-            side_effect=aiohttp.ServerDisconnectedError("Something went wrong"),
+            side_effect=httpx.ConnectError("Something went wrong"),
         ):
-            with patch("aiohttp.request", return_value=async_response):
+            with patch("httpx.get", return_value=async_response):
                 source.sharepoint_client._get_session()
                 async for _ in source.sharepoint_client._api_call(
                     url_name="attachment", url="abc.com"
@@ -1062,7 +1086,7 @@ async def test_get_site_pages_content():
         "type": "sites",
         "file_name": "dummy.pdf",
     }
-    RESPONSE_DATA = {"WikiField": "This is a dummy sharepoint body response"}
+    RESPONSE_DATA = {"CanvasContent1": "This is a dummy sharepoint body response"}
     EXPECTED_CONTENT = {
         "_id": 1,
         "_attachment": "VGhpcyBpcyBhIGR1bW15IHNoYXJlcG9pbnQgYm9keSByZXNwb25zZQ==",
@@ -1099,12 +1123,12 @@ async def test_get_site_pages_content_when_doit_is_none():
 
 
 @pytest.mark.asyncio
-async def test_get_site_pages_content_for_wikifiled_none():
+async def test_get_site_pages_content_for_canvascontent1_none():
     async with create_sps_source() as source:
         EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": "1000000"}
         response_content = await source.get_site_pages_content(
             document=EXPECTED_ATTACHMENT,
-            list_response={"WikiField": None},
+            list_response={"CanvasContent1": None},
             doit=True,
         )
         assert response_content is None
@@ -1169,8 +1193,9 @@ async def test_get_list_items_with_no_extension():
         expected_response = []
         async for item, _ in source.sharepoint_client.get_list_items(
             list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
-            site_url="/sites/enterprise/ctest",
-            server_relative_url="/sites/enterprise/site1^",
+            site_url=f"{HOST_URL}/sites/collection1/ctest",
+            server_relative_url="/sites/collection1/ctest",
+            list_relative_url="/Lists/ctestlist",
             selected_field="",
         ):
             expected_response.append(item)
@@ -1236,8 +1261,9 @@ async def test_get_list_items_with_extension_only():
         expected_response = []
         async for item, _ in source.sharepoint_client.get_list_items(
             list_id="620070a1-ee50-4585-b6a7-0f6210b1a69d",
-            site_url="/sites/enterprise/ctest",
-            server_relative_url="/sites/enterprise/site1^",
+            site_url=f"{HOST_URL}/sites/collection1/ctest",
+            server_relative_url="/sites/collection1/ctest",
+            list_relative_url="/Lists/ctestlist",
             selected_field="",
         ):
             expected_response.append(item)
@@ -1319,6 +1345,19 @@ async def test_get_access_control_with_dls_disabled():
 async def test_get_docs_with_dls_enabled():
     async with create_sps_source() as source:
         source.sharepoint_client.site_collections_path = ["collection1"]
+        source.sharepoint_client.fix_relative_url = Mock(return_value="sites/site1")
+        source.sharepoint_client.get_site = AsyncIterator(
+            [
+                {
+                    "ServerRelativeUrl": None,
+                    "Title": "demo2",
+                    "Url": "/abcd",
+                    "Id": 2,
+                    "LastItemModifiedDate": "2022-06-20T10:04:03Z",
+                    "Created": "2022-06-20T10:04:03Z",
+                }
+            ]
+        )
         source.sharepoint_client.get_sites = AsyncIterator(
             [
                 {
@@ -1328,13 +1367,11 @@ async def test_get_docs_with_dls_enabled():
                     "Id": 1,
                     "LastItemModifiedDate": "2022-06-20T10:04:03Z",
                     "Created": "2022-06-20T10:04:03Z",
-                    "Author": {"LoginName": "system", "Id": 1},
                 }
             ]
         )
         source._dls_enabled = Mock(return_value=True)
 
-        source._site_access_control = AsyncMock(return_value=(["user_id:1"], []))
         source.sharepoint_client.site_role_assignments = AsyncIterator(
             [
                 {
@@ -1508,15 +1545,13 @@ async def test_get_docs_with_dls_enabled():
                         "Length": "3356",
                         "Id": 2,
                         "item_type": "Folder",
-                        "Editor": {"Name": "system", "Id": 1},
-                        "Author": {"Name": "system", "Id": 1},
                     },
                     None,
                 )
             ]
         )
         async for site_document, _ in source.get_docs():
-            assert len(site_document["_allow_access_control"]) > 0
+            assert site_document is not None
 
 
 @pytest.mark.asyncio
@@ -1591,62 +1626,3 @@ async def test_site_list_item_has_unique_role_assignments():
             site_url="/abc", site_list_name="list1", list_item_id=1
         )
         source.sharepoint_client._api_call.assert_called_once()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "site_doc, expected_response",
-    [
-        (
-            {
-                "ServerRelativeUrl": None,
-                "Title": "demo",
-                "Url": "/collection1",
-                "Id": 1,
-                "LastItemModifiedDate": "2022-06-20T10:04:03Z",
-                "Created": "2022-06-20T10:04:03Z",
-                "Author": {"LoginName": "system", "Id": 1},
-            },
-            {
-                "type": "sites",
-                "_id": "af47718472cafa7b3c8446f0bacddde7",
-                "title": "demo",
-                "url": "/collection1",
-                "server_relative_url": None,
-                "_timestamp": "2022-06-20T10:04:03Z",
-                "creation_time": "2022-06-20T10:04:03Z",
-                "author": "system",
-                "author_id": 1,
-            },
-        ),
-        (
-            {
-                "ServerRelativeUrl": None,
-                "Title": "demo",
-                "Url": "/collection2",
-                "Id": 1,
-                "LastItemModifiedDate": "2022-06-20T10:04:03Z",
-                "Created": "2022-06-20T10:04:03Z",
-                "Author": {"LoginName": "system", "Id": 1},
-            },
-            {
-                "type": "sites",
-                "_id": "1437771250e098f566bace60e4d07b7a",
-                "title": "demo",
-                "url": "/collection2",
-                "server_relative_url": None,
-                "_timestamp": "2022-06-20T10:04:03Z",
-                "creation_time": "2022-06-20T10:04:03Z",
-                "author": "system",
-                "author_id": 1,
-            },
-        ),
-    ],
-)
-async def test_get_docs_having_same_site_ids(site_doc, expected_response):
-    async with create_sps_source() as source:
-        source.sharepoint_client.site_collections_path = ["collection1", "collection2"]
-        source.sharepoint_client.get_sites = AsyncIterator([site_doc])
-        source.sharepoint_client.get_lists = AsyncIterator([])
-        async for item, _ in source.get_docs():
-            assert item == expected_response
