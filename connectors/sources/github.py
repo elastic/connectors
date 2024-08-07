@@ -53,6 +53,7 @@ REPOSITORY_OBJECT = "repository"
 RETRIES = 3
 RETRY_INTERVAL = 2
 FORBIDDEN = 403
+UNAUTHORIZED = 401
 NODE_SIZE = 100
 REVIEWS_COUNT = 45
 
@@ -735,6 +736,8 @@ class GitHubClient:
                 private_key=self.private_key,
             )
             self._installation_access_token = access_token_response["token"]
+        except RateLimitExceeded:
+            await self._put_to_sleep("core")
         except Exception:
             self._logger.exception(
                 f"Failed to get access token for installation {self._installation_id}.",
@@ -838,7 +841,7 @@ class GitHubClient:
                 url=resource, oauth_token=self._access_token()
             )
         except ClientResponseError as exception:
-            if exception.status == 401:
+            if exception.status == UNAUTHORIZED:
                 if self.auth_method == GITHUB_APP:
                     self._logger.debug(
                         f"The access token for installation #{self._installation_id} expired, Regenerating a new token."
@@ -908,15 +911,20 @@ class GitHubClient:
                 )
                 return set()
             return {scope.strip() for scope in scopes.split(",")}
-        except Exception as exception:
-            if self.get_rate_limit_encountered(
-                exception.status,  # pyright: ignore
-                exception.headers.get("X-RateLimit-Remaining"),  # pyright: ignore
-            ):
-                await self._put_to_sleep(resource_type="core")
-            elif exception.status == FORBIDDEN:  # pyright: ignore
-                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {self.base_url}."
-                raise ForbiddenException(msg) from exception
+        except ClientResponseError as exception:
+            if exception.status == FORBIDDEN:
+                if self.get_rate_limit_encountered(
+                    exception.status, exception.headers.get("X-RateLimit-Remaining")
+                ):
+                    await self._put_to_sleep("graphql")
+                else:
+                    msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {self.base_url}."
+                    raise ForbiddenException(msg) from exception
+            elif exception.status == UNAUTHORIZED:
+                msg = "Your Github token is either expired or revoked. Please check again."
+                raise UnauthorizedException(msg) from exception
+            else:
+                raise
 
     @retryable(
         retries=RETRIES,
@@ -1322,23 +1330,16 @@ class GitHubDataSource(BaseDataSource):
                 self.configured_repos,
             )
         )
-        try:
-            for full_repo_name in self.configured_repos:
-                if full_repo_name in invalid_repos:
-                    continue
-                owner, repo_name = self.github_client.get_repo_details(
-                    repo_name=full_repo_name
-                )
-                if await self._get_repo_object_for_github_app(owner, repo_name) is None:
-                    invalid_repos.add(full_repo_name)
+        for full_repo_name in self.configured_repos:
+            if full_repo_name in invalid_repos:
+                continue
+            owner, repo_name = self.github_client.get_repo_details(
+                repo_name=full_repo_name
+            )
+            if await self._get_repo_object_for_github_app(owner, repo_name) is None:
+                invalid_repos.add(full_repo_name)
 
-            return list(invalid_repos)
-        except Exception as exception:
-            if self.github_client.get_rate_limit_encountered(
-                exception.status,  # pyright: ignore
-                exception.headers.get("X-RateLimit-Remaining"),  # pyright: ignore
-            ):
-                await self.github_client._put_to_sleep(resource_type="graphql")
+        return list(invalid_repos)
 
     async def _get_repo_object_for_github_app(self, owner, repo_name):
         await self._fetch_installations()

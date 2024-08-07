@@ -2085,6 +2085,53 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes):
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.parametrize(
+    "exception, raises",
+    [
+        (
+            ClientResponseError(
+                status=401,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                headers={"X-RateLimit-Remaining": 5000},
+            ),
+            UnauthorizedException,
+        ),
+        (
+            ClientResponseError(
+                status=403,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                headers={"X-RateLimit-Remaining": 2500},
+            ),
+            ForbiddenException,
+        ),
+        (
+            ClientResponseError(
+                status=404,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                headers={"X-RateLimit-Remaining": 2500},
+            ),
+            ClientResponseError,
+        ),
+    ],
+)
+async def test_get_personal_access_token_scopes_when_error_occurs(exception, raises):
+    async with create_github_source() as source:
+        source.github_client._get_client._request = AsyncMock(side_effect=exception)
+        with pytest.raises(raises):
+            await source.github_client.get_personal_access_token_scopes()
+
+
+@pytest.mark.asyncio
 async def test_github_client_get_installations():
     async with create_github_source(auth_method=GITHUB_APP) as source:
         mock_response = [
