@@ -27,6 +27,11 @@ def load_config(config_file):
     return configuration
 
 
+def load_config_agentless(config_dict):
+    configuration = dict(_merge_dicts(_default_config(), config_dict))
+    return configuration
+
+
 # Left - in Enterprise Search; Right - in Connectors
 config_mappings = {
     "elasticsearch.host": "elasticsearch.host",

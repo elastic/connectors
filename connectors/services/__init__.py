@@ -7,7 +7,7 @@
 from connectors.services.access_control_sync_job_execution import (
     AccessControlSyncJobExecutionService,  # NOQA
 )
-from connectors.services.base import get_services  # NOQA
+from connectors.services.base import get_services, get_raw_services  # NOQA
 from connectors.services.content_sync_job_execution import (
     ContentSyncJobExecutionService,  # NOQA
 )

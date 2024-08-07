@@ -22,6 +22,7 @@ __all__ = [
     "ServiceAlreadyRunningError",
     "get_service",
     "get_services",
+    "get_raw_services",
     "BaseService",
 ]
 
@@ -39,6 +40,14 @@ def get_services(names, config):
     returns a `MultiService` instance.
     """
     return MultiService(*[get_service(name, config) for name in names])
+
+
+def get_raw_services(names, config):
+    """Instantiates a list of services given their names and a config.
+
+    returns a `MultiService` instance.
+    """
+    return [get_service(name, config) for name in names]
 
 
 def get_service(name, config):
