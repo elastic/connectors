@@ -36,6 +36,7 @@ from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
+    html_to_text,
     iso_utc,
     nested_get_from_dict,
     retryable,
@@ -821,13 +822,15 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def get_user(self):
         url = os.path.join(self.configuration["confluence_url"], URLS[USER])
-        async for users in self.atlassian_access_control.fetch_all_users(url=url):
+        async for users in self.atlassian_access_control.fetch_all_users_for_confluence(
+            url=url
+        ):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
             )
             tasks = [
                 anext(
-                    self.atlassian_access_control.fetch_user(
+                    self.atlassian_access_control.fetch_user_for_confluence(
                         url=f"{user_info.get('self')}&{USER_QUERY}"
                     )
                 )
@@ -1017,7 +1020,7 @@ class ConfluenceDataSource(BaseDataSource):
                 "title": document.get("title"),
                 "ancestors": ancestor_title,
                 "space": document["space"]["name"],
-                "body": document["body"]["storage"]["value"],
+                "body": html_to_text(document["body"]["storage"]["value"]),
                 "url": document_url,
                 "author": document["history"]["createdBy"][self.authorkey],
                 "createdDate": document["history"]["createdDate"],
@@ -1088,7 +1091,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
                 "_timestamp": entity.get("lastModified"),
-                "body": entity_details.get("body", {}).get("storage", {}).get("value"),
+                "body": html_to_text(
+                    entity_details.get("body", {}).get("storage", {}).get("value")
+                ),
                 "type": entity.get("entityType"),
                 "url": os.path.join(
                     self.confluence_client.host_url, entity.get("url")[1:]
