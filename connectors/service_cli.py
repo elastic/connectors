@@ -72,13 +72,19 @@ async def _start_service(actions, config, loop):
         return await multi_service.run()
 
 
+def _get_uvloop():
+    import uvloop
+
+    return uvloop
+
+
 def get_event_loop(uvloop=False):
     if uvloop:
         # activate uvloop if lib is present
         try:
             import uvloop
 
-            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            asyncio.set_event_loop_policy(_get_uvloop().EventLoopPolicy())
         except Exception as e:
             logger.warning(
                 f"Unable to enable uvloop: {e}. Running with default event loop"
