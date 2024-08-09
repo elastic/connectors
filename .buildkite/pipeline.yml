@@ -47,13 +47,11 @@ steps:
             - "${DOCKERFILE_FTEST_PATH}"
             - "requirements/**"
             config:
-              label: "asdf"
-              build:
-                message: "🔨 MySQL"
-                env:
-                  - PYTHON_VERSION=3.10
-                  - DATA_SIZE=small
-                  - CONNECTOR=mysql
+              label: "🔨 MySQL"
+              env:
+                - PYTHON_VERSION=3.10
+                - DATA_SIZE=small
+                - CONNECTOR=mysql
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
