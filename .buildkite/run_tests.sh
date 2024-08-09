@@ -6,7 +6,7 @@ set -euo pipefail
 source ~/.bash_profile
 
 pyenv global $PYTHON_VERSION
-make test
+echo "Python version:"
+pyenv global
 
-echo "Python version was:"
-bin/python --version
+make test

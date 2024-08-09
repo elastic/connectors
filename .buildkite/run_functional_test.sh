@@ -10,6 +10,9 @@ if [ "$MACHINE_TYPE" != "x86_64" ] && [ -v SKIP_AARCH64 ]; then
   exit
 fi
 
+pyenv global $PYTHON_VERSION
+echo "Python version:"
+pyenv global
 
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
@@ -21,8 +24,6 @@ make install
 export PIP=$ROOT/bin/pip
 
 $PIP install py-spy
-
-pyenv global $PYTHON_VERSION
 
 # If we run on buildkite, we connect to docker so we can pull private images
 # !!! WARNING be cautious about the following lines to avoid leaking the secrets in the CI logs
