@@ -2,7 +2,7 @@ steps:
   - label: "🔨 [Python {{ matrix }}] MySQL"
     command: ".buildkite/run_functional_test.sh"
     env:
-    DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+      DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mysql"
       DATA_SIZE: "medium"
