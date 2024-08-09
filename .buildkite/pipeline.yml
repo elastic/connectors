@@ -16,7 +16,7 @@ steps:
     command: "ls -alF ~ && cat ~/.bashrc && whoami"
 
   - label: ":pytest: Just bla bla bla {{ matrix.python }}"
-    command: "~/.pyenv/bin/pyenv global {{ matrix.python }} && make install && bin/python --version"
+    command: "pyenv global {{ matrix.python }} && python3 --version && python --version && make install && bin/python --version"
     timeout_in_minutes: 5
     matrix:
       setup:
@@ -26,7 +26,7 @@ steps:
           - "3.12"
 
   - label: ":pytest: Test with Python {{ matrix.python }}"
-    command: "~/.pyenv/bin/pyenv global {{ matrix.python }} && make test"
+    command: "pyenv global {{ matrix.python }} && make test"
     timeout_in_minutes: 5
     matrix:
       setup:
