@@ -22,7 +22,6 @@ steps:
     matrix:
       - "3.10"
       - "3.11"
-      - "3.12"
 
   - label: ":shipit: Smoke test"
     command: ".buildkite/run_functional_test.sh"
