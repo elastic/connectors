@@ -36,7 +36,7 @@ steps:
 
   - label: ":sweating: Checking for changes in connectors"
     plugins:
-      chronotc/monorepo-diff#v2.4.0:
+      monebag/monorepo-diff#v2.5.9:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
