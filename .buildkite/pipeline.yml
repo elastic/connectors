@@ -23,7 +23,11 @@ steps:
       - "3.12"
 
   - label: ":shipit: Smoke test"
-    command: "make ftest NAME=dir DATA_SIZE=small"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "3.10" # TODO: can actually do a matrix too
+      CONNECTOR: "dir"
+      DATA_SIZE: "small"
     timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"

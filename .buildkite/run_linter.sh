@@ -5,7 +5,7 @@ set -euo pipefail
 
 source ~/.bash_profile
 
-make install
-echo "Python version:"
-bin/python --version
 make lint
+
+echo "Python version was:"
+bin/python --version
