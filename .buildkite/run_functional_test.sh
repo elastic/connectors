@@ -10,6 +10,8 @@ if [ "$MACHINE_TYPE" != "x86_64" ] && [ -v SKIP_AARCH64 ]; then
   exit
 fi
 
+source ~/.bash_profile
+
 pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
