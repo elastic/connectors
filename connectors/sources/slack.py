@@ -7,7 +7,7 @@
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
@@ -88,7 +88,7 @@ class SlackClient:
         channel_id = channel["id"]
 
         self._logger.info(
-            f"Fetching messages between {datetime.fromtimestamp(oldest, timezone.utc)} and {datetime.fromtimestamp(latest, timezone.utc)} from channel: '{channel['name']}'"
+            f"Fetching messages between {datetime.utcfromtimestamp(oldest)} and {datetime.utcfromtimestamp(latest)} from channel: '{channel['name']}'"
         )
         while True:
             url = f"{BASE_URL}/conversations.history?channel={channel_id}&limit={PAGE_SIZE}&oldest={oldest}&latest={latest}"

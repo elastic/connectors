@@ -92,7 +92,6 @@ steps:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "oracle"
       DATA_SIZE: "medium"
-    env:
       SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
