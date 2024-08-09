@@ -1,6 +1,6 @@
 .PHONY: test lint autoformat run ftest install release docker-build docker-run docker-push
 
-PYTHON=python3
+PYTHON=python
 ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
