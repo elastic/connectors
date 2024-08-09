@@ -13,7 +13,7 @@ steps:
     timeout_in_minutes: 5
 
   - label: "Just LL"
-    command: "ls -alF ~/"
+    command: "sudo ls -alF /root/.pyenv"
 
   - label: ":pytest: Test with Python {{ matrix.python }}"
     command: "pyenv global {{ matrix.python }} && make install && bin/python --version"
