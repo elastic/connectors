@@ -16,14 +16,14 @@ steps:
     command: "ls -alF ~ && cat ~/.bash_profile && whoami"
 
   - label: ":pytest: Just bla bla bla {{ matrix.python }}"
-    command: "pyenv global {{ matrix.python }} && python3 --version && python --version && make install && bin/python --version"
+    command: ".buildkite/run_tests.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
     timeout_in_minutes: 5
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
 
   - label: ":pytest: Test with Python {{ matrix.python }}"
     command: "pyenv global {{ matrix.python }} && make test"
