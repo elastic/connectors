@@ -223,8 +223,8 @@ steps:
   - label: "🔨 [Python {{ matrix }}] Dropbox"
     command: ".buildkite/run_functional_test.sh"
     env:
-      PYTHON_VERSION: "{{ dropbox }}"
-      CONNECTOR: "s3"
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "dropbox"
       DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
