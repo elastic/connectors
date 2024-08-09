@@ -62,7 +62,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Postgresql"
+  - label: "🔨 [Python {{ matrix }}] Postgresql"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -74,7 +74,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 System Directory"
+  - label: "🔨 [Python {{ matrix }}] System Directory"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -86,7 +86,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Oracle Database"
+  - label: "🔨 [Python {{ matrix }}] Oracle Database"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -100,7 +100,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Sharepoint Server"
+  - label: "🔨 [Python {{ matrix }}] Sharepoint Server"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -112,7 +112,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Sharepoint Online"
+  - label: "🔨 [Python {{ matrix }}] Sharepoint Online"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -124,7 +124,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Microsoft SQL"
+  - label: "🔨 [Python {{ matrix }}] Microsoft SQL"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -136,7 +136,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Jira"
+  - label: "🔨 [Python {{ matrix }}] Jira"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -148,7 +148,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Confluence"
+  - label: "🔨 [Python {{ matrix }}] Confluence"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -160,7 +160,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 ServiceNow"
+  - label: "🔨 [Python {{ matrix }}] ServiceNow"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -172,7 +172,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 MongoDB"
+  - label: "🔨 [Python {{ matrix }}] MongoDB"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -184,7 +184,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-#   - label: "🔨 MongoDB Serverless"
+#   - label: "🔨 [Python {{ matrix }}] MongoDB Serverless"
 #     command: ".buildkite/run_functional_test.sh"
 #     env:
 #       PYTHON_VERSION: "{{ matrix }}"
@@ -196,7 +196,7 @@ steps:
 #       - "3.12"
 #     artifact_paths:
 #       - "perf8-report-*/**/*"
-  - label: "🔨 GitHub"
+  - label: "🔨 [Python {{ matrix }}] GitHub"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -208,7 +208,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Google Drive"
+  - label: "🔨 [Python {{ matrix }}] Google Drive"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -220,7 +220,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Dropbox"
+  - label: "🔨 [Python {{ matrix }}] Dropbox"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ dropbox }}"
@@ -232,7 +232,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 OneDrive"
+  - label: "🔨 [Python {{ matrix }}] OneDrive"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -244,7 +244,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Salesforce"
+  - label: "🔨 [Python {{ matrix }}] Salesforce"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -256,7 +256,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Zoom"
+  - label: "🔨 [Python {{ matrix }}] Zoom"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -268,7 +268,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Box"
+  - label: "🔨 [Python {{ matrix }}] Box"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -280,7 +280,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Notion"
+  - label: "🔨 [Python {{ matrix }}] Notion"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -292,7 +292,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 Redis"
+  - label: "🔨 [Python {{ matrix }}] Redis"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -304,7 +304,7 @@ steps:
       - "3.10"
       - "3.11"
       - "3.12"
-  - label: "🔨 GraphQL"
+  - label: "🔨 [Python {{ matrix }}] GraphQL"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
