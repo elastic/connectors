@@ -42,6 +42,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
+from connectors.utils import ErrorMonitor, TooManyErrors
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -1140,6 +1141,7 @@ def test_bulk_populate_stats(res, expected_result):
     sink = Sink(
         client=None,
         queue=None,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline=None,
         chunk_mem_size=0,
@@ -1175,6 +1177,7 @@ async def test_batch_bulk_with_retry():
     sink = Sink(
         client=client,
         queue=None,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1198,6 +1201,68 @@ async def test_batch_bulk_with_retry():
 
 
 @pytest.mark.asyncio
+async def test_batch_bulk_with_error_monitor():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+    client = ESManagementClient(config)
+    client.client = AsyncMock()
+    sink = Sink(
+        client=client,
+        queue=None,
+        error_monitor=ErrorMonitor(max_consecutive_errors=10),
+        chunk_size=0,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=0,
+        max_concurrency=0,
+        max_retries=3,
+        retry_interval=10,
+    )
+
+    def _create_response(num_successful, num_failed):
+        call_result = {"items": []}
+        for id_ in range(num_successful):
+            call_result["items"].append(
+                {OP_UPDATE: {"_id": str(id_), "result": "updated"}}
+            )
+
+        for id_ in range(num_failed):
+            call_result["items"].append(
+                {
+                    OP_UPDATE: {
+                        "_id": str(num_successful + id_),
+                        "result": "failed",
+                        "error": "something went wrong",
+                    }
+                }
+            )
+
+        return call_result
+
+    # First add 45 successful items and 5 failed
+    first_call_result = _create_response(45, 5)
+
+    # Then add 40 successful items and 10 failed
+    second_call_result = _create_response(40, 10)
+
+    # Lastly add 0 successful items and 1 failed
+    # This should fail the test as max consecutive_error_count=10
+    # 10 errors came last in second call, and this one just triggers it
+    third_call_result = _create_response(0, 1)
+
+    client.client.bulk = AsyncMock(
+        side_effect=[first_call_result, second_call_result, third_call_result]
+    )
+
+    await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+    await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+    with pytest.raises(TooManyErrors):
+        await sink._batch_bulk([], {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}})
+
+
+@pytest.mark.asyncio
 async def test_batch_bulk_with_errors(patch_logger):
     config = {
         "username": "elastic",
@@ -1209,6 +1274,7 @@ async def test_batch_bulk_with_errors(patch_logger):
     sink = Sink(
         client=client,
         queue=None,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1281,11 +1347,7 @@ async def test_extractor_put_doc():
     doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
-    extractor = Extractor(
-        None,
-        queue,
-        INDEX,
-    )
+    extractor = Extractor(None, queue, INDEX)
 
     await extractor.put_doc(doc)
     queue.put.assert_awaited_once_with(doc)
@@ -1324,11 +1386,7 @@ async def test_force_canceled_extractor_put_doc():
     doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
-    extractor = Extractor(
-        None,
-        queue,
-        INDEX,
-    )
+    extractor = Extractor(None, queue, INDEX)
 
     extractor.force_cancel()
     with pytest.raises(ForceCanceledError):
@@ -1363,6 +1421,7 @@ async def test_sink_fetch_doc():
     sink = Sink(
         None,
         queue,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1384,6 +1443,7 @@ async def test_force_canceled_sink_fetch_doc():
     sink = Sink(
         None,
         queue,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1405,6 +1465,7 @@ async def test_force_canceled_sink_with_other_errors(patch_logger):
     sink = Sink(
         None,
         queue,
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1500,11 +1561,7 @@ async def test_extractor_run_when_mem_full_is_raised():
     # instances
     doc_generator = AsyncIterator([(doc, None, "") for doc in docs_from_source])
 
-    extractor = Extractor(
-        es_client,
-        queue,
-        INDEX,
-    )
+    extractor = Extractor(es_client, queue, INDEX)
 
     await extractor.run(doc_generator, JobType.FULL)
 
@@ -1526,6 +1583,7 @@ async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1609,6 +1667,7 @@ async def test_should_log_bulk_operations_if_doc_id_tracing_is_enabled(
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1639,6 +1698,7 @@ async def test_should_log_error_when_id_is_missing(patch_logger):
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
@@ -1674,6 +1734,7 @@ async def test_should_log_error_when_unknown_action_item_returned(patch_logger):
     sink = Sink(
         client=client,
         queue=Mock(),
+        error_monitor=Mock(),
         chunk_size=0,
         pipeline={"name": "pipeline"},
         chunk_mem_size=0,
