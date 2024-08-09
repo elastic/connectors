@@ -55,6 +55,7 @@ RESPONSE_SPACE = {
 SPACE = {
     "id": 4554779,
     "name": "DEMO",
+    "key": "DM",
     "_links": {
         "webui": "/spaces/DM",
     },
@@ -157,6 +158,7 @@ EXPECTED_SPACE = {
     "url": "http://127.0.0.1:9696/spaces/DM",
     "createdDate": "2023-01-03T09:24:50.633Z",
     "author": "user1",
+    "key": "DM",
 }
 
 RESPONSE_ATTACHMENT = {
