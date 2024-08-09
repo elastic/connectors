@@ -2,285 +2,317 @@ env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
-  - label: "🔨 MySQL with Python {{ matrix python }}"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} mysql"
+  - label: "🔨 [Python {{ matrix }}] MySQL"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "mysql"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Network Drive"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} network_drive"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "network_drive"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
-  - label: "🔨 Amazon S3"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} s3"
+      - "3.10"
+      - "3.11"
+      - "3.12"
+  - label: "🔨 [Python {{ matrix }}] Amazon S3"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "s3"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
-  - label: "🔨 Google Cloud Storage"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} google_cloud_storage"
+      - "3.10"
+      - "3.11"
+      - "3.12"
+  - label: "🔨 [Python {{ matrix }}] Google Cloud Storage"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "google_cloud_storage"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
-  - label: "🔨 Azure Blob Storage"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} azure_blob_storage"
+      - "3.10"
+      - "3.11"
+      - "3.12"
+  - label: "🔨 [Python {{ matrix }}] Azure Blob Storage"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "azure_blob_storage"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Postgresql"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} postgresql"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "postgresql"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 System Directory"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} dir"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "dir"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Oracle Database"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} oracle"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "oracle"
+      DATA_SIZE: "medium"
     env:
       SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Sharepoint Server"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} sharepoint_server"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "sharepoint_server"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Sharepoint Online"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} sharepoint_online"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "sharepoint_online"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Microsoft SQL"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} mssql"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "mssql"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Jira"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} jira"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "jira"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Confluence"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} confluence"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "confluence"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 ServiceNow"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} servicenow"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "servicenow"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 MongoDB"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} mongodb"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "mongodb"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
 #   - label: "🔨 MongoDB Serverless"
-#     command:
-#       - ".buildkite/run_nigthly.sh {{ matrix python }} mongodb_serverless"
+#     command: ".buildkite/run_functional_test.sh"
+#     env:
+#       PYTHON_VERSION: "{{ matrix }}"
+#       CONNECTOR: "mongodb_serverless"
+#       DATA_SIZE: "medium"
+#     matrix:
+#       - "3.10"
+#       - "3.11"
+#       - "3.12"
 #     artifact_paths:
 #       - "perf8-report-*/**/*"
   - label: "🔨 GitHub"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} github"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "github"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Google Drive"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} google_drive"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "google_drive"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Dropbox"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} dropbox"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ dropbox }}"
+      CONNECTOR: "s3"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 OneDrive"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} onedrive"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "onedrive"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Salesforce"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} salesforce"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "salesforce"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Zoom"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} zoom"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "zoom"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Box"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} box"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "box"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Notion"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} notion"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "notion"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 Redis"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} redis"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "redis"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"
   - label: "🔨 GraphQL"
-    command:
-      - ".buildkite/run_nigthly.sh {{ matrix python }} graphql"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+      CONNECTOR: "graphql"
+      DATA_SIZE: "medium"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
-      setup:
-        python:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+      - "3.10"
+      - "3.11"
+      - "3.12"

@@ -36,8 +36,11 @@ steps:
 
   - label: ":sweating: Checking for changes in connectors"
     plugins:
-      chronotc/monorepo-diff#v2.4.0:
+      monebag/monorepo-diff#v2.5.9:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
+        env:
+          PYTHON_VERSION: "3.10"
+          DATA_SIZE: "small"
         wait: false
         watch:
           - path:
@@ -49,9 +52,7 @@ steps:
             config:
               label: "🔨 MySQL"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "mysql"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -66,9 +67,7 @@ steps:
             config:
               label: "🔨 Network Drive"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "network_drive"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -83,9 +82,7 @@ steps:
             config:
               label: "🔨 Amazon S3"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "s3"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -100,9 +97,7 @@ steps:
             config:
               label: "🔨 Google Cloud Storage"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "google_cloud_storage"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -117,9 +112,7 @@ steps:
             config:
               label: "🔨 Azure Blob Storage"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "azure_blob_storage"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -134,9 +127,7 @@ steps:
             config:
               label: "🔨 Postgresql"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "postgresql"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -151,9 +142,7 @@ steps:
             config:
               label: "🔨 System Directory"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "dir"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -168,9 +157,7 @@ steps:
             config:
               label: "🔨 Oracle Database"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "oracle"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -185,9 +172,7 @@ steps:
             config:
               label: "🔨 Sharepoint Server"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "sharepoint_server"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -202,9 +187,7 @@ steps:
             config:
               label: "🔨 Sharepoint Online"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "sharepoint_online"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -219,9 +202,7 @@ steps:
             config:
               label: "🔨 Microsoft SQL"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "mssql"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -237,9 +218,7 @@ steps:
             config:
               label: "🔨 Jira"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "jira"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -255,9 +234,7 @@ steps:
             config:
               label: "🔨 Confluence"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "confluence"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -272,9 +249,7 @@ steps:
             config:
               label: "🔨 ServiceNow"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "servicenow"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -289,9 +264,7 @@ steps:
             config:
               label: "🔨 MongoDB"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "mongodb"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -306,9 +279,7 @@ steps:
             config:
               label: "🔨 GitHub"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "github"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -323,9 +294,7 @@ steps:
             config:
               label: "🔨 Google Drive"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "google_drive"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -340,9 +309,7 @@ steps:
             config:
               label: "🔨 Dropbox"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "dropbox"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -357,9 +324,7 @@ steps:
             config:
               label: "🔨 OneDrive"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "onedrive"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -374,9 +339,7 @@ steps:
             config:
               label: "🔨 Salesforce"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "salesforce"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -391,9 +354,7 @@ steps:
             config:
               label: "🔨 Zoom"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "zoom"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -408,9 +369,7 @@ steps:
             config:
               label: "🔨 Box"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "box"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -425,9 +384,7 @@ steps:
             config:
               label: "🔨 Microsoft Teams"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "microsoft_teams"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -442,9 +399,7 @@ steps:
             config:
               label: "🔨 Notion"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "notion"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -459,9 +414,7 @@ steps:
             config:
               label: "🔨 Redis"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "redis"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
@@ -476,9 +429,7 @@ steps:
             config:
               label: "🔨 GraphQL"
               env:
-                PYTHON_VERSION: "3.10"
                 CONNECTOR: "graphql"
-                DATA_SIZE: "small"
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
