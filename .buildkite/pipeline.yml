@@ -47,7 +47,7 @@ steps:
             - "${DOCKERFILE_FTEST_PATH}"
             - "requirements/**"
             config:
-              label: ""
+              label: "asdf"
               build:
                 message: "🔨 MySQL"
                 env:
@@ -68,9 +68,9 @@ steps:
             config:
               label: "🔨 Network Drive"
               env:
-                PYTHON_VERSION: "3.10"
-                DATA_SIZE: "small"
-                CONNECTOR: "network_drive"
+                - PYTHON_VERSION=3.10
+                - DATA_SIZE=small
+                - CONNECTOR=network_drive
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
