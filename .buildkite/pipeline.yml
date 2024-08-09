@@ -10,6 +10,8 @@ env:
 steps:
   - label: ":face_with_peeking_eye: Lint"
     command: ".buildkite/run_linter.sh"
+    env:
+      PYTHON_VERSION: "3.10" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"

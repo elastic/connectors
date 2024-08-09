@@ -5,6 +5,7 @@ set -euo pipefail
 
 source ~/.bash_profile
 
+pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
 
