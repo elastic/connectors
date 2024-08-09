@@ -12,7 +12,7 @@ steps:
     command: "make lint"
     timeout_in_minutes: 5
 
-  - label: "Just LL":
+  - label: "Just LL"
     command: "ls -alF ~/"
 
   - label: ":pytest: Test with Python {{ matrix.python }}"
