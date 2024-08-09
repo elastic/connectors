@@ -38,9 +38,6 @@ steps:
     plugins:
       monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
-        env:
-          - PYTHON_VERSION=3.10
-          - DATA_SIZE=small
         wait: false
         watch:
           - path:
