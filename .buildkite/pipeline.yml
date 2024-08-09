@@ -4,12 +4,6 @@ agents:
   useVault: true
   image: family/enterprise-search-ubuntu-2204-connectors-py
 
-env:
-  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
-  PYTHON_VERSION: "3.10"
-  DATA_SIZE: "small"
-  CONNECTOR: ""
-
 steps:
   - label: ":face_with_peeking_eye: Lint"
     command: ".buildkite/run_linter.sh"
@@ -41,6 +35,10 @@ steps:
     plugins:
       monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
+        env:
+          DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+          PYTHON_VERSION: "3.10"
+          DATA_SIZE: "small"
         wait: false
         watch:
           - path:
@@ -50,8 +48,9 @@ steps:
             - "${DOCKERFILE_FTEST_PATH}"
             - "requirements/**"
             config:
-              label: "🔨 MySQL"
+              label: ""
               build:
+                message: "🔨 MySQL"
                 env:
                   PYTHON_VERSION: "3.10"
                   DATA_SIZE: "small"
