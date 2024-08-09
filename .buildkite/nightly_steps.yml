@@ -2,133 +2,285 @@ env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
-  - label: "🔨 MySQL"
+  - label: "🔨 MySQL with Python {{ matrix python }}"
     command:
-      - ".buildkite/run_nigthly.sh mysql"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} mysql"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Network Drive"
     command:
-      - ".buildkite/run_nigthly.sh network_drive"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} network_drive"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Amazon S3"
     command:
-      - ".buildkite/run_nigthly.sh s3"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} s3"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Google Cloud Storage"
     command:
-      - ".buildkite/run_nigthly.sh google_cloud_storage"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} google_cloud_storage"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Azure Blob Storage"
     command:
-      - ".buildkite/run_nigthly.sh azure_blob_storage"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} azure_blob_storage"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Postgresql"
     command:
-      - ".buildkite/run_nigthly.sh postgresql"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} postgresql"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 System Directory"
     command:
-      - ".buildkite/run_nigthly.sh dir"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} dir"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Oracle Database"
     command:
-      - ".buildkite/run_nigthly.sh oracle"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} oracle"
     env:
       SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Sharepoint Server"
     command:
-      - ".buildkite/run_nigthly.sh sharepoint_server"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} sharepoint_server"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Sharepoint Online"
     command:
-      - ".buildkite/run_nigthly.sh sharepoint_online"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} sharepoint_online"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Microsoft SQL"
     command:
-      - ".buildkite/run_nigthly.sh mssql"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} mssql"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Jira"
     command:
-      - ".buildkite/run_nigthly.sh jira"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} jira"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Confluence"
     command:
-      - ".buildkite/run_nigthly.sh confluence"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} confluence"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 ServiceNow"
     command:
-      - ".buildkite/run_nigthly.sh servicenow"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} servicenow"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 MongoDB"
     command:
-      - ".buildkite/run_nigthly.sh mongodb"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} mongodb"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
 #   - label: "🔨 MongoDB Serverless"
 #     command:
-#       - ".buildkite/run_nigthly.sh mongodb_serverless"
+#       - ".buildkite/run_nigthly.sh {{ matrix python }} mongodb_serverless"
 #     artifact_paths:
 #       - "perf8-report-*/**/*"
   - label: "🔨 GitHub"
     command:
-      - ".buildkite/run_nigthly.sh github"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} github"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Google Drive"
     command:
-      - ".buildkite/run_nigthly.sh google_drive"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} google_drive"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Dropbox"
     command:
-      - ".buildkite/run_nigthly.sh dropbox"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} dropbox"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 OneDrive"
     command:
-      - ".buildkite/run_nigthly.sh onedrive"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} onedrive"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Salesforce"
     command:
-      - ".buildkite/run_nigthly.sh salesforce"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} salesforce"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Zoom"
     command:
-      - ".buildkite/run_nigthly.sh zoom"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} zoom"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Box"
     command:
-      - ".buildkite/run_nigthly.sh box"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} box"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Notion"
     command:
-      - ".buildkite/run_nigthly.sh notion"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} notion"
+    artifact_paths:
+      - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 Redis"
     command:
-      - ".buildkite/run_nigthly.sh redis"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} redis"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
   - label: "🔨 GraphQL"
     command:
-      - ".buildkite/run_nigthly.sh graphql"
+      - ".buildkite/run_nigthly.sh {{ matrix python }} graphql"
     artifact_paths:
       - "perf8-report-*/**/*"
+    matrix:
+      setup:
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"

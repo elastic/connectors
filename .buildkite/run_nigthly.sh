@@ -14,9 +14,6 @@ fi
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
 
-# TODO to be moved in the image at https://github.com/elastic/ci-agent-images/blob/main/vm-images/enterprise-search/scripts/connectors-python/install-deps.sh#L6
-sudo apt-get -y install liblz4-dev libunwind-dev
-
 cd $ROOT
 
 make install
@@ -24,7 +21,11 @@ make install
 export PIP=$ROOT/bin/pip
 
 $PIP install py-spy
-DATA_SIZE="${2:-small}"
+PYTHON_VERSION=$1
+NAME=$2
+DATA_SIZE="${3:-small}"
+
+pyenv global $PYTHON_VERSION
 
 # If we run on buildkite, we connect to docker so we can pull private images
 # !!! WARNING be cautious about the following lines to avoid leaking the secrets in the CI logs
@@ -42,4 +43,4 @@ if [ -v BUILDKITE ]; then
   sudo sysctl -w vm.max_map_count=262144
 fi
 
-PERF8=yes NAME=$1 DATA_SIZE=$DATA_SIZE make ftest
+PERF8=yes NAME=$NAME DATA_SIZE=$DATA_SIZE make ftest
