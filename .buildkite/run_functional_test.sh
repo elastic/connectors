@@ -21,9 +21,6 @@ make install
 export PIP=$ROOT/bin/pip
 
 $PIP install py-spy
-PYTHON_VERSION=$1
-NAME=$2
-DATA_SIZE="${3:-small}"
 
 pyenv global $PYTHON_VERSION
 
@@ -43,4 +40,4 @@ if [ -v BUILDKITE ]; then
   sudo sysctl -w vm.max_map_count=262144
 fi
 
-PERF8=yes NAME=$NAME DATA_SIZE=$DATA_SIZE make ftest
+PERF8=yes NAME=$CONNECTOR DATA_SIZE=$DATA_SIZE make ftest
