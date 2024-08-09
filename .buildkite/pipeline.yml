@@ -13,7 +13,7 @@ steps:
     timeout_in_minutes: 5
 
   - label: "Just LL"
-    command: "ls -alF ~ && cat ~/.bashrc && whoami"
+    command: "ls -alF ~ && cat ~/.bash_profile && whoami"
 
   - label: ":pytest: Just bla bla bla {{ matrix.python }}"
     command: "pyenv global {{ matrix.python }} && python3 --version && python --version && make install && bin/python --version"
