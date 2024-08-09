@@ -8,13 +8,13 @@ steps:
   - label: ":face_with_peeking_eye: Lint"
     command: ".buildkite/run_linter.sh"
     env:
-      PYTHON_VERSION: "3.10" # We don't really care about linter on multiple versions for now
+      - PYTHON_VERSION: "3.10" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"
     command: ".buildkite/run_tests.sh"
     env:
-      PYTHON_VERSION: "{{ matrix }}"
+      - PYTHON_VERSION: "{{ matrix }}"
     timeout_in_minutes: 5
     matrix:
       - "3.10"
@@ -24,9 +24,9 @@ steps:
   - label: ":shipit: Smoke test"
     command: ".buildkite/run_functional_test.sh"
     env:
-      PYTHON_VERSION: "3.10" # TODO: can actually do a matrix too
-      CONNECTOR: "dir"
-      DATA_SIZE: "small"
+      - PYTHON_VERSION: "3.10" # TODO: can actually do a matrix too
+      - CONNECTOR: "dir"
+      - DATA_SIZE: "small"
     timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
@@ -36,9 +36,9 @@ steps:
       monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         env:
-          DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
-          PYTHON_VERSION: "3.10"
-          DATA_SIZE: "small"
+          - DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+          - PYTHON_VERSION: "3.10"
+          - DATA_SIZE: "small"
         wait: false
         watch:
           - path:
