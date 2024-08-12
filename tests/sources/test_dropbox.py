@@ -12,13 +12,18 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import aiohttp
 import pytest
 from aiohttp import StreamReader
-from aiohttp.client_exceptions import ClientResponseError, ServerDisconnectedError
+from aiohttp.client_exceptions import (
+    ClientResponseError,
+    ServerDisconnectedError,
+    ServerTimeoutError,
+)
 from freezegun import freeze_time
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.dropbox import (
+    AUTHENTICATED_ADMIN_URL,
     DropBoxAdvancedRulesValidator,
     DropboxClient,
     DropboxDataSource,
@@ -744,6 +749,63 @@ async def test_ping():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
+async def test_ping_when_server_timeout_error_raises():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client._set_access_token = AsyncMock()
+        with patch.object(
+            aiohttp.ClientSession, "post", side_effect=ServerTimeoutError()
+        ):
+            with pytest.raises(Exception):
+                await source.ping()
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
+async def test_ping_when_client_response_error_occurs():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client._set_access_token = AsyncMock()
+        with patch.object(
+            aiohttp.ClientSession,
+            "post",
+            side_effect=[
+                ClientResponseError(
+                    request_info=aiohttp.RequestInfo(
+                        url=AUTHENTICATED_ADMIN_URL, method="POST", headers=None
+                    ),
+                    history=(),
+                ),
+                get_json_mock(MOCK_CURRENT_USER, 200),
+            ],
+        ):
+            await source.ping()
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
+async def test_ping_when_client_response_error_occur_with_unexpected_url():
+    async with create_source(DropboxDataSource) as source:
+        setup_dropbox(source)
+        source.dropbox_client._set_access_token = AsyncMock()
+        with patch.object(
+            aiohttp.ClientSession,
+            "post",
+            side_effect=[
+                ClientResponseError(
+                    request_info=aiohttp.RequestInfo(
+                        url="fake_url", method="POST", headers=None
+                    ),
+                    history=(),
+                )
+            ],
+        ):
+            with pytest.raises(ClientResponseError):
+                await source.ping()
+
+
+@pytest.mark.asyncio
+@patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
 async def test_api_call_negative():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -1115,7 +1177,12 @@ async def test_search_files():
         ],
     ),
 )
-async def test_get_docs(files_folders_patch, shared_files_patch):
+@patch.object(
+    DropboxClient,
+    "ping",
+    return_value=JSONAsyncMock(MOCK_AUTHENTICATED_ADMIN, 200),
+)
+async def test_get_docs(files_folders_patch, shared_files_patch, ping_patch):
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         expected_responses = [*EXPECTED_FILES_FOLDERS, *EXPECTED_SHARED_FILES]
@@ -1215,9 +1282,14 @@ async def test_advanced_rules_validation_with_invalid_repos(
         [JSONAsyncMock(MOCK_SEARCH_FILE_3, 200)],
     ),
 )
+@patch.object(
+    DropboxClient,
+    "ping",
+    return_value=JSONAsyncMock(MOCK_AUTHENTICATED_ADMIN, 200),
+)
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(
-    received_files_patch, files_folders_patch, filtering
+    received_files_patch, files_folders_patch, ping_patch, filtering
 ):
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
@@ -1383,6 +1455,7 @@ async def test_get_docs_for_dls():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
+        source.set_user_info = AsyncMock()
         source.add_document_to_list = Mock(
             return_value=AsyncIterator([(FORMATTED_DOCUMENT, None)])
         )
@@ -1401,6 +1474,7 @@ async def test_remote_validation_with_dls():
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
+        source.set_user_info = AsyncMock()
         source.dropbox_client.path = "/abc"
         source.get_account_details = Mock(
             return_value=create_fake_coroutine(["dbid:123", "dbmid:123-456"])
@@ -1432,7 +1506,7 @@ async def test_add_document_to_list():
         )
         documents = []
         async for item, _ in source.add_document_to_list(
-            func=source._fetch_files_folders, account_id=1, folder_id=2
+            func=source._fetch_files_folders, account_id=1
         ):
             documents.append(item)
         assert documents == EXPECTED_DOCUMENT_TUPLE
@@ -1457,7 +1531,7 @@ async def test_add_document_to_list_with_exclude_inherited_users_and_groups():
         )
         documents = []
         async for item, _ in source.add_document_to_list(
-            func=source._fetch_files_folders, account_id=1, folder_id=2
+            func=source._fetch_files_folders, account_id=1
         ):
             documents.append(item)
         assert documents == EXPECTED_DOCUMENT_TUPLE
