@@ -53,7 +53,7 @@ class GitHubAPI:
             self.get_commits
         )
         self.app.route("/api/graphql", methods=["POST"])(self.mock_graphql_response)
-        self.app.route("/api", methods=["HEAD"])(self.get_scopes)
+        self.app.route("/api/graphql", methods=["HEAD"])(self.get_scopes)
         self.files = {}
 
     def encode_cursor(self, value):
