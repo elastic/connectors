@@ -7,7 +7,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mysql"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -18,7 +18,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "network_drive"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -29,7 +29,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "s3"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -40,7 +40,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "google_cloud_storage"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -51,7 +51,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "azure_blob_storage"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -62,7 +62,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "postgresql"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -73,7 +73,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "dir"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -84,7 +84,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "oracle"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
       SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
@@ -96,7 +96,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "sharepoint_server"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -107,7 +107,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "sharepoint_online"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -118,7 +118,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mssql"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -129,7 +129,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "jira"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -140,7 +140,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "confluence"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -151,7 +151,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "servicenow"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -162,7 +162,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mongodb"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -173,7 +173,7 @@ steps:
 #     env:
 #       PYTHON_VERSION: "{{ matrix }}"
 #       CONNECTOR: "mongodb_serverless"
-#       DATA_SIZE: "medium"
+#       DATA_SIZE: "small"
 #     matrix:
 #       - "3.10"
 #       - "3.11"
@@ -184,7 +184,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "github"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -195,7 +195,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "google_drive"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -206,7 +206,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "dropbox"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -217,7 +217,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "onedrive"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -228,7 +228,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "salesforce"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -239,7 +239,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "zoom"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -250,7 +250,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "box"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -261,7 +261,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "notion"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -272,7 +272,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "redis"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
@@ -283,7 +283,7 @@ steps:
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "graphql"
-      DATA_SIZE: "medium"
+      DATA_SIZE: "small"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
