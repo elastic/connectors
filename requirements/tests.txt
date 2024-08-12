@@ -7,7 +7,7 @@ pytest-cov==4.1.0
 pytest-asyncio==0.21.1
 pytest-mock==3.11.1
 pytest-randomly==3.13.0
-git+https://github.com/elastic/perf8#egg=perf8
+git+https://github.com/elastic/perf8@05327841bb607fa4c6fcec8630f7c0d99d843171#egg=perf8
 freezegun==1.2.2
 pytest-fail-slow==0.3.0
 pyright==1.1.317
