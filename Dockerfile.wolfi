@@ -1,4 +1,4 @@
-FROM docker.elastic.co/wolfi/python:3.12-dev
+FROM docker.elastic.co/wolfi/python:3.11-dev
 USER root
 COPY . /app
 WORKDIR /app

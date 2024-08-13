@@ -11,7 +11,7 @@ steps:
   - label: ":face_with_peeking_eye: Lint"
     command: ".buildkite/run_linter.sh"
     env:
-      PYTHON_VERSION: "3.10" # We don't really care about linter on multiple versions for now
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"
@@ -26,7 +26,7 @@ steps:
   - label: ":shipit: Smoke test"
     command: ".buildkite/run_functional_test.sh"
     env:
-      PYTHON_VERSION: "3.10" # TODO: can actually do a matrix too
+      PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
       CONNECTOR: "dir"
       DATA_SIZE: "small"
     timeout_in_minutes: 45
@@ -48,7 +48,7 @@ steps:
             config:
               label: "🔨 MySQL"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=mysql
               command:
@@ -65,7 +65,7 @@ steps:
             config:
               label: "🔨 Network Drive"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=network_drive
               command:
@@ -82,7 +82,7 @@ steps:
             config:
               label: "🔨 Amazon S3"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=s3
               command:
@@ -99,7 +99,7 @@ steps:
             config:
               label: "🔨 Google Cloud Storage"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=google_cloud_storage
               command:
@@ -116,7 +116,7 @@ steps:
             config:
               label: "🔨 Azure Blob Storage"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=azure_blob_storage
               command:
@@ -133,7 +133,7 @@ steps:
             config:
               label: "🔨 Postgresql"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=postgresql
               command:
@@ -150,7 +150,7 @@ steps:
             config:
               label: "🔨 System Directory"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=dir
               command:
@@ -167,7 +167,7 @@ steps:
             config:
               label: "🔨 Oracle Database"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=oracle
               command:
@@ -184,7 +184,7 @@ steps:
             config:
               label: "🔨 Sharepoint Server"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=sharepoint_server
               command:
@@ -201,7 +201,7 @@ steps:
             config:
               label: "🔨 Sharepoint Online"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=sharepoint_online
               command:
@@ -218,7 +218,7 @@ steps:
             config:
               label: "🔨 Microsoft SQL"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=mssql
               command:
@@ -236,7 +236,7 @@ steps:
             config:
               label: "🔨 Jira"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=jira
               command:
@@ -254,7 +254,7 @@ steps:
             config:
               label: "🔨 Confluence"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=confluence
               command:
@@ -271,7 +271,7 @@ steps:
             config:
               label: "🔨 ServiceNow"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=servicenow
               command:
@@ -288,7 +288,7 @@ steps:
             config:
               label: "🔨 MongoDB"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=mongodb
               command:
@@ -305,7 +305,7 @@ steps:
             config:
               label: "🔨 GitHub"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=github
               command:
@@ -322,7 +322,7 @@ steps:
             config:
               label: "🔨 Google Drive"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=google_drive
               command:
@@ -339,7 +339,7 @@ steps:
             config:
               label: "🔨 Dropbox"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=dropbox
               command:
@@ -356,7 +356,7 @@ steps:
             config:
               label: "🔨 OneDrive"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=onedrive
               command:
@@ -373,7 +373,7 @@ steps:
             config:
               label: "🔨 Salesforce"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=salesforce
               command:
@@ -390,7 +390,7 @@ steps:
             config:
               label: "🔨 Zoom"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=zoom
               command:
@@ -407,7 +407,7 @@ steps:
             config:
               label: "🔨 Box"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=box
               command:
@@ -424,7 +424,7 @@ steps:
             config:
               label: "🔨 Microsoft Teams"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=microsoft_teams
               command:
@@ -441,7 +441,7 @@ steps:
             config:
               label: "🔨 Notion"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=notion
               command:
@@ -458,7 +458,7 @@ steps:
             config:
               label: "🔨 Redis"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=redis
               command:
@@ -475,7 +475,7 @@ steps:
             config:
               label: "🔨 GraphQL"
               env:
-                - PYTHON_VERSION=3.10
+                - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=graphql
               command:
