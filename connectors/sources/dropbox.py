@@ -48,6 +48,9 @@ PAPER = "paper"
 FILE = "File"
 FOLDER = "Folder"
 RECEIVED_FILE = "Received File"
+AUTHENTICATED_ADMIN_URL = (
+    "https://api.dropboxapi.com/2/team/token/get_authenticated_admin"
+)
 
 API_VERSION = 2
 
@@ -175,6 +178,7 @@ class DropboxClient:
         self.access_token = None
         self.token_expiration_time = None
         self.member_id = None
+        self.root_namespace_id = None
         self._logger = logger
 
     def set_logger(self, logger_):
@@ -265,9 +269,17 @@ class DropboxClient:
             ]
         ):
             request_headers["Dropbox-API-Select-User"] = self.member_id
-        if kwargs.get("folder_id"):
+
+        if url_name not in [
+            ENDPOINTS.get(EndpointName.AUTHENTICATED_ADMIN.value),
+            ENDPOINTS.get(EndpointName.TEAM_FOLDER_LIST.value),
+            ENDPOINTS.get(EndpointName.MEMBERS.value),
+        ] and (self.root_namespace_id or kwargs.get("folder_id")):
             request_headers["Dropbox-API-Path-Root"] = json.dumps(
-                {".tag": "namespace_id", "namespace_id": kwargs["folder_id"]}
+                {
+                    ".tag": "namespace_id",
+                    "namespace_id": self.root_namespace_id or kwargs.get("folder_id"),
+                }
             )
         return request_headers
 
@@ -393,7 +405,7 @@ class DropboxClient:
                 return
 
     async def ping(self, endpoint):
-        await anext(
+        return await anext(
             self.api_call(
                 base_url=BASE_URLS["FILES_FOLDERS_BASE_URL"],
                 url_name=ENDPOINTS.get(endpoint),
@@ -816,6 +828,7 @@ class DropboxDataSource(BaseDataSource):
     async def _remote_validation(self):
         try:
             if self.dropbox_client.path not in ["", None]:
+                await self.set_user_info()
                 if self._dls_enabled():
                     _, member_id = await self.get_account_details()
                     self.dropbox_client.member_id = member_id
@@ -844,11 +857,37 @@ class DropboxDataSource(BaseDataSource):
         await self.dropbox_client.close()
 
     async def ping(self):
-        endpoint = EndpointName.PING.value
-        if self._dls_enabled():
+        try:
             endpoint = EndpointName.AUTHENTICATED_ADMIN.value
-        await self.dropbox_client.ping(endpoint=endpoint)
-        self._logger.info("Successfully connected to Dropbox")
+            await self.dropbox_client.ping(endpoint=endpoint)
+            self._logger.info("Successfully connected to Dropbox")
+        except ClientResponseError as exception:
+            if str(exception.request_info.url) == AUTHENTICATED_ADMIN_URL:
+                endpoint = EndpointName.PING.value
+                await self.dropbox_client.ping(endpoint=endpoint)
+                self._logger.info("Successfully connected to Dropbox")
+            else:
+                raise
+
+    async def set_user_info(self):
+        try:
+            endpoint = EndpointName.AUTHENTICATED_ADMIN.value
+            response = await self.dropbox_client.ping(endpoint=endpoint)
+        except ClientResponseError as exception:
+            if str(exception.request_info.url) == AUTHENTICATED_ADMIN_URL:
+                endpoint = EndpointName.PING.value
+                response = await self.dropbox_client.ping(endpoint=endpoint)
+            else:
+                raise
+        _json = await response.json()
+
+        admin_profile = _json.get("admin_profile", {}) or {}
+        root_info = _json.get("root_info", {}) or {}
+
+        self.dropbox_client.member_id = admin_profile.get("team_member_id")
+        self.dropbox_client.root_namespace_id = admin_profile.get(
+            "root_folder_id"
+        ) or root_info.get("root_namespace_id")
 
     async def get_content(
         self, attachment, is_shared=False, folder_id=None, timestamp=None, doit=False
@@ -966,7 +1005,9 @@ class DropboxDataSource(BaseDataSource):
             for entry in response.get("matches"):
                 data = entry.get("metadata", {}).get("metadata")
                 if data.get("preview_url") and not data.get("export_info"):
-                    async for metadata in self.dropbox_client.get_received_file_metadata(
+                    async for (
+                        metadata
+                    ) in self.dropbox_client.get_received_file_metadata(
                         url=data["preview_url"]
                     ):
                         json_metadata = await metadata.json()
@@ -1010,7 +1051,10 @@ class DropboxDataSource(BaseDataSource):
         return permissions
 
     async def get_folder_permission(self, shared_folder_id, account_id):
-        if not shared_folder_id:
+        if (
+            not shared_folder_id
+            or shared_folder_id == self.dropbox_client.root_namespace_id
+        ):
             return [account_id]
 
         async for permission in self.dropbox_client.list_folder_permission(
@@ -1021,9 +1065,9 @@ class DropboxDataSource(BaseDataSource):
             )
 
     async def get_file_permission_without_batching(self, file_id, account_id):
-        async for permission in self.dropbox_client.list_file_permission_without_batching(
-            file_id=file_id
-        ):
+        async for (
+            permission
+        ) in self.dropbox_client.list_file_permission_without_batching(file_id=file_id):
             return await self.get_permission(
                 permission=permission, account_id=account_id
             )
@@ -1093,13 +1137,9 @@ class DropboxDataSource(BaseDataSource):
         else:
             return document, None
 
-    async def add_document_to_list(self, func, account_id, folder_id, is_shared=False):
+    async def add_document_to_list(self, func, account_id, is_shared=False):
         batched_document = {}
-        calling_func = (
-            func()
-            if is_shared
-            else func(path=self.dropbox_client.path, folder_id=folder_id)
-        )
+        calling_func = func() if is_shared else func(path=self.dropbox_client.path)
 
         async for document, attachment in calling_func:
             if (
@@ -1116,50 +1156,50 @@ class DropboxDataSource(BaseDataSource):
                 yield self.document_tuple(
                     document=self._decorate_with_access_control(document, permissions),
                     attachment=attachment,
-                    folder_id=folder_id,
                 )
             else:
                 if len(batched_document) == REQUEST_BATCH_SIZE:
-                    async for mapped_document, mapped_attachment in self.map_permission_with_document(
+                    async for (
+                        mapped_document,
+                        mapped_attachment,
+                    ) in self.map_permission_with_document(
                         batched_document=batched_document, account_id=account_id
                     ):
                         yield self.document_tuple(
                             document=mapped_document,
                             attachment=mapped_attachment,
-                            folder_id=folder_id,
                         )
                     batched_document = {attachment["id"]: (document, attachment)}
                 else:
                     batched_document[attachment["id"]] = (document, attachment)
 
         if len(batched_document) > 0:
-            async for mapped_document, mapped_attachment in self.map_permission_with_document(
+            async for (
+                mapped_document,
+                mapped_attachment,
+            ) in self.map_permission_with_document(
                 batched_document=batched_document, account_id=account_id
             ):
                 yield self.document_tuple(
                     document=mapped_document,
                     attachment=mapped_attachment,
-                    folder_id=folder_id,
                 )
             batched_document = {}
 
     async def fetch_file_folders_with_dls(self):
         account_id, member_id = await self.get_account_details()
         self.dropbox_client.member_id = member_id
-        async for folder_id in self.get_team_folder_id():
-            async for mapped_document in self.add_document_to_list(
-                func=self._fetch_files_folders,
-                account_id=account_id,
-                folder_id=folder_id,
-            ):
-                yield mapped_document
-            async for mapped_document in self.add_document_to_list(
-                func=self._fetch_shared_files,
-                account_id=account_id,
-                folder_id=folder_id,
-                is_shared=True,
-            ):
-                yield mapped_document
+        async for mapped_document in self.add_document_to_list(
+            func=self._fetch_files_folders,
+            account_id=account_id,
+        ):
+            yield mapped_document
+        async for mapped_document in self.add_document_to_list(
+            func=self._fetch_shared_files,
+            account_id=account_id,
+            is_shared=True,
+        ):
+            yield mapped_document
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch dropbox objects in async manner
@@ -1171,6 +1211,7 @@ class DropboxDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
 
+        await self.set_user_info()
         if self._dls_enabled():
             async for document in self.fetch_file_folders_with_dls():
                 yield document
@@ -1181,12 +1222,21 @@ class DropboxDataSource(BaseDataSource):
                 self._logger.debug(f"Fetching files using advanced sync rule: {rule}")
 
                 async for document, attachment in self.advanced_sync(rule=rule):
-                    yield self.document_tuple(document=document, attachment=attachment)
+                    yield self.document_tuple(
+                        document=document,
+                        attachment=attachment,
+                    )
         else:
             async for document, attachment in self._fetch_files_folders(
                 path=self.dropbox_client.path
             ):
-                yield self.document_tuple(document=document, attachment=attachment)
+                yield self.document_tuple(
+                    document=document,
+                    attachment=attachment,
+                )
 
             async for document, attachment in self._fetch_shared_files():
-                yield self.document_tuple(document=document, attachment=attachment)
+                yield self.document_tuple(
+                    document=document,
+                    attachment=attachment,
+                )
