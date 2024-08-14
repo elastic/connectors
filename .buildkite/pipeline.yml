@@ -1,3 +1,10 @@
+definitions:
+  steps:
+    - step: &docker-login
+        plugins:
+          - elastic/vault-docker-login#v0.5.2:
+              secret_path: 'kv/ci-shared/serverless/external-docker-registry'
+
 agents:
   provider: "gcp"
   machineType: "n1-standard-2"
@@ -9,12 +16,14 @@ env:
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
+    key: "lint"
     command: ".buildkite/run_linter.sh"
     env:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"
+    key: "unit_tests"
     command: ".buildkite/run_tests.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -24,6 +33,7 @@ steps:
       - "3.11"
 
   - label: ":shipit: Smoke test"
+    key: "smoke_test"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
@@ -34,6 +44,7 @@ steps:
       machineType: "n1-standard-8"
 
   - label: ":sweating: Checking for changes in connectors"
+    key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
@@ -482,3 +493,23 @@ steps:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
+
+  # ----
+  # DRA publishing
+  # ----
+  - group: ":truck: DRA"
+    key: "mbp_dra_group"
+    if: "(build.branch == \"main\")" # Add new maintenance branches here
+    depends_on:
+      - "lint"
+      - "unit_tests"
+      - "smoke_test"
+      - "relevant_ftests"
+    steps:
+      - label: ":truck: Publish DRA Items"
+        agents:
+          provider: gcp
+        key: "publish-dra-artifacts"
+        timeout_in_minutes: 45
+        command: ".buildkite/publish/dra/init_dra_publishing.sh"
+        <<: *docker-login
