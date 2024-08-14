@@ -1,5 +1,6 @@
 bin
 lib
+dist
 include
 .coverage
 *.un~
