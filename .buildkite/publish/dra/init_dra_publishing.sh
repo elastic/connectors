@@ -36,10 +36,10 @@ export PRODUCT_NAME="enterprise-search"
 export GIT_REPO="ent-search"
 
 # set PUBLISH_SNAPSHOT and PUBLISH_STAGING based on the branch
-if [[ "${BUILDKITE_BRANCH:-}" =~ (main|[0-9]\.[0-9x]*$) ]]; then
+if [[ "${BUILDKITE_BRANCH:-}" =~ (main|seanstory/add-DRA-support|[0-9]\.[0-9x]*$) ]]; then # TODO: remove my special branch
   export PUBLISH_SNAPSHOT="true"
 fi
-if [[ "${BUILDKITE_BRANCH:-}" =~ ([0-9]\.[0-9x]*$) ]]; then
+if [[ "${BUILDKITE_BRANCH:-}" =~ (seanstory/add-DRA-support|[0-9]\.[0-9x]*$) ]]; then # TODO: remove my special branch
   export PUBLISH_STAGING="true"
 fi
 
