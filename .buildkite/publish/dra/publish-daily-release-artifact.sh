@@ -75,7 +75,7 @@ docker run --rm \
   -e VAULT_ADDR \
   -e VAULT_ROLE_ID \
   -e VAULT_SECRET_ID \
-  --mount type=bind,readonly=false,src="${RELEASE_DIR}",target="${RELEASE_DIR}/dist" \
+  --mount type=bind,readonly=false,src="${RELEASE_DIR}/dist",target="/artifacts" \
   docker.elastic.co/infra/release-manager:latest \
   cli collect \
       --project "${GIT_REPO}" \
