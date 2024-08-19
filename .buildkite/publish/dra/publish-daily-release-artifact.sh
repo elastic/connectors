@@ -69,6 +69,8 @@ fi
 
 #---------------------------------------------------------------------------------------------------
 echo "Made it to 'docker run'" # TODO, replace this with actual docker run
+echo "Conents of 'src':"
+ls -lah ${RELEASE_DIR}/dist
 BRANCH_NAME="main" #TODO, hacking around dev branch iterations
 docker run --rm \
   --name release-manager \
