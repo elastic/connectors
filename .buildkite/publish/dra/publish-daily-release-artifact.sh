@@ -67,18 +67,6 @@ if [[ "${BRANCH_NAME:-}" == "" ]]; then
   exit 2
 fi
 
-# ensure JQ is installed...
-if ! which jq > /dev/null; then
-  wget -O jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && chmod +x jq
-fi
-
-DEPENDENCY_VERSION="$VERSION"
-ARTIFACT_BASE_URL="https://artifacts-staging.elastic.co"
-if [[ "${WORKFLOW:-}" == "snapshot" ]]; then
-  DEPENDENCY_VERSION="$VERSION-SNAPSHOT"
-  ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
-fi
-
 #---------------------------------------------------------------------------------------------------
 echo "Made it to 'docker run'" # TODO, replace this with actual docker run
 BRANCH_NAME="main" #TODO, hacking around dev branch iterations
@@ -87,7 +75,7 @@ docker run --rm \
   -e VAULT_ADDR \
   -e VAULT_ROLE_ID \
   -e VAULT_SECRET_ID \
-  --mount type=bind,readonly=false,src="${RELEASE_DIR}",target=/artifacts \
+  --mount type=bind,readonly=false,src="${RELEASE_DIR}",target=dist \
   docker.elastic.co/infra/release-manager:latest \
   cli collect \
       --project "${GIT_REPO}" \
