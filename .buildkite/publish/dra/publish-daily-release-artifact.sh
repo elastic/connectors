@@ -81,6 +81,7 @@ fi
 
 #---------------------------------------------------------------------------------------------------
 echo "Made it to 'docker run'" # TODO, replace this with actual docker run
+BRANCH_NAME="main" #TODO, hacking around dev branch iterations
 docker run --rm \
   --name release-manager \
   -e VAULT_ADDR \
