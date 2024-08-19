@@ -81,17 +81,17 @@ fi
 
 #---------------------------------------------------------------------------------------------------
 echo "Made it to 'docker run'" # TODO, replace this with actual docker run
-#docker run --rm \
-#  --name release-manager \
-#  -e VAULT_ADDR \
-#  -e VAULT_ROLE_ID \
-#  -e VAULT_SECRET_ID \
-#  --mount type=bind,readonly=false,src="${RELEASE_DIR}",target=/artifacts \
-#  docker.elastic.co/infra/release-manager:latest \
-#  cli collect \
-#      --project "${GIT_REPO}" \
-#      --branch "${BRANCH_NAME}" \
-#      --commit "${REVISION}" \
-#      --workflow "${WORKFLOW}" \
-#      --version "${VERSION}" \
-#      --artifact-set main
+docker run --rm \
+  --name release-manager \
+  -e VAULT_ADDR \
+  -e VAULT_ROLE_ID \
+  -e VAULT_SECRET_ID \
+  --mount type=bind,readonly=false,src="${RELEASE_DIR}",target=/artifacts \
+  docker.elastic.co/infra/release-manager:latest \
+  cli collect \
+      --project "${GIT_REPO}" \
+      --branch "${BRANCH_NAME}" \
+      --commit "${REVISION}" \
+      --workflow "${WORKFLOW}" \
+      --version "${VERSION}" \
+      --artifact-set main
