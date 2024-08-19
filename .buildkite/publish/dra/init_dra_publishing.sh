@@ -48,6 +48,13 @@ chmod -R a+rw "${RELEASE_DIR}/dist"
 echo "---- listing artifact directory: ${RELEASE_DIR}/dist:"
 ls -al $RELEASE_DIR/dist
 
+# ensure we have a directory and permissions for our dependency report to be created
+# this path is set in the actual config file in
+# https://github.com/elastic/infra/tree/master/cd/release/release-manager/project-configs
+export DEPENDENCIES_REPORTS_DIR="${PROJECT_ROOT}/cd/output" # TODO, change this path?
+mkdir -p "${DEPENDENCIES_REPORTS_DIR}"
+chmod -R a+rw "${DEPENDENCIES_REPORTS_DIR}"
+
 # function to set our vault creds for DRA publishing
 function setDraVaultCredentials() {
   set +x
@@ -98,8 +105,17 @@ function unsetDraVaultCredentials() {
   set -x
 }
 
-# publish SNAPSHOT artifacts
+# function to generate dependency report.
+function generateDependencyReport() {
+  echo "name,version,url,license,sourceURL" > $1 # TODO, do this right
+}
+
+# generate the dependency report and publish SNAPSHOT artifacts
 if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
+  # note that this name is set by infra and must be in the format specified
+  dependencyReportName="dependencies-${VERSION}-SNAPSHOT.csv";
+  echo "-------- Generating SNAPSHOT dependency report: ${dependencyReportName}"
+  generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
   setDraVaultCredentials
@@ -112,10 +128,14 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
     echo "DRA_PUBLISH_GATE is locked. This is where we would call 'source ${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh'"
   fi
   unsetDraVaultCredentials
+  rm -rf "${DEPENDENCIES_REPORTS_DIR}/*"
 fi
 
-# publish STAGING artifacts
+# generate the dependency report and publish STAGING artifacts
 if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
+  dependencyReportName="dependencies-${VERSION}.csv";
+  echo "-------- Generating STAGING dependency report: ${dependencyReportName}"
+  generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing STAGING DRA Artifacts"
   setDraVaultCredentials
