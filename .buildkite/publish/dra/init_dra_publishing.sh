@@ -32,8 +32,8 @@ fi
 # for the dependency report and publishing scripts
 export REVISION="${BUILDKITE_COMMIT}"
 export BRANCH_NAME="${BUILDKITE_BRANCH}"
-export PRODUCT_NAME="enterprise-search"
-export GIT_REPO="ent-search"
+export PRODUCT_NAME="connectors"
+export GIT_REPO="connectors"
 
 # set PUBLISH_SNAPSHOT and PUBLISH_STAGING based on the branch
 if [[ "${BUILDKITE_BRANCH:-}" =~ (main|seanstory/add-DRA-support|[0-9]\.[0-9x]*$) ]]; then # TODO: remove my special branch
