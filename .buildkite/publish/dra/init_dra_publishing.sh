@@ -13,11 +13,10 @@ CURDIR="$(dirname "$DRA_DIR")"
 source $CURDIR/publish-common.sh
 export RELEASE_DIR="${PROJECT_ROOT}"
 
-# Mock out creating an artifact
-rm -rf $RELEASE_DIR/dist
+# Create and stage the artifact
+cd $PROJECT_ROOT
+make clean sdist
 mkdir -p $RELEASE_DIR/dist/dra-artifacts
-cd $RELEASE_DIR/dist
-zip "connectors.zip" -r . -i *
 cd -
 
 echo "The artifacts are: $(ls $RELEASE_DIR/dist)"
@@ -118,7 +117,7 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
-  cp $RELEASE_DIR/dist/connectors.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}-SNAPSHOT.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}-SNAPSHOT.zip
   setDraVaultCredentials
   export WORKFLOW="snapshot"
 
@@ -139,7 +138,7 @@ if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing STAGING DRA Artifacts"
-  cp $RELEASE_DIR/dist/connectors.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}.zip
   setDraVaultCredentials
   export WORKFLOW="staging"
 
