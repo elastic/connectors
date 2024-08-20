@@ -35,10 +35,10 @@ export PRODUCT_NAME="connectors"
 export GIT_REPO="connectors"
 
 # set PUBLISH_SNAPSHOT and PUBLISH_STAGING based on the branch
-if [[ "${BUILDKITE_BRANCH:-}" =~ (main|seanstory/add-DRA-support|[0-9]\.[0-9x]*$) ]]; then # TODO: remove my special branch
+if [[ "${BUILDKITE_BRANCH:-}" =~ (main|[0-9]\.[0-9x]*$) ]]; then
   export PUBLISH_SNAPSHOT="true"
 fi
-if [[ "${BUILDKITE_BRANCH:-}" =~ (seanstory/add-DRA-support|[0-9]\.[0-9x]*$) ]]; then # TODO: remove my special branch
+if [[ "${BUILDKITE_BRANCH:-}" =~ ([0-9]\.[0-9x]*$) ]]; then
   export PUBLISH_STAGING="true"
 fi
 
