@@ -15,6 +15,9 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
+  - label: ":face_with_peeking_eye: Just testing"
+    command: "git pull git@github.com:elastic/python-elastic-agent-client.git"
+
   - label: ":pytest: Test with Python {{ matrix }}"
     key: "unit_tests"
     command: ".buildkite/run_tests.sh"
