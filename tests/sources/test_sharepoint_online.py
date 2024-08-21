@@ -1027,15 +1027,23 @@ class TestSharepointOnlineClient:
         )
 
     @pytest.mark.asyncio
-    async def test_site_collections(self, client, patch_scroll):
-        actual_items = ["1", "2", "3", "4"]
+    async def test_site_collections(self, client, patch_fetch):
+        actual_response = {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": "This is a test site collection",
+            "id": "site-id",
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
 
-        returned_items = await self._execute_scrolling_method(
-            client.site_collections, patch_scroll, actual_items
-        )
-
-        assert len(returned_items) == len(actual_items)
-        assert returned_items == actual_items
+        patch_fetch.return_value = actual_response
+        async for site_collection in client.site_collections():
+            assert site_collection == actual_response
 
     @pytest.mark.asyncio
     async def test_sites_wildcard(self, client, patch_scroll):
@@ -1125,6 +1133,32 @@ class TestSharepointOnlineClient:
 
         assert len(returned_items) == 3
         assert returned_items == expected_items
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exception, raises",
+        [
+            (
+                PermissionsMissing(),
+                PermissionsMissing,
+            ),
+            (
+                ClientResponseError(
+                    status=400,
+                    request_info=aiohttp.RequestInfo(
+                        real_url="", method=None, headers=None, url=""
+                    ),
+                    history=None,
+                ),
+                ClientResponseError,
+            ),
+        ],
+    )
+    async def test_all_sites_with_error(self, client, patch_scroll, exception, raises):
+        sharepoint_host = "example.sharepoint.com"
+        patch_scroll.side_effect = exception
+        with pytest.raises(raises):
+            await anext(client._all_sites(sharepoint_host, []))
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
