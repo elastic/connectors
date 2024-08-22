@@ -19,6 +19,10 @@ make clean sdist
 mkdir -p $RELEASE_DIR/dist/dra-artifacts
 cd -
 
+# Download previous step artifacts
+buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/dra-artifacts --step build_docker_image_amd64
+buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/dra-artifacts --step build_docker_image_arm64
+
 echo "The artifacts are: $(ls $RELEASE_DIR/dist)"
 
 
