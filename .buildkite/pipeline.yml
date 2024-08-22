@@ -40,6 +40,9 @@ steps:
     timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
+      provider: "gcp"
+      useVault: true
+      image: family/enterprise-search-ubuntu-2204-connectors-py
 
   - label: ":sweating: Checking for changes in connectors"
     <<: *test-agents
@@ -568,8 +571,7 @@ steps:
           - ".buildkite/publish/test-docker.sh"
 
       - label: ":truck: Publish DRA Items"
-        agents:
-          provider: gcp
+        <<: *test-agents
         key: "publish-dra-artifacts"
         timeout_in_minutes: 45
         depends_on:
