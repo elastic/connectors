@@ -1,14 +1,18 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-2"
-  useVault: true
-  image: family/enterprise-search-ubuntu-2204-connectors-py
+definitions:
+  steps:
+    - step: &test-agents
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-2"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors-py
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
+    <<: *test-agents
     key: "lint"
     command: ".buildkite/run_linter.sh"
     env:
@@ -16,6 +20,7 @@ steps:
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"
+    <<: *test-agents
     key: "unit_tests"
     command: ".buildkite/run_tests.sh"
     env:
@@ -37,6 +42,7 @@ steps:
       machineType: "n1-standard-8"
 
   - label: ":sweating: Checking for changes in connectors"
+    <<: *test-agents
     key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.0.1:
