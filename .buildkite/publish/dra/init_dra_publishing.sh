@@ -124,12 +124,7 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   setDraVaultCredentials
   export WORKFLOW="snapshot"
 
-  # TODO - when ready, remove the gate and ungate test vars
-  if [[ "${DRA_PUBLISH_GATE:-}" == "" || "${DRA_UNGATE_TEST:-}" == "true" ]]; then
-    source "${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh"
-  else
-    echo "DRA_PUBLISH_GATE is locked. This is where we would call 'source ${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh'"
-  fi
+  source "${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh"
   unsetDraVaultCredentials
   rm -rf "${DEPENDENCIES_REPORTS_DIR}/*"
 fi
@@ -145,12 +140,8 @@ if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   setDraVaultCredentials
   export WORKFLOW="staging"
 
-  # TODO - when ready, remove the gate var
-  if [[ "${DRA_PUBLISH_GATE:-}" == "" ]]; then
-    source "${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh"
-  else
-    echo "DRA_PUBLISH_GATE is locked. This is where we would call 'source ${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh'"
-  fi
+
+  source "${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh"
   unsetDraVaultCredentials
   rm -rf "${DEPENDENCIES_REPORTS_DIR}/*"
 fi
