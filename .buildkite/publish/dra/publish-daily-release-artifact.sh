@@ -68,10 +68,8 @@ if [[ "${BRANCH_NAME:-}" == "" ]]; then
 fi
 
 #---------------------------------------------------------------------------------------------------
-echo "Made it to 'docker run'" # TODO, replace this with actual docker run
-echo "Conents of 'src':"
+echo "Contents of 'src' for the release-manager command:"
 ls -lah ${RELEASE_DIR}/dist
-BRANCH_NAME="main" #TODO, hacking around dev branch iterations
 docker run --rm \
   --name release-manager \
   -e VAULT_ADDR \

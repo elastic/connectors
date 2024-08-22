@@ -24,7 +24,10 @@ echo "The artifacts are: $(ls $RELEASE_DIR/dist)"
 
 # ensure JQ is installed...
 if ! which jq > /dev/null; then
+  echo "'jq' was not installed. Installing it now"
   wget -O jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && chmod +x jq
+else
+  echo "jq already installed"
 fi
 
 # Need to export the revision, name and version and others
