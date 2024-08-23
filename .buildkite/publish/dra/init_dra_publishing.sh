@@ -23,7 +23,7 @@ cd -
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/dra-artifacts --step build_docker_image_amd64
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/dra-artifacts --step build_docker_image_arm64
 
-echo "The artifacts are: $(ls $RELEASE_DIR/dist)"
+echo "The artifacts are: $(ls $RELEASE_DIR/dist/dra-artifacts)"
 
 
 # ensure JQ is installed...
