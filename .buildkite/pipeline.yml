@@ -501,7 +501,7 @@ steps:
   # ----
   - group: ":truck: DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\")"
+    if: "(build.branch == \"main\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
