@@ -9,7 +9,7 @@
       "matchPackageNames": [
         "docker.elastic.co/wolfi/python"
       ],
-      "matchCurrentValue": "/3\\.10(-dev)?/",
+      "matchCurrentValue": "/3\\.11(-dev)?/",
       "matchUpdateTypes": ["major", "minor"],
       "enabled": false
     }
