@@ -4,4 +4,4 @@ RUN apt update && apt upgrade && apt install make -y
 COPY . /app
 WORKDIR /app
 RUN make clean install
-RUN bin/pip install -r requirements/ftest.txt
+RUN .venv/bin/pip install -r requirements/ftest.txt
