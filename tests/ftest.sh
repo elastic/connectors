@@ -10,6 +10,7 @@ INDEX_NAME=search-${NAME%"_serverless"}
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/.."
+VENV_DIR="$ROOT_DIR/.venv"
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
@@ -28,9 +29,9 @@ else
     PLUGINS='--asyncstats --psutil'
 fi
 
-PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
-PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
-ELASTIC_INGEST=${ELASTIC_INGEST:-$ROOT_DIR/bin/elastic-ingest}
+PERF8_BIN=${PERF8_BIN:-$VENV_DIR/bin/perf8}
+PYTHON=${PYTHON:-$VENV_DIR/bin/python}
+ELASTIC_INGEST=${ELASTIC_INGEST:-$VENV_DIR/bin/elastic-ingest}
 
 unamestr=$(uname)
 if [[ "$unamestr" == 'Linux' ]]; then
@@ -54,7 +55,7 @@ fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $PYTHON fixture.py --name $NAME --action check_stack
-$ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --config-file $NAME/config.yml --connector-definition $NAME/connector.json --debug
+$VENV_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --config-file $NAME/config.yml --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
 
 if [[ $PERF8 == "yes" ]]
@@ -81,7 +82,7 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
-$PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
+$PYTHON $VENV_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action teardown
 
 # stopping the stack as a final step once everything else is done.

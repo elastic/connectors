@@ -1,5 +1,3 @@
-.PHONY: test lint autoformat run ftest install release docker-build docker-run docker-push
-
 PYTHON?=python3
 ARCH=$(shell uname -m)
 PERF8?=no
@@ -10,78 +8,80 @@ DOCKER_IMAGE_NAME?=docker.elastic.co/enterprise-search/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
 
+.PHONY: config.yml
 config.yml:
 	- cp -n config.yml.example config.yml
 
-bin/python: config.yml
-	$(PYTHON) -m venv .
-	bin/pip install --upgrade pip
-	bin/pip install --upgrade setuptools
+.PHONY: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/black .venv/bin/pytest
+.venv/bin/python: config.yml
+	$(PYTHON) -m venv .venv
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install --upgrade setuptools
 
-install: bin/python bin/elastic-ingest
+.venv/bin/elastic-ingest: .venv/bin/python
+	.venv/bin/pip install -r requirements/$(ARCH).txt
+	.venv/bin/python setup.py develop
 
-bin/elastic-ingest: bin/python
-	bin/pip install -r requirements/$(ARCH).txt
-	bin/python setup.py develop
-
-bin/black: bin/python
-	bin/pip install -r requirements/$(ARCH).txt
-	bin/pip install -r requirements/tests.txt
+.venv/bin/black: .venv/bin/python
+	.venv/bin/pip install -r requirements/$(ARCH).txt
+	.venv/bin/pip install -r requirements/tests.txt
 	
 
-bin/pytest: bin/python
-	bin/pip install -r requirements/$(ARCH).txt
-	bin/pip install -r requirements/tests.txt
-	bin/pip install -r requirements/ftest.txt
+.venv/bin/pytest: .venv/bin/python
+	.venv/bin/pip install -r requirements/$(ARCH).txt
+	.venv/bin/pip install -r requirements/tests.txt
+	.venv/bin/pip install -r requirements/ftest.txt
+
+install: .venv/bin/python .venv/bin/elastic-ingest
 
 clean:
-	rm -rf bin lib include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet
+	rm -rf bin lib venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet
 
-lint: bin/python bin/black bin/elastic-ingest
-	bin/black --check connectors
-	bin/black --check tests
-	bin/black --check setup.py
-	bin/black --check scripts
-	bin/ruff connectors
-	bin/ruff tests
-	bin/ruff setup.py
-	bin/ruff scripts
-	bin/pyright connectors
-	bin/pyright tests
+lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
+	.venv/bin/black --check connectors
+	.venv/bin/black --check tests
+	.venv/bin/black --check setup.py
+	.venv/bin/black --check scripts
+	.venv/bin/ruff connectors
+	.venv/bin/ruff tests
+	.venv/bin/ruff setup.py
+	.venv/bin/ruff scripts
+	.venv/bin/pyright connectors
+	.venv/bin/pyright tests
 
-autoformat: bin/python bin/black bin/elastic-ingest
-	bin/black connectors
-	bin/black tests
-	bin/black setup.py
-	bin/black scripts
-	bin/ruff connectors --fix
-	bin/ruff tests --fix
-	bin/ruff setup.py --fix
-	bin/ruff scripts --fix
+autoformat: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
+	.venv/bin/black connectors
+	.venv/bin/black tests
+	.venv/bin/black setup.py
+	.venv/bin/black scripts
+	.venv/bin/ruff connectors --fix
+	.venv/bin/ruff tests --fix
+	.venv/bin/ruff setup.py --fix
+	.venv/bin/ruff scripts --fix
 
-test: bin/pytest bin/elastic-ingest
-	bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
+test: .venv/bin/pytest .venv/bin/elastic-ingest
+	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 release: install
-	bin/python setup.py sdist
+	.venv/bin/python setup.py sdist
 
-ftest: bin/pytest bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
+ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	tests/ftest.sh $(NAME) $(PERF8)
 
-ftrace: bin/pytest bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
+ftrace: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
-	bin/elastic-ingest
+	.venv/bin/elastic-ingest
 
 default-config: install
-	bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
+	.venv/bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
 docker-build: $(DOCKERFILE_PATH)
 	docker build -f $(DOCKERFILE_PATH) -t $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT .
 
 docker-run:
-	docker run -v $(PWD):/config $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT /app/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
+	docker run -v $(PWD):/config $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT /app/.venv/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
 
 docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT

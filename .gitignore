@@ -17,5 +17,6 @@ config.yml
 *.iml
 .cli
 
+.venv
 **/venv
 scripts/stack/connectors-config
