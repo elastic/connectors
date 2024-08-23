@@ -121,7 +121,7 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}-SNAPSHOT.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.tar.gz $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}-SNAPSHOT.tar.gz
   setDraVaultCredentials
   export WORKFLOW="snapshot"
 
@@ -137,7 +137,7 @@ if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing STAGING DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.tar.gz $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}.tar.gz
   setDraVaultCredentials
   export WORKFLOW="staging"
 

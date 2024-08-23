@@ -24,9 +24,12 @@ config.yml:
 install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
 
+.venv/bin/hatch: .venv/bin/python
+	.venv/bin/pip install -r requirements/$(ARCH).txt
+
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/python setup.py develop
+	.venv/bin/pip install --editable .
 
 .venv/bin/black: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
@@ -44,11 +47,9 @@ clean:
 lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 	.venv/bin/black --check connectors
 	.venv/bin/black --check tests
-	.venv/bin/black --check setup.py
 	.venv/bin/black --check scripts
 	.venv/bin/ruff connectors
 	.venv/bin/ruff tests
-	.venv/bin/ruff setup.py
 	.venv/bin/ruff scripts
 	.venv/bin/pyright connectors
 	.venv/bin/pyright tests
@@ -56,18 +57,13 @@ lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 autoformat: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 	.venv/bin/black connectors
 	.venv/bin/black tests
-	.venv/bin/black setup.py
 	.venv/bin/black scripts
 	.venv/bin/ruff connectors --fix
 	.venv/bin/ruff tests --fix
-	.venv/bin/ruff setup.py --fix
 	.venv/bin/ruff scripts --fix
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
-
-release: install
-	.venv/bin/python setup.py sdist
 
 ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	tests/ftest.sh $(NAME) $(PERF8)
@@ -90,8 +86,8 @@ docker-run:
 docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
 
-sdist: .venv/bin/python
-	.venv/bin/python setup.py sdist --formats=zip
+sdist: .venv/bin/hatch
+	.venv/bin/hatch build
 
 deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist

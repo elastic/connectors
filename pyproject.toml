@@ -1,0 +1,56 @@
+[project]
+name = "elasticsearch-connectors"
+dynamic = ["version"]
+description = "Elasticsearch Connectors"
+readme = "README.md"
+authors = [
+    { name = "Search Extract and Transform Team", email = "enterprise-search-ingestion-team@elastic.co" }
+]
+
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+]
+
+requires-python = ">=3.10,<3.12"
+
+[project.scripts]
+elastic-ingest = "connectors.service_cli:main"
+fake-kibana = "connectors.kibana:main"
+connectors = "connectors.connectors_cli:main"
+test-connectors = "scripts.testing.cli:main"
+
+[build-system]
+requires = [
+  "hatchling",
+  "hatch-zipped-directory",
+]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata.hooks.custom]
+
+
+[tool.hatch.build]
+dev-mode-dirs = ["."]
+directory="dist"
+
+[tool.setuptools.dynamic]
+version = {file = "connectors/VERSION"}
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "connectors",
+  "scripts"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["connectors", "scripts"]
+
+[tool.hatch.build.targets.zipped-directory]
+install-name = "connectors"
+sources = [
+    "connectors",
+]
