@@ -35,7 +35,7 @@ config.yml:
 install: .venv/bin/python .venv/bin/elastic-ingest
 
 clean:
-	rm -rf bin lib venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet
+	rm -rf bin lib venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 
 lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 	.venv/bin/black --check connectors
@@ -85,3 +85,6 @@ docker-run:
 
 docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
+
+sdist: bin/python
+	bin/python setup.py sdist --formats=zip
