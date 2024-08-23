@@ -18,7 +18,7 @@ config.yml:
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install --upgrade setuptools
 
-bin/pip-licenses: bin/python
+.venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
 
 install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
