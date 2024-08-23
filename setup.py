@@ -21,8 +21,6 @@ if sys.version_info < (3, 10):
     msg = "Requires Python 3.10 or higher."
     raise ValueError(msg)
 
-from connectors import __version__  # NOQA
-
 # We feed install_requires with `requirements.txt` but we unpin versions so we
 # don't enforce them and trap folks into dependency hell. (only works with `==` here)
 #
@@ -87,7 +85,7 @@ classifiers = [
 
 setup(
     name="elasticsearch-connectors",
-    version=__version__,
+    version="8.16.0.1",
     packages=find_packages(),
     description=("Elastic Search Connectors."),
     long_description=long_description,

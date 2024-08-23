@@ -1,4 +1,4 @@
-from connectors import __version__
+from connectors.version import connectors_version
 from connectors.es.cli_client import CLIClient
 
 
@@ -12,5 +12,5 @@ def test_overrides_user_agent_header():
 
     assert (
         cli_client.client._headers["user-agent"]
-        == f"elastic-connectors-{__version__}/cli"
+        == f"elastic-connectors-{connectors_version()}/cli"
     )

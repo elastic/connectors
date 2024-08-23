@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
-from connectors import __version__
+from connectors.version import connectors_version
 from connectors.es.client import (
     ESClient,
     License,
@@ -251,7 +251,7 @@ class TestESClient:
 
         assert (
             es_client.client._headers["user-agent"]
-            == f"elastic-connectors-{__version__}/service"
+            == f"elastic-connectors-{connectors_version()}/service"
         )
 
 

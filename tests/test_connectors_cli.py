@@ -7,7 +7,7 @@ import yaml
 from click.testing import CliRunner
 from elasticsearch import ApiError
 
-from connectors import __version__  # NOQA
+from connectors.version import connectors_version
 from connectors.cli.auth import CONFIG_FILE_PATH
 from connectors.connectors_cli import cli, login
 from connectors.protocol.connectors import Connector as ConnectorObject
@@ -42,7 +42,7 @@ def test_version(commands):
     runner = CliRunner()
     result = runner.invoke(cli, commands)
     assert result.exit_code == 0
-    assert result.output.strip() == __version__
+    assert result.output.strip() == connectors_version()
 
 
 @pytest.mark.parametrize("commands", [["-h"], ["--help"], []])

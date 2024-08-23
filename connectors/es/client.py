@@ -15,7 +15,6 @@ from elasticsearch import (
     ConnectionError as ElasticConnectionError,
 )
 
-from connectors import __version__
 from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
@@ -28,6 +27,8 @@ from connectors.utils import (
     time_to_sleep_between_retries,
 )
 
+from connectors.version import connectors_version
+
 
 class License(Enum):
     ENTERPRISE = "enterprise"
@@ -39,7 +40,7 @@ class License(Enum):
     UNSET = None
 
 
-USER_AGENT_BASE = f"elastic-connectors-{__version__}"
+USER_AGENT_BASE = f"elastic-connectors-{connectors_version()}"
 
 
 class ESClient:

@@ -13,7 +13,7 @@ import pytest
 from click import ClickException, UsageError
 from click.testing import CliRunner
 
-from connectors import __version__
+from connectors.version import connectors_version
 from connectors.service_cli import _start_service, get_event_loop, main
 
 SUCCESS_EXIT_CODE = 0
@@ -54,7 +54,7 @@ def test_version_action(option):
     result = runner.invoke(main, [option])
 
     assert result.exit_code == SUCCESS_EXIT_CODE
-    assert __version__ in result.output
+    assert connectors_version() in result.output
 
 
 @pytest.mark.asyncio

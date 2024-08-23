@@ -20,13 +20,13 @@ import signal
 import click
 from click import ClickException, UsageError
 
-from connectors import __version__
 from connectors.config import load_config
 from connectors.content_extraction import ContentExtraction
 from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.source import get_source_klass, get_source_klasses
+from connectors.version import connectors_version
 
 __all__ = ["main"]
 
@@ -40,7 +40,7 @@ async def _start_service(actions, config, loop):
     - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
-    preflight = PreflightCheck(config, __version__)
+    preflight = PreflightCheck(config, connectors_version())
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
     try:
@@ -107,7 +107,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
-    logger.info(f"Running connector service version {__version__}")
+    logger.info(f"Running connector service version {connectors_version()}")
 
     # load config
     config = {}
@@ -176,7 +176,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 
 
 @click.command()
-@click.version_option(__version__, "-v", "--version", message="%(version)s")
+@click.version_option(connectors_version(), "-v", "--version", message="%(version)s")
 @click.option(
     "--action",
     type=click.Choice(

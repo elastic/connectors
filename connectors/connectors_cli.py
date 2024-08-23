@@ -17,10 +17,10 @@ import os
 import click
 import yaml
 from colorama import Fore, Style
+from connectors.version import connectors_version
 from simple_term_menu import TerminalMenu
 from tabulate import tabulate
 
-from connectors import __version__  # NOQA
 from connectors.cli.auth import CONFIG_FILE_PATH, Auth
 from connectors.cli.connector import Connector
 from connectors.cli.index import Index
@@ -49,7 +49,7 @@ def load_config(ctx, config):
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-@click.version_option(__version__, "-v", "--version", message="%(version)s")
+@click.version_option(connectors_version(), "-v", "--version", message="%(version)s")
 @click.option("-c", "--config", type=click.File("rb"))
 @click.pass_context
 def cli(ctx, config):

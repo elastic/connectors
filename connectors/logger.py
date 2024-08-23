@@ -15,9 +15,8 @@ from functools import wraps
 from typing import AsyncGenerator
 
 import ecs_logging
+from connectors.version import connectors_version
 from dateutil.tz import tzlocal
-
-from connectors import __version__
 
 logger = None
 
@@ -151,7 +150,7 @@ class ExtraLogger(logging.Logger):
         extra.update(
             {
                 "service.type": "connectors-python",
-                "service.version": __version__,
+                "service.version": connectors_version(),
             }
         )
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
