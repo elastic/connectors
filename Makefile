@@ -18,7 +18,11 @@ bin/python: config.yml
 	bin/pip install --upgrade pip
 	bin/pip install --upgrade setuptools
 
-install: bin/python bin/elastic-ingest
+bin/pip-licenses: bin/python
+	bin/pip install pip-licenses
+
+install: bin/python bin/pip-licenses bin/elastic-ingest
+	bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
 
 bin/elastic-ingest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
@@ -88,3 +92,7 @@ docker-push:
 
 sdist: bin/python
 	bin/python setup.py sdist --formats=zip
+
+deps-csv: bin/pip-licenses
+	mkdir -p dist
+	bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
