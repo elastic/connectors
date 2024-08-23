@@ -24,9 +24,9 @@ buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --st
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_arm64
 cp $RELEASE_DIR/dist/.artifacts/* $RELEASE_DIR/dist/dra-artifacts
 
-# Rename to match DRA expectations
+# Rename to match DRA expectations (<name>-<version>-<classifier>-<os>-<arch>) (also, x86_64 instead of amd64)
 cd $RELEASE_DIR/dist/dra-artifacts
-mv elastic-connectors-docker-$VERSION-amd64.tar.gz elastic-connectors-$VERSION-docker-image-linux-amd64.tar.gz
+mv elastic-connectors-docker-$VERSION-amd64.tar.gz elastic-connectors-$VERSION-docker-image-linux-x86_64.tar.gz
 mv elastic-connectors-docker-$VERSION-arm64.tar.gz elastic-connectors-$VERSION-docker-image-linux-arm64.tar.gz
 cd -
 
@@ -133,7 +133,7 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
   cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}-SNAPSHOT.zip
-  cp $RELEASE_DIR/dist/dra-artifacts/elastic-connectors-$VERSION-docker-image-linux-amd64.tar.gz $RELEASE_DIR/dist/dra-artifacts/elastic-connectors-$VERSION-SNAPSHOT-docker-image-linux-amd64.tar.gz
+  cp $RELEASE_DIR/dist/dra-artifacts/elastic-connectors-$VERSION-docker-image-linux-x86_64.tar.gz $RELEASE_DIR/dist/dra-artifacts/elastic-connectors-$VERSION-SNAPSHOT-docker-image-linux-x86_64.tar.gz
   cp $RELEASE_DIR/dist/dra-artifacts/elastic-connectors-$VERSION-docker-image-linux-arm64.tar.gz $RELEASE_DIR/dist/dra-artifacts/elastic-connectors-$VERSION-SNAPSHOT-docker-image-linux-arm64.tar.gz
   setDraVaultCredentials
   export WORKFLOW="snapshot"
