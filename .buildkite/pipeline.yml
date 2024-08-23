@@ -501,12 +501,12 @@ steps:
   # ----
   - group: ":truck: DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"seanstory/add-docker-images-to-DRA\")" # TODO: remove special branch # Add new maintenance branches here
-    depends_on: # TODO, put these back
-#      - "lint"
-#      - "unit_tests"
-#      - "smoke_test"
-#      - "relevant_ftests"
+    if: "(build.branch == \"main\")"
+    depends_on:
+      - "lint"
+      - "unit_tests"
+      - "smoke_test"
+      - "relevant_ftests"
     steps:
       # ----
       # Docker builds for amd64

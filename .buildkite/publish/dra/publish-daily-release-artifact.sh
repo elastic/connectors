@@ -74,8 +74,6 @@ ls -lah ${RELEASE_DIR}/dist
 echo "Contents of 'dra-artifacts' subdir"
 ls -lah ${RELEASE_DIR}/dist/dra-artifacts
 
-BRANCH_NAME="main" # TODO remove this
-
 docker run --rm \
   --name release-manager \
   -e VAULT_ADDR \
