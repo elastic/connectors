@@ -74,17 +74,19 @@ ls -lah ${RELEASE_DIR}/dist
 echo "Contents of 'dra-artifacts' subdir"
 ls -lah ${RELEASE_DIR}/dist/dra-artifacts
 
-#docker run --rm \ # TODO: put this back
-#  --name release-manager \
-#  -e VAULT_ADDR \
-#  -e VAULT_ROLE_ID \
-#  -e VAULT_SECRET_ID \
-#  --mount type=bind,readonly=false,src="${RELEASE_DIR}/dist",target="/artifacts" \
-#  docker.elastic.co/infra/release-manager:latest \
-#  cli collect \
-#      --project "${GIT_REPO}" \
-#      --branch "${BRANCH_NAME}" \
-#      --commit "${REVISION}" \
-#      --workflow "${WORKFLOW}" \
-#      --version "${VERSION}" \
-#      --artifact-set main
+BRANCH_NAME="main" # TODO remove this
+
+docker run --rm \
+  --name release-manager \
+  -e VAULT_ADDR \
+  -e VAULT_ROLE_ID \
+  -e VAULT_SECRET_ID \
+  --mount type=bind,readonly=false,src="${RELEASE_DIR}/dist",target="/artifacts" \
+  docker.elastic.co/infra/release-manager:latest \
+  cli collect \
+      --project "${GIT_REPO}" \
+      --branch "${BRANCH_NAME}" \
+      --commit "${REVISION}" \
+      --workflow "${WORKFLOW}" \
+      --version "${VERSION}" \
+      --artifact-set main
