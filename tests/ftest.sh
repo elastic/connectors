@@ -82,7 +82,7 @@ $PYTHON fixture.py --name $NAME --action monitor --pid $PID_2
 
 
 NUM_DOCS=`$PYTHON fixture.py --name $NAME --action get_num_docs`
-$PYTHON $VENV_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
+$PYTHON $ROOT_DIR/scripts/verify.py --index-name $INDEX_NAME --service-type $NAME --size $NUM_DOCS
 $PYTHON fixture.py --name $NAME --action teardown
 
 # stopping the stack as a final step once everything else is done.
