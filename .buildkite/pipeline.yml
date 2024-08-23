@@ -9,22 +9,33 @@ env:
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
-    command: "make lint"
+    command: ".buildkite/run_linter.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
-  - label: ":pytest: Test"
-    command: "make test"
+  - label: ":pytest: Test with Python {{ matrix }}"
+    command: ".buildkite/run_tests.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
     timeout_in_minutes: 5
+    matrix:
+      - "3.10"
+      - "3.11"
 
   - label: ":shipit: Smoke test"
-    command: "make ftest NAME=dir DATA_SIZE=small"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
+      CONNECTOR: "dir"
+      DATA_SIZE: "small"
     timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
 
   - label: ":sweating: Checking for changes in connectors"
     plugins:
-      chronotc/monorepo-diff#v2.4.0:
+      monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
@@ -36,8 +47,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MySQL"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mysql
               command:
-                - ".buildkite/run_nigthly.sh mysql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -49,8 +64,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Network Drive"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=network_drive
               command:
-                - ".buildkite/run_nigthly.sh network_drive small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -62,8 +81,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Amazon S3"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=s3
               command:
-                - ".buildkite/run_nigthly.sh s3 small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -75,8 +98,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_cloud_storage
               command:
-                - ".buildkite/run_nigthly.sh google_cloud_storage small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -88,8 +115,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=azure_blob_storage
               command:
-                - ".buildkite/run_nigthly.sh azure_blob_storage small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -101,8 +132,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Postgresql"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=postgresql
               command:
-                - ".buildkite/run_nigthly.sh postgresql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -114,8 +149,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 System Directory"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=dir
               command:
-                - ".buildkite/run_nigthly.sh dir small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -127,8 +166,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Oracle Database"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=oracle
               command:
-                - ".buildkite/run_nigthly.sh oracle small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -140,8 +183,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sharepoint_server
               command:
-                - ".buildkite/run_nigthly.sh sharepoint_server small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -153,8 +200,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sharepoint_online
               command:
-                - ".buildkite/run_nigthly.sh sharepoint_online small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -166,8 +217,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mssql
               command:
-                - ".buildkite/run_nigthly.sh mssql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -180,8 +235,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Jira"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=jira
               command:
-                - ".buildkite/run_nigthly.sh jira small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -194,8 +253,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Confluence"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=confluence
               command:
-                - ".buildkite/run_nigthly.sh confluence small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -207,8 +270,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 ServiceNow"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=servicenow
               command:
-                - ".buildkite/run_nigthly.sh servicenow small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -220,8 +287,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MongoDB"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mongodb
               command:
-                - ".buildkite/run_nigthly.sh mongodb small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -233,8 +304,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GitHub"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=github
               command:
-                - ".buildkite/run_nigthly.sh github small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -246,8 +321,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Drive"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_drive
               command:
-                - ".buildkite/run_nigthly.sh google_drive small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -259,8 +338,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Dropbox"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=dropbox
               command:
-                - ".buildkite/run_nigthly.sh dropbox small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -272,8 +355,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 OneDrive"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=onedrive
               command:
-                - ".buildkite/run_nigthly.sh onedrive small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -285,8 +372,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Salesforce"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=salesforce
               command:
-                - ".buildkite/run_nigthly.sh salesforce small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -298,8 +389,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Zoom"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=zoom
               command:
-                - ".buildkite/run_nigthly.sh zoom small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -311,8 +406,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Box"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=box
               command:
-                - ".buildkite/run_nigthly.sh box small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -324,8 +423,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=microsoft_teams
               command:
-                - ".buildkite/run_nigthly.sh microsoft_teams small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -337,8 +440,14 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Notion"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=notion
               command:
-                - ".buildkite/run_nigthly.sh notion small"
+                - ".buildkite/run_functional_test.sh"
+              artifact_paths:
+                - "perf8-report-*/**/*"
           
           - path:
             - "connectors/sources/redis.py"
@@ -348,8 +457,12 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Redis"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=redis
               command:
-                - ".buildkite/run_nigthly.sh redis small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
             
@@ -361,7 +474,11 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GraphQL"
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=graphql
               command:
-                - ".buildkite/run_nigthly.sh graphql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
