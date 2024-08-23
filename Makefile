@@ -12,11 +12,18 @@ DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
 config.yml:
 	- cp -n config.yml.example config.yml
 
+
 .PHONY: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/black .venv/bin/pytest
 .venv/bin/python: config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install --upgrade setuptools
+
+bin/pip-licenses: bin/python
+	.venv/bin/pip install pip-licenses
+
+install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
+	.venv/bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
 
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
@@ -31,8 +38,6 @@ config.yml:
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/tests.txt
 	.venv/bin/pip install -r requirements/ftest.txt
-
-install: .venv/bin/python .venv/bin/elastic-ingest
 
 clean:
 	rm -rf bin lib venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
@@ -88,3 +93,7 @@ docker-push:
 
 sdist: bin/python
 	bin/python setup.py sdist --formats=zip
+
+deps-csv: bin/pip-licenses
+	mkdir -p dist
+	bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
