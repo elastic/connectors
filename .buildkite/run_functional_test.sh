@@ -18,12 +18,13 @@ pyenv global
 
 BASEDIR=$(realpath $(dirname $0))
 ROOT=$(realpath $BASEDIR/../)
+VENV_ROOT=$ROOT/.venv
 
 cd $ROOT
 
 make install
 
-export PIP=$ROOT/bin/pip
+export PIP=$VENV_ROOT/bin/pip
 
 $PIP install py-spy
 
