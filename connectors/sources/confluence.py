@@ -1257,4 +1257,4 @@ class ConfluenceDataSource(BaseDataSource):
 
                 async for item in self._consumer():
                     yield item
-                await self.fetchers.join()
+            await self.fetchers.join()
