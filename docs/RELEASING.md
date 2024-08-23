@@ -27,12 +27,13 @@ The Unified Release build will take care of producing git tags and official arti
 ### In-Between releases
 
 Sometimes, we need to release Connectors independently from the Elastic unified-release.
-For instance, if a user reports a critical bug in Connector Clients, and we want to ship a fix to them as soon as possible.
+For instance, if a user reports a critical bug in Connectors, and we want to ship a fix as soon as possible.
 
-In this case, we can trigger the Agent Release Pipeline (once the bugfix has been merged and a staging DRA artifact produced).
+In this case, we can work with `#early-agent-releases` to trigger the Independent Agent Release Pipeline ([staging](https://buildkite.com/elastic/independent-agent-release-staging), [releasing](https://buildkite.com/elastic/independent-agent-release-releasing)) once the bugfix has been merged and a staging DRA artifact produced.
 This pipeline is used for integrations that need to release more frequently than the stack cadence, but still need to stay associated with the stack versioning scheme.
 This will produce Connectors (and Agent) artifacts like **MAJOR.MINOR.PATCH+build<TIMESTAMP>**.
 These versions are compatible with SEMVER (Semantic Versioning).
+While the pipeline was built by-and-for Agent, it will release all our connector artifacts - not just the agent docker image.
 
 No changes to the VERSION file are necessary for these "in-between" releases.
 
