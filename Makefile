@@ -22,7 +22,7 @@ install: bin/python bin/elastic-ingest
 
 bin/elastic-ingest: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
-	bin/pip install --editable .
+	bin/python setup.py develop
 
 bin/black: bin/python
 	bin/pip install -r requirements/$(ARCH).txt
