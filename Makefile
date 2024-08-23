@@ -1,3 +1,5 @@
+.PHONY: install clean lint autoformat test release ftest ftrace install run default-config release docker-build docker-run docker-push
+
 PYTHON?=python3
 ARCH=$(shell uname -m)
 PERF8?=no
@@ -8,12 +10,9 @@ DOCKER_IMAGE_NAME?=docker.elastic.co/enterprise-search/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
 
-.PHONY: config.yml
 config.yml:
 	- cp -n config.yml.example config.yml
 
-
-.PHONY: .venv/bin/python .venv/bin/elastic-ingest .venv/bin/black .venv/bin/pytest
 .venv/bin/python: config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
