@@ -39,7 +39,7 @@ install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip install -r requirements/ftest.txt
 
 clean:
-	rm -rf bin lib venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
+	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 
 lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 	.venv/bin/black --check connectors
