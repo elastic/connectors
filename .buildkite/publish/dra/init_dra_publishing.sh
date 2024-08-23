@@ -109,7 +109,8 @@ function unsetDraVaultCredentials() {
 
 # function to generate dependency report.
 function generateDependencyReport() {
-  echo "name,version,url,license,sourceURL" > $1 # TODO, do this right
+  make deps-csv
+  cp $RELEASE_DIR/dist/dependencies.csv $1
 }
 
 # generate the dependency report and publish SNAPSHOT artifacts
