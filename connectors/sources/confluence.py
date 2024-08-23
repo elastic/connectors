@@ -78,8 +78,8 @@ URLS = {
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
 MAX_CONCURRENCY = 50
-QUEUE_SIZE = 2024
-QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
+QUEUE_SIZE = 2048
+QUEUE_MEM_SIZE = 50 * 1024 * 1024  # Size in Megabytes
 SERVER_USER_BATCH = 1000
 DATACENTER_USER_BATCH = 200
 END_SIGNAL = "FINISHED_TASK"

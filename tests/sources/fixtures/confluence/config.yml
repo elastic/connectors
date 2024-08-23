@@ -1,4 +1,6 @@
 service.idling: 1
+elasticsearch.bulk.queue_max_size: 2048
+elasticsearch.bulk.queue_max_mem_size: 50
 
 connectors:
   -
