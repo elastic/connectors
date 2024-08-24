@@ -49,7 +49,7 @@ class ConfluenceAPI:
     def __init__(self):
         self.app = Flask(__name__)
         self.space_start_at = 0
-        self.space_page_limit = 100
+        self.space_page_limit = SPACE_COUNT
         self.total_spaces = SPACE_COUNT
         self.total_content = SPACE_OBJECT_COUNT
         self.attachment_start_at = 1
@@ -117,7 +117,7 @@ class ConfluenceAPI:
             elif spaces["_links"]["next"] is None:
                 self.space_start_at = 0
                 self.space_page_limit = 0
-                self.total_spaces -= 100  # Deleting 100 spaces for the second sync
+                self.total_spaces -= 5  # Deleting 5 spaces for the second sync
             elif self.space_page_limit >= spaces["size"]:
                 spaces["_links"]["next"] = None
             self.space_page_limit = self.space_page_limit + spaces["limit"]
