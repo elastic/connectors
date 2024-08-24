@@ -20,15 +20,15 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        SPACE_COUNT = 100
+        SPACE_COUNT = 10
         SPACE_OBJECT_COUNT = 100
         ATTACHMENT_COUNT = 3
     case "medium":
-        SPACE_COUNT = 100
+        SPACE_COUNT = 10
         SPACE_OBJECT_COUNT = 200
         ATTACHMENT_COUNT = 5
     case "large":
-        SPACE_COUNT = 100
+        SPACE_COUNT = 10
         SPACE_OBJECT_COUNT = 250
         ATTACHMENT_COUNT = 7
     case _:
@@ -42,7 +42,7 @@ def get_num_docs():
     # There are 2 types of content:
     # - blogpost
     # - page
-    print(SPACE_COUNT + SPACE_OBJECT_COUNT * ATTACHMENT_COUNT * 2)
+    print(SPACE_COUNT * SPACE_OBJECT_COUNT * ATTACHMENT_COUNT * 2)
 
 
 class ConfluenceAPI:
