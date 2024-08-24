@@ -1027,7 +1027,46 @@ class TestSharepointOnlineClient:
         )
 
     @pytest.mark.asyncio
-    async def test_site_collections(self, client, patch_fetch):
+    async def test_site_collections(self, client, patch_scroll):
+        first_site_collection = {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": "This is the first test site collection",
+            "id": "site-id-1",
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection-1",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
+        second_site_collection = {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": "This is the second test site collection",
+            "id": "site-id-2",
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection-2",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
+
+        patch_scroll.side_effect = AsyncIterator(
+            [[first_site_collection, second_site_collection]]
+        )
+        returned_items = []
+        async for site_collection in client.site_collections():
+            returned_items.append(site_collection)
+
+        assert len(returned_items) == 2
+        assert returned_items == [first_site_collection, second_site_collection]
+
+    @pytest.mark.asyncio
+    async def test_site_collections_when_permission_missing(
+        self, client, patch_fetch, patch_scroll
+    ):
         actual_response = {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
             "createdDateTime": "2023-12-12T12:00:00.000Z",
@@ -1041,7 +1080,8 @@ class TestSharepointOnlineClient:
             "siteCollection": {"hostname": "example.sharepoint.com"},
         }
 
-        patch_fetch.return_value = actual_response
+        patch_scroll.side_effect = PermissionsMissing()
+        patch_fetch.side_effect = [actual_response]
         async for site_collection in client.site_collections():
             assert site_collection == actual_response
 

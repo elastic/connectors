@@ -589,7 +589,20 @@ class SharepointOnlineClient:
             return
 
     async def site_collections(self):
-        yield await self._graph_api_client.fetch(url=f"{GRAPH_API_URL}/sites/root")
+        try:
+            filter_ = url_encode("siteCollection/root ne null")
+            select = "siteCollection,webUrl"
+
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/?$filter={filter_}&$select={select}"
+            ):
+                for site_collection in page:
+                    yield site_collection
+        except PermissionsMissing:
+            self._logger.warning(
+                "Looks like 'Sites.Read.All' permission is missing to fetch all root-level site collections, hence fetching only tenant root site"
+            )
+            yield await self._graph_api_client.fetch(url=f"{GRAPH_API_URL}/sites/root")
 
     async def site_role_assignments(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)

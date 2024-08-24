@@ -239,6 +239,22 @@ class RandomDataStorage:
                     self.site_list_items[site_list["id"]].append(list_item)
 
     def get_site_collections(self):
+        results = []
+
+        for tenant in self.tenants:
+            results.append(
+                {
+                    "webUrl": f"https://{tenant}/",
+                    "siteCollection": {
+                        "hostname": tenant,
+                        "root": {},
+                    },
+                }
+            )
+
+        return results
+
+    def get_tenant_root_site_collections(self):
         return {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
             "createdDateTime": "2023-12-12T12:00:00.000Z",
@@ -595,10 +611,15 @@ def get_tenant():
     }
 
 
-@app.route("/sites/root", methods=["GET"])
+@app.route("/sites/", methods=["GET"])
 def get_site_collections():
     # No paging as there's always one site collection
     return data_storage.get_site_collections()
+
+@app.route("/sites/root", methods=["GET"])
+def get_tenant_root_site_collections():
+    # No paging as there's always one site collection
+    return data_storage.get_tenant_root_site_collections()
 
 
 @app.route("/sites/<string:site_id>/sites", methods=["GET"])
