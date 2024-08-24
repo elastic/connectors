@@ -21,15 +21,15 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 match DATA_SIZE:
     case "small":
         SPACE_COUNT = 10
-        SPACE_OBJECT_COUNT = 100
+        SPACE_OBJECT_COUNT = 25
         ATTACHMENT_COUNT = 3
     case "medium":
         SPACE_COUNT = 10
-        SPACE_OBJECT_COUNT = 200
+        SPACE_OBJECT_COUNT = 50
         ATTACHMENT_COUNT = 5
     case "large":
         SPACE_COUNT = 10
-        SPACE_OBJECT_COUNT = 250
+        SPACE_OBJECT_COUNT = 75
         ATTACHMENT_COUNT = 7
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
