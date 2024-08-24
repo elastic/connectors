@@ -614,7 +614,11 @@ def get_tenant():
 @app.route("/sites/", methods=["GET"])
 def get_site_collections():
     # No paging as there's always one site collection
-    return data_storage.get_site_collections()
+    return {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(siteCollection,webUrl)",
+        "value": data_storage.get_site_collections(),
+    }
+
 
 @app.route("/sites/root", methods=["GET"])
 def get_tenant_root_site_collections():
