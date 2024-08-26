@@ -23,4 +23,5 @@ fi
 
 export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/enterprise-search/elastic-connectors}
 export DOCKERFILE_PATH=${DOCKERFILE_PATH:-Dockerfile}
-export DOCKER_ARTIFACT_KEY=${DOCKER_ARTIFACT_KEY:-elastic-connectors-docker}
+export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors}
+export DOCKER_ARTIFACT_KEY=${DOCKER_ARTIFACT_KEY:-${PROJECT_NAME}-docker}

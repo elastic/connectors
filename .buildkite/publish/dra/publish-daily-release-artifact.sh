@@ -72,7 +72,7 @@ echo "Contents of 'src' for the release-manager command:"
 ls -lah ${RELEASE_DIR}/dist
 
 echo "Contents of 'dra-artifacts' subdir"
-ls -lah ${RELEASE_DIR}/dist/dra-artifacts
+ls -lah $DRA_ARTIFACTS_DIR
 
 docker run --rm \
   --name release-manager \
