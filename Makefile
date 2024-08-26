@@ -91,8 +91,8 @@ docker-push:
 	docker push $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT
 
 sdist: bin/python
-	bin/python setup.py sdist --formats=zip
+	.venv/bin/python setup.py sdist --formats=zip
 
 deps-csv: bin/pip-licenses
 	mkdir -p dist
-	bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
+	.venv/bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
