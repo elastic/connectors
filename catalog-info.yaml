@@ -155,3 +155,80 @@ spec:
           access_level: "READ_ONLY"
         ingestion-team: {}
         search-productivity-team: {}
+
+########
+# Nightly Docker SNAPSHOT image build and publish
+#  This is in place to release versions < 8.16
+#  Once we are no longer maintaining versions that old, this can be removed
+########
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-nightly-dockers"
+  description: "Connectors Service Nightly Dockers"
+  links:
+    - title: "connectors Nightly Buildkite Jobs"
+      url: "https://buildkite.com/elastic/connectors"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:ingestion-team"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-nightly-dockers"
+      description: "Connectors Service Nightly Dockers"
+      links:
+        - title: "Connector Service Nightly Pipeline"
+          url: "https://buildkite.com/elastic/connectors-nightly-dockers"
+    spec:
+      pipeline_file: ".buildkite/nightly_docker.yml"
+      provider_settings:
+        trigger_mode: "none"
+      repository: "elastic/connectors"
+      schedules:
+        Daily 8_15:
+          branch: '8.15'
+          cronline: '@daily'
+          message: "Builds and pushes daily `8.15` docker images"
+      teams:
+        everyone:
+          access_level: "READ_ONLY"
+        ingestion-team: {}
+        search-productivity-team: {}
+
+########
+# Docker image build and publish - manual release
+#  This is in place to release versions < 8.16
+#  Once we are no longer maintaining versions that old, this can be removed
+########
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-docker-build-publish"
+  description: "Docker image build and publish for Elastic connectors"
+  links:
+    - title: "Connectors Docker Build and Publish"
+      url: "https://buildkite.com/elastic/connectors-docker-build-publish"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:ingestion-team"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-docker-build-publish"
+    spec:
+      repository: "elastic/connectors"
+      pipeline_file: ".buildkite/release-pipeline.yml"
+      provider_settings:
+        trigger_mode: "none"
+      teams:
+        ingestion-team: {}
+        search-productivity-team: {}
+        everyone:
+          access_level: "READ_ONLY"
