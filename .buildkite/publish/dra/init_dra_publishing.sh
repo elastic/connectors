@@ -143,6 +143,8 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   source "${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh"
   unsetDraVaultCredentials
   rm -rf "${DEPENDENCIES_REPORTS_DIR}/*"
+else
+  echo "Not publishing SNAPSHOTs in this build"
 fi
 
 # generate the dependency report and publish STAGING artifacts
@@ -160,4 +162,6 @@ if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   source "${PROJECT_ROOT}/.buildkite/publish/dra/publish-daily-release-artifact.sh"
   unsetDraVaultCredentials
   rm -rf "${DEPENDENCIES_REPORTS_DIR}/*"
+else
+  echo "Not publishing to staging in this build"
 fi
