@@ -122,7 +122,7 @@ function unsetDraVaultCredentials() {
 
 # function to generate dependency report.
 function generateDependencyReport() {
-  make deps-csv
+  make clean install deps-csv
   cp $RELEASE_DIR/dist/dependencies.csv $1
 }
 
