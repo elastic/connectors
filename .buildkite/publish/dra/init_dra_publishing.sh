@@ -16,10 +16,23 @@ export RELEASE_DIR="${PROJECT_ROOT}"
 # Create and stage the artifact
 cd $PROJECT_ROOT
 make clean sdist
-mkdir -p $RELEASE_DIR/dist/dra-artifacts
+export DRA_ARTIFACTS_DIR=$RELEASE_DIR/dist/dra-artifacts
+mkdir -p $DRA_ARTIFACTS_DIR
+
 cd -
 
-echo "The artifacts are: $(ls $RELEASE_DIR/dist)"
+# Download previous step artifacts
+buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_amd64
+buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_arm64
+cp $RELEASE_DIR/dist/.artifacts/* $DRA_ARTIFACTS_DIR
+
+# Rename to match DRA expectations (<name>-<version>-<classifier>-<os>-<arch>) (also, x86_64 instead of amd64)
+cd $DRA_ARTIFACTS_DIR
+mv $DOCKER_ARTIFACT_KEY-$VERSION-amd64.tar.gz $PROJECT_NAME-$VERSION-docker-image-linux-x86_64.tar.gz
+mv $DOCKER_ARTIFACT_KEY-$VERSION-arm64.tar.gz $PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz
+cd -
+
+echo "The artifacts are: $(ls $DRA_ARTIFACTS_DIR)"
 
 
 # ensure JQ is installed...
@@ -121,7 +134,9 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}-SNAPSHOT.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}-SNAPSHOT.zip
+  cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-x86_64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-x86_64.tar.gz
+  cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-arm64.tar.gz
   setDraVaultCredentials
   export WORKFLOW="snapshot"
 
@@ -137,7 +152,7 @@ if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing STAGING DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $RELEASE_DIR/dist/dra-artifacts/connectors-${VERSION}.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip
   setDraVaultCredentials
   export WORKFLOW="staging"
 

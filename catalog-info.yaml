@@ -48,6 +48,11 @@ spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
       repository: "elastic/connectors"
+      schedules:
+        Daily main:
+          branch: main
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `main` DRA artifacts"
       provider_settings:
         skip_pull_request_builds_for_existing_commits: false
       teams:
@@ -151,6 +156,11 @@ spec:
         ingestion-team: {}
         search-productivity-team: {}
 
+########
+# Nightly Docker SNAPSHOT image build and publish
+#  This is in place to release versions < 8.16
+#  Once we are no longer maintaining versions that old, this can be removed
+########
 ---
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
@@ -179,18 +189,10 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_14:
-          branch: '8.14'
-          cronline: '@daily'
-          message: "Builds and pushes daily `8.14` docker images"
         Daily 8_15:
           branch: '8.15'
           cronline: '@daily'
           message: "Builds and pushes daily `8.15` docker images"
-        Daily main:
-          branch: main
-          cronline: '@daily'
-          message: "Builds and pushes daily `main` docker images"
       teams:
         everyone:
           access_level: "READ_ONLY"
@@ -199,6 +201,8 @@ spec:
 
 ########
 # Docker image build and publish - manual release
+#  This is in place to release versions < 8.16
+#  Once we are no longer maintaining versions that old, this can be removed
 ########
 ---
 apiVersion: "backstage.io/v1alpha1"

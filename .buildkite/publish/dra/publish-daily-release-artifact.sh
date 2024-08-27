@@ -70,18 +70,21 @@ fi
 #---------------------------------------------------------------------------------------------------
 echo "Contents of 'src' for the release-manager command:"
 ls -lah ${RELEASE_DIR}/dist
-# TODO: put this back once https://github.com/elastic/crawler/pull/103 is approved
-#docker run --rm \
-#  --name release-manager \
-#  -e VAULT_ADDR \
-#  -e VAULT_ROLE_ID \
-#  -e VAULT_SECRET_ID \
-#  --mount type=bind,readonly=false,src="${RELEASE_DIR}/dist",target="/artifacts" \
-#  docker.elastic.co/infra/release-manager:latest \
-#  cli collect \
-#      --project "${GIT_REPO}" \
-#      --branch "${BRANCH_NAME}" \
-#      --commit "${REVISION}" \
-#      --workflow "${WORKFLOW}" \
-#      --version "${VERSION}" \
-#      --artifact-set main
+
+echo "Contents of 'dra-artifacts' subdir"
+ls -lah $DRA_ARTIFACTS_DIR
+
+docker run --rm \
+  --name release-manager \
+  -e VAULT_ADDR \
+  -e VAULT_ROLE_ID \
+  -e VAULT_SECRET_ID \
+  --mount type=bind,readonly=false,src="${RELEASE_DIR}/dist",target="/artifacts" \
+  docker.elastic.co/infra/release-manager:latest \
+  cli collect \
+      --project "${GIT_REPO}" \
+      --branch "${BRANCH_NAME}" \
+      --commit "${REVISION}" \
+      --workflow "${WORKFLOW}" \
+      --version "${VERSION}" \
+      --artifact-set main
