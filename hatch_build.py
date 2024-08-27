@@ -1,7 +1,7 @@
-import json
 import os
 
 from hatchling.metadata.plugin.interface import MetadataHookInterface
+
 
 class JSONMetaDataHook(MetadataHookInterface):
     def update(self, metadata):
