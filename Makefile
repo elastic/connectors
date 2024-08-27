@@ -48,9 +48,11 @@ lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 	.venv/bin/black --check connectors
 	.venv/bin/black --check tests
 	.venv/bin/black --check scripts
+	.venv/bin/black --check hatch_build.py
 	.venv/bin/ruff connectors
 	.venv/bin/ruff tests
 	.venv/bin/ruff scripts
+	.venv/bin/ruff hatch_build.py
 	.venv/bin/pyright connectors
 	.venv/bin/pyright tests
 
@@ -58,9 +60,11 @@ autoformat: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
 	.venv/bin/black connectors
 	.venv/bin/black tests
 	.venv/bin/black scripts
+	.venv/bin/black hatch_build.py
 	.venv/bin/ruff connectors --fix
 	.venv/bin/ruff tests --fix
 	.venv/bin/ruff scripts --fix
+	.venv/bin/ruff hatch_build.py --fix
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests

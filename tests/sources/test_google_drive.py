@@ -42,7 +42,7 @@ async def create_gdrive_source(**kwargs):
         GoogleDriveDataSource,
         service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
         use_document_level_security=False,
-        **kwargs
+        **kwargs,
     ) as source:
         yield source
 
