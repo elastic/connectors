@@ -36,6 +36,17 @@ steps:
     agents:
       machineType: "n1-standard-8"
 
+  - label: ":pip: Check package"
+    key: "check_package"
+    command: ".buildkite/run_package_test.sh"
+    env:
+      PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
+      CONNECTOR: "dir"
+      DATA_SIZE: "small"
+    timeout_in_minutes: 45
+    agents:
+      machineType: "n1-standard-8"
+
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
     plugins:
