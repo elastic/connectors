@@ -315,12 +315,12 @@ async def test_get_content():
     mock_download_extract = AsyncMock(return_value=MagicMock())
     mock_file_metadata = AsyncMock(return_value=MagicMock())
     async with create_source(NotionDataSource) as source:
-        with patch.object(
-            NotionDataSource, "get_file_metadata", mock_file_metadata
-        ), patch.object(
-            NotionDataSource, "can_file_be_downloaded", return_value=True
-        ), patch.object(
-            NotionDataSource, "download_and_extract_file", mock_download_extract
+        with (
+            patch.object(NotionDataSource, "get_file_metadata", mock_file_metadata),
+            patch.object(NotionDataSource, "can_file_be_downloaded", return_value=True),
+            patch.object(
+                NotionDataSource, "download_and_extract_file", mock_download_extract
+            ),
         ):
             await source.get_content(FILE_BLOCK, URL)
             assert mock_get_via_session.called_once_with(url=URL)
@@ -599,12 +599,15 @@ async def test_get_docs_with_advanced_rules(filtering):
         notion_secret_key="secert_key",
     ) as source:
         documents = []
-        with patch.object(
-            NotionClient, "query_database", return_value=AsyncIterator([DATABASE])
-        ), patch.object(
-            NotionDataSource,
-            "retrieve_and_process_blocks",
-            return_value=AsyncIterator([(BLOCK, None)]),
+        with (
+            patch.object(
+                NotionClient, "query_database", return_value=AsyncIterator([DATABASE])
+            ),
+            patch.object(
+                NotionDataSource,
+                "retrieve_and_process_blocks",
+                return_value=AsyncIterator([(BLOCK, None)]),
+            ),
         ):
             expected_responses_ids = [DATABASE.get("id"), BLOCK.get("id")]
             async for docs, _ in source.get_docs(filtering):
@@ -759,12 +762,15 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     async with create_source(
         NotionDataSource, notion_secret_key="secret_key"
     ) as source:
-        with patch.object(
-            NotionClient,
-            "async_iterate_paginated_api",
-            return_value=AsyncIterator([DATABASE]),
-        ), patch.object(
-            NotionDataSource, "get_entities", return_value=[DATABASE, BLOCK]
+        with (
+            patch.object(
+                NotionClient,
+                "async_iterate_paginated_api",
+                return_value=AsyncIterator([DATABASE]),
+            ),
+            patch.object(
+                NotionDataSource, "get_entities", return_value=[DATABASE, BLOCK]
+            ),
         ):
             validation_result = await NotionAdvancedRulesValidator(source).validate(
                 advanced_rules

@@ -1,8 +1,10 @@
+target-version = "py311"
+[lint]
 select = ["A", "ASYNC", "I", "E", "F", "B", "C4", "T10", "T20", "EM", "ISC", "S"]
-ignore = ["E501"]
+ignore = ["E501", "ISC001"]
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
-fixable = ["A", "B", "C", "C4", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT", "T10", "T20"]
+fixable = ["ALL"]
 unfixable = []
 
 exclude = [
@@ -13,14 +15,13 @@ exclude = [
     "include"
 ]
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-target-version = "py310"
 
-[per-file-ignores]
+[lint.per-file-ignores]
 "connectors/*" = ["S608"]
 "scripts/verify.py" = [ "EM" ]
 "setup.py" = [ "EM" ]
 "tests/*" = ["B017", "S101", "S"]
 "tests/conftest.py" = [ "EM" ]
 
-[isort]
+[lint.isort]
 known-first-party=["connectors", "tests"]

@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """ServiceNow source module responsible to fetch documents from ServiceNow."""
+
 import base64
 import json
 import os
@@ -320,7 +321,9 @@ class ServiceNowClient:
 
             for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
                 batched_apis = record_apis[
-                    batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+                    batched_apis_index : (
+                        batched_apis_index + TABLE_BATCH_SIZE
+                    )  # noqa
                 ]
                 async for table_data in self.get_data(batched_apis=batched_apis):
                     for mapping in table_data:  # pyright: ignore
@@ -686,7 +689,7 @@ class ServiceNowDataSource(BaseDataSource):
                 0, len(attachment_apis), ATTACHMENT_BATCH_SIZE
             ):
                 batched_apis = attachment_apis[
-                    batched_apis_index : (  # noqa
+                    batched_apis_index :   (  # noqa
                         batched_apis_index + ATTACHMENT_BATCH_SIZE
                     )
                 ]
@@ -815,7 +818,9 @@ class ServiceNowDataSource(BaseDataSource):
 
         for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
             batched_apis = record_apis[
-                batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+                batched_apis_index : (
+                    batched_apis_index + TABLE_BATCH_SIZE
+                )  # noqa
             ]
             yield batched_apis
 

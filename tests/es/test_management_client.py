@@ -233,14 +233,6 @@ class TestESManagementClient:
         )
 
     @pytest.mark.asyncio
-    async def test_index_exists(self, es_management_client):
-        index_name = "search-mongo"
-        es_management_client.client.indices.exists = AsyncMock()
-
-        await es_management_client.index_exists(index_name=index_name)
-        es_management_client.client.indices.exists.assert_awaited_with(index=index_name)
-
-    @pytest.mark.asyncio
     async def test_clean_index(self, es_management_client):
         index_name = "search-mongo"
         es_management_client.client.indices.exists = AsyncMock()
@@ -262,6 +254,7 @@ class TestESManagementClient:
         es_management_client.client.indices.exists = AsyncMock(return_value=True)
 
         assert await es_management_client.index_exists(index_name=index_name) is True
+        await es_management_client.index_exists(index_name=index_name)
 
     @pytest.mark.asyncio
     async def test_upsert(self, es_management_client):
@@ -291,9 +284,10 @@ class TestESManagementClient:
             return_value=AsyncIterator(records),
         ):
             ids = []
-            async for doc_id, _ in es_management_client.yield_existing_documents_metadata(
-                "something"
-            ):
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
                 ids.append(doc_id)
 
             assert ids == []
@@ -314,9 +308,10 @@ class TestESManagementClient:
             return_value=AsyncIterator(records),
         ):
             ids = []
-            async for doc_id, _ in es_management_client.yield_existing_documents_metadata(
-                "something"
-            ):
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
                 ids.append(doc_id)
 
             assert ids == ["1", "2"]

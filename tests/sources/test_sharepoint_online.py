@@ -2347,9 +2347,11 @@ class TestSharepointOnlineDataSource:
     ):
         async with create_spo_source() as source:
             with pytest.raises(SyncCursorEmpty):
-                async for _doc, _download_func, _operation in source.get_docs_incrementally(
-                    sync_cursor=sync_cursor
-                ):
+                async for (
+                    _doc,
+                    _download_func,
+                    _operation,
+                ) in source.get_docs_incrementally(sync_cursor=sync_cursor):
                     pass
 
     @pytest.mark.asyncio
@@ -2362,9 +2364,9 @@ class TestSharepointOnlineDataSource:
 
         sync_cursor = {"site_drives": {}, "cursor_timestamp": self.month_ago}
         for site_drive in self.site_drives:
-            sync_cursor["site_drives"][
-                site_drive["id"]
-            ] = "http://fakesharepoint.com/deltalink"
+            sync_cursor["site_drives"][site_drive["id"]] = (
+                "http://fakesharepoint.com/deltalink"
+            )
 
         deleted = 0
         for page in self.drive_items_delta:
@@ -2622,7 +2624,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_with_permissions = []
 
-            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_with_permission
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_with_permissions.append(drive_item_with_permission)
@@ -2643,7 +2647,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_without_permissions = []
 
-            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_without_permissions
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
@@ -2664,7 +2670,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_without_permissions = []
 
-            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_without_permissions
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
@@ -2703,7 +2711,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_with_permissions = []
 
-            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_with_permission
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_with_permissions.append(drive_item_with_permission)
@@ -2969,12 +2979,15 @@ class TestSharepointOnlineDataSource:
         attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(attachment_id, async_buffer):
@@ -3001,12 +3014,15 @@ class TestSharepointOnlineDataSource:
         attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(attachment_id, async_buffer):
@@ -3075,12 +3091,15 @@ class TestSharepointOnlineDataSource:
         }
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(drive_id, drive_item_id, async_buffer):
@@ -3114,12 +3133,15 @@ class TestSharepointOnlineDataSource:
         }
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(drive_id, drive_item_id, async_buffer):

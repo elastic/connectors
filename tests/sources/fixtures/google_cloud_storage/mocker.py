@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Module responsible for mocking POST call to Google Cloud Storage Data Source
-"""
+"""Module responsible for mocking POST call to Google Cloud Storage Data Source"""
+
 from flask import Flask
 
 app = Flask(__name__)

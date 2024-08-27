@@ -704,9 +704,9 @@ class GoogleDriveDataSource(BaseDataSource):
         user_email = user.get("primaryEmail")
         user_domain = _get_domain_from_email(user_email)
         user_groups = []
-        async for groups_page in self.google_admin_directory_client.list_groups_for_user(
-            user_id
-        ):
+        async for (
+            groups_page
+        ) in self.google_admin_directory_client.list_groups_for_user(user_id):
             for group in groups_page.get("groups", []):
                 user_groups.append(group.get("email"))
 
@@ -1236,13 +1236,17 @@ class GoogleDriveDataSource(BaseDataSource):
                         seen_ids=seen_ids,
                     ):
                         if file.get("trashed") is True:
-                            yield file, partial(
-                                self.get_content, google_drive_client, file
-                            ), OP_DELETE
+                            yield (
+                                file,
+                                partial(self.get_content, google_drive_client, file),
+                                OP_DELETE,
+                            )
                         else:
-                            yield file, partial(
-                                self.get_content, google_drive_client, file
-                            ), OP_INDEX
+                            yield (
+                                file,
+                                partial(self.get_content, google_drive_client, file),
+                                OP_INDEX,
+                            )
 
             email_for_shared_drives_sync = (
                 self._google_google_workspace_email_for_shared_drives_sync()
@@ -1275,17 +1279,21 @@ class GoogleDriveDataSource(BaseDataSource):
                     if (
                         trashedTime is None or trashedTime > self.last_sync_time()
                     ) and file.get("trashed") is True:
-                        yield file, partial(
-                            self.get_content, shared_drives_client, file
-                        ), OP_DELETE
+                        yield (
+                            file,
+                            partial(self.get_content, shared_drives_client, file),
+                            OP_DELETE,
+                        )
                     elif (
                         trashedTime is not None and trashedTime < self.last_sync_time()
                     ) and file.get("trashed") is True:
                         continue
                     else:
-                        yield file, partial(
-                            self.get_content, shared_drives_client, file
-                        ), OP_INDEX
+                        yield (
+                            file,
+                            partial(self.get_content, shared_drives_client, file),
+                            OP_INDEX,
+                        )
 
         else:
             # Build a path lookup, parentId -> parent path
@@ -1309,17 +1317,21 @@ class GoogleDriveDataSource(BaseDataSource):
                     if (
                         trashedTime is None or trashedTime > self.last_sync_time()
                     ) and file.get("trashed") is True:
-                        yield file, partial(
-                            self.get_content, google_drive_client, file
-                        ), OP_DELETE
+                        yield (
+                            file,
+                            partial(self.get_content, google_drive_client, file),
+                            OP_DELETE,
+                        )
                     elif (
                         trashedTime is not None and trashedTime < self.last_sync_time()
                     ) and file.get("trashed") is True:
                         continue
                     else:
-                        yield file, partial(
-                            self.get_content, google_drive_client, file
-                        ), OP_INDEX
+                        yield (
+                            file,
+                            partial(self.get_content, google_drive_client, file),
+                            OP_INDEX,
+                        )
         self.update_sync_timestamp_cursor(timestamp)
 
     def init_sync_cursor(self):

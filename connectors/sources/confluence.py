@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Confluence source module responsible to fetch documents from Confluence Cloud/Server.
-"""
+"""Confluence source module responsible to fetch documents from Confluence Cloud/Server."""
+
 import asyncio
 import os
 from copy import copy
@@ -878,7 +878,10 @@ class ConfluenceDataSource(BaseDataSource):
             List: List of permissions attached to document
             Dictionary: Dictionary of restrictions attached to document
         """
-        async for document, attachment_count in self.confluence_client.fetch_page_blog_documents(
+        async for (
+            document,
+            attachment_count,
+        ) in self.confluence_client.fetch_page_blog_documents(
             api_query=api_query,
         ):
             document_url = os.path.join(
@@ -903,14 +906,14 @@ class ConfluenceDataSource(BaseDataSource):
             }
             if self.confluence_client.index_labels:
                 doc["labels"] = document["labels"]
-            yield doc, attachment_count, document.get("space", {}).get(
-                "key"
-            ), document.get("space", {}).get("permissions", []), document.get(
-                "restrictions", {}
-            ).get(
-                "read", {}
-            ).get(
-                "restrictions", {}
+            yield (
+                doc,
+                attachment_count,
+                document.get("space", {}).get("key"),
+                document.get("space", {}).get("permissions", []),
+                document.get("restrictions", {})
+                .get("read", {})
+                .get("restrictions", {}),
             )
 
     async def fetch_attachments(
@@ -938,19 +941,22 @@ class ConfluenceDataSource(BaseDataSource):
                 self.confluence_client.host_url,
                 attachment.get("_links", {}).get("webui", "")[1:],
             )
-            yield {
-                "type": attachment.get("type"),
-                "title": attachment.get("title"),
-                "_id": attachment.get("id"),
-                "space": parent_space,
-                parent_type: parent_name,
-                "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
-                "size": attachment.get("extensions", {}).get("fileSize", 0),
-                "url": attachment_url,
-                "createdDate": nested_get_from_dict(
-                    attachment, ["history", "createdDate"]
-                ),
-            }, attachment.get("_links", {}).get("download")
+            yield (
+                {
+                    "type": attachment.get("type"),
+                    "title": attachment.get("title"),
+                    "_id": attachment.get("id"),
+                    "space": parent_space,
+                    parent_type: parent_name,
+                    "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
+                    "size": attachment.get("extensions", {}).get("fileSize", 0),
+                    "url": attachment_url,
+                    "createdDate": nested_get_from_dict(
+                        attachment, ["history", "createdDate"]
+                    ),
+                },
+                attachment.get("_links", {}).get("download"),
+            )
 
     async def search_by_query(self, query):
         async for entity in self.confluence_client.search_by_query(query=query):
@@ -1150,9 +1156,13 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.info(
                 f"Fetching {target_type} and its permissions from Confluence"
             )
-            async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
-                api_query
-            ):
+            async for (
+                document,
+                attachment_count,
+                space_key,
+                permissions,
+                restrictions,
+            ) in self.fetch_documents(api_query):
                 # Pages and blog posts are open to viewing or editing by default,
                 # but you can restrict either viewing or editing to certain users or groups.
                 if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
@@ -1227,10 +1237,13 @@ class ConfluenceDataSource(BaseDataSource):
                 logger.debug(f"Fetching confluence content using custom query: {query}")
                 async for document, download_link in self.search_by_query(query):
                     if download_link:
-                        yield document, partial(
-                            self.download_attachment,
-                            download_link[1:],
-                            copy(document),
+                        yield (
+                            document,
+                            partial(
+                                self.download_attachment,
+                                download_link[1:],
+                                copy(document),
+                            ),
                         )
                     else:
                         yield document, None

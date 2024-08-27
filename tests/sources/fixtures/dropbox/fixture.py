@@ -4,8 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Dropbox module responsible to generate files/folders using flask.
-"""
+"""Dropbox module responsible to generate files/folders using flask."""
 
 import io
 import json

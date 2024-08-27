@@ -142,9 +142,9 @@ class DataGenerator:
                 item["folder"] = file["folder"]
             else:
                 item["file"] = file["file"]
-                item[
-                    "@microsoft.graph.downloadUrl"
-                ] = f"{ROOT}/users/{user_id}/drive/items/{file['id']}/content"
+                item["@microsoft.graph.downloadUrl"] = (
+                    f"{ROOT}/users/{user_id}/drive/items/{file['id']}/content"
+                )
 
             results.append(item)
 
@@ -244,9 +244,9 @@ class OneDriveAPI:
         }
 
         if len(drive_items) == take:
-            response[
-                "@odata.nextLink"
-            ] = f"{ROOT}/users/{user_id}/drive/root/delta?$skip={skip+take}&$take={take}"
+            response["@odata.nextLink"] = (
+                f"{ROOT}/users/{user_id}/drive/root/delta?$skip={skip+take}&$take={take}"
+            )
 
         return response
 

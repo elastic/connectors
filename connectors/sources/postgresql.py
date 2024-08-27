@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
+
 import ssl
 from functools import cached_property, partial
 from urllib.parse import quote

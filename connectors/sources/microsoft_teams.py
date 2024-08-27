@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Microsoft Teams source module responsible to fetch documents from Microsoft Teams.
-"""
+"""Microsoft Teams source module responsible to fetch documents from Microsoft Teams."""
+
 import asyncio
 import os
 from calendar import month_name
