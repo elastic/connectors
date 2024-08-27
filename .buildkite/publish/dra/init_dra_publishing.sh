@@ -26,9 +26,9 @@ buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --st
 buildkite-agent artifact download '.artifacts/*.tar.gz*' $RELEASE_DIR/dist/ --step build_docker_image_arm64
 cp $RELEASE_DIR/dist/.artifacts/* $DRA_ARTIFACTS_DIR
 
-# Rename to match DRA expectations (<name>-<version>-<classifier>-<os>-<arch>) (also, x86_64 instead of amd64)
+# Rename to match DRA expectations (<name>-<version>-<classifier>-<os>-<arch>)
 cd $DRA_ARTIFACTS_DIR
-mv $DOCKER_ARTIFACT_KEY-$VERSION-amd64.tar.gz $PROJECT_NAME-$VERSION-docker-image-linux-x86_64.tar.gz
+mv $DOCKER_ARTIFACT_KEY-$VERSION-amd64.tar.gz $PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz
 mv $DOCKER_ARTIFACT_KEY-$VERSION-arm64.tar.gz $PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz
 cd -
 
@@ -135,7 +135,7 @@ if [[ "${PUBLISH_SNAPSHOT:-}" == "true" ]]; then
 
   echo "-------- Publishing SNAPSHOT DRA Artifacts"
   cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}-SNAPSHOT.zip
-  cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-x86_64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-x86_64.tar.gz
+  cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-amd64.tar.gz
   cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-SNAPSHOT-docker-image-linux-arm64.tar.gz
   setDraVaultCredentials
   export WORKFLOW="snapshot"
