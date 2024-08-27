@@ -14,7 +14,7 @@ cd dist
 python -m venv .venv
 
 # Install the package locally
-.venv/bin/pip install  $(ls | grep tar)
+.venv/bin/pip install  $(ls | grep zip)
 
 # Just run version checks
 .venv/bin/elastic-ingest --version
