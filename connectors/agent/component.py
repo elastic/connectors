@@ -40,4 +40,3 @@ class ConnectorsAgentComponent:
 
     def stop(self, sig):
         self.multi_service.shutdown(sig)
-        self.connector_service_manager.shutdown_multi_service(sig)
