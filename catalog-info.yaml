@@ -55,6 +55,7 @@ spec:
           message: "Builds, tests, and pushes daily `main` DRA artifacts"
       provider_settings:
         skip_pull_request_builds_for_existing_commits: false
+        build_pull_request_labels_changed: true
       teams:
         everyone:
           access_level: "READ_ONLY"

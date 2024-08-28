@@ -499,9 +499,9 @@ steps:
   # ----
   # DRA publishing
   # ----
-  - group: ":truck: DRA"
+  - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
