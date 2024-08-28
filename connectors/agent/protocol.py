@@ -20,7 +20,6 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
 
     async def apply_from_client(self):
         logger.info("There's new information for the components/units!")
-        logger.info(self.service_manager._multi_service._services)
         if self.client.units:
             outputs = [
                 unit

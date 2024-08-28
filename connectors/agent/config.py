@@ -1,4 +1,4 @@
-from connectors.config import config_with_override
+from connectors.config import add_defaults
 
 
 class ConnectorsAgentConfiguration:
@@ -46,6 +46,6 @@ class ConnectorsAgentConfiguration:
         config.update(self.specific_config)
 
         # Then merge with default connectors config
-        configuration = dict(config_with_override(config))
+        configuration = dict(add_defaults(config))
 
         return configuration

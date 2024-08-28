@@ -27,7 +27,7 @@ def load_config(config_file):
     return configuration
 
 
-def config_with_override(config):
+def add_defaults(config):
     configuration = dict(_merge_dicts(_default_config(), config))
     return configuration
 

@@ -1,17 +1,29 @@
 from es_agent_client.util.logger import logger
 
-from connectors.services.base import BaseService, get_services
+from connectors.logger import DocumentLogger
+from connectors.services.base import ServiceAlreadyRunningError, get_services
+from connectors.utils import CancellableSleeps
 
 
-class ConnectorServiceManager(BaseService):
+class ConnectorServiceManager:
     name = "connector-service-manager"
 
     def __init__(self, configuration):
-        super().__init__(configuration.get(), "connector-service-manager")
+        service_name = self.__class__.name
+        self.logger = DocumentLogger(
+            f"[{service_name}]", {"service_name": service_name}
+        )
         self.agent_config = configuration
         self._multi_service = None
+        self.running = False
+        self._sleeps = CancellableSleeps()
 
-    async def _run(self):
+    async def run(self):
+        if self.running:
+            msg = f"{self.__class__.__name__} is already running."
+            raise ServiceAlreadyRunningError(msg)
+
+        self.running = True
         try:
             while self.running:
                 try:
@@ -26,16 +38,12 @@ class ConnectorServiceManager(BaseService):
                         f"Error while running services in ConnectorServiceManager: {e}"
                     )
                     raise
-                if not self.running:
-                    break
-                await self._sleeps.sleep(1)
         finally:
             logger.info("Finished running, exiting")
-        return 0
 
     def stop(self):
         logger.info("Service manager is stopping connector services")
-        super().stop()
+        self.running = False
         if self._multi_service:
             self._multi_service.shutdown(None)
 
