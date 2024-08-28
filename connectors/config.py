@@ -27,6 +27,11 @@ def load_config(config_file):
     return configuration
 
 
+def config_with_override(config):
+    configuration = dict(_merge_dicts(_default_config(), config))
+    return configuration
+
+
 # Left - in Enterprise Search; Right - in Connectors
 config_mappings = {
     "elasticsearch.host": "elasticsearch.host",
