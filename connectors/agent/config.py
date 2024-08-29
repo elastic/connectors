@@ -2,7 +2,21 @@ from connectors.config import add_defaults
 
 
 class ConnectorsAgentConfigurationWrapper:
+    """A wrapper that facilitates passing configuration from Agent to Connectors Service.
+
+    This class is responsible for:
+    - Storing in-memory configuration of Connectors Service running on Agent
+    - Transforming configuration reported by Agent to valid Connectors Service configuration
+    - Indicating that configuration has changed so that the user of the class can trigger the restart
+    """
+
     def __init__(self):
+        """Inits the class.
+
+        There's default config that allows us to run connectors natively (see _force_allow_native flag),
+        when final configuration is reported these defaults will be merged with defaults from Connectors
+        Service config and specific config coming from Agent.
+        """
         self._default_config = {
             "_force_allow_native": True,
             "native_service_types": [
@@ -37,6 +51,15 @@ class ConnectorsAgentConfigurationWrapper:
         self.specific_config = {}
 
     def try_update(self, source):
+        """Try update the configuration and see if it changed.
+
+        This method takes the check-in event coming from Agent and checks if config needs an update.
+
+        If update is needed, configuration is updated and method returns True. If no update is needed
+        the method returns False.
+        """
+
+        # TODO: find a good link to what this object is.
         if source.fields.get("hosts") and (
             source.fields.get("api_key")
             or source.fields.get("username")
@@ -60,14 +83,23 @@ class ConnectorsAgentConfigurationWrapper:
             }
             self.specific_config = new_config
             return True
+
         return False
 
     def get(self):
+        """Get current Connectors Service configuration.
+
+        This method combines three configs with higher ones taking precedence:
+        - Config reported from Agent
+        - Default config stored in this class
+        - Default config of Connectors Service
+
+        Resulting config should be sufficient to run Connectors Service with.
+        """
         # First take "default config"
         config = self._default_config.copy()
         # Then override with what we get from Agent
         config.update(self.specific_config)
-
         # Then merge with default connectors config
         configuration = dict(add_defaults(config))
 

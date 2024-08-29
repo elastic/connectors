@@ -11,6 +11,11 @@ from connectors.agent.component import ConnectorsAgentComponent
 
 
 def main(args=None):
+    """Script entry point into running Connectors Service on Agent.
+
+    It initialises an event loop, creates a component and runs the component.
+    Additionally, signals are handled for graceful termination of the component.
+    """
     loop = asyncio.get_event_loop()
     logger.info("Running agent")
     component = ConnectorsAgentComponent()

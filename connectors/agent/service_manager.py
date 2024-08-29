@@ -1,4 +1,3 @@
-
 from connectors.logger import DocumentLogger
 from connectors.services.base import (
     ServiceAlreadyRunningError,
