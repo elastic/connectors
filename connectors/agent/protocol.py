@@ -31,13 +31,13 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
     tries to update the configuration and, if the configuration is updated, restarts the Connectors Service.
     """
 
-    def __init__(self, client, agent_config, service_manager):
+    def __init__(self, client, agent_connectors_config_wrapper, service_manager):
         """Inits the class.
 
         Initing this class should not produce side-effects.
         """
         super().__init__(client)
-        self.agent_config = agent_config
+        self.agent_connectors_config_wrapper = agent_connectors_config_wrapper
         self.service_manager = service_manager
 
     async def apply_from_client(self):
@@ -49,6 +49,7 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         """
         logger.info("There's new information for the components/units!")
         if self.client.units:
+            logger.debug("Client reported units")
             outputs = [
                 unit
                 for unit in self.client.units
@@ -56,9 +57,12 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
             ]
 
             if len(outputs) > 0 and outputs[0].config:
+                logger.debug("Outputs were found")
                 source = outputs[0].config.source
 
-                changed = self.agent_config.try_update(source)
+                changed = self.agent_connectors_config_wrapper.try_update(source)
                 if changed:
                     logger.info("Updating connector service manager config")
                     self.service_manager.restart()
+                else:
+                    logger.debug("No changes to connectors config")
