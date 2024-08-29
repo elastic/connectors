@@ -96,3 +96,4 @@ sdist: .venv/bin/python
 deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist
 	.venv/bin/pip-licenses --format=csv --with-urls > dist/dependencies.csv
+	.venv/bin/python scripts/deps-csv.py dist/dependencies.csv
