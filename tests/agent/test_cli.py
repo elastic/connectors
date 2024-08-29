@@ -1,11 +1,7 @@
 import asyncio
-from unittest.mock import AsyncMock, Mock, patch
-
 import os
 import signal
-import pytest
 
-from connectors.agent.cli import main
 
 def test_main():
     async def kill():

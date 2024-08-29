@@ -1,9 +1,10 @@
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
-import asyncio
 
 from connectors.agent.component import ConnectorsAgentComponent
+
 
 class StubMultiService:
     def __init__(self):
@@ -21,11 +22,12 @@ class StubMultiService:
         self.running_stop.set()
 
 
-
 @pytest.mark.asyncio
 @patch("connectors.agent.component.MultiService", return_value=StubMultiService())
 @patch("connectors.agent.component.new_v2_from_reader", return_value=MagicMock())
-async def test_try_update_without_auth_data(stub_multi_service, patch_new_v2_from_reader):
+async def test_try_update_without_auth_data(
+    stub_multi_service, patch_new_v2_from_reader
+):
     component = ConnectorsAgentComponent()
 
     async def stop_after_timeout():
@@ -33,6 +35,6 @@ async def test_try_update_without_auth_data(stub_multi_service, patch_new_v2_fro
         component.stop("SIGINT")
 
     await asyncio.gather(component.run(), stop_after_timeout())
-    
+
     assert stub_multi_service.has_ran
     assert stub_multi_service.has_shutdown
