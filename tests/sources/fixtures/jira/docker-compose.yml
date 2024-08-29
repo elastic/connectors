@@ -77,7 +77,7 @@ services:
     build: 
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
-    command: bin/python tests/sources/fixtures/jira/fixture.py
+    command: .venv/bin/python tests/sources/fixtures/jira/fixture.py
     ports:
       - "8080:8080"
     volumes:
