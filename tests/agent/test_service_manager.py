@@ -20,15 +20,13 @@ def multi_service_mock():
 
 class StubMultiService:
     def __init__(self):
-        self.running = False
+        self.running_stop = asyncio.Event()
 
     async def run(self):
-        self.running = True
-        while (self.running):
-            await asyncio.sleep(0)
+        await self.running_stop.wait()
 
     def stop(self):
-        self.running = False
+        self.running_stop.set()
 
 @pytest.mark.asyncio
 @patch("connectors.agent.service_manager.get_services")

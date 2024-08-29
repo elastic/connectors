@@ -1,7 +1,7 @@
-from es_agent_client.generated import elastic_agent_client_pb2 as proto
-from es_agent_client.handler.action import BaseActionHandler
-from es_agent_client.handler.checkin import BaseCheckinHandler
-from es_agent_client.util.logger import logger
+from elastic_agent_client.generated import elastic_agent_client_pb2 as proto
+from elastic_agent_client.handler.action import BaseActionHandler
+from elastic_agent_client.handler.checkin import BaseCheckinHandler
+from elastic_agent_client.util.logger import logger
 
 
 class ConnectorActionHandler(BaseActionHandler):

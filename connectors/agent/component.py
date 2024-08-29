@@ -1,9 +1,9 @@
 import sys
 
-from es_agent_client.client import V2Options, VersionInfo
-from es_agent_client.reader import new_v2_from_reader
-from es_agent_client.service.actions import ActionsService
-from es_agent_client.service.checkin import CheckinV2Service
+from elastic_agent_client.client import V2Options, VersionInfo
+from elastic_agent_client.reader import new_v2_from_reader
+from elastic_agent_client.service.actions import ActionsService
+from elastic_agent_client.service.checkin import CheckinV2Service
 
 from connectors.agent.config import ConnectorsAgentConfiguration
 from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler

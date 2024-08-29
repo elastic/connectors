@@ -2,10 +2,10 @@ import asyncio
 import functools
 import signal
 
-from es_agent_client.util.async_tools import (
+from elastic_agent_client.util.async_tools import (
     sleeps_for_retryable,
 )
-from es_agent_client.util.logger import logger
+from elastic_agent_client.util.logger import logger
 
 from connectors.agent.component import ConnectorsAgentComponent
 

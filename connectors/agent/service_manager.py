@@ -1,4 +1,4 @@
-from es_agent_client.util.logger import logger
+from elastic_agent_client.util.logger import logger
 
 from connectors.logger import DocumentLogger
 from connectors.services.base import ServiceAlreadyRunningError, get_services
