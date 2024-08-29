@@ -45,7 +45,6 @@ steps:
       image: family/enterprise-search-ubuntu-2204-connectors-py
 
   - label: ":sweating: Checking for changes in connectors"
-    <<: *test-agents
     key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.0.1:
@@ -60,6 +59,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MySQL"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -77,6 +77,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Network Drive"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -94,6 +95,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Amazon S3"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -111,6 +113,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -128,6 +131,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -145,6 +149,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Postgresql"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -162,6 +167,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 System Directory"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -179,6 +185,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Oracle Database"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -196,6 +203,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -213,6 +221,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -230,6 +239,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -248,6 +258,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Jira"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -266,6 +277,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Confluence"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -283,6 +295,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 ServiceNow"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -300,6 +313,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MongoDB"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -317,6 +331,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GitHub"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -334,6 +349,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Drive"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -351,6 +367,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Dropbox"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -368,6 +385,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 OneDrive"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -385,6 +403,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Salesforce"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -402,6 +421,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Zoom"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -419,6 +439,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Box"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -436,6 +457,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -453,6 +475,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Notion"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -470,6 +493,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Redis"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -487,6 +511,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GraphQL"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
