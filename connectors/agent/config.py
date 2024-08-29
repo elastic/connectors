@@ -60,11 +60,10 @@ class ConnectorsAgentConfigurationWrapper:
         """
 
         # TODO: find a good link to what this object is.
-        if source.fields.get("hosts") and (
-            source.fields.get("api_key")
-            or source.fields.get("username")
-            and source.fields.get("password")
-        ):
+        has_hosts = source.fields.get("hosts")
+        has_api_key = source.fields.get("api_key")
+        has_basic_auth = source.fields.get("username") and source.fields.get("password")
+        if has_hosts and (has_api_key or has_basic_auth):
             es_creds = {
                 "host": source["hosts"][0],
             }

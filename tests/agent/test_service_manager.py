@@ -20,10 +20,6 @@ def config_mock():
     return config
 
 
-def multi_service_mock():
-    return AsyncMock()
-
-
 class StubMultiService:
     def __init__(self):
         self.running_stop = asyncio.Event()
