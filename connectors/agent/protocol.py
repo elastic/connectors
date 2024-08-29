@@ -34,34 +34,8 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
 
             if len(outputs) > 0 and outputs[0].config:
                 source = outputs[0].config.source
-                if source.fields.get("hosts") and (
-                    source.fields.get("api_key")
-                    or source.fields.get("username")
-                    and source.fields.get("password")
-                ):
+
+                changed = self.agent_config.try_update(source)
+                if changed:
                     logger.info("Updating connector service manager config")
-
-                    es_creds = {
-                        "host": source["hosts"][0],
-                    }
-
-                    if source.fields.get("api_key"):
-                        es_creds["api_key"] = source["api_key"]
-                    elif source.fields.get("username") and source.fields.get(
-                        "password"
-                    ):
-                        es_creds["username"] = source["username"]
-                        es_creds["password"] = source["password"]
-                    else:
-                        msg = "Invalid Elasticsearch credentials"
-                        raise ValueError(msg)
-
-                    new_config = {
-                        "elasticsearch": es_creds,
-                    }
-                    # this restarts all connector services
-                    # this should happen only when user changes the target elasticsearch output
-                    # in agent policy
-
-                    self.agent_config.update(new_config)
                     self.service_manager.restart()

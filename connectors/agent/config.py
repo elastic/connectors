@@ -1,7 +1,7 @@
 from connectors.config import add_defaults
 
 
-class ConnectorsAgentConfiguration:
+class ConnectorsAgentConfigurationWrapper:
     def __init__(self):
         self._default_config = {
             "_force_allow_native": True,
@@ -36,8 +36,31 @@ class ConnectorsAgentConfiguration:
 
         self.specific_config = {}
 
-    def update(self, new_config):
-        self.specific_config = new_config
+    def try_update(self, source):
+        if source.fields.get("hosts") and (
+            source.fields.get("api_key")
+            or source.fields.get("username")
+            and source.fields.get("password")
+        ):
+            es_creds = {
+                "host": source["hosts"][0],
+            }
+
+            if source.fields.get("api_key"):
+                es_creds["api_key"] = source["api_key"]
+            elif source.fields.get("username") and source.fields.get("password"):
+                es_creds["username"] = source["username"]
+                es_creds["password"] = source["password"]
+            else:
+                msg = "Invalid Elasticsearch credentials"
+                raise ValueError(msg)
+
+            new_config = {
+                "elasticsearch": es_creds,
+            }
+            self.specific_config = new_config
+            return True
+        return False
 
     def get(self):
         # First take "default config"
