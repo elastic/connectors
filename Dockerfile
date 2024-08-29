@@ -3,5 +3,4 @@ RUN apt update && apt upgrade && apt install make -y
 COPY . /app
 WORKDIR /app
 RUN make clean install
-
 ENTRYPOINT []
