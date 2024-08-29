@@ -45,7 +45,6 @@ steps:
       image: family/enterprise-search-ubuntu-2204-connectors-py
 
   - label: ":sweating: Checking for changes in connectors"
-    <<: *test-agents
     key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.0.1:
