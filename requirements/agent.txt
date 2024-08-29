@@ -1,1 +1,1 @@
-es-agent-client@git+https://github.com/elastic/python-elastic-agent-client@artem/update-setup-py-dependencies
+es-agent-client@git+https://github.com/elastic/python-elastic-agent-client@main
