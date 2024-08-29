@@ -34,6 +34,8 @@ class JobCleanUpService(BaseService):
             while self.running:
                 await self._process_orphaned_idle_jobs()
                 await self._process_idle_jobs()
+                if not self.running:
+                    break
                 await self._sleeps.sleep(self.idling)
         finally:
             if self.connector_index is not None:
