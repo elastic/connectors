@@ -24,6 +24,7 @@ class ConnectorServiceManager:
             raise ServiceAlreadyRunningError(msg)
 
         self.running = True
+
         try:
             while self.running:
                 try:
