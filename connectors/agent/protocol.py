@@ -46,6 +46,10 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         This method is called by the Agent Protocol handlers when there's a check-in event
         coming from Agent. This class reads the event and runs business logic based on the
         content of the event.
+
+        If this class blocks for too long, the component will mark the agent as failed:
+        agent expects the components to respond within 30 seconds.
+        See comment in https://github.com/elastic/elastic-agent-client/blob/main/elastic-agent-client.proto#L29
         """
         logger.info("There's new information for the components/units!")
         if self.client.units:
