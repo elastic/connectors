@@ -1095,6 +1095,7 @@ class ConfluenceDataSource(BaseDataSource):
             "title": space.get("name"),
             "_timestamp": iso_utc(),
             "url": space_url,
+            "key": space.get("key"),
         }
         if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
             document["createdDate"] = nested_get_from_dict(
@@ -1132,12 +1133,10 @@ class ConfluenceDataSource(BaseDataSource):
                 space = self._decorate_with_access_control(
                     document=space, access_control=access_control
                 )
-                await self.queue.put((space, None))  # pyright: ignore
+                yield space
         except Exception as exception:
             self._logger.exception(f"Error while fetching spaces: {exception}")
             raise
-        finally:
-            await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _page_blog_coro(self, api_query, target_type):
         """Coroutine to add pages/blogposts to Queue
@@ -1149,6 +1148,9 @@ class ConfluenceDataSource(BaseDataSource):
         try:
             self._logger.info(
                 f"Fetching {target_type} and its permissions from Confluence"
+            )
+            self._logger.debug(
+                f"Fetching {target_type} using Confluence query: '{api_query}'"
             )
             async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
                 api_query
@@ -1236,32 +1238,26 @@ class ConfluenceDataSource(BaseDataSource):
                         yield document, None
 
         else:
-            if self.spaces == [WILDCARD]:
-                logger.debug("Including docs from all spaces")
-                configured_spaces_query = "cql=type="
-            else:
-                quoted_spaces = "','".join(self.spaces)
-                logger.debug(
-                    f"Including docs from the following spaces: {quoted_spaces}"
+            async for space in self._space_coro():
+                yield space, None
+                self._logger.info(f"Fetching docs from space: {space['key']}")
+                configured_spaces_query = f"cql=space in ('{space['key']}') AND type="
+                await self.fetchers.put(
+                    partial(
+                        self._page_blog_coro,
+                        f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
+                        BLOGPOST,
+                    )
                 )
-                configured_spaces_query = f"cql=space in ('{quoted_spaces}') AND type="
-            await self.fetchers.put(self._space_coro)
-            await self.fetchers.put(
-                partial(
-                    self._page_blog_coro,
-                    f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
-                    BLOGPOST,
+                await self.fetchers.put(
+                    partial(
+                        self._page_blog_coro,
+                        f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
+                        PAGE,
+                    )
                 )
-            )
-            await self.fetchers.put(
-                partial(
-                    self._page_blog_coro,
-                    f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
-                    PAGE,
-                )
-            )
-            self.fetcher_count += 3
+                self.fetcher_count += 2
 
-            async for item in self._consumer():
-                yield item
+                async for item in self._consumer():
+                    yield item
             await self.fetchers.join()
