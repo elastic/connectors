@@ -254,6 +254,20 @@ class RandomDataStorage:
 
         return results
 
+    def get_tenant_root_site_collections(self):
+        return {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": fake.paragraph(),
+            "id": str(fake.uuid4()),
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
+
     def get_sites(self, skip=0, take=10):
         results = []
 
@@ -604,6 +618,12 @@ def get_site_collections():
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(siteCollection,webUrl)",
         "value": data_storage.get_site_collections(),
     }
+
+
+@app.route("/sites/root", methods=["GET"])
+def get_tenant_root_site_collections():
+    # No paging as there's always one site collection
+    return data_storage.get_tenant_root_site_collections()
 
 
 @app.route("/sites/<string:site_id>/sites", methods=["GET"])

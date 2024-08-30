@@ -69,13 +69,13 @@ TEST_CONFIG_TEXT='
 schemaVersion: "2.0.0"
 
 commandTests:
-  # ensure Python 3.10.* is installed
-  - name: "Python 3 Installation 3.10.*"
+  # ensure Python 3.11.* is installed
+  - name: "Python 3 Installation 3.11.*"
     command: "python3"
     args: ["--version"]
-    expectedOutput: ["Python\\s3\\.10\\.*"]
+    expectedOutput: ["Python\\s3\\.11\\.*"]
   - name: "Connectors Installation"
-    command: "/app/bin/elastic-ingest"
+    command: "/app/.venv/bin/elastic-ingest"
     args: ["--version"]
     expectedOutput: ["'"${ESCAPED_VERSION}"'*"]
 '

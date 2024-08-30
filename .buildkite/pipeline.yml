@@ -1,20 +1,27 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-2"
-  useVault: true
-  image: family/enterprise-search-ubuntu-2204-connectors-py
+definitions:
+  steps:
+    - step: &test-agents
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-2"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors-py
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
+    <<: *test-agents
+    key: "lint"
     command: ".buildkite/run_linter.sh"
     env:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
   - label: ":pytest: Test with Python {{ matrix }}"
+    <<: *test-agents
+    key: "unit_tests"
     command: ".buildkite/run_tests.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -24,6 +31,7 @@ steps:
       - "3.11"
 
   - label: ":shipit: Smoke test"
+    key: "smoke_test"
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
@@ -32,8 +40,12 @@ steps:
     timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
+      provider: "gcp"
+      useVault: true
+      image: family/enterprise-search-ubuntu-2204-connectors-py
 
   - label: ":sweating: Checking for changes in connectors"
+    key: "relevant_ftests"
     plugins:
       monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
@@ -47,6 +59,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MySQL"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -64,6 +77,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Network Drive"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -81,6 +95,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Amazon S3"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -98,6 +113,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -115,6 +131,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -132,6 +149,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Postgresql"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -149,6 +167,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 System Directory"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -166,6 +185,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Oracle Database"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -183,6 +203,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -200,6 +221,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -217,6 +239,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -235,6 +258,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Jira"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -253,6 +277,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Confluence"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -270,6 +295,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 ServiceNow"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -287,6 +313,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MongoDB"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -304,6 +331,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GitHub"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -321,6 +349,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Drive"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -338,6 +367,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Dropbox"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -355,6 +385,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 OneDrive"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -372,6 +403,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Salesforce"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -389,6 +421,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Zoom"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -406,6 +439,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Box"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -423,6 +457,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -440,6 +475,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Notion"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -457,6 +493,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Redis"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -474,6 +511,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GraphQL"
+              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -482,3 +520,86 @@ steps:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
+
+  # ----
+  # DRA publishing
+  # ----
+  - group: ":truck: Packaging and DRA"
+    key: "mbp_dra_group"
+    if: "(build.branch == \"main\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    depends_on:
+      - "lint"
+      - "unit_tests"
+      - "smoke_test"
+      - "relevant_ftests"
+    steps:
+      # ----
+      # Docker builds for amd64
+      # ----
+      - label: "Building amd64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_docker_image_amd64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing amd64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        depends_on: "build_docker_image_amd64"
+        key: "test_docker_image_amd64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_amd64
+          - ".buildkite/publish/test-docker.sh"
+
+      # ----
+      # Docker builds for arm64
+      # ----
+      - label: "Building arm64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_docker_image_arm64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing arm64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        depends_on: "build_docker_image_arm64"
+        key: "test_docker_image_arm64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64
+          - ".buildkite/publish/test-docker.sh"
+
+      - label: ":truck: Publish DRA Items"
+        <<: *test-agents
+        key: "publish-dra-artifacts"
+        timeout_in_minutes: 45
+        depends_on:
+          - test_docker_image_amd64
+          - test_docker_image_arm64
+        command: ".buildkite/publish/dra/init_dra_publishing.sh"
