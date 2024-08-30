@@ -1149,6 +1149,9 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.info(
                 f"Fetching {target_type} and its permissions from Confluence"
             )
+            self._logger.debug(
+                f"Fetching {target_type} using Confluence query: '{api_query}'"
+            )
             async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
                 api_query
             ):
