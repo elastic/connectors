@@ -24,6 +24,9 @@ config.yml:
 install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
 
+install-agent: install
+	.venv/bin/pip install -r requirements/agent.txt
+
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/python setup.py develop
@@ -64,7 +67,10 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format setup.py
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
-	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
+	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests --ignore tests/agent
+
+test-agent: .venv/bin/pytest .venv/bin/elastic-ingest install-agent
+	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors/agent --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests/agent
 
 release: install
 	.venv/bin/python setup.py sdist
