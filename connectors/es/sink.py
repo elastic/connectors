@@ -835,6 +835,26 @@ class SyncOrchestrator:
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
 
+    def _index_or_alias(self, response, name):
+        index = response.get(name, None)
+
+        if index:
+            return index
+
+        for idx_name in response.keys():
+            index_definition = response.get(idx_name)
+            
+            if not index_definition.get("aliases", None):
+                continue
+
+            for alias in index_definition.get("aliases"):
+                if name == alias:
+                    return index_definition
+
+        return None
+
+
+
     async def prepare_content_index(self, index_name, language_code=None):
         """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
@@ -843,7 +863,7 @@ class SyncOrchestrator:
             index_name, ignore_unavailable=True
         )
 
-        index = result.get(index_name, None)
+        index = self._index_or_alias(result, index_name)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
@@ -858,7 +878,7 @@ class SyncOrchestrator:
             )
 
             await self.es_management_client.ensure_content_index_mappings(
-                index_name, mappings
+                index_name, index=index, desired_mappings=mappings
             )
         else:
             # Create a new index

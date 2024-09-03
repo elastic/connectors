@@ -37,6 +37,7 @@ class ESManagementClient(ESClient):
         super().__init__(config)
 
     async def ensure_exists(self, indices=None):
+        return
         if indices is None:
             indices = []
 
@@ -63,16 +64,13 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def ensure_content_index_mappings(self, index, mappings):
+    async def ensure_content_index_mappings(self, index_name, index, desired_mappings):
         # open = Match open, non-hidden indices. Also matches any non-hidden data stream.
         # Content indices are always non-hidden.
-        response = await self._retrier.execute_with_retry(
-            partial(self.client.indices.get_mapping, index=index)
-        )
 
-        existing_mappings = response[index].get("mappings", {})
+        existing_mappings = index.get("mappings", {})
         if len(existing_mappings) == 0:
-            if mappings:
+            if desired_mappings:
                 logger.info(
                     "Index %s has no mappings or it's empty. Adding mappings...", index
                 )
@@ -80,10 +78,10 @@ class ESManagementClient(ESClient):
                     await self._retrier.execute_with_retry(
                         partial(
                             self.client.indices.put_mapping,
-                            index=index,
-                            dynamic=mappings.get("dynamic", False),
-                            dynamic_templates=mappings.get("dynamic_templates", []),
-                            properties=mappings.get("properties", {}),
+                            index=index_name,
+                            dynamic=desired_mappings.get("dynamic", False),
+                            dynamic_templates=desired_mappings.get("dynamic_templates", []),
+                            properties=desired_mappings.get("properties", {}),
                         )
                     )
                     logger.info("Successfully added mappings for index %s", index)
