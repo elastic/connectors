@@ -37,7 +37,6 @@ class ESManagementClient(ESClient):
         super().__init__(config)
 
     async def ensure_exists(self, indices=None):
-        return
         if indices is None:
             indices = []
 
@@ -84,7 +83,7 @@ class ESManagementClient(ESClient):
                             properties=desired_mappings.get("properties", {}),
                         )
                     )
-                    logger.info("Successfully added mappings for index %s", index)
+                    logger.info("Successfully added mappings for index %s", index_name)
                 except Exception as e:
                     logger.warning(
                         f"Could not create mappings for index {index}, encountered error {e}"
@@ -95,7 +94,7 @@ class ESManagementClient(ESClient):
                 )
         else:
             logger.debug(
-                "Index %s already has mappings, skipping mappings creation", index
+                "Index %s already has mappings, skipping mappings creation", index_name
             )
 
     async def ensure_content_index_settings(
