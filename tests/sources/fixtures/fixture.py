@@ -141,7 +141,7 @@ async def _monitor_service(pid):
         start = time.time()
 
         # Fetch connector
-        connector_id, last_synced = await _fetch_connector_metadata(es_client)
+        _, last_synced = await _fetch_connector_metadata(es_client)
         while True:
             _, new_last_synced = await _fetch_connector_metadata(es_client)
             lapsed = time.time() - start

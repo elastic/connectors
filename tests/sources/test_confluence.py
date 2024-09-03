@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Confluence database source class methods"""
+
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
@@ -55,6 +56,7 @@ RESPONSE_SPACE = {
 SPACE = {
     "id": 4554779,
     "name": "DEMO",
+    "key": "DM",
     "_links": {
         "webui": "/spaces/DM",
     },
@@ -157,6 +159,7 @@ EXPECTED_SPACE = {
     "url": "http://127.0.0.1:9696/spaces/DM",
     "createdDate": "2023-01-03T09:24:50.633Z",
     "author": "user1",
+    "key": "DM",
 }
 
 RESPONSE_ATTACHMENT = {
@@ -1064,12 +1067,15 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
     lambda *_: True,
 )
 async def test_download_attachment_with_text_extraction_enabled_adds_body():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=RESPONSE_CONTENT,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=RESPONSE_CONTENT,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_confluence_source(use_text_extraction_service=True) as source:
             source.confluence_client._get_session().get = AsyncMock(

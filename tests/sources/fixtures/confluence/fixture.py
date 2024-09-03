@@ -4,10 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Module to responsible to generate confluence documents using the Flask framework.
-"""
+"""Module to responsible to generate confluence documents using the Flask framework."""
+
 import io
 import os
+import re
 import time
 
 from flask import Flask, request
@@ -20,16 +21,16 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        SPACE_COUNT = 100
-        SPACE_OBJECT_COUNT = 100
+        SPACE_COUNT = 10
+        SPACE_OBJECT_COUNT = 25
         ATTACHMENT_COUNT = 3
     case "medium":
-        SPACE_COUNT = 100
-        SPACE_OBJECT_COUNT = 200
+        SPACE_COUNT = 10
+        SPACE_OBJECT_COUNT = 50
         ATTACHMENT_COUNT = 5
     case "large":
-        SPACE_COUNT = 100
-        SPACE_OBJECT_COUNT = 250
+        SPACE_COUNT = 10
+        SPACE_OBJECT_COUNT = 75
         ATTACHMENT_COUNT = 7
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
@@ -42,15 +43,14 @@ def get_num_docs():
     # There are 2 types of content:
     # - blogpost
     # - page
-    print(SPACE_COUNT + SPACE_OBJECT_COUNT * ATTACHMENT_COUNT * 2)
+    print(SPACE_COUNT + SPACE_COUNT * SPACE_OBJECT_COUNT * ATTACHMENT_COUNT * 2)
 
 
 class ConfluenceAPI:
     def __init__(self):
         self.app = Flask(__name__)
+        self.first_sync = True
         self.space_start_at = 0
-        self.space_page_limit = 100
-        self.total_spaces = SPACE_COUNT
         self.total_content = SPACE_OBJECT_COUNT
         self.attachment_start_at = 1
         self.attachment_end_at = self.attachment_start_at + ATTACHMENT_COUNT - 1
@@ -79,48 +79,34 @@ class ConfluenceAPI:
         Returns:
             spaces (dictionary): dictionary of spaces.
         """
-        args = request.args
+        if request.args.get("limit") == "1":
+            total_spaces = 1
+            limit = 1
+        elif self.first_sync:
+            self.first_sync = False
+            total_spaces = SPACE_COUNT
+            limit = 100
+        else:
+            total_spaces = SPACE_COUNT - 5  # Delete 5 spaces out of 10
+            limit = 100
         spaces = {
             "results": [],
             "start": 0,
-            "limit": 1,
-            "size": self.total_spaces,
+            "limit": limit,
+            "size": total_spaces,
             "_links": {"next": None},
         }
-        if args["limit"] == "1":
+        for space_count in range(self.space_start_at, total_spaces):
             spaces["results"].append(
                 {
-                    "id": "space 0",
-                    "name": "Demo Space 0",
+                    "id": f"space_{space_count}",
+                    "key": f"space{space_count}",
+                    "name": f"Demo Space {space_count}",
                     "_links": {
-                        "webui": "/spaces/space0",
+                        "webui": f"/spaces/space{space_count}",
                     },
                 }
             )
-        else:
-            for space_count in range(self.space_start_at, self.space_page_limit):
-                spaces["results"].append(
-                    {
-                        "id": f"space {space_count}",
-                        "key": f"space{space_count}",
-                        "name": f"Demo Space {space_count}",
-                        "_links": {
-                            "webui": f"/spaces/space{space_count}",
-                        },
-                    }
-                )
-            spaces["start"] = self.space_start_at
-            spaces["limit"] = 100
-            self.space_start_at = self.space_page_limit
-            if self.space_page_limit < spaces["size"]:
-                spaces["_links"]["next"] = "/rest/api/space?limit=100"
-            elif spaces["_links"]["next"] is None:
-                self.space_start_at = 0
-                self.space_page_limit = 0
-                self.total_spaces -= 100  # Deleting 100 spaces for the second sync
-            elif self.space_page_limit >= spaces["size"]:
-                spaces["_links"]["next"] = None
-            self.space_page_limit = self.space_page_limit + spaces["limit"]
         return spaces
 
     def get_label(self, label_id):
@@ -153,11 +139,12 @@ class ConfluenceAPI:
             "_links": {"next": None},
         }
         confluence_query = args.get("cql")
+        space_name = re.search(r"space in \('([^']+)'\)", confluence_query).group(1)
         document_type = confluence_query.split("type=")[1]
         for content_count in range(self.total_content):
             content["results"].append(
                 {
-                    "id": f"{document_type}_{content_count}",
+                    "id": f"{document_type}_{space_name}_{content_count}",
                     "title": f"ES-scrum_{content_count}",
                     "type": document_type,
                     "history": {

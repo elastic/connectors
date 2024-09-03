@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the PostgreSQL database source class methods"""
+
 import ssl
 from contextlib import asynccontextmanager
 from unittest.mock import ANY, Mock, patch

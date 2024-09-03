@@ -155,7 +155,7 @@ async def test_get_docs():
             return_value=AsyncMock(),
         ):
             source.get_db_records = AsyncIterator(items=DOCUMENTS)
-            async for (doc, _) in source.get_docs():
+            async for doc, _ in source.get_docs():
                 assert doc in DOCUMENTS
 
 
@@ -256,7 +256,7 @@ async def test_get_docs_with_sync_rules(filtering):
         source.client._client.type = AsyncMock(return_value="string")
         source.client._client.get = AsyncMock(return_value="this is value")
         source.client._client.memory_usage = AsyncMock(return_value=10)
-        async for (doc, _) in source.get_docs(filtering):
+        async for doc, _ in source.get_docs(filtering):
             assert doc in DOCUMENTS
         source.client._client.scan_iter.assert_called_once_with(
             match="0*", count=1000, _type="string"
