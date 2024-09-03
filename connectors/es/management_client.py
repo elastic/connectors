@@ -79,7 +79,9 @@ class ESManagementClient(ESClient):
                             self.client.indices.put_mapping,
                             index=index_name,
                             dynamic=desired_mappings.get("dynamic", False),
-                            dynamic_templates=desired_mappings.get("dynamic_templates", []),
+                            dynamic_templates=desired_mappings.get(
+                                "dynamic_templates", []
+                            ),
                             properties=desired_mappings.get("properties", {}),
                         )
                     )
