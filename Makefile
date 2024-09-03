@@ -28,7 +28,7 @@ install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/python setup.py develop
 
-.venv/bin/black: .venv/bin/python
+.venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/tests.txt
 	
