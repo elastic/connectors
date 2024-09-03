@@ -1012,7 +1012,6 @@ class Connector(ESDocument):
             await self.index.client.indices.refresh(
                 index=self.index_name, ignore_unavailable=True
             )
-
         result = await self.index.client.count(
             index=self.index_name, ignore_unavailable=True
         )
