@@ -10,6 +10,7 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
+
 from datetime import datetime, timezone
 
 from connectors.es.client import License, with_concurrency_control
@@ -111,9 +112,7 @@ class JobSchedulingService(BaseService):
             (
                 is_platinum_license_enabled,
                 license_enabled,
-            ) = await self.connector_index.has_active_license_enabled(
-                License.PLATINUM
-            )  # pyright: ignore
+            ) = await self.connector_index.has_active_license_enabled(License.PLATINUM)  # pyright: ignore
 
             if is_platinum_license_enabled:
                 await self._try_schedule_sync(connector, JobType.ACCESS_CONTROL)

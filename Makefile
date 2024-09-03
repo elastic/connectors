@@ -28,7 +28,7 @@ install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/python setup.py develop
 
-.venv/bin/black: .venv/bin/python
+.venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/tests.txt
 	
@@ -41,27 +41,27 @@ install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 clean:
 	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 
-lint: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
-	.venv/bin/black --check connectors
-	.venv/bin/black --check tests
-	.venv/bin/black --check setup.py
-	.venv/bin/black --check scripts
-	.venv/bin/ruff connectors
-	.venv/bin/ruff tests
-	.venv/bin/ruff setup.py
-	.venv/bin/ruff scripts
+lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
+	.venv/bin/ruff check connectors
+	.venv/bin/ruff format connectors --check
+	.venv/bin/ruff check tests
+	.venv/bin/ruff format tests --check
+	.venv/bin/ruff check scripts
+	.venv/bin/ruff format scripts --check
+	.venv/bin/ruff check setup.py
+	.venv/bin/ruff format setup.py --check
 	.venv/bin/pyright connectors
 	.venv/bin/pyright tests
 
-autoformat: .venv/bin/python .venv/bin/black .venv/bin/elastic-ingest
-	.venv/bin/black connectors
-	.venv/bin/black tests
-	.venv/bin/black setup.py
-	.venv/bin/black scripts
-	.venv/bin/ruff connectors --fix
-	.venv/bin/ruff tests --fix
-	.venv/bin/ruff setup.py --fix
-	.venv/bin/ruff scripts --fix
+autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
+	.venv/bin/ruff check connectors --fix
+	.venv/bin/ruff format connectors
+	.venv/bin/ruff check tests --fix
+	.venv/bin/ruff format tests
+	.venv/bin/ruff check scripts --fix
+	.venv/bin/ruff format scripts
+	.venv/bin/ruff check setup.py --fix
+	.venv/bin/ruff format setup.py
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests

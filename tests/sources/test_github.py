@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Github source class methods"""
+
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from http import HTTPStatus
@@ -1242,12 +1243,15 @@ async def test_get_content_with_md_file():
 
 @pytest.mark.asyncio
 async def test_get_content_with_md_file_with_extraction_service():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="Test File !!! U+1F602",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="Test File !!! U+1F602",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         expected_response = {
             "_id": "demo_repo/source.md",

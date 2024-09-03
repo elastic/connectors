@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
+
 import json
 import time
 from enum import Enum
@@ -2132,20 +2133,27 @@ class GitHubDataSource(BaseDataSource):
                         repo_name=repo_name, default_branch=branch
                     ):
                         if file_document["type"] == BLOB:
-                            yield file_document, partial(
-                                self.get_content, attachment=attachment_metadata
+                            yield (
+                                file_document,
+                                partial(
+                                    self.get_content, attachment=attachment_metadata
+                                ),
                             )
                         else:
                             yield file_document, None
 
                 if path := rule["filter"].get(ObjectType.PATH.value):
-                    async for file_document, attachment_metadata in self._fetch_files_by_path(
-                        repo_name=repo_name, path=path
-                    ):
+                    async for (
+                        file_document,
+                        attachment_metadata,
+                    ) in self._fetch_files_by_path(repo_name=repo_name, path=path):
                         if file_document["type"] == FILE:
                             attachment_metadata["url"] = attachment_metadata["git_url"]
-                            yield file_document, partial(
-                                self.get_content, attachment=attachment_metadata
+                            yield (
+                                file_document,
+                                partial(
+                                    self.get_content, attachment=attachment_metadata
+                                ),
                             )
                         else:
                             yield file_document, None
@@ -2164,9 +2172,12 @@ class GitHubDataSource(BaseDataSource):
                     )
 
                 if needs_access_control:
-                    yield self._decorate_with_access_control(
-                        document=repo, access_control=access_control
-                    ), None
+                    yield (
+                        self._decorate_with_access_control(
+                            document=repo, access_control=access_control
+                        ),
+                        None,
+                    )
                 else:
                     yield repo, None
 
@@ -2182,9 +2193,12 @@ class GitHubDataSource(BaseDataSource):
                     response_key=[REPOSITORY_OBJECT, "pullRequests"],
                 ):
                     if needs_access_control:
-                        yield self._decorate_with_access_control(
-                            document=pull_request, access_control=access_control
-                        ), None
+                        yield (
+                            self._decorate_with_access_control(
+                                document=pull_request, access_control=access_control
+                            ),
+                            None,
+                        )
                     else:
                         yield pull_request, None
 
@@ -2192,9 +2206,12 @@ class GitHubDataSource(BaseDataSource):
                     repo_name=repo_name, response_key=[REPOSITORY_OBJECT, "issues"]
                 ):
                     if needs_access_control:
-                        yield self._decorate_with_access_control(
-                            document=issue, access_control=access_control
-                        ), None
+                        yield (
+                            self._decorate_with_access_control(
+                                document=issue, access_control=access_control
+                            ),
+                            None,
+                        )
                     else:
                         yield issue, None
 
@@ -2204,21 +2221,30 @@ class GitHubDataSource(BaseDataSource):
                     ):
                         if file_document["type"] == BLOB:
                             if needs_access_control:
-                                yield self._decorate_with_access_control(
-                                    document=file_document,
-                                    access_control=access_control,
-                                ), partial(
-                                    self.get_content, attachment=attachment_metadata
+                                yield (
+                                    self._decorate_with_access_control(
+                                        document=file_document,
+                                        access_control=access_control,
+                                    ),
+                                    partial(
+                                        self.get_content, attachment=attachment_metadata
+                                    ),
                                 )
                             else:
-                                yield file_document, partial(
-                                    self.get_content, attachment=attachment_metadata
+                                yield (
+                                    file_document,
+                                    partial(
+                                        self.get_content, attachment=attachment_metadata
+                                    ),
                                 )
                         else:
                             if needs_access_control:
-                                yield self._decorate_with_access_control(
-                                    document=file_document,
-                                    access_control=access_control,
-                                ), None
+                                yield (
+                                    self._decorate_with_access_control(
+                                        document=file_document,
+                                        access_control=access_control,
+                                    ),
+                                    None,
+                                )
                             else:
                                 yield file_document, None

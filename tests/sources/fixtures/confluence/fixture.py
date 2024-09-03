@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Module to responsible to generate confluence documents using the Flask framework.
-"""
+"""Module to responsible to generate confluence documents using the Flask framework."""
+
 import io
 import os
 import re

@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Salesforce source module responsible to fetch documents from Salesforce."""
+
 import os
 import re
 from datetime import datetime
@@ -1493,9 +1494,12 @@ class SalesforceDataSource(BaseDataSource):
                     access_control = self.permissions.get(
                         doc.get("attributes", {}).get("type"), []
                     )
-                    yield self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(doc, access_control)
-                    ), None
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(doc, access_control)
+                        ),
+                        None,
+                    )
 
         else:
             for sobject in [
@@ -1514,53 +1518,76 @@ class SalesforceDataSource(BaseDataSource):
             async for account in self.salesforce_client.get_accounts():
                 content_docs.extend(self._parse_content_documents(account))
                 access_control = self.permissions.get("Account", [])
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(account, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(account, access_control)
+                    ),
+                    None,
+                )
 
             async for opportunity in self.salesforce_client.get_opportunities():
                 content_docs.extend(self._parse_content_documents(opportunity))
                 access_control = self.permissions.get("Opportunity", [])
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(opportunity, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(opportunity, access_control)
+                    ),
+                    None,
+                )
 
             async for contact in self.salesforce_client.get_contacts():
                 content_docs.extend(self._parse_content_documents(contact))
                 access_control = self.permissions.get("Contact", [])
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(contact, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(contact, access_control)
+                    ),
+                    None,
+                )
 
             async for lead in self.salesforce_client.get_leads():
                 content_docs.extend(self._parse_content_documents(lead))
                 access_control = self.permissions.get("Lead", [])
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(lead, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(lead, access_control)
+                    ),
+                    None,
+                )
 
             async for campaign in self.salesforce_client.get_campaigns():
                 content_docs.extend(self._parse_content_documents(campaign))
                 access_control = self.permissions.get("Campaign", [])
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(campaign, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(campaign, access_control)
+                    ),
+                    None,
+                )
 
             async for case in self.salesforce_client.get_cases():
                 content_docs.extend(self._parse_content_documents(case))
                 access_control = self.permissions.get("Case", [])
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(case, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(case, access_control)
+                    ),
+                    None,
+                )
 
             async for custom_object in self.salesforce_client.get_custom_objects():
                 content_docs.extend(self._parse_content_documents(custom_object))
                 access_control = self.permissions.get(
                     custom_object.get("attributes", {}).get("type"), []
                 )
-                yield self.doc_mapper.map_salesforce_objects(
-                    self._decorate_with_access_control(custom_object, access_control)
-                ), None
+                yield (
+                    self.doc_mapper.map_salesforce_objects(
+                        self._decorate_with_access_control(
+                            custom_object, access_control
+                        )
+                    ),
+                    None,
+                )
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)

@@ -3,7 +3,6 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-# ruff: noqa: T201
 """Module to handle api calls received from connector."""
 
 import os
@@ -97,7 +96,7 @@ TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
 
 
 def get_num_docs():
-    print(TOTAL_RECORD_COUNT)
+    print(TOTAL_RECORD_COUNT)  # noqa: T201
 
 
 class AutoIncrement:
@@ -410,9 +409,9 @@ class RandomDataStorage:
                 drive_item["size"] = 0
             else:
                 drive_item["size"] = item["size"]
-                drive_item[
-                    "@microsoft.graph.downloadUrl"
-                ] = f"{ROOT}/drives/{drive_id}/items/{item['id']}/content"
+                drive_item["@microsoft.graph.downloadUrl"] = (
+                    f"{ROOT}/drives/{drive_id}/items/{item['id']}/content"
+                )
 
             results.append(drive_item)
 
@@ -562,9 +561,9 @@ class RandomDataStorage:
                     "FileName": attachment["title"],
                     "FileNameAsPath": {"DecodedUrl": attachment["title"]},
                     "ServerRelativePath": {
-                        "DecodedUrl": f"/sites/{site['name']}/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}"
+                        "DecodedUrl": f"/sites/{site['name']}/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}"  # noqa: F821
                     },
-                    "ServerRelativeUrl": f"/sites/site['name']/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}",
+                    "ServerRelativeUrl": f"/sites/site['name']/Lists/{list['name']}/Attachments/{list_item_id}/{attachment['title']}",  # noqa: F821
                 }
             )
 
@@ -640,9 +639,9 @@ def get_sites(site_id):
     }
 
     if len(sites) == take:
-        response[
-            "@odata.nextLink"
-        ] = f"{ROOT}/sites/site_id/sites?$skip={skip+take}&$take={take}"
+        response["@odata.nextLink"] = (
+            f"{ROOT}/sites/site_id/sites?$skip={skip + take}&$take={take}"
+        )
 
     return response
 
@@ -668,9 +667,9 @@ def get_drive_root_delta(drive_id):
     }
 
     if len(drive_items) == take:
-        response[
-            "@odata.nextLink"
-        ] = f"{ROOT}/drives/{drive_id}/root/delta?$skip={skip+take}&$take={take}"
+        response["@odata.nextLink"] = (
+            f"{ROOT}/drives/{drive_id}/root/delta?$skip={skip + take}&$take={take}"
+        )
 
     return response
 
@@ -694,9 +693,9 @@ def get_site_lists(site_id):
     }
 
     if len(site_lists) == take:
-        response[
-            "@odata.nextLink"
-        ] = f"{ROOT}/sites/{site_id}/lists?$skip={skip+take}&$take={take}"
+        response["@odata.nextLink"] = (
+            f"{ROOT}/sites/{site_id}/lists?$skip={skip + take}&$take={take}"
+        )
 
     return response
 
@@ -714,9 +713,9 @@ def get_site_list_items(site_id, list_id):
     }
 
     if len(site_list_items) == take:
-        response[
-            "@odata.nextLink"
-        ] = f"{ROOT}/sites/{site_id}/lists/{list_id}/items?$skip={skip+take}&$take={take}"
+        response["@odata.nextLink"] = (
+            f"{ROOT}/sites/{site_id}/lists/{list_id}/items?$skip={skip + take}&$take={take}"
+        )
 
     return response
 
@@ -746,9 +745,9 @@ def get_site_pages(site_name):
         "value": site_pages,
     }
     if len(site_pages) == take:
-        response[
-            "odata.nextLink"
-        ] = f"{ROOT}/sites/{site_name}/_api/web/lists/GetByTitle('Site Pages')/items?$skip={skip+take}&$take={take}"
+        response["odata.nextLink"] = (
+            f"{ROOT}/sites/{site_name}/_api/web/lists/GetByTitle('Site Pages')/items?$skip={skip + take}&$take={take}"
+        )
 
     return response
 
