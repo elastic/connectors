@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Box source module responsible to fetch documents from Box"""
+
 import asyncio
 import os
 from datetime import datetime, timedelta

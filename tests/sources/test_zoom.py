@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Zoom source class methods"""
+
 from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import Mock, patch
@@ -773,12 +774,15 @@ async def test_get_content(attachment, doit, expected_content):
 
 @pytest.mark.asyncio
 async def test_get_content_with_extraction_service():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=SAMPLE_CONTENT,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=SAMPLE_CONTENT,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_zoom_source(use_text_extraction_service=True) as source:
             with mock.patch(
@@ -807,7 +811,7 @@ async def test_get_docs():
             return_value=get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE),
         ):
             with mock.patch("aiohttp.ClientSession.get", side_effect=mock_zoom_apis):
-                async for (doc, content) in source.get_docs():
+                async for doc, content in source.get_docs():
                     document_without_attachment.append(doc)
                     if content:
                         res = await content(doit=True)

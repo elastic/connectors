@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Tests the Sharepoint source class methods.
-"""
+"""Tests the Sharepoint source class methods."""
+
 import ssl
 from contextlib import asynccontextmanager
 from unittest import mock
@@ -740,12 +740,15 @@ async def test_get_content():
 @pytest.mark.asyncio
 async def test_get_content_with_content_extraction():
     response_content = "This is a dummy sharepoint body response"
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=response_content,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=response_content,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async_response = MockObjectResponse()
         async_response.aiter_bytes = AsyncIterator([bytes(response_content, "utf-8")])
@@ -1005,8 +1008,9 @@ async def test_api_call_successfully():
         async_response = MockResponse(mocked_response, 200)
         async_response_token = MockResponse(mock_token, 200)
 
-        with patch("httpx.AsyncClient.get", return_value=async_response), patch(
-            "httpx.request", return_value=async_response_token
+        with (
+            patch("httpx.AsyncClient.get", return_value=async_response),
+            patch("httpx.request", return_value=async_response_token),
         ):
             source.sharepoint_client._get_session()
             async for response in source.sharepoint_client._api_call(

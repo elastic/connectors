@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Oracle Database source class methods"""
+
 from contextlib import contextmanager
 from unittest.mock import patch
 

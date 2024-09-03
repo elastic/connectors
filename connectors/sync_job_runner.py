@@ -346,7 +346,9 @@ class SyncJobRunner:
             except asyncio.CancelledError:
                 self.sync_job.log_debug("Job reporting task is stopped.")
         if self.sync_orchestrator is not None:
-            await self.sync_orchestrator.cancel()  # in case the extractor/sink tasks are still running
+            await (
+                self.sync_orchestrator.cancel()
+            )  # in case the extractor/sink tasks are still running
 
         ingestion_stats = (
             {}

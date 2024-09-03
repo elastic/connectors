@@ -10,6 +10,7 @@ This is the main entry point of the framework. When the project is installed as
 a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
+
 import asyncio
 import json
 import os
