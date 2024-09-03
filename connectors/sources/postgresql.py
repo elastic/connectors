@@ -522,7 +522,7 @@ class PostgreSQLDataSource(BaseDataSource):
             primary_key_columns.extend(
                 await self.postgresql_client.get_table_primary_key(table)
             )
-        primary_key_columns = sorted(primary_key_columns)
+
         return (
             map_column_names(
                 column_names=primary_key_columns, schema=self.schema, tables=tables
