@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Oracle module responsible to generate records on the Oracle server.
-"""
+"""Oracle module responsible to generate records on the Oracle server."""
+
 import os
 import random
 

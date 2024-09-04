@@ -665,12 +665,15 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
     }
     mock_download = b"Mock...."
 
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=str(mock_download),
-    ) as extraction_service_mock, patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=str(mock_download),
+        ) as extraction_service_mock,
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_abs_source(use_text_extraction_service=True) as source:
             source.connection_string = source._configure_connection_string()

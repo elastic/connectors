@@ -3,8 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-""" Helpers to build sources + FQN-based Registry
-"""
+"""Helpers to build sources + FQN-based Registry"""
 
 import asyncio
 import importlib
@@ -140,7 +139,7 @@ class Field:
             return value
 
         # list requires special type casting
-        if cast_type == list:
+        if cast_type is list:
             if isinstance(value, str):
                 return [item.strip() for item in value.split(",")] if value else []
             elif isinstance(value, int):

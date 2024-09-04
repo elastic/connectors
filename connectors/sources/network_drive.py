@@ -3,17 +3,17 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Network Drive source module responsible to fetch documents from Network Drive.
-"""
+"""Network Drive source module responsible to fetch documents from Network Drive."""
+
 import asyncio
 import csv
 from collections import deque
 from functools import cached_property, partial
 
 import fastjsonschema
+import requests.exceptions
 import smbclient
 import winrm
-from requests.exceptions import ConnectionError
 from smbprotocol.exceptions import (
     SMBConnectionClosed,
     SMBException,
@@ -805,9 +805,9 @@ class NASDataSource(BaseDataSource):
                         user=user,
                         sid=sid,
                     )
-            except ConnectionError as exception:
+            except requests.exceptions.ConnectionError as exception:
                 msg = "Something went wrong"
-                raise ConnectionError(msg) from exception
+                raise requests.exceptions.ConnectionError(msg) from exception
 
     async def get_entity_permission(self, file_path, file_type, groups_info):
         """Processes permissions for a network drive, focusing on key terms:
@@ -880,9 +880,12 @@ class NASDataSource(BaseDataSource):
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             async for document in self.fetch_filtered_directory(advanced_rules):
-                yield document, partial(self.get_content, document) if document[
-                    "type"
-                ] == "file" else None
+                yield (
+                    document,
+                    partial(self.get_content, document)
+                    if document["type"] == "file"
+                    else None,
+                )
 
         else:
             groups_info = {}
@@ -892,8 +895,11 @@ class NASDataSource(BaseDataSource):
             async for document in self.traverse_diretory(
                 path=rf"\\{self.server_ip}/{self.drive_path}"
             ):
-                yield await self._decorate_with_access_control(
-                    document, document["path"], document["type"], groups_info
-                ), partial(self.get_content, document) if document[
-                    "type"
-                ] == "file" else None
+                yield (
+                    await self._decorate_with_access_control(
+                        document, document["path"], document["type"], groups_info
+                    ),
+                    partial(self.get_content, document)
+                    if document["type"] == "file"
+                    else None,
+                )

@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Microsoft SQL source module is responsible to fetch documents from Microsoft SQL."""
+
 import asyncio
 import os
 from functools import cached_property, partial
@@ -231,7 +232,8 @@ class MSSQLClient:
             loop = asyncio.get_running_loop()
             if self.connection is None:
                 self.connection = await loop.run_in_executor(
-                    executor=None, func=self.engine.connect  # pyright: ignore
+                    executor=None,
+                    func=self.engine.connect,  # pyright: ignore
                 )
             cursor = await loop.run_in_executor(
                 executor=None,

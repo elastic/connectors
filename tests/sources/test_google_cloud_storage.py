@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Tests the Google Cloud Storage source class methods.
-"""
+"""Tests the Google Cloud Storage source class methods."""
+
 import asyncio
 from contextlib import asynccontextmanager
 from unittest import mock
@@ -484,12 +484,15 @@ async def test_get_content(blob_document, expected_blob_document):
 async def test_get_content_with_text_extraction_enabled_adds_body():
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="file content",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="file content",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_gcs_source(use_text_extraction_service=True) as source:
             blob_document = {

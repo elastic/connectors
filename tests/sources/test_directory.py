@@ -18,7 +18,7 @@ async def test_basics():
 async def test_get_docs(catch_stdout):
     async with create_source(DirectoryDataSource) as source:
         num = 0
-        async for (doc, dl) in source.get_docs():
+        async for doc, dl in source.get_docs():
             num += 1
             if doc["path"].endswith("__init__.py"):
                 continue

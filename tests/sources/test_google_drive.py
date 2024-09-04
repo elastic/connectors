@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Tests the Google Drive source class methods.
-"""
+"""Tests the Google Drive source class methods."""
+
 import asyncio
 import re
 from contextlib import asynccontextmanager
@@ -42,7 +42,7 @@ async def create_gdrive_source(**kwargs):
         GoogleDriveDataSource,
         service_account_credentials=SERVICE_ACCOUNT_CREDENTIALS,
         use_document_level_security=False,
-        **kwargs
+        **kwargs,
     ) as source:
         yield source
 
@@ -939,12 +939,15 @@ async def test_get_google_workspace_content():
 )
 async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body():
     """Test the module responsible for fetching the content of the Google Suite document."""
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="I love unit tests",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="I love unit tests",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_gdrive_source(use_text_extraction_service=True) as source:
             file_document = {
@@ -1061,12 +1064,15 @@ async def test_get_generic_file_content():
 )
 async def test_get_generic_file_content_with_text_extraction_enabled_adds_body():
     """Test the module responsible for fetching the content of the file if it is extractable."""
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="I love unit tests generic file",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="I love unit tests generic file",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_gdrive_source(use_text_extraction_service=True) as source:
             file_document = {

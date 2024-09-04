@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the OneDrive source class methods"""
+
 from contextlib import asynccontextmanager
 from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
@@ -883,12 +884,15 @@ async def test_get_content_when_is_downloadable_is_true(
 
 @pytest.mark.asyncio
 async def test_get_content_with_extraction_service():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=RESPONSE_CONTENT,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=RESPONSE_CONTENT,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_onedrive_source(use_text_extraction_service=True) as source:
             with patch.object(AccessToken, "get", return_value="abc"):
