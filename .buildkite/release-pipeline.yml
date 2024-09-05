@@ -1,13 +1,36 @@
 ## 🏠/.buildkite/pipeline-release.yml
 # Manual triggered pipeline to build and publish Docker images
 
+env:
+  MANUAL_RELEASE: true # unlike DRA, this pipeline should suffix its artifacts with a timestamp
+
 steps:
+  - group: "Release setup"
+    key: "release_setup"
+    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    steps:
+    # ----
+    # Set the build timestamp (for the verion suffix)
+    # ---
+    - label: "Set build metadata"
+      commands:
+        - buildkite-agent meta-data set timestamp "$(date -u +'%Y%m%d%H%M')"
+        - buildkite-agent meta-data set orig_version "$(cat connectors/VERSION)"
+      key: set_timestamp
+    - wait
+    - label: ":github: update version and tag"
+      key: update_version
+      command: ".buildkite/publish/manual-release/update-release-version.sh"
+
+
   # ----
   # Docker builds for amd64
   # ----
   - group: ":package: amd64 Build and Test"
     key: "build_and_test_amd64"
     if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    depends_on:
+      - release_setup
     steps:
       - label: "Building amd64 Docker image"
         agents:
@@ -39,6 +62,8 @@ steps:
   - group: ":package: arm64 Build and Test"
     key: "build_and_test_arm64"
     if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    depends_on:
+      - release_setup
     steps:
       - label: "Building arm64 Docker image"
         agents:
@@ -68,6 +93,20 @@ steps:
           - "mkdir -p .artifacts"
           - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64
           - ".buildkite/publish/test-docker.sh"
+
+  - group: "Release repo cleanup"
+    key: "repo_cleanup"
+    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
+    depends_on:
+      - step: "build_and_test_amd64"
+        allow_failure: true
+      - step: "build_and_test_arm64"
+        allow_failure: true
+      - step: "update_version"
+    steps:
+      - label: "restore VERSION file"
+        command: ".buildkite/publish/manual-release/restore-stack-version.sh"
+
   # ----
   # Multiarch Docker image build and push
   # ----
