@@ -25,3 +25,5 @@ export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/enterprise-search/el
 export DOCKERFILE_PATH=${DOCKERFILE_PATH:-Dockerfile}
 export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors}
 export DOCKER_ARTIFACT_KEY=${DOCKER_ARTIFACT_KEY:-${PROJECT_NAME}-docker}
+export VAULT_ADDR=${VAULT_ADDR:-https://vault-ci-prod.elastic.dev}
+export VAULT_USER="docker-swiftypeadmin"
