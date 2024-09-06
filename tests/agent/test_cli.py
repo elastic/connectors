@@ -13,7 +13,7 @@ from connectors.agent.cli import main
 
 @patch("connectors.agent.cli.ConnectorsAgentComponent", return_value=AsyncMock())
 def test_main_responds_to_sigterm(patch_component):
-    async def kill(): 
+    async def kill():
         await asyncio.sleep(0.2)
         os.kill(os.getpid(), signal.SIGTERM)
 
