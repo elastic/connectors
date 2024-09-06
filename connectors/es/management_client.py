@@ -256,7 +256,9 @@ class ESManagementClient(ESClient):
                 continue
 
             if index_name in existing_index_definition["aliases"]:
-                logger.debug(f"Got index {existing_index_name} by its alias {index_name}")
+                logger.debug(
+                    f"Got index {existing_index_name} by its alias {index_name}"
+                )
                 return existing_index_definition
 
         return None
