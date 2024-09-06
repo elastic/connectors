@@ -66,7 +66,9 @@ class TestESManagementClient:
         mappings = {}
         existing_mappings_response = {index_name: {"mappings": ["something"]}}
 
-        await es_management_client.ensure_content_index_mappings(index_name, existing_mappings_response, mappings)
+        await es_management_client.ensure_content_index_mappings(
+            index_name, existing_mappings_response, mappings
+        )
         es_management_client.client.indices.put_mapping.assert_not_called()
 
     @pytest.mark.asyncio
@@ -81,7 +83,9 @@ class TestESManagementClient:
         }
         existing_mappings_response = {index_name: {"mappings": {}}}
 
-        await es_management_client.ensure_content_index_mappings(index_name, existing_mappings_response, mappings)
+        await es_management_client.ensure_content_index_mappings(
+            index_name, existing_mappings_response, mappings
+        )
         es_management_client.client.indices.put_mapping.assert_awaited_with(
             index=index_name,
             dynamic=mappings["dynamic"],
@@ -97,7 +101,9 @@ class TestESManagementClient:
         mappings = None
         existing_mappings_response = {index_name: {"mappings": {}}}
 
-        await es_management_client.ensure_content_index_mappings(index_name, existing_mappings_response, mappings)
+        await es_management_client.ensure_content_index_mappings(
+            index_name, existing_mappings_response, mappings
+        )
         es_management_client.client.indices.put_mapping.assert_not_called()
 
     @pytest.mark.asyncio

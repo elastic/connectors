@@ -11,7 +11,7 @@ def test_extract_index_or_alias_with_index():
         "shapo-online": {
             "aliases": {"search-shapo-online": {}},
             "mappings": {},
-            "settings": {}
+            "settings": {},
         }
     }
 
@@ -25,7 +25,7 @@ def test_extract_index_or_alias_with_alias():
         "shapo-online": {
             "aliases": {"search-shapo-online": {}},
             "mappings": {},
-            "settings": {}
+            "settings": {},
         }
     }
 
@@ -39,7 +39,7 @@ def test_extract_index_or_alias_when_none_present():
         "shapo-online": {
             "aliases": {"search-shapo-online": {}},
             "mappings": {},
-            "settings": {}
+            "settings": {},
         }
     }
 

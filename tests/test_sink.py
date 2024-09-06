@@ -230,7 +230,9 @@ async def test_prepare_content_index(mock_responses):
 
         await es.close()
 
-        put_mapping_mock.assert_called_with(index_name=index_name, index=response[index_name], desired_mappings=mappings)
+        put_mapping_mock.assert_called_with(
+            index_name=index_name, index=response[index_name], desired_mappings=mappings
+        )
 
 
 def set_responses(mock_responses, ts=None):
