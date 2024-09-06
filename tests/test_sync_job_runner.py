@@ -1005,7 +1005,7 @@ async def test_native_connector_sync_fails_when_api_key_secret_missing(
     ],
 )
 @pytest.mark.asyncio
-async def test_native_sync_runs_with_secrets_disabled(
+async def test_native_sync_runs_with_secrets_disabled_when_no_permissions(
     job_type, sync_cursor, sync_orchestrator_mock, es_management_client_mock
 ):
     ingestion_stats = {
@@ -1014,8 +1014,10 @@ async def test_native_sync_runs_with_secrets_disabled(
         "deleted_document_count": 20,
     }
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    es_management_client_mock.get_connector_secret.side_effect = ElasticNotFoundError(
-        message="not found", meta=None, body={}
+    error_meta = Mock()
+    error_meta.status = 403
+    es_management_client_mock.get_connector_secret.side_effect = (
+        ElasticAuthorizationException(message=None, meta=error_meta, body={})
     )
     sync_job_runner = create_runner(
         job_type=job_type,
@@ -1048,7 +1050,7 @@ async def test_native_sync_runs_with_secrets_disabled(
     ],
 )
 @pytest.mark.asyncio
-async def test_native_sync_fails_with_secrets_enabled_and_no_permissions(
+async def test_native_sync_fails_with_secrets_enabled_when_no_permissions(
     job_type, sync_cursor, sync_orchestrator_mock, es_management_client_mock
 ):
     expected_error = f"Connector is not authorized to access index [{SEARCH_INDEX_NAME}]. API key may need to be regenerated. Status code: [403]."
