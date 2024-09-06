@@ -224,14 +224,42 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.exists, index=index_name)
         )
 
-    async def get_index(self, index_name, ignore_unavailable=False):
-        return await self._retrier.execute_with_retry(
+    async def get_index_or_alias(self, index_name, ignore_unavailable=False):
+        """
+        Get index definition (mappings and settings) by its name or its alias.
+        """
+        # Example structure of response:
+        # {
+        #     "my-data-index": {
+        #         "aliases": {"search-my-data-index": {}},
+        #         "mappings": { ... },
+        #         "settings": { ... },
+        #     }
+        # }
+        get_index_response = await self._retrier.execute_with_retry(
             partial(
                 self.client.indices.get,
                 index=index_name,
                 ignore_unavailable=ignore_unavailable,
             )
         )
+
+        if index_name in get_index_response:
+            logger.debug(f"Got index by its name: {index_name}")
+            return get_index_response[index_name]
+
+        for (
+            existing_index_name,
+            existing_index_definition,
+        ) in get_index_response.items():
+            if "aliases" not in existing_index_definition:
+                continue
+
+            if index_name not in existing_index_definition["aliases"]:
+                continue
+
+            logger.debug(f"Got index {existing_index_name} by its alias {index_name}")
+            return existing_index_definition
 
     async def upsert(self, _id, index_name, doc):
         return await self._retrier.execute_with_retry(

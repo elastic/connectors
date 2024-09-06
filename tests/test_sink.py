@@ -1483,6 +1483,7 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
             es._sink.force_cancel.assert_not_called()
 
 
+@pytest.mark.asyncio
 async def test_extractor_run_when_mem_full_is_raised():
     docs_from_source = [
         {"_id": 1},

@@ -361,3 +361,69 @@ class TestESManagementClient:
             body={"value": secret_value},
             headers={"accept": "application/json", "content-type": "application/json"},
         )
+
+    @pytest.mark.asyncio
+    async def test_extract_index_or_alias_with_index(self, es_management_client):
+        response = {
+            "shapo-online": {
+                "aliases": {"search-shapo-online": {}},
+                "mappings": {},
+                "settings": {},
+            }
+        }
+
+        es_management_client.client.indices.get = AsyncMock(return_value=response)
+
+        index = await es_management_client.get_index_or_alias("shapo-online")
+
+        assert index == response["shapo-online"]
+
+    @pytest.mark.asyncio
+    async def test_extract_index_or_alias_with_alias(self, es_management_client):
+        response = {
+            "shapo-online": {
+                "aliases": {"search-shapo-online": {}},
+                "mappings": {},
+                "settings": {},
+            }
+        }
+
+        es_management_client.client.indices.get = AsyncMock(return_value=response)
+
+        index = await es_management_client.get_index_or_alias("search-shapo-online")
+
+        assert index == response["shapo-online"]
+
+    @pytest.mark.asyncio
+    async def test_extract_index_or_alias_when_none_present(self, es_management_client):
+        response = {
+            "shapo-online": {
+                "aliases": {"search-shapo-online": {}},
+                "mappings": {},
+                "settings": {},
+            }
+        }
+
+        es_management_client.client.indices.get = AsyncMock(return_value=response)
+
+        index = await es_management_client.get_index_or_alias("nonexistent")
+
+        assert index is None
+
+    @pytest.mark.asyncio
+    async def test_get_index_or_alias(self, es_management_client, mock_responses):
+        secret_id = "secret-id"
+        secret_value = "my-secret"
+
+        es_management_client.client.perform_request = AsyncMock(
+            return_value={"id": secret_id}
+        )
+
+        returned_id = await es_management_client.create_connector_secret(secret_value)
+        assert returned_id == secret_id
+        es_management_client.client.perform_request.assert_awaited_with(
+            "POST",
+            "/_connector/_secret",
+            body={"value": secret_value},
+            headers={"accept": "application/json", "content-type": "application/json"},
+        )

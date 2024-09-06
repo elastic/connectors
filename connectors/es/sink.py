@@ -30,7 +30,6 @@ from connectors.config import (
 )
 from connectors.es.management_client import ESManagementClient
 from connectors.es.settings import TIMESTAMP_FIELD, Mappings
-from connectors.es.utils import extract_index_or_alias
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
@@ -837,15 +836,16 @@ class SyncOrchestrator:
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
 
+    def extract_index_or_alias(self, get_index_response, expected_index_name):
+        return None
+
     async def prepare_content_index(self, index_name, language_code=None):
         """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
 
-        response = await self.es_management_client.get_index(
+        index = await self.es_management_client.get_index_or_alias(
             index_name, ignore_unavailable=True
         )
-
-        index = extract_index_or_alias(response, index_name)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
