@@ -12,14 +12,17 @@ from connectors.agent.cli import main
 
 
 @patch("connectors.agent.cli.ConnectorsAgentComponent", return_value=AsyncMock())
-def test_main(patch_component):
-    async def kill():
+def test_main_responds_to_sigterm(patch_component):
+    async def kill(): 
         await asyncio.sleep(0.2)
         os.kill(os.getpid(), signal.SIGTERM)
 
     loop = asyncio.new_event_loop()
     loop.create_task(kill())
 
+    # No asserts here.
+    # main() will block forever unless it's killed with a signal
+    # This test succeeds if it exits, if it hangs it'll be killed by a timeout
     main()
 
     loop.close()
