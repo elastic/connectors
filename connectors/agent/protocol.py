@@ -6,7 +6,10 @@
 from elastic_agent_client.generated import elastic_agent_client_pb2 as proto
 from elastic_agent_client.handler.action import BaseActionHandler
 from elastic_agent_client.handler.checkin import BaseCheckinHandler
-from elastic_agent_client.util.logger import logger
+
+from connectors.agent.logger import get_logger
+
+logger = get_logger("component")
 
 
 class ConnectorActionHandler(BaseActionHandler):

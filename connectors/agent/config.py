@@ -5,7 +5,10 @@
 #
 import base64
 
+from connectors.agent.logger import get_logger
 from connectors.config import add_defaults
+
+logger = get_logger("config")
 
 
 class ConnectorsAgentConfigurationWrapper:
@@ -79,6 +82,7 @@ class ConnectorsAgentConfigurationWrapper:
             }
 
             if source.fields.get("api_key"):
+                logger.debug("Found api_key")
                 api_key = source["api_key"]
                 # if beats_logstash_format we need to base64 the key
                 if ":" in api_key:
@@ -86,6 +90,7 @@ class ConnectorsAgentConfigurationWrapper:
 
                 es_creds["api_key"] = api_key
             elif source.fields.get("username") and source.fields.get("password"):
+                logger.debug("Found username and passowrd")
                 es_creds["username"] = source["username"]
                 es_creds["password"] = source["password"]
             else:
@@ -96,8 +101,10 @@ class ConnectorsAgentConfigurationWrapper:
                 "elasticsearch": es_creds,
             }
             self.specific_config = new_config
+            logger.debug("Changes detected for connectors-relevant configurations")
             return True
 
+        logger.debug("No changes detected for connectors-relevant configurations")
         return False
 
     def get(self):

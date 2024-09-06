@@ -10,9 +10,11 @@ import signal
 from elastic_agent_client.util.async_tools import (
     sleeps_for_retryable,
 )
-from elastic_agent_client.util.logger import logger
 
 from connectors.agent.component import ConnectorsAgentComponent
+from connectors.agent.logger import get_logger
+
+logger = get_logger("cli")
 
 
 def main(args=None):

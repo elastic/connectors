@@ -3,12 +3,14 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.logger import DocumentLogger
+from connectors.agent.logger import get_logger
 from connectors.services.base import (
     ServiceAlreadyRunningError,
     get_services,
 )
 from connectors.utils import CancellableSleeps
+
+logger = get_logger("component")
 
 
 class ConnectorServiceManager:
@@ -22,8 +24,6 @@ class ConnectorServiceManager:
 
     """
 
-    name = "connector-service-manager"
-
     def __init__(self, configuration):
         """Inits ConnectorServiceManager with shared ConnectorsAgentConfigurationWrapper.
 
@@ -32,10 +32,6 @@ class ConnectorServiceManager:
 
         There is nothing enforcing it, but expect problems if that happens.
         """
-        service_name = self.__class__.name
-        self._logger = DocumentLogger(
-            f"[{service_name}]", {"service_name": service_name}
-        )
         self._agent_config = configuration
         self._multi_service = None
         self._running = False
@@ -59,26 +55,26 @@ class ConnectorServiceManager:
         try:
             while self._running:
                 try:
-                    self._logger.info("Starting connector services")
+                    logger.info("Starting connector services")
                     self._multi_service = get_services(
                         ["schedule", "sync_content", "sync_access_control", "cleanup"],
                         self._agent_config.get(),
                     )
                     await self._multi_service.run()
                 except Exception as e:
-                    self._logger.exception(
+                    logger.exception(
                         f"Error while running services in ConnectorServiceManager: {e}"
                     )
                     raise
         finally:
-            self._logger.info("Finished running, exiting")
+            logger.info("Finished running, exiting")
 
     def stop(self):
         """Stop the service manager and all running subservices.
 
         Running stop attempts to gracefully shutdown all subservices currently running.
         """
-        self._logger.info("Stopping connector services.")
+        logger.info("Stopping connector services.")
         self._running = False
         self._done = True
         if self._multi_service:
@@ -91,6 +87,6 @@ class ConnectorServiceManager:
         After services are gracefully stopped, they will be started again with fresh configuration
         that comes from ConnectorsAgentConfigurationWrapper.
         """
-        self._logger.info("Restarting connector services")
+        logger.info("Restarting connector services")
         if self._multi_service:
             self._multi_service.shutdown(None)
