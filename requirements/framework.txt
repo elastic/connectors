@@ -15,7 +15,7 @@ tzcron==1.0.0
 pytz==2019.3
 python-dateutil==2.8.2
 aiogoogle==5.3.0
-uvloop==0.18.0; sys_platform != 'win32'
+uvloop==0.20.0; sys_platform != 'win32'
 fastjsonschema==2.16.2
 base64io==1.0.3
 azure-storage-blob==12.19.1

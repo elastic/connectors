@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Zoom source module responsible to fetch documents from Zoom."""
+
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -438,17 +439,23 @@ class ZoomDataSource(BaseDataSource):
             async for live_meeting in self.client.get_meetings(
                 user_id=user.get("id"), meeting_type="live"
             ):
-                yield self._format_doc(
-                    doc=live_meeting, doc_time=live_meeting.get("created_at")
-                ), None
+                yield (
+                    self._format_doc(
+                        doc=live_meeting, doc_time=live_meeting.get("created_at")
+                    ),
+                    None,
+                )
 
             async for upcoming_meeting in self.client.get_meetings(
                 user_id=user.get("id"), meeting_type="upcoming_meetings"
             ):
-                yield self._format_doc(
-                    doc=upcoming_meeting,
-                    doc_time=upcoming_meeting.get("created_at"),
-                ), None
+                yield (
+                    self._format_doc(
+                        doc=upcoming_meeting,
+                        doc_time=upcoming_meeting.get("created_at"),
+                    ),
+                    None,
+                )
 
             async for previous_meeting in self.client.get_meetings(
                 user_id=user.get("id"), meeting_type="previous_meetings"
@@ -460,25 +467,37 @@ class ZoomDataSource(BaseDataSource):
                         )
                     )
                     if not previous_meeting_details:
-                        yield self._format_doc(
+                        yield (
+                            self._format_doc(
+                                doc=previous_meeting,
+                                doc_time=previous_meeting.get("created_at"),
+                            ),
+                            None,
+                        )
+                    else:
+                        yield (
+                            self._format_doc(
+                                doc=previous_meeting_details,
+                                doc_time=previous_meeting_details.get("end_time"),
+                            ),
+                            None,
+                        )
+                else:
+                    yield (
+                        self._format_doc(
                             doc=previous_meeting,
                             doc_time=previous_meeting.get("created_at"),
-                        ), None
-                    else:
-                        yield self._format_doc(
-                            doc=previous_meeting_details,
-                            doc_time=previous_meeting_details.get("end_time"),
-                        ), None
-                else:
-                    yield self._format_doc(
-                        doc=previous_meeting,
-                        doc_time=previous_meeting.get("created_at"),
-                    ), None
+                        ),
+                        None,
+                    )
 
             async for recording in self.client.get_recordings(user_id=user.get("id")):
-                yield self._format_doc(
-                    doc=recording, doc_time=recording.get("start_time")
-                ), None
+                yield (
+                    self._format_doc(
+                        doc=recording, doc_time=recording.get("start_time")
+                    ),
+                    None,
+                )
 
             async for channel in self.client.get_channels(user_id=user.get("id")):
                 yield self._format_doc(doc=channel, doc_time=iso_utc()), None
@@ -486,14 +505,20 @@ class ZoomDataSource(BaseDataSource):
             async for chat_message in self.client.get_chats(
                 user_id=user.get("id"), chat_type="message"
             ):
-                yield self._format_doc(
-                    doc=chat_message, doc_time=chat_message.get("date_time")
-                ), None
+                yield (
+                    self._format_doc(
+                        doc=chat_message, doc_time=chat_message.get("date_time")
+                    ),
+                    None,
+                )
 
             async for chat_file in self.client.get_chats(
                 user_id=user.get("id"), chat_type="file"
             ):
                 chat_file["id"] = chat_file.get("file_id")
-                yield self._format_doc(
-                    doc=chat_file, doc_time=chat_file.get("date_time")
-                ), partial(self.get_content, chat_file=chat_file.copy())
+                yield (
+                    self._format_doc(
+                        doc=chat_file, doc_time=chat_file.get("date_time")
+                    ),
+                    partial(self.get_content, chat_file=chat_file.copy()),
+                )

@@ -8,8 +8,8 @@ from functools import cached_property
 from unittest import mock
 from unittest.mock import AsyncMock, Mock
 
+import elasticsearch
 import pytest
-from elasticsearch import ApiError, ConflictError, ConnectionError, ConnectionTimeout
 
 from connectors import __version__
 from connectors.es.client import (
@@ -33,13 +33,13 @@ async def test_with_concurrency_control():
     @with_concurrency_control(retries=num_retries)
     async def conflict():
         mock_func()
-        raise ConflictError(
+        raise elasticsearch.ConflictError(
             message="This is an error message from test_with_concurrency_control",
             meta=None,
             body={},
         )
 
-    with pytest.raises(ConflictError):
+    with pytest.raises(elasticsearch.ConflictError):
         await conflict()
 
         assert mock_func.call_count == num_retries
@@ -231,7 +231,9 @@ class TestESClient:
         with mock.patch.object(
             es_client.client,
             "info",
-            side_effect=ConnectionError("Cannot connect - no route to host."),
+            side_effect=elasticsearch.ConnectionError(
+                "Cannot connect - no route to host."
+            ),
         ):
             # Execute
             assert not await es_client.ping()
@@ -301,7 +303,7 @@ class TestTransientElasticsearchRetrier:
 
             if attempt < nr_failed_requests:
                 attempt += 1
-                raise ApiError(429, meta_mock, "data")
+                raise elasticsearch.ApiError(429, meta_mock, "data")
             pass
 
         await retrier.execute_with_retry(_func)
@@ -319,9 +321,9 @@ class TestTransientElasticsearchRetrier:
         async def _func():
             meta_mock = Mock()
             meta_mock.status = 429
-            raise ApiError(429, meta_mock, "data")
+            raise elasticsearch.ApiError(429, meta_mock, "data")
 
-        with pytest.raises(ApiError) as e:
+        with pytest.raises(elasticsearch.ApiError) as e:
             await retrier.execute_with_retry(_func)
 
         assert e is not None
@@ -337,9 +339,9 @@ class TestTransientElasticsearchRetrier:
 
         async def _func():
             msg = ":stop:"
-            raise ConnectionTimeout(msg)
+            raise elasticsearch.ConnectionTimeout(msg)
 
-        with pytest.raises(ConnectionTimeout) as e:
+        with pytest.raises(elasticsearch.ConnectionTimeout) as e:
             await retrier.execute_with_retry(_func)
 
         assert e is not None
@@ -356,7 +358,7 @@ class TestTransientElasticsearchRetrier:
         async def _func():
             await retrier.close()
             msg = ":stop:"
-            raise ConnectionTimeout(msg)
+            raise elasticsearch.ConnectionTimeout(msg)
 
         with pytest.raises(RetryInterruptedError) as e:
             await retrier.execute_with_retry(_func)

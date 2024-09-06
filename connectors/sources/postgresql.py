@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
+
 import ssl
 from functools import cached_property, partial
 from urllib.parse import quote
@@ -522,7 +523,7 @@ class PostgreSQLDataSource(BaseDataSource):
             primary_key_columns.extend(
                 await self.postgresql_client.get_table_primary_key(table)
             )
-        primary_key_columns = sorted(primary_key_columns)
+
         return (
             map_column_names(
                 column_names=primary_key_columns, schema=self.schema, tables=tables

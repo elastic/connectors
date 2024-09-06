@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Dropbox source module responsible to fetch documents from Dropbox online.
-"""
+"""Dropbox source module responsible to fetch documents from Dropbox online."""
+
 import json
 import os
 from datetime import datetime
@@ -250,9 +250,9 @@ class DropboxClient:
         if file_type == FILE:
             request_headers["Dropbox-API-Arg"] = f'{{"path": "{kwargs["path"]}"}}'
         elif file_type == PAPER:
-            request_headers[
-                "Dropbox-API-Arg"
-            ] = f'{{"path": "{kwargs["path"]}", "export_format": "markdown"}}'
+            request_headers["Dropbox-API-Arg"] = (
+                f'{{"path": "{kwargs["path"]}", "export_format": "markdown"}}'
+            )
         elif file_type == RECEIVED_FILE:
             request_headers["Dropbox-API-Arg"] = f'{{"url": "{kwargs["url"]}"}}'
         else:
@@ -996,9 +996,12 @@ class DropboxDataSource(BaseDataSource):
                     url=entry["preview_url"]
                 ):
                     json_metadata = await metadata.json()
-                    yield self._adapt_dropbox_shared_file_doc_to_es_doc(
-                        response=json_metadata
-                    ), json_metadata
+                    yield (
+                        self._adapt_dropbox_shared_file_doc_to_es_doc(
+                            response=json_metadata
+                        ),
+                        json_metadata,
+                    )
 
     async def advanced_sync(self, rule):
         async for response in self.dropbox_client.search_files_folders(rule=rule):
@@ -1011,9 +1014,12 @@ class DropboxDataSource(BaseDataSource):
                         url=data["preview_url"]
                     ):
                         json_metadata = await metadata.json()
-                        yield self._adapt_dropbox_shared_file_doc_to_es_doc(
-                            response=json_metadata
-                        ), json_metadata
+                        yield (
+                            self._adapt_dropbox_shared_file_doc_to_es_doc(
+                                response=json_metadata
+                            ),
+                            json_metadata,
+                        )
                 else:
                     yield self._adapt_dropbox_doc_to_es_doc(response=data), data
 
@@ -1117,9 +1123,10 @@ class DropboxDataSource(BaseDataSource):
                 )
                 file_id = batched_document[permission["file"]]
 
-                yield self._decorate_with_access_control(
-                    file_id[0], file_permission
-                ), file_id[1]
+                yield (
+                    self._decorate_with_access_control(file_id[0], file_permission),
+                    file_id[1],
+                )
 
     def document_tuple(self, document, attachment, folder_id=None):
         if document.get("type") == FILE:

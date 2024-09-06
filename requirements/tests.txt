@@ -1,6 +1,5 @@
 # tests
-black==23.7.0
-ruff==0.0.278
+ruff==0.6.3
 aioresponses==0.7.6
 pytest==7.4.0
 pytest-cov==4.1.0

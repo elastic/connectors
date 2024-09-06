@@ -17,6 +17,7 @@
 Elasticsearch <== Sink <== queue <== Extractor <== generator
 
 """
+
 import asyncio
 import copy
 import functools

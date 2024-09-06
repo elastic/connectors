@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""SharePoint source module responsible to fetch documents from SharePoint Server.
-"""
+"""SharePoint source module responsible to fetch documents from SharePoint Server."""
+
 import os
 import re
 from functools import partial
@@ -1187,7 +1187,9 @@ class SharepointServerDataSource(BaseDataSource):
                     self._logger.debug(
                         f"Fetching unique list permissions for list with id '{site_list['Id']}'. Ignoring parent site permissions."
                     )
-                    async for role_assignment in self.sharepoint_client.site_role_assignments_using_title(
+                    async for (
+                        role_assignment
+                    ) in self.sharepoint_client.site_role_assignments_using_title(
                         site_url, site_list["Title"]
                     ):
                         site_list_access_control.extend(
@@ -1218,7 +1220,9 @@ class SharepointServerDataSource(BaseDataSource):
                 self._logger.debug(
                     f"Fetching unique permissions for list item with id '{list_item_id}'. Ignoring parent site permissions."
                 )
-                async for role_assignment in self.sharepoint_client.site_list_item_role_assignments(
+                async for (
+                    role_assignment
+                ) in self.sharepoint_client.site_list_item_role_assignments(
                     site_url, site_list_name, list_item_id
                 ):
                     list_item_access_control.extend(
@@ -1287,26 +1291,32 @@ class SharepointServerDataSource(BaseDataSource):
                     if result.get("Title") == "Site Pages":
                         is_site_page = True
                         selected_field = SELECTED_FIELDS
-                    yield self.format_lists(
-                        item=result,
-                        document_type=DOCUMENT_LIBRARY,
-                        admin_access_control=site_admin_access_control.copy(),
-                        site_list_access_control=site_list_access_control.copy(),
-                        site_url=site_url,
-                        list_relative_url=list_relative_url,
-                    ), None
+                    yield (
+                        self.format_lists(
+                            item=result,
+                            document_type=DOCUMENT_LIBRARY,
+                            admin_access_control=site_admin_access_control.copy(),
+                            site_list_access_control=site_list_access_control.copy(),
+                            site_url=site_url,
+                            list_relative_url=list_relative_url,
+                        ),
+                        None,
+                    )
                     list_relative_url = None
                     func = self.sharepoint_client.get_drive_items
                     format_document = self.format_drive_item
                 else:
-                    yield self.format_lists(
-                        item=result,
-                        document_type=LISTS,
-                        admin_access_control=site_admin_access_control.copy(),
-                        site_list_access_control=site_list_access_control.copy(),
-                        site_url=site_url,
-                        list_relative_url=list_relative_url,
-                    ), None
+                    yield (
+                        self.format_lists(
+                            item=result,
+                            document_type=LISTS,
+                            admin_access_control=site_admin_access_control.copy(),
+                            site_list_access_control=site_list_access_control.copy(),
+                            site_url=site_url,
+                            list_relative_url=list_relative_url,
+                        ),
+                        None,
+                    )
                     func = self.sharepoint_client.get_list_items
                     format_document = self.format_list_item
                 async for item, file_relative_url in func(
@@ -1338,17 +1348,23 @@ class SharepointServerDataSource(BaseDataSource):
                         yield document, None
                     else:
                         if is_site_page:
-                            yield document, partial(
-                                self.get_site_pages_content,
+                            yield (
                                 document,
-                                item,
+                                partial(
+                                    self.get_site_pages_content,
+                                    document,
+                                    item,
+                                ),
                             )
                         else:
-                            yield document, partial(
-                                self.get_content,
+                            yield (
                                 document,
-                                file_relative_url,
-                                site_url,
+                                partial(
+                                    self.get_content,
+                                    document,
+                                    file_relative_url,
+                                    site_url,
+                                ),
                             )
 
     async def get_content(
