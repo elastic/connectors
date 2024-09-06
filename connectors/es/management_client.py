@@ -255,11 +255,11 @@ class ESManagementClient(ESClient):
             if "aliases" not in existing_index_definition:
                 continue
 
-            if index_name not in existing_index_definition["aliases"]:
-                continue
+            if index_name in existing_index_definition["aliases"]:
+                logger.debug(f"Got index {existing_index_name} by its alias {index_name}")
+                return existing_index_definition
 
-            logger.debug(f"Got index {existing_index_name} by its alias {index_name}")
-            return existing_index_definition
+        return None
 
     async def upsert(self, _id, index_name, doc):
         return await self._retrier.execute_with_retry(
