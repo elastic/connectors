@@ -103,3 +103,11 @@ You might need to adjust some details here:
   - For Elasticsearch of version `<VERSION>` you can use `elastic-connectors:<VERSION>`for a stable revision of the connectors, or `elastic-connectors:<VERSION>-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).
   - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
 - `-c /config/config.yml` - replace `config.yml` with the name of the config file you've put in the directory you've created in step 2.
+
+> [!TIP]
+> When starting a Docker container with the connector service against a local Elasticsearch cluster that has security and SSL enabled (like the [docker compose example](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html#docker-compose-file) from the Elasticsearch docs), it's crucial to handle the self-signed certificate correctly:
+> 1. Ensure the Docker container running the connector service has the volume attached that contains the generated certificate. When using Docker Compose, Docker automatically adds a project-specific prefix to volume names based on the directory where your `docker-compose.yml` is located. When starting the connector service with `docker run`, use `-v <your_project>_certs:/usr/share/connectors/config/certs` to reference it. Replace `<your_project>` with the actual prefix, such as `elastic_docker_certs` if your `docker-compose.yml` that starts the Elasticsearch stack is in a directory named `elastic_docker`.
+> 2. Make sure the connector service's `config.yml` correctly references the certificate with:
+> ```
+> elasticsearch.ca_certs: /usr/share/connectors/config/certs/ca/ca.crt
+> ```

@@ -743,7 +743,7 @@ def test_convert_to_b64_newer_macos(system, mac_ver, cmd_template, patch_file_op
         patch("platform.mac_ver", return_value=[mac_ver]),
         patch("subprocess.check_call") as subprocess_mock,
     ):
-        with temp_file("system") as (source, content):
+        with temp_file("system") as (source, _):
             target = f"{source}.b64"
 
             convert_to_b64(source, target, overwrite=False)

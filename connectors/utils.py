@@ -13,7 +13,7 @@ import platform
 import re
 import shutil
 import ssl
-import subprocess
+import subprocess  # noqa S404
 import time
 import urllib.parse
 from copy import deepcopy
@@ -115,7 +115,7 @@ def epoch_timestamp_zulu():
 def next_run(quartz_definition, now):
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
-    seconds, minutes, hours, day_of_month, month, day_of_week, year = (
+    _, minutes, hours, day_of_month, month, day_of_week, year = (
         quartz_definition.split(" ") + [None]
     )[:7]
 

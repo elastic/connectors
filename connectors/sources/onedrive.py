@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""OneDrive source module responsible to fetch documents from OneDrive.
-"""
+"""OneDrive source module responsible to fetch documents from OneDrive."""
+
 import asyncio
 import json
 import os
@@ -573,6 +573,8 @@ class OneDriveDataSource(BaseDataSource):
         )
 
     def prepare_doc(self, file):
+        file_info = file.get("file", {}) or {}
+
         modified_document = {
             "type": FILE if file.get(FILE) else FOLDER,
             "title": file.get("name"),
@@ -581,6 +583,7 @@ class OneDriveDataSource(BaseDataSource):
             "created_at": file.get("createdDateTime"),
             "size": file.get("size"),
             "url": file.get("webUrl"),
+            "mime_type": file_info.get("mimeType"),
         }
         if self._dls_enabled():
             modified_document[ACCESS_CONTROL] = file[ACCESS_CONTROL]

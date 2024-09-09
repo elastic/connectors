@@ -156,9 +156,13 @@ async def create_fake_coroutine(data):
 async def test_ping():
     """Test ping method of S3DataSource class"""
     async with create_s3_source() as source:
-        with mock.patch(
-            "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
-        ), mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        with (
+            mock.patch(
+                "aioboto3.resources.collection.AIOResourceCollection",
+                AIOResourceCollection,
+            ),
+            mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+        ):
             await source.ping()
 
 
@@ -238,12 +242,15 @@ async def test_get_content(s3_client):
 @pytest.mark.asyncio
 async def test_get_content_with_text_extraction_enabled_adds_body(s3_client):
     """Test get_content method of S3Client"""
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="test content",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="test content",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_s3_source(use_text_extraction_service=True) as source:
             document = {
@@ -354,14 +361,19 @@ async def test_get_docs(mock_aws):
         source.s3_client.get_bucket_location = mock.Mock(
             return_value=await create_fake_coroutine("ap-south-1")
         )
-        with mock.patch(
-            "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
-        ), mock.patch("aiobotocore.client.AioBaseClient", S3Object), mock.patch(
-            "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
-            get_roles,
+        with (
+            mock.patch(
+                "aioboto3.resources.collection.AIOResourceCollection",
+                AIOResourceCollection,
+            ),
+            mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+            mock.patch(
+                "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
+                get_roles,
+            ),
         ):
             num = 0
-            async for (doc, _) in source.get_docs():
+            async for doc, _ in source.get_docs():
                 assert doc["_id"] in (
                     "d0295955cdb6d488a4a1d3f10dbf141b",
                     "94fce1b79d35d3ff4f96a678ebaed3b5",
@@ -392,14 +404,19 @@ async def test_get_docs_with_advanced_rules(filtering):
         source.s3_client.get_bucket_location = mock.Mock(
             return_value=await create_fake_coroutine("ap-south-1")
         )
-        with mock.patch(
-            "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
-        ), mock.patch("aiobotocore.client.AioBaseClient", S3Object), mock.patch(
-            "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
-            get_roles,
+        with (
+            mock.patch(
+                "aioboto3.resources.collection.AIOResourceCollection",
+                AIOResourceCollection,
+            ),
+            mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+            mock.patch(
+                "aiobotocore.utils.AioInstanceMetadataFetcher.retrieve_iam_role_credentials",
+                get_roles,
+            ),
         ):
             num = 0
-            async for (doc, _) in source.get_docs(filtering):
+            async for doc, _ in source.get_docs(filtering):
                 assert doc["_id"] in (
                     "70743168e14c18632702ee6e3e9b73fc",
                     "9fbda540ca0a2441475aea7b8f37bdaf",
@@ -431,9 +448,13 @@ async def test_get_bucket_list_for_wildcard():
     async with create_s3_source() as source:
         source.configuration.get_field("buckets").value = ["*"]
 
-        with mock.patch(
-            "aioboto3.resources.collection.AIOResourceCollection", AIOResourceCollection
-        ), mock.patch("aiobotocore.client.AioBaseClient", S3Object):
+        with (
+            mock.patch(
+                "aioboto3.resources.collection.AIOResourceCollection",
+                AIOResourceCollection,
+            ),
+            mock.patch("aiobotocore.client.AioBaseClient", S3Object),
+        ):
             actual_response = await source.s3_client.get_bucket_list()
 
         assert ["bucket1", "bucket2"] == actual_response

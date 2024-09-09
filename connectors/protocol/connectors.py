@@ -12,6 +12,7 @@ Main classes are :
 - SyncJob: represents a document in `.elastic-connectors-sync-jobs`
 
 """
+
 import socket
 from collections import UserDict
 from copy import deepcopy
@@ -993,9 +994,9 @@ class Connector(ESDocument):
             filtering = self.filtering.to_list()
             for filter_ in filtering:
                 if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                    filter_.get("draft", {"validation": {}})[
-                        "validation"
-                    ] = validation_result.to_dict()
+                    filter_.get("draft", {"validation": {}})["validation"] = (
+                        validation_result.to_dict()
+                    )
                     if validation_result.state == FilteringValidationState.VALID:
                         filter_["active"] = filter_.get("draft")
 

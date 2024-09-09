@@ -1,3 +1,4 @@
+#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -29,6 +30,11 @@ def load_config(config_file):
 
 def load_config_agentless(config_dict):
     configuration = dict(_merge_dicts(_default_config(), config_dict))
+    return configuration
+
+
+def add_defaults(config):
+    configuration = dict(_merge_dicts(_default_config(), config))
     return configuration
 
 

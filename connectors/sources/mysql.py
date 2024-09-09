@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """MySQL source module responsible to fetch documents from MySQL"""
+
 import re
 
 import aiomysql
@@ -31,7 +32,7 @@ from connectors.utils import (
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
 MAX_POOL_SIZE = 10
-DEFAULT_FETCH_SIZE = 50
+DEFAULT_FETCH_SIZE = 5000
 RETRIES = 3
 RETRY_INTERVAL = 2
 
@@ -50,8 +51,11 @@ class MySQLQueries(Queries):
     def table_primary_key(self, table):
         return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
 
-    def table_data(self, table):
-        return f"SELECT * FROM `{self.database}`.`{table}`"
+    def table_data(self, table, primary_keys=None, limit=None, offset=None):
+        if primary_keys:
+            return f"SELECT * FROM `{self.database}`.`{table}` ORDER BY '{', '.join(primary_keys)}' LIMIT {limit} OFFSET {offset}"
+        else:
+            return f"SELECT * FROM `{self.database}`.`{table}`"
 
     def table_last_update_time(self, table):
         return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
@@ -62,8 +66,8 @@ class MySQLQueries(Queries):
     def ping(self):
         pass
 
-    def table_data_count(self, **kwargs):
-        pass
+    def table_data_count(self, table):
+        return f"SELECT COUNT(*) FROM `{self.database}`.`{table}`"
 
     def all_schemas(self):
         pass
@@ -75,6 +79,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "tables": {"type": "array", "minItems": 1},
             "query": {"type": "string", "minLength": 1},
+            "id_columns": {"type": "array", "minItems": 1},
         },
         "required": ["tables", "query"],
         "additionalProperties": False,
@@ -250,18 +255,71 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def yield_rows_for_table(self, table):
-        async for row in self._fetchmany_in_batches(self.queries.table_data(table)):
-            yield row
+    async def yield_rows_for_table(self, table, primary_keys, table_row_count):
+        offset = 0
+        while offset < table_row_count:
+            async for row in self._fetchmany_in_batches(
+                self.queries.table_data(
+                    table,
+                    primary_keys=primary_keys,
+                    limit=self.fetch_size,
+                    offset=offset,
+                )
+            ):
+                if row:
+                    yield row
+                else:
+                    break
+            offset += self.fetch_size
+
+    async def _get_table_row_count_for_query(self, query):
+        table_row_count_query = re.sub(
+            r"SELECT\s.*?\sFROM",
+            "SELECT COUNT(*) FROM",
+            query,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+            await cursor.execute(table_row_count_query)
+            table_row_count = await cursor.fetchone()
+            return int(table_row_count[0])
+
+    def _update_query_with_pagination_attributes(
+        self, query, offset, primary_key_columns
+    ):
+        updated_query = ""
+        has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
+        # Checking if custom query has a semicolon at the end or not
+        if query.endswith(";"):
+            query = query[:-1]
+        if has_orderby:
+            updated_query = f"{query} LIMIT {self.fetch_size} OFFSET {offset};"
+        else:
+            updated_query = f"{query} ORDER BY {', '.join(primary_key_columns)} LIMIT {self.fetch_size} OFFSET {offset};"
+
+        return updated_query
 
     @retryable(
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def yield_rows_for_query(self, query):
-        async for row in self._fetchmany_in_batches(query):
-            yield row
+    async def yield_rows_for_query(self, query, primary_key_columns):
+        table_row_count_for_query = await self._get_table_row_count_for_query(
+            query=query
+        )
+        offset = 0
+        while offset < table_row_count_for_query:
+            async for row in self._fetchmany_in_batches(
+                query=self._update_query_with_pagination_attributes(
+                    query=query, offset=offset, primary_key_columns=primary_key_columns
+                )
+            ):
+                if row:
+                    yield row
+                else:
+                    break
+            offset += self.fetch_size
 
     async def _fetchmany_in_batches(self, query):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
@@ -271,19 +329,15 @@ class MySQLClient:
             successful_batches = 0
 
             try:
-                while True:
-                    rows = await cursor.fetchmany(self.fetch_size)
+                rows = await cursor.fetchall()
 
-                    if not rows:
-                        break
+                for row in rows:
+                    yield row
 
-                    for row in rows:
-                        yield row
+                fetched_rows += len(rows)
+                successful_batches += 1
 
-                    fetched_rows += len(rows)
-                    successful_batches += 1
-
-                    await self._sleeps.sleep(0)
+                await self._sleeps.sleep(0)
             except IndexError as e:
                 self._logger.exception(
                     f"Fetched {fetched_rows} rows in {successful_batches} batches. Encountered exception {e} in batch {successful_batches + 1}."
@@ -486,12 +540,12 @@ class MySqlDataSource(BaseDataSource):
             for query_info in advanced_rules:
                 tables = query_info.get("tables", [])
                 query = query_info.get("query", "")
-
+                id_columns = query_info.get("id_columns", [])
                 self._logger.debug(
-                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query."
+                    f"Fetching rows from table '{format_list(tables)}' in database '{self.database}' with a custom query and given ID column '{id_columns}'."
                 )
 
-                async for row in self.fetch_documents(tables, query):
+                async for row in self.fetch_documents(tables, query, id_columns):
                     yield row, None
 
                 await self._sleeps.sleep(0)
@@ -501,7 +555,7 @@ class MySqlDataSource(BaseDataSource):
             async for row in self.fetch_documents(tables):
                 yield row, None
 
-    async def fetch_documents(self, tables, query=None):
+    async def fetch_documents(self, tables, query=None, id_columns=None):
         """If query is not present it fetches all rows from all tables.
         Otherwise, the custom query is executed.
 
@@ -517,7 +571,7 @@ class MySqlDataSource(BaseDataSource):
 
         async with self.mysql_client() as client:
             docs_generator = (
-                self._yield_docs_custom_query(client, tables, query)
+                self._yield_docs_custom_query(client, tables, query, id_columns)
                 if query is not None
                 else self._yield_all_docs_from_tables(client, tables)
             )
@@ -538,7 +592,13 @@ class MySqlDataSource(BaseDataSource):
             last_update_time = await client.get_last_update_time(table)
             column_names = await client.get_column_names_for_table(table)
 
-            async for row in client.yield_rows_for_table(table):
+            async with client.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
+                await cursor.execute(client.queries.table_data_count(table=table))
+                table_row_count = await cursor.fetchone()
+
+            async for row in client.yield_rows_for_table(
+                table, primary_key_columns, int(table_row_count[0])
+            ):
                 yield row2doc(
                     row=row,
                     column_names=column_names,
@@ -547,13 +607,16 @@ class MySqlDataSource(BaseDataSource):
                     timestamp=last_update_time,
                 )
 
-    async def _yield_docs_custom_query(self, client, tables, query):
+    async def _yield_docs_custom_query(self, client, tables, query, id_columns):
         primary_key_columns = [
             await client.get_primary_key_column_names(table) for table in tables
         ]
         primary_key_columns = sorted(
             [column for columns in primary_key_columns for column in columns]
         )
+
+        if id_columns:
+            primary_key_columns = id_columns
 
         if not primary_key_columns:
             self._logger.warning(
@@ -568,6 +631,12 @@ class MySqlDataSource(BaseDataSource):
             )
         )
         column_names = await client.get_column_names_for_query(query=query)
+
+        if set(primary_key_columns) - set(column_names):
+            self._logger.warning(
+                f"Skipping query {query} for tables {', '.join(tables)} as primary key column name/id_column is not present in query."
+            )
+            return
 
         async for row in client.yield_rows_for_query(query):
             yield row2doc(

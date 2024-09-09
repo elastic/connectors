@@ -4,14 +4,16 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Github source class methods"""
+
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from http import HTTPStatus
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
-from gidgethub.abc import GraphQLAuthorizationFailure, QueryError
+from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
 
 from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -23,6 +25,7 @@ from connectors.sources.github import (
     REPOSITORY_OBJECT,
     ForbiddenException,
     GitHubAdvancedRulesValidator,
+    GitHubClient,
     GitHubDataSource,
     UnauthorizedException,
 )
@@ -995,17 +998,80 @@ async def test_get_retry_after():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_graphql_with_errors():
+@pytest.mark.parametrize(
+    "exceptions, raises",
+    [
+        (
+            BadGraphQLRequest(
+                status_code=HTTPStatus.FORBIDDEN, response={"message": None}
+            ),
+            ForbiddenException,
+        ),
+        (
+            BadGraphQLRequest(
+                status_code=HTTPStatus.CONFLICT, response={"message": None}
+            ),
+            BadGraphQLRequest,
+        ),
+    ],
+)
+async def test_graphql_with_BadGraphQLRequest(exceptions, raises):
     async with create_github_source() as source:
-        source.github_client._get_client.graphql = Mock(
-            side_effect=QueryError(
-                {"errors": [{"type": "QUERY", "message": "Invalid query"}]}
-            )
-        )
-        with pytest.raises(Exception):
+        source.github_client._get_client.graphql = Mock(side_effect=exceptions)
+        with pytest.raises(raises):
             await source.github_client.graphql(
                 {"variable": {"owner": "demo_user"}, "query": "QUERY"}
             )
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.parametrize(
+    "exceptions, raises, is_raised",
+    [
+        (
+            QueryError(
+                {
+                    "errors": [
+                        {
+                            "type": "RATE_LIMITED",
+                            "message": "API rate limit exceeded for user ID: 123456",
+                        }
+                    ]
+                }
+            ),
+            Exception,
+            False,
+        ),
+        (
+            QueryError(
+                {
+                    "errors": [
+                        {"type": "SOME_QUERY_ERROR", "message": "Some query error."}
+                    ]
+                }
+            ),
+            Exception,
+            True,
+        ),
+    ],
+)
+async def test_graphql_with_QueryError(exceptions, raises, is_raised):
+    async with create_github_source() as source:
+        source.github_client._get_client.graphql = Mock(side_effect=exceptions)
+        if is_raised:
+            with pytest.raises(raises):
+                await source.github_client.graphql(
+                    {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+                )
+        else:
+            with patch.object(
+                GitHubClient, "_get_retry_after", AsyncMock(return_value=0)
+            ):
+                with pytest.raises(raises):
+                    await source.github_client.graphql(
+                        {"variable": {"owner": "demo_user"}, "query": "QUERY"}
+                    )
 
 
 @pytest.mark.asyncio
@@ -1177,12 +1243,15 @@ async def test_get_content_with_md_file():
 
 @pytest.mark.asyncio
 async def test_get_content_with_md_file_with_extraction_service():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="Test File !!! U+1F602",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="Test File !!! U+1F602",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         expected_response = {
             "_id": "demo_repo/source.md",
@@ -1521,6 +1590,19 @@ async def test_fetch_files():
         ):
             async for document in source._fetch_files("demo_repo", "main"):
                 assert expected_response == document
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exception",
+    [UnauthorizedException, ForbiddenException],
+)
+async def test_fetch_files_when_error_occurs(exception):
+    async with create_github_source() as source:
+        source.github_client.get_github_item = Mock(side_effect=exception())
+        with pytest.raises(exception):
+            async for _ in source._fetch_files("demo_repo", "main"):
+                pass
 
 
 @pytest.mark.asyncio
@@ -2007,6 +2089,53 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes):
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.parametrize(
+    "exception, raises",
+    [
+        (
+            ClientResponseError(
+                status=401,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                headers={"X-RateLimit-Remaining": 5000},
+            ),
+            UnauthorizedException,
+        ),
+        (
+            ClientResponseError(
+                status=403,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                headers={"X-RateLimit-Remaining": 2500},
+            ),
+            ForbiddenException,
+        ),
+        (
+            ClientResponseError(
+                status=404,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                history=None,
+                headers={"X-RateLimit-Remaining": 2500},
+            ),
+            ClientResponseError,
+        ),
+    ],
+)
+async def test_get_personal_access_token_scopes_when_error_occurs(exception, raises):
+    async with create_github_source() as source:
+        source.github_client._get_client._request = AsyncMock(side_effect=exception)
+        with pytest.raises(raises):
+            await source.github_client.get_personal_access_token_scopes()
+
+
+@pytest.mark.asyncio
 async def test_github_client_get_installations():
     async with create_github_source(auth_method=GITHUB_APP) as source:
         mock_response = [
@@ -2162,3 +2291,62 @@ async def test_get_owners(auth_method, repo_type, expected_owners):
         ):
             actual_owners = [owner async for owner in source._get_owners()]
             assert actual_owners == expected_owners
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_update_installation_access_token_when_error_occurs():
+    async with create_github_source() as source:
+        source.github_client.get_installation_access_token = AsyncMock(
+            side_effect=Exception()
+        )
+        with pytest.raises(Exception):
+            await source.github_client._update_installation_access_token()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+@pytest.mark.parametrize(
+    "exceptions, raises",
+    [
+        (
+            ClientResponseError(
+                status=403,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                headers={"X-RateLimit-Remaining": 4000},
+                history=None,
+            ),
+            ForbiddenException,
+        ),
+        (
+            ClientResponseError(
+                status=401,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                headers={"X-RateLimit-Remaining": 4000},
+                history=None,
+            ),
+            UnauthorizedException,
+        ),
+        (
+            ClientResponseError(
+                status=404,
+                request_info=aiohttp.RequestInfo(
+                    real_url="", method=None, headers=None, url=""
+                ),
+                headers={"X-RateLimit-Remaining": 4000},
+                history=None,
+            ),
+            ClientResponseError,
+        ),
+        (Exception(), Exception),
+    ],
+)
+async def test_get_github_item_when_error_occurs(exceptions, raises):
+    async with create_github_source() as source:
+        source.github_client._get_client.getitem = Mock(side_effect=exceptions)
+        with pytest.raises(raises):
+            await source.github_client.get_github_item("/core")

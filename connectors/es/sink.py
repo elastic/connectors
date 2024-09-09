@@ -17,6 +17,7 @@
 Elasticsearch <== Sink <== queue <== Extractor <== generator
 
 """
+
 import asyncio
 import copy
 import functools
@@ -197,7 +198,9 @@ class Sink:
             for item in res["items"]:
                 for op, data in item.items():
                     if "error" in data:
-                        self._logger.error(f"operation {op} failed, {data['error']}")
+                        self._logger.error(
+                            f"operation {op} failed for doc {data['_id']}, {data['error']}"
+                        )
 
         self._populate_stats(stats, res)
 

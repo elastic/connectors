@@ -6,6 +6,7 @@
 """
 Logger -- sets the logging and provides a `logger` global object.
 """
+
 import contextlib
 import inspect
 import logging

@@ -10,6 +10,7 @@
   config
 - `get_services` and `get_service`: factories
 """
+
 import asyncio
 import time
 from copy import deepcopy
@@ -181,7 +182,7 @@ class MultiService:
         """Runs every service in a task and wait for all tasks."""
         tasks = [asyncio.create_task(service.run()) for service in self._services]
 
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
 
         for task in pending:
             task.cancel()
