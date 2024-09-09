@@ -230,7 +230,9 @@ async def test_prepare_content_index(mock_responses):
 
         await es.close()
 
-        put_mapping_mock.assert_called_with(index_name, mappings)
+        put_mapping_mock.assert_called_with(
+            index_name=index_name, index=response[index_name], desired_mappings=mappings
+        )
 
 
 def set_responses(mock_responses, ts=None):
@@ -1481,6 +1483,7 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
             es._sink.force_cancel.assert_not_called()
 
 
+@pytest.mark.asyncio
 async def test_extractor_run_when_mem_full_is_raised():
     docs_from_source = [
         {"_id": 1},
