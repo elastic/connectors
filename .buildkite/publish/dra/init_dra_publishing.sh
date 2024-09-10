@@ -51,7 +51,7 @@ export PRODUCT_NAME="connectors"
 export GIT_REPO="connectors"
 
 # set PUBLISH_SNAPSHOT and PUBLISH_STAGING based on the branch
-if [[ "${BUILDKITE_BRANCH:-}" =~ (main|[0-9]\.[0-9x]*$) ]]; then
+if [[ "${BUILDKITE_BRANCH:-}" =~ (main|8\.x|[0-9]\.[0-9x]*$) ]]; then
   export PUBLISH_SNAPSHOT="true"
 fi
 if [[ "${BUILDKITE_BRANCH:-}" =~ ([0-9]\.[0-9x]*$) ]]; then
