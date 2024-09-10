@@ -9,4 +9,4 @@ pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
 
-make test test-agent
+make test
