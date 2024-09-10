@@ -24,11 +24,9 @@ config.yml:
 install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
 
-install-agent: install
-	.venv/bin/pip install -r requirements/agent.txt
-
 .venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
+	.venv/bin/pip install -r requirements/agent.txt
 	.venv/bin/python setup.py develop
 
 .venv/bin/ruff: .venv/bin/python
@@ -38,6 +36,7 @@ install-agent: install
 
 .venv/bin/pytest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
+	.venv/bin/pip install -r requirements/agent.txt
 	.venv/bin/pip install -r requirements/tests.txt
 	.venv/bin/pip install -r requirements/ftest.txt
 
