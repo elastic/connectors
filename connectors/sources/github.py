@@ -2139,8 +2139,11 @@ class GitHubDataSource(BaseDataSource):
                         repo_name=repo_name, default_branch=branch
                     ):
                         if file_document["type"] == BLOB:
-                            yield file_document, partial(
-                                self.get_content, attachment=attachment_metadata
+                            yield (
+                                file_document,
+                                partial(
+                                    self.get_content, attachment=attachment_metadata
+                                ),
                             )
                         else:
                             yield file_document, None
