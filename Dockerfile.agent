@@ -17,7 +17,7 @@ RUN apt install vim git yq -y
 # TODO: also package this with revision and everything
 COPY ./ /usr/share/connectors
 WORKDIR /usr/share/connectors
-RUN PYTHON=python3.11 make clean install
+RUN PYTHON=python3.11 make clean install install-agent
 
 # Add component
 # Agent directory name is dynamic and based on build hash, so we need to move in two steps
