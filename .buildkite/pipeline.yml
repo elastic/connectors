@@ -1,3 +1,14 @@
+retry:
+  automatic:
+    - exit_status: -1  # Connection to the Agent was lost
+      signal_reason: none
+      limit: 2
+    - exit_status: 255  # Timeout
+      signal_reason: none
+      limit: 2
+    - signal_reason: 2  # Flaky test
+      limit: 2
+
 definitions:
   steps:
     - step: &test-agents
