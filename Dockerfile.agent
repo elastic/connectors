@@ -1,4 +1,6 @@
-FROM docker.elastic.co/elastic-agent/elastic-agent:sha256-fff74ac535403af9307ed6f93aad71ec95866bf6f1ec2da1bd7966e6bc17ae72
+# This file is for internal experimental purposes only.
+# Please do not use this file for any real-world workloads.
+FROM docker.elastic.co/elastic-agent/elastic-agent:9.0.0-SNAPSHOT
 USER root
 # Install dependencies
 RUN apt update
