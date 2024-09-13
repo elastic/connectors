@@ -24,6 +24,9 @@ if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
 fi
 
 if [[ "${MANUAL_RELEASE:-}" == "true" ]]; then
+  # This block is for out-of-band releases, triggered by the release-pipeline
+  # See discussion in https://github.com/elastic/connectors/pull/2804/commits/d27e4c18650bc2dfd099018080fe16ad307eb18b#r1758850508
+  # See also RELEASING.md
   export ORIG_VERSION=$(buildkite-agent meta-data get orig_version)
   IFS='.' read -ra VERSION_PARTS <<< "$ORIG_VERSION"
   PATCH_PART=${VERSION_PARTS[2]}
