@@ -1,2 +1,2 @@
 [report]
-omit = connectors/quartz.py,connectors/conftest.py,tests/*,connectors/agent/*,connectors/cli/*
+omit = connectors/quartz.py,connectors/conftest.py,tests/*
