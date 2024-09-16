@@ -29,13 +29,26 @@ The Unified Release build will take care of producing git tags and official arti
 Sometimes, we need to release Connectors independently from the Elastic unified-release.
 For instance, if a user reports a critical bug in Connectors, and we want to ship a fix as soon as possible.
 
-In this case, we can work with `#early-agent-releases` to trigger the Independent Agent Release Pipeline ([staging](https://buildkite.com/elastic/independent-agent-release-staging), [releasing](https://buildkite.com/elastic/independent-agent-release-releasing)) once the bugfix has been merged and a staging DRA artifact produced.
-This pipeline is used for integrations that need to release more frequently than the stack cadence, but still need to stay associated with the stack versioning scheme.
-This will produce Connectors (and Agent) artifacts like **MAJOR.MINOR.PATCH+build<TIMESTAMP>**.
-These versions are compatible with SEMVER (Semantic Versioning).
-While the pipeline was built by-and-for Agent, it will release all our connector artifacts - not just the agent docker image.
+In this case, we can trigger a manual release buildkite job.
+1. Go to https://buildkite.com/elastic, find "connectors-docker-build-publish" pipeline and trigger a Build:
+   - Choose the maintenance branch you want to release from. For example, `8.16` if you want to release between 8.16.0 and 8.16.1
+   - Click on "New Build"
+   - Enter a descriptive message, and leave HEAD as the commit
+   - Press "Create Build" and wait for the build to finish
 
-No changes to the VERSION file are necessary for these "in-between" releases.
+This will produce Connectors artifacts like **MAJOR.MINOR.PATCH+build<TIMESTAMP>**.
+These versions are compatible with SEMVER (Semantic Versioning).
+This will automatically create the necessary git tag.
+
+Note that `PATCH` will be 1 less than the current contents of the VERSION file.
+This is because the VERSION file is usually bumped right after a stack release.
+So right after 8.16.0, the VERSION file is bumped to 8.16.1.
+If we want to release again the next day, the in-between artifacts should be associated with 8.16.0 stack versions, not with 8.16.1.
+
+No manual changes to the VERSION file are necessary for these "in-between" releases.
+During the pipeline, it will bump the VERSION file in the branch, build the artifacts, then restore the VERSION file.
+If the release build fails for some reason, check to make sure the VERSION file was properly restored.
+
 
 ## For versions <= 8.15
 

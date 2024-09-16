@@ -206,8 +206,6 @@ spec:
 
 ########
 # Docker image build and publish - manual release
-#  This is in place to release versions < 8.16
-#  Once we are no longer maintaining versions that old, this can be removed
 ########
 ---
 apiVersion: "backstage.io/v1alpha1"
