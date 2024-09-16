@@ -1,0 +1,22 @@
+version: 2
+inputs:
+  - name: connectors-py
+    description: "Connectors Py component input"
+    platforms: &platforms
+      - linux/amd64
+      - linux/arm64
+      - darwin/amd64
+      - darwin/arm64
+      - windows/amd64
+      - container/amd64
+      - container/arm64
+    outputs: &outputs
+      - elasticsearch
+    shippers: &shippers
+      - shipper
+    command: &command
+      restart_monitoring_period: 5s
+      maximum_restarts_per_period: 1
+      timeouts:
+        restart: 1s
+      args: []
