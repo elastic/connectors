@@ -91,7 +91,7 @@ class PreflightCheck:
         es_version_parts = list(
             map(int, es_version.replace("-SNAPSHOT", "").split("."))
         )
-        connector_version_parts = list(map(int, self.version.split(".")))
+        connector_version_parts = list(map(int, self.version.split("+")[0].split(".")))
 
         # major
         if es_version_parts[0] != connector_version_parts[0]:
