@@ -96,7 +96,7 @@ docker-push:
 
 ## Agent Docker Zone
 # Only use it for local testing, that's it
-AGENT_ES_HOSTS?=http://127.0.0.1:9200
+AGENT_ES_HOSTS?=[http://127.0.0.1:9200]
 AGENT_ES_USERNAME?=elastic
 AGENT_ES_PASSWORD?=changeme
 AGENT_DOCKERFILE_NAME?=Dockerfile.agent

@@ -3,6 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import base64
+
 from connectors.config import add_defaults
 
 
@@ -24,6 +26,9 @@ class ConnectorsAgentConfigurationWrapper:
         """
         self._default_config = {
             "_force_allow_native": True,
+            "service": {
+                "_use_native_connector_api_keys": False,
+            },
             "native_service_types": [
                 "azure_blob_storage",
                 "box",
@@ -74,7 +79,12 @@ class ConnectorsAgentConfigurationWrapper:
             }
 
             if source.fields.get("api_key"):
-                es_creds["api_key"] = source["api_key"]
+                api_key = source["api_key"]
+                # if beats_logstash_format we need to base64 the key
+                if ":" in api_key:
+                    api_key = base64.b64encode(api_key.encode()).decode()
+
+                es_creds["api_key"] = api_key
             elif source.fields.get("username") and source.fields.get("password"):
                 es_creds["username"] = source["username"]
                 es_creds["password"] = source["password"]
