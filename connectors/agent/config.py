@@ -128,16 +128,33 @@ class ConnectorsAgentConfigurationWrapper:
 
     def config_changed(self, new_config):
         # TODO: For now manually check, need to think of a better way?
+        # Not super proud of this function, but hey it's tested
         logger.debug("Checking if config changed")
         current_config = self._default_config.copy()
         current_config.update(self.specific_config)
 
-        if current_config["service"]["log_level"] != nested_get_from_dict(
-            new_config, ("service", "log_level")
-        ):
+        def _log_level_changed():
+            new_config_log_level = nested_get_from_dict(
+                new_config, ("service", "log_level")
+            )
+            current_config_log_level = nested_get_from_dict(
+                current_config, ("service", "log_level")
+            )
+
+            if new_config_log_level is None:
+                return False
+
+            return current_config_log_level != new_config_log_level
+
+        def _elasticsearch_config_changed():
+            return current_config.get("elasticsearch") != new_config.get(
+                "elasticsearch"
+            )
+
+        if _log_level_changed():
             return True
 
-        if current_config["elasticsearch"] != new_config.get("elasticsearch"):
+        if _elasticsearch_config_changed():
             return True
 
         return False
