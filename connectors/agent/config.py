@@ -111,8 +111,6 @@ class ConnectorsAgentConfigurationWrapper:
 
             assumed_configuration["elasticsearch"] = es_creds
 
-        logger.info(f"Config:\n{assumed_configuration}")
-
         if self.config_changed(assumed_configuration):
             logger.debug("Changes detected for connectors-relevant configurations")
             # This is a partial update.
