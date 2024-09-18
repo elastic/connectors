@@ -76,13 +76,23 @@ class ConnectorsAgentConfigurationWrapper:
         the method returns False.
         """
 
+        source = unit.config.source
+
         # TODO: find a good link to what this object is.
         has_hosts = source.fields.get("hosts")
         has_api_key = source.fields.get("api_key")
         has_basic_auth = source.fields.get("username") and source.fields.get("password")
+
+        assumed_configuration = {}
+
+        # Log-related
+        assumed_configuration["service"] = {}
+        assumed_configuration["service"]["log_level"] = unit.log_level
+
+        # Auth-related
         if has_hosts and (has_api_key or has_basic_auth):
             es_creds = {
-                "host": source["hosts"][0],
+                "host": source["hosts"][0]
             }
 
             if source.fields.get("api_key"):
