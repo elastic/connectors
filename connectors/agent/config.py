@@ -125,6 +125,13 @@ class ConnectorsAgentConfigurationWrapper:
         return False
 
     def config_changed(self, new_config):
+        """See if configuration passed in new_config will update currently stored configuration
+
+        This method takes the new configuration received from the agent and see if there are any changes
+        to existing configuration.
+
+        If new_config contains new values for relevant fields, then True is returned, otherwise it returns False.
+        """
         # TODO: For now manually check, need to think of a better way?
         # Not super proud of this function, but hey it's tested
         logger.debug("Checking if config changed")
@@ -150,9 +157,11 @@ class ConnectorsAgentConfigurationWrapper:
             )
 
         if _log_level_changed():
+            logger.debug("log_level changed")
             return True
 
         if _elasticsearch_config_changed():
+            logger.debug("elasticsearch changed")
             return True
 
         return False
