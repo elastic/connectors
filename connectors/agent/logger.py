@@ -7,18 +7,23 @@ import logging
 
 import ecs_logging
 
+root_logger = logging.getLogger("agent_component")
+handler = logging.StreamHandler()
+handler.setFormatter(ecs_logging.StdlibFormatter())
+root_logger.addHandler(handler)
+root_logger.setLevel(logging.INFO)
 
-def get_logger(module, log_level=logging.INFO):
-    logger = logging.getLogger(module)
+
+def get_logger(module):
+    logger = root_logger.getChild(module)
 
     if logger.hasHandlers():
         return logger
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(ecs_logging.StdlibFormatter())
-
-    handler.setLevel(log_level)
     logger.addHandler(handler)
-    logger.setLevel(log_level)
 
     return logger
+
+
+def update_logger_level(log_level):
+    root_logger.setLevel(log_level)

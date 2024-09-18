@@ -7,6 +7,7 @@ import base64
 
 from connectors.agent.logger import get_logger
 from connectors.config import add_defaults
+from connectors.utils import nested_get_from_dict
 
 logger = get_logger("config")
 
@@ -28,6 +29,9 @@ class ConnectorsAgentConfigurationWrapper:
         Service config and specific config coming from Agent.
         """
         self._default_config = {
+            "service": {
+                "log_level": "INFO",
+            },
             "_force_allow_native": True,
             "service": {
                 "_use_native_connector_api_keys": False,
@@ -63,7 +67,7 @@ class ConnectorsAgentConfigurationWrapper:
 
         self.specific_config = {}
 
-    def try_update(self, source):
+    def try_update(self, unit):
         """Try update the configuration and see if it changed.
 
         This method takes the check-in event coming from Agent and checks if config needs an update.
@@ -97,14 +101,37 @@ class ConnectorsAgentConfigurationWrapper:
                 msg = "Invalid Elasticsearch credentials"
                 raise ValueError(msg)
 
-            new_config = {
-                "elasticsearch": es_creds,
-            }
-            self.specific_config = new_config
+            assumed_configuration["elasticsearch"] = es_creds
+
+        logger.info(f"Config:\n{assumed_configuration}")
+
+        if self.config_changed(assumed_configuration):
             logger.debug("Changes detected for connectors-relevant configurations")
+            # This is a partial update.
+            # Agent can send different data in updates.
+            # For example, updating only log_level will not send credentials.
+            # Thus we don't overwrite configuration, we only update fields that
+            # were received
+            self.specific_config.update(assumed_configuration)
             return True
 
         logger.debug("No changes detected for connectors-relevant configurations")
+        return False
+
+    def config_changed(self, new_config):
+        # TODO: For now manually check, need to think of a better way?
+        logger.debug("Checking if config changed")
+        current_config = self._default_config.copy()
+        current_config.update(self.specific_config)
+
+        if current_config["service"]["log_level"] != nested_get_from_dict(
+            new_config, ("service", "log_level")
+        ):
+            return True
+
+        if current_config["elasticsearch"] != new_config.get("elasticsearch"):
+            return True
+
         return False
 
     def get(self):
