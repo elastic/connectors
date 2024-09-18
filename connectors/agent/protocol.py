@@ -3,14 +3,12 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import logging
 
 from elastic_agent_client.generated import elastic_agent_client_pb2 as proto
 from elastic_agent_client.handler.action import BaseActionHandler
 from elastic_agent_client.handler.checkin import BaseCheckinHandler
 
 from connectors.agent.logger import get_logger
-from connectors.logger import set_logger
 
 logger = get_logger("component")
 
