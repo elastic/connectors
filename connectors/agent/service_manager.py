@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import logging
 
 import connectors.agent.logger
 import connectors.logger
@@ -64,14 +65,12 @@ class ConnectorServiceManager:
                         ["schedule", "sync_content", "sync_access_control", "cleanup"],
                         config,
                     )
-                    # Log Level for connectors is managed like this
-                    connectors.logger.set_logger(
-                        log_level=config["service"]["log_level"], filebeat=True
-                    )
+                    log_level = config.get("service", {}).get(
+                        "log_level", logging.INFO
+                    )  # Log Level for connectors is managed like this
+                    connectors.logger.set_logger(log_level, filebeat=True)
                     # Log Level for agent connectors component itself
-                    connectors.agent.logger.update_logger_level(
-                        log_level=config["service"]["log_level"]
-                    )
+                    connectors.agent.logger.update_logger_level(log_level)
 
                     await self._multi_service.run()
                 except Exception as e:
