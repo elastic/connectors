@@ -224,6 +224,16 @@ async def test_warn_mismatched_version(
             "1.2.3.0",
             "Elasticsearch 1.2.3 and Connectors 1.2.3.0 are compatible",
         ),
+        (
+            "1.2.3",
+            "1.2.3+abc",
+            "Elasticsearch 1.2.3 and Connectors 1.2.3+abc are compatible",
+        ),
+        (
+            "1.2.3",
+            "1.2.3",
+            "Elasticsearch 1.2.3 and Connectors 1.2.3 are compatible",
+        ),
     ],
 )
 async def test_pass_mismatched_version(

@@ -51,9 +51,12 @@ async def test_extract_text(mock_responses, patch_logger):
     url = "http://localhost:8090/extract_text/"
     payload = {"extracted_text": "I've been extracted!"}
 
-    with patch("builtins.open", mock_open(read_data=b"data")), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         mock_responses.put(url, status=200, payload=payload)
 
@@ -75,13 +78,16 @@ async def test_extract_text_with_file_pointer(mock_responses, patch_logger):
     url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
     payload = {"extracted_text": "I've been extracted from a local file!"}
 
-    with patch("builtins.open", mock_open(read_data=b"data")), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={
-            "host": "http://localhost:8090",
-            "use_file_pointers": True,
-            "shared_volume_dir": "/tmp",
-        },
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={
+                "host": "http://localhost:8090",
+                "use_file_pointers": True,
+                "shared_volume_dir": "/tmp",
+            },
+        ),
     ):
         mock_responses.put(url, status=200, payload=payload)
 
@@ -101,13 +107,16 @@ async def test_extract_text_with_file_pointer(mock_responses, patch_logger):
 async def test_extract_text_when_host_is_none(mock_responses, patch_logger):
     filepath = "/tmp/notreal.txt"
 
-    with patch("builtins.open", mock_open(read_data=b"data")), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={
-            "host": None,
-            "use_file_pointers": True,
-            "shared_volume_dir": "/tmp",
-        },
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={
+                "host": None,
+                "use_file_pointers": True,
+                "shared_volume_dir": "/tmp",
+            },
+        ),
     ):
         extraction_service = ContentExtraction()
 
@@ -129,9 +138,12 @@ async def test_extract_text_when_response_isnt_200_logs_warning(
     filepath = "tmp/notreal.txt"
     url = "http://localhost:8090/extract_text/"
 
-    with patch("builtins.open", mock_open(read_data=b"data")), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         mock_responses.put(
             url,
@@ -158,12 +170,16 @@ async def test_extract_text_when_response_isnt_200_logs_warning(
 async def test_extract_text_when_response_is_error(mock_responses, patch_logger):
     filepath = "tmp/notreal.txt"
 
-    with patch("builtins.open", mock_open(read_data=b"data")), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.send_file",
-        side_effect=ClientConnectionError("oops!"),
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.send_file",
+            side_effect=ClientConnectionError("oops!"),
+        ),
     ):
         extraction_service = ContentExtraction()
         extraction_service._begin_session()
@@ -184,9 +200,12 @@ async def test_extract_text_when_response_is_200_with_error_logs_warning(
     filepath = "tmp/notreal.txt"
     url = "http://localhost:8090/extract_text/"
 
-    with patch("builtins.open", mock_open(read_data=b"data")), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         mock_responses.put(
             url,

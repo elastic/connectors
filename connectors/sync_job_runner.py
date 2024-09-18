@@ -10,9 +10,7 @@ import elasticsearch
 from elasticsearch import (
     AuthorizationException as ElasticAuthorizationException,
 )
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
-)
+from elasticsearch import NotFoundError as ElasticNotFoundError
 
 from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
@@ -178,6 +176,7 @@ class SyncJobRunner:
             if (
                 self.connector.native
                 and self.connector.features.native_connector_api_keys_enabled()
+                and self.service_config.get("_use_native_connector_api_keys", True)
             ):
                 # Update the config so native connectors can use API key authentication during sync
                 await self._update_native_connector_authentication()
@@ -346,7 +345,9 @@ class SyncJobRunner:
             except asyncio.CancelledError:
                 self.sync_job.log_debug("Job reporting task is stopped.")
         if self.sync_orchestrator is not None:
-            await self.sync_orchestrator.cancel()  # in case the extractor/sink tasks are still running
+            await (
+                self.sync_orchestrator.cancel()
+            )  # in case the extractor/sink tasks are still running
 
         ingestion_stats = (
             {}
@@ -378,9 +379,11 @@ class SyncJobRunner:
             sync_cursor = (
                 None
                 if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
-                else self.data_provider.sync_cursor()
-                if self.sync_job.is_content_sync()
-                else None
+                else (
+                    self.data_provider.sync_cursor()
+                    if self.sync_job.is_content_sync()
+                    else None
+                )
             )
             await self.connector.sync_done(
                 self.sync_job if await self.reload_sync_job() else None,

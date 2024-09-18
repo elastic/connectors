@@ -296,10 +296,13 @@ class S3DataSource(BaseDataSource):
                     document = await self.format_document(
                         bucket_name=bucket, bucket_object=obj_summary
                     )
-                    yield document, partial(
-                        self.get_content,
-                        doc=document,
-                        s3_client=s3_client,
+                    yield (
+                        document,
+                        partial(
+                            self.get_content,
+                            doc=document,
+                            s3_client=s3_client,
+                        ),
                     )
 
     async def get_content(self, doc, s3_client, timestamp=None, doit=None):

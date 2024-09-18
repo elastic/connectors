@@ -10,6 +10,7 @@ INDEX_NAME=search-${NAME%"_serverless"}
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR="$SCRIPT_DIR/.."
+VIRTUAL_ENV="$ROOT_DIR/.venv"
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
@@ -19,7 +20,7 @@ export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
-export VERSION='8.16.0-SNAPSHOT'
+export VERSION='9.0.0-SNAPSHOT'
 
 if [ "$PERF8_TRACE" == true ]; then
     echo 'Tracing is enabled, memray stats will be delivered'
@@ -28,9 +29,9 @@ else
     PLUGINS='--asyncstats --psutil'
 fi
 
-PERF8_BIN=${PERF8_BIN:-$ROOT_DIR/bin/perf8}
-PYTHON=${PYTHON:-$ROOT_DIR/bin/python}
-ELASTIC_INGEST=${ELASTIC_INGEST:-$ROOT_DIR/bin/elastic-ingest}
+PERF8_BIN=${PERF8_BIN:-$VIRTUAL_ENV/bin/perf8}
+PYTHON=${PYTHON:-$VIRTUAL_ENV/bin/python}
+ELASTIC_INGEST=${ELASTIC_INGEST:-$VIRTUAL_ENV/bin/elastic-ingest}
 
 unamestr=$(uname)
 if [[ "$unamestr" == 'Linux' ]]; then
@@ -54,7 +55,7 @@ fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $PYTHON fixture.py --name $NAME --action check_stack
-$ROOT_DIR/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --config-file $NAME/config.yml --connector-definition $NAME/connector.json --debug
+$VIRTUAL_ENV/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --config-file $NAME/config.yml --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
 
 if [[ $PERF8 == "yes" ]]

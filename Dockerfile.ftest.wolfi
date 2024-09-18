@@ -1,7 +1,7 @@
-FROM docker.elastic.co/wolfi/python:3.10-dev@sha256:2b7e585c59b5f7b5800de99aa2dc0e576bc1f7358e0d1acfcc14dcd90bb3925f
+FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:c059ea437c85aed56004fdd71dd8c2146f3b7355183d8db443ca3d1aa90e173f
 USER root
 COPY . /connectors
 WORKDIR /connectors
 RUN make clean install
-RUN bin/pip install -r requirements/ftest.txt
+RUN .venv/bin/pip install -r requirements/ftest.txt
 ENTRYPOINT []

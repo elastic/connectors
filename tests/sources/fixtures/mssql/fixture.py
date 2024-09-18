@@ -99,9 +99,7 @@ def inject_lines(table, cursor, lines):
                     faked.random_int(min=1, max=10),  # small_age
                     base64.b64encode(
                         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x10\x00\x00\x00\x10\x08\x06\x00\x00\x00\x1f\xf3\xff\xa6\x00\x00\x00"
-                    ).decode(
-                        "utf-8"
-                    ),  # profile_pic
+                    ).decode("utf-8"),  # profile_pic
                 )
             )
 

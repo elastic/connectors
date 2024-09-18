@@ -63,16 +63,13 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def ensure_content_index_mappings(self, index, mappings):
+    async def ensure_content_index_mappings(self, index_name, index, desired_mappings):
         # open = Match open, non-hidden indices. Also matches any non-hidden data stream.
         # Content indices are always non-hidden.
-        response = await self._retrier.execute_with_retry(
-            partial(self.client.indices.get_mapping, index=index)
-        )
 
-        existing_mappings = response[index].get("mappings", {})
+        existing_mappings = index.get("mappings", {})
         if len(existing_mappings) == 0:
-            if mappings:
+            if desired_mappings:
                 logger.info(
                     "Index %s has no mappings or it's empty. Adding mappings...", index
                 )
@@ -80,13 +77,15 @@ class ESManagementClient(ESClient):
                     await self._retrier.execute_with_retry(
                         partial(
                             self.client.indices.put_mapping,
-                            index=index,
-                            dynamic=mappings.get("dynamic", False),
-                            dynamic_templates=mappings.get("dynamic_templates", []),
-                            properties=mappings.get("properties", {}),
+                            index=index_name,
+                            dynamic=desired_mappings.get("dynamic", False),
+                            dynamic_templates=desired_mappings.get(
+                                "dynamic_templates", []
+                            ),
+                            properties=desired_mappings.get("properties", {}),
                         )
                     )
-                    logger.info("Successfully added mappings for index %s", index)
+                    logger.info("Successfully added mappings for index %s", index_name)
                 except Exception as e:
                     logger.warning(
                         f"Could not create mappings for index {index}, encountered error {e}"
@@ -97,7 +96,7 @@ class ESManagementClient(ESClient):
                 )
         else:
             logger.debug(
-                "Index %s already has mappings, skipping mappings creation", index
+                "Index %s already has mappings, skipping mappings creation", index_name
             )
 
     async def ensure_content_index_settings(
@@ -225,14 +224,44 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.exists, index=index_name)
         )
 
-    async def get_index(self, index_name, ignore_unavailable=False):
-        return await self._retrier.execute_with_retry(
+    async def get_index_or_alias(self, index_name, ignore_unavailable=False):
+        """
+        Get index definition (mappings and settings) by its name or its alias.
+        """
+        # Example structure of response:
+        # {
+        #     "my-data-index": {
+        #         "aliases": {"search-my-data-index": {}},
+        #         "mappings": { ... },
+        #         "settings": { ... },
+        #     }
+        # }
+        get_index_response = await self._retrier.execute_with_retry(
             partial(
                 self.client.indices.get,
                 index=index_name,
                 ignore_unavailable=ignore_unavailable,
             )
         )
+
+        if index_name in get_index_response:
+            logger.debug(f"Got index by its name: {index_name}")
+            return get_index_response[index_name]
+
+        for (
+            existing_index_name,
+            existing_index_definition,
+        ) in get_index_response.items():
+            if "aliases" not in existing_index_definition:
+                continue
+
+            if index_name in existing_index_definition["aliases"]:
+                logger.debug(
+                    f"Got index {existing_index_name} by its alias {index_name}"
+                )
+                return existing_index_definition
+
+        return None
 
     async def upsert(self, _id, index_name, doc):
         return await self._retrier.execute_with_retry(

@@ -17,6 +17,7 @@
 Elasticsearch <== Sink <== queue <== Extractor <== generator
 
 """
+
 import asyncio
 import copy
 import functools
@@ -835,15 +836,16 @@ class SyncOrchestrator:
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
 
+    def extract_index_or_alias(self, get_index_response, expected_index_name):
+        return None
+
     async def prepare_content_index(self, index_name, language_code=None):
         """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
 
-        result = await self.es_management_client.get_index(
+        index = await self.es_management_client.get_index_or_alias(
             index_name, ignore_unavailable=True
         )
-
-        index = result.get(index_name, None)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
@@ -858,7 +860,7 @@ class SyncOrchestrator:
             )
 
             await self.es_management_client.ensure_content_index_mappings(
-                index_name, mappings
+                index_name=index_name, index=index, desired_mappings=mappings
             )
         else:
             # Create a new index
