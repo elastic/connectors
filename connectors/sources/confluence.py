@@ -84,7 +84,7 @@ URLS = {
 PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
 MAX_CONCURRENCY = 50
-QUEUE_SIZE = 2024
+QUEUE_SIZE = 1024
 QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
 SERVER_USER_BATCH = 1000
 DATACENTER_USER_BATCH = 200
@@ -115,6 +115,10 @@ class SyncFailure(Exception):
 
 
 class UnauthorizedException(Exception):
+    pass
+
+
+class BadRequestError(Exception):
     pass
 
 
@@ -217,13 +221,13 @@ class ConfluenceClient:
             raise ThrottledError
         elif exception.status == 400:
             self._logger.error(f"Bad Request Error (400). Exception: {exception}.")
-            raise UnauthorizedException
+            raise BadRequestError
         elif exception.status == 401:
             self._logger.error(f"Authentication error (401). Exception: {exception}.")
             raise UnauthorizedException
         elif exception.status == 403:
             self._logger.error(
-                f"Provided token does not have the necessary permissions to perform the request for the URL: {url}"
+                f"Invalid credentials provided for the request to url: {url}. Exception: {exception}"
             )
             raise Forbidden
         elif exception.status == 404:
@@ -331,17 +335,7 @@ class ConfluenceClient:
                     self.host_url,
                     links.get("next")[1:],
                 )
-            except (
-                ServerConnectionError,
-                ClientResponseError,
-                ClientPayloadError,
-                Forbidden,
-                UnauthorizedException,
-                ThrottledError,
-                NotFound,
-                InternalServerError,
-                Exception,
-            ) as exception:
+            except Exception as exception:
                 await self._handle_api_call_error(url, exception)
                 break
 
@@ -368,22 +362,15 @@ class ConfluenceClient:
                 url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
-            except (
-                ServerConnectionError,
-                ClientResponseError,
-                ClientPayloadError,
-                Forbidden,
-                UnauthorizedException,
-                ThrottledError,
-                NotFound,
-                InternalServerError,
-                Exception,
-            ) as exception:
+            except Exception as exception:
                 await self._handle_api_call_error(url, exception)
                 break
 
     async def download_func(self, url):
-        yield await self.api_call(url)
+        try:
+            yield await self.api_call(url)
+        except Exception as exception:
+            await self._handle_api_call_error(url, exception)
 
     async def search_by_query(self, query):
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
@@ -416,17 +403,7 @@ class ConfluenceClient:
             permissions = await self.api_call(url=os.path.join(self.host_url, url))
             permission = await permissions.json()
             return permission
-        except (
-            ServerConnectionError,
-            ClientResponseError,
-            ClientPayloadError,
-            Forbidden,
-            UnauthorizedException,
-            ThrottledError,
-            NotFound,
-            InternalServerError,
-            Exception,
-        ) as exception:
+        except Exception as exception:
             await self._handle_api_call_error(url, exception)
 
     async def fetch_page_blog_documents(self, api_query):
@@ -481,17 +458,7 @@ class ConfluenceClient:
                     return
                 yield response.get(key)
                 start_at += limit
-            except (
-                ServerConnectionError,
-                ClientResponseError,
-                ClientPayloadError,
-                Forbidden,
-                UnauthorizedException,
-                ThrottledError,
-                NotFound,
-                InternalServerError,
-                Exception,
-            ) as exception:
+            except Exception as exception:
                 await self._handle_api_call_error(url, exception)
                 break
 
@@ -502,17 +469,7 @@ class ConfluenceClient:
             labels = await label_data.json()
             return [label.get("name") for label in labels["results"]]
 
-        except (
-            ServerConnectionError,
-            ClientResponseError,
-            ClientPayloadError,
-            Forbidden,
-            UnauthorizedException,
-            ThrottledError,
-            NotFound,
-            InternalServerError,
-            Exception,
-        ) as exception:
+        except Exception as exception:
             await self._handle_api_call_error(url, exception)
 
 
