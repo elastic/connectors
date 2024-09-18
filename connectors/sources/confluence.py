@@ -403,6 +403,11 @@ class ConfluenceClient:
             permissions = await self.api_call(url=os.path.join(self.host_url, url))
             permission = await permissions.json()
             return permission
+        except ClientResponseError as exception:
+            self._logger.warning(
+                f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
+            )
+            return {}
         except Exception as exception:
             await self._handle_api_call_error(url, exception)
 
@@ -1315,7 +1320,7 @@ class ConfluenceDataSource(BaseDataSource):
             2,
         )
         if failed_percentage >= API_FAILURE_THRESHOLD * 100:
-            msg = f"High percentage of API exceptions {failed_percentage}% is greater than or equal to the default threshold {API_FAILURE_THRESHOLD*100}%. This calculation is done at the end of the synchronization process. Please review the logs for more details."
+            msg = f"High percentage of API exceptions {failed_percentage}% is greater than or equal to the default threshold {API_FAILURE_THRESHOLD * 100}%. This calculation is done at the end of the synchronization process. Please review the logs for more details."
             self._logger.error(msg)
             raise SyncFailure(msg)
 
