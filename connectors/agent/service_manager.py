@@ -14,7 +14,7 @@ from connectors.services.base import (
 )
 from connectors.utils import CancellableSleeps
 
-logger = get_logger("component")
+logger = get_logger("service_manager")
 
 
 class ConnectorServiceManager:
