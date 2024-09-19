@@ -10,7 +10,7 @@ from elastic_agent_client.handler.checkin import BaseCheckinHandler
 
 from connectors.agent.logger import get_logger
 
-logger = get_logger("component")
+logger = get_logger("protocol")
 
 
 class ConnectorActionHandler(BaseActionHandler):
