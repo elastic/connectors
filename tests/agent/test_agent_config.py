@@ -48,11 +48,7 @@ def test_try_update_with_non_encoded_api_key_auth_data():
     encoded = "c29tZXRoaW5nOmVsc2U="
 
     config_wrapper = ConnectorsAgentConfigurationWrapper()
-    source_mock = MagicMock()
-    fields_container = {"hosts": hosts, "api_key": api_key}
-
-    source_mock.fields = fields_container
-    source_mock.__getitem__.side_effect = fields_container.__getitem__
+    source_mock = prepare_unit_mock({"hosts": hosts, "api_key": api_key}, None)
 
     assert config_wrapper.try_update(source_mock) is True
     assert config_wrapper.get()["elasticsearch"]["host"] == hosts[0]
