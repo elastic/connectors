@@ -111,7 +111,13 @@ def test_config_changed_when_elasticsearch_config_changed():
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in_lalala"
 
-    starting_config = {"elasticsearch": {"hosts": hosts, "username": "elastic", "password": "hey-im-a-password"}}
+    starting_config = {
+        "elasticsearch": {
+            "hosts": hosts,
+            "username": "elastic",
+            "password": "hey-im-a-password",
+        }
+    }
     new_config = {"elasticsearch": {"hosts": hosts, "api_key": api_key}}
 
     config_wrapper = ConnectorsAgentConfigurationWrapper()
