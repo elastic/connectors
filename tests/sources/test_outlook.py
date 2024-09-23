@@ -374,6 +374,7 @@ async def create_outlook_source(
     tenant_id="foo",
     client_id="bar",
     client_secret="faa",
+    client_emails=None,
     exchange_server="127.0.0.1",
     active_directory_server="127.0.0.1",
     username="fee",
@@ -383,12 +384,16 @@ async def create_outlook_source(
     ssl_ca="",
     use_text_extraction_service=False,
 ):
+    if client_emails is None:
+        client_emails = ""
+
     async with create_source(
         OutlookDataSource,
         data_source=data_source,
         tenant_id=tenant_id,
         client_id=client_id,
         client_secret=client_secret,
+        client_emails=client_emails,
         exchange_server=exchange_server,
         active_directory_server=active_directory_server,
         username=username,
@@ -415,26 +420,36 @@ def get_stream_reader():
     return async_mock
 
 
-def side_effect_function(url, headers):
+def side_effect_function(client_emails=None):
     """Dynamically changing return values for API calls
     Args:
         url, ssl: Params required for get call
+        client_emails: Optional string of comma-separated email addresses
     """
-    if url == "https://graph.microsoft.com/v1.0/users?$top=999":
-        return get_json_mock(
-            mock_response={
-                "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token",
-                "value": [{"mail": "test.user@gmail.com"}],
-            },
-            status=200,
-        )
-    elif (
-        url
-        == "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token"
-    ):
-        return get_json_mock(
-            mock_response={"value": [{"mail": "dummy.user@gmail.com"}]}, status=200
-        )
+    def inner(url, headers):
+        if client_emails:
+            emails = [email.strip() for email in client_emails.split(",")]
+            for email in emails:
+                if url == f"https://graph.microsoft.com/v1.0/users/{email}":
+                    users_response = {"value": [{"mail": email}]}
+                    return get_json_mock(mock_response=users_response, status=200)
+        elif url == "https://graph.microsoft.com/v1.0/users?$top=999":
+            return get_json_mock(
+                mock_response={
+                    "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token",
+                    "value": [{"mail": "test.user@gmail.com"}],
+                },
+                status=200,
+            )
+        elif (
+            url
+            == "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token"
+        ):
+            return get_json_mock(
+                mock_response={"value": [{"mail": "dummy.user@gmail.com"}]}, status=200
+            )
+    
+    return inner
 
 
 @pytest.mark.asyncio
@@ -459,6 +474,7 @@ def side_effect_function(url, headers):
                 "tenant_id": "foo",
                 "client_id": "bar",
                 "client_secret": "",
+                "client_emails": None,
             }
         ),
     ],
@@ -497,6 +513,17 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
                 "tenant_id": "foo",
                 "client_id": "bar",
                 "client_secret": "foo.bar",
+                "client_emails": None
+            }
+        ),
+        (
+            # Outlook Cloud with non-blank dependent fields & client_emails provided
+            {
+                "data_source": OUTLOOK_CLOUD,
+                "tenant_id": "foo",
+                "client_id": "bar",
+                "client_secret": "foo.bar",
+                "client_emails": "test.user@gmail.com"
             }
         ),
     ],
@@ -552,7 +579,7 @@ async def test_ping_for_cloud():
         ):
             with mock.patch(
                 "aiohttp.ClientSession.get",
-                side_effect=side_effect_function,
+                side_effect=side_effect_function(),
             ):
                 await source.ping()
 
@@ -597,12 +624,48 @@ async def test_get_users_for_cloud():
         ):
             with mock.patch(
                 "aiohttp.ClientSession.get",
-                side_effect=side_effect_function,
+                side_effect=side_effect_function(),
             ):
                 async for response in source.client._get_user_instance.get_users():
                     user_mails = [user["mail"] for user in response["value"]]
                     users.extend(user_mails)
                 assert users == ["test.user@gmail.com", "dummy.user@gmail.com"]
+
+    client_emails = "one.user@gmail.com"
+    async with create_outlook_source(client_emails=client_emails) as source:
+        users = []
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=get_json_mock(
+                mock_response={"access_token": "fake-token"}, status=200
+            ),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=side_effect_function(client_emails),
+            ):
+                async for response in source.client._get_user_instance.get_users():
+                    user_mails = [user["mail"] for user in response["value"]]
+                    users.extend(user_mails)
+                assert users == ["one.user@gmail.com"]
+
+    client_emails = "first.user@gmail.com, second.user@gmail.com"
+    async with create_outlook_source(client_emails=client_emails) as source:
+        users = []
+        with mock.patch(
+            "aiohttp.ClientSession.post",
+            return_value=get_json_mock(
+                mock_response={"access_token": "fake-token"}, status=200
+            ),
+        ):
+            with mock.patch(
+                "aiohttp.ClientSession.get",
+                side_effect=side_effect_function(client_emails),
+            ):
+                async for response in source.client._get_user_instance.get_users():
+                    user_mails = [user["mail"] for user in response["value"]]
+                    users.extend(user_mails)
+                assert set(users) == {"first.user@gmail.com", "second.user@gmail.com"}
 
 
 @pytest.mark.asyncio

@@ -7,9 +7,11 @@
 
 import asyncio
 import os
+from abc import ABC, abstractmethod
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
+from typing import List
 
 import aiofiles
 import aiohttp
@@ -348,13 +350,13 @@ class ExchangeUsers:
             yield user_account
 
 
-class Office365Users:
-    """Fetch users from Office365 Active Directory"""
+class BaseOffice365User(ABC):
+    """Abstract base class for Office 365 user management"""
 
     def __init__(self, client_id, client_secret, tenant_id):
-        self.tenant_id = tenant_id
         self.client_id = client_id
         self.client_secret = client_secret
+        self.tenant_id = tenant_id
 
     @cached_property
     def _get_session(self):
@@ -402,6 +404,21 @@ class Office365Users:
                 return token_response["access_token"]
         except Exception as exception:
             self._check_errors(response=exception)
+
+    @abstractmethod
+    async def get_users(self):
+        pass
+
+    @abstractmethod
+    async def get_user_accounts(self):
+        pass 
+
+
+class Office365Users(BaseOffice365User):
+    """Fetch users from Office365 Active Directory"""
+
+    def __init__(self, client_id, client_secret, tenant_id):
+        super().__init__(client_id, client_secret, tenant_id)
 
     @retryable(
         retries=RETRIES,
@@ -454,6 +471,57 @@ class Office365Users:
                     access_type=IMPERSONATION,
                 )
                 yield user_account
+
+
+class MultiOffice365Users(BaseOffice365User):
+    """Fetch multiple Office365 users based on a list of email addresses."""
+
+    def __init__(self, client_id, client_secret, tenant_id, client_emails: List[str]):
+        super().__init__(client_id, client_secret, tenant_id)
+        self.client_emails = client_emails
+
+    async def get_users(self):
+        access_token = await self._fetch_token()
+        for email in self.client_emails:
+            url = f"https://graph.microsoft.com/v1.0/users/{email}"
+            try:
+                async with self._get_session.get(
+                    url=url,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json",
+                    },
+                ) as response:
+                    json_response = await response.json()
+                    yield json_response
+            except Exception:
+                raise
+
+    async def get_user_accounts(self):
+        async for user in self.get_users():
+            mail = user.get("mail")
+            if mail is None:
+                continue
+
+            credentials = OAuth2Credentials(
+                client_id=self.client_id,
+                tenant_id=self.tenant_id,
+                client_secret=self.client_secret,
+                identity=Identity(primary_smtp_address=mail),
+            )
+            configuration = Configuration(
+                credentials=credentials,
+                auth_type=OAUTH2,
+                service_endpoint=EWS_ENDPOINT,
+                retry_policy=FaultTolerance(max_wait=120),
+            )
+            user_account = Account(
+                primary_smtp_address=mail,
+                config=configuration,
+                autodiscover=False,
+                access_type=IMPERSONATION,
+            )
+            yield user_account
 
 
 class OutlookDocFormatter:
@@ -583,6 +651,27 @@ class OutlookDocFormatter:
         }
 
 
+class UserFactory:
+    """Factory class for creating Office365 user instances"""
+
+    @staticmethod
+    def create_user(configuration: dict) -> BaseOffice365User:
+        if configuration.get("client_emails"):
+            client_emails = [email.strip() for email in configuration["client_emails"].split(",")]
+            return MultiOffice365Users(
+                client_id=configuration["client_id"],
+                client_secret=configuration["client_secret"],
+                tenant_id=configuration["tenant_id"],
+                client_emails=client_emails
+            )
+        else:
+            return Office365Users(
+                client_id=configuration["client_id"],
+                client_secret=configuration["client_secret"],
+                tenant_id=configuration["tenant_id"]
+            )
+
+
 class OutlookClient:
     """Outlook client to handle API calls made to Outlook"""
 
@@ -605,11 +694,7 @@ class OutlookClient:
     @cached_property
     def _get_user_instance(self):
         if self.is_cloud:
-            return Office365Users(
-                client_id=self.configuration["client_id"],
-                client_secret=self.configuration["client_secret"],
-                tenant_id=self.configuration["tenant_id"],
-            )
+            return UserFactory.create_user(self.configuration)
 
         return ExchangeUsers(
             ad_server=self.configuration["active_directory_server"],
@@ -666,9 +751,12 @@ class OutlookClient:
             yield task
 
     async def get_contacts(self, account):
-        folder = account.root / "Top of Information Store" / "Contacts"
-        for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
-            yield contact
+        try:
+            folder = account.root / "Top of Information Store" / "Contacts"
+            for contact in await asyncio.to_thread(folder.all().only, *CONTACT_FIELDS):
+                yield contact
+        except Exception:
+            raise
 
 
 class OutlookDataSource(BaseDataSource):
@@ -733,6 +821,13 @@ class OutlookDataSource(BaseDataSource):
                 "label": "Client Secret Value",
                 "order": 4,
                 "sensitive": True,
+                "type": "str",
+            },
+            "client_emails": {
+                "depends_on": [{"field": "data_source", "value": OUTLOOK_CLOUD}],
+                "label": "Client Email Addresses (comma-separated)",
+                "order": 5,
+                "required": False,
                 "type": "str",
             },
             "exchange_server": {
@@ -1072,9 +1167,11 @@ class OutlookDataSource(BaseDataSource):
             dictionary: dictionary containing meta-data of the files.
         """
         async for account in self.client._get_user_instance.get_user_accounts():
+            self._logger.debug(f"Processing account: {account}")
             timezone = account.default_timezone or DEFAULT_TIMEZONE
 
             async for mail in self._fetch_mails(account=account, timezone=timezone):
+                self._logger.debug(f"Fetched mail: {mail}")
                 yield mail
 
             async for contact in self._fetch_contacts(
