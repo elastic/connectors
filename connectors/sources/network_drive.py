@@ -724,8 +724,7 @@ class NASDataSource(BaseDataSource):
         rid_groups = []
 
         for group_sid in groups_info or []:
-            rid = group_sid.split("-")[-1]
-            rid_groups.append(_prefix_rid(rid))
+            rid_groups.append(_prefix_rid(group_sid.split("-")[-1]))
 
         access_control = [rid_user, prefixed_username, *rid_groups]
 
@@ -744,13 +743,14 @@ class NASDataSource(BaseDataSource):
             try:
                 csv_reader = csv.reader(file, delimiter=";")
                 for row in csv_reader:
-                    user_info.append(
-                        {
-                            "name": row[0],
-                            "user_sid": row[1],
-                            "groups": row[2].split(",") if len(row[2]) > 0 else [],
-                        }
-                    )
+                    if row:
+                        user_info.append(
+                            {
+                                "name": row[0],
+                                "user_sid": row[1],
+                                "groups": row[2].split(",") if len(row[2]) > 0 else [],
+                            }
+                        )
             except csv.Error as e:
                 self._logger.exception(
                     f"Error while reading user mapping file at the location: {self.identity_mappings}. Error: {e}"
@@ -880,9 +880,14 @@ class NASDataSource(BaseDataSource):
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             async for document in self.fetch_filtered_directory(advanced_rules):
-                yield document, partial(self.get_content, document) if document[
-                    "type"
-                ] == "file" else None
+                yield (
+                    document,
+                    (
+                        partial(self.get_content, document)
+                        if document["type"] == "file"
+                        else None
+                    ),
+                )
 
         else:
             groups_info = {}
@@ -892,8 +897,13 @@ class NASDataSource(BaseDataSource):
             async for document in self.traverse_diretory(
                 path=rf"\\{self.server_ip}/{self.drive_path}"
             ):
-                yield await self._decorate_with_access_control(
-                    document, document["path"], document["type"], groups_info
-                ), partial(self.get_content, document) if document[
-                    "type"
-                ] == "file" else None
+                yield (
+                    await self._decorate_with_access_control(
+                        document, document["path"], document["type"], groups_info
+                    ),
+                    (
+                        partial(self.get_content, document)
+                        if document["type"] == "file"
+                        else None
+                    ),
+                )
