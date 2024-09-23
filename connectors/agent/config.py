@@ -31,11 +31,9 @@ class ConnectorsAgentConfigurationWrapper:
         self._default_config = {
             "service": {
                 "log_level": "INFO",
-            },
-            "_force_allow_native": True,
-            "service": {
                 "_use_native_connector_api_keys": False,
             },
+            "_force_allow_native": True,
             "native_service_types": [
                 "azure_blob_storage",
                 "box",
@@ -178,8 +176,8 @@ class ConnectorsAgentConfigurationWrapper:
         """
         # First take "default config"
         config = self._default_config.copy()
-        # Then override with what we get from Agent
-        config.update(self.specific_config)
+        # Then merge with what we get from Agent
+        config = dict(add_defaults(self.specific_config, default_config=config))
         # Then merge with default connectors config
         configuration = dict(add_defaults(config))
 
