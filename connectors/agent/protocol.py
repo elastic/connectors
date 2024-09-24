@@ -3,10 +3,14 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+
 from elastic_agent_client.generated import elastic_agent_client_pb2 as proto
 from elastic_agent_client.handler.action import BaseActionHandler
 from elastic_agent_client.handler.checkin import BaseCheckinHandler
-from elastic_agent_client.util.logger import logger
+
+from connectors.agent.logger import get_logger
+
+logger = get_logger("protocol")
 
 
 class ConnectorActionHandler(BaseActionHandler):
@@ -64,12 +68,10 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                 for unit in self.client.units
                 if unit.unit_type == proto.UnitType.OUTPUT
             ]
-
             if len(outputs) > 0 and outputs[0].config:
                 logger.debug("Outputs were found")
-                source = outputs[0].config.source
 
-                changed = self.agent_connectors_config_wrapper.try_update(source)
+                changed = self.agent_connectors_config_wrapper.try_update(outputs[0])
                 if changed:
                     logger.info("Updating connector service manager config")
                     self.service_manager.restart()
