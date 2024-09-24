@@ -11,9 +11,12 @@ from elastic_agent_client.service.actions import ActionsService
 from elastic_agent_client.service.checkin import CheckinV2Service
 
 from connectors.agent.config import ConnectorsAgentConfigurationWrapper
+from connectors.agent.logger import get_logger
 from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 from connectors.agent.service_manager import ConnectorServiceManager
 from connectors.services.base import MultiService
+
+logger = get_logger("component")
 
 CONNECTOR_SERVICE = "connector-service"
 
@@ -51,6 +54,7 @@ class ConnectorsAgentComponent:
 
         Additionally services for handling Check-in and Actions will be started to implement the protocol correctly.
         """
+        logger.info("Starting connectors agent component")
         client = new_v2_from_reader(self.buffer, self.ver, self.opts)
         action_handler = ConnectorActionHandler()
         self.connector_service_manager = ConnectorServiceManager(self.config_wrapper)
@@ -71,4 +75,5 @@ class ConnectorsAgentComponent:
 
         Attempts to gracefully shutdown the services that are running under the component.
         """
+        logger.info("Shutting down connectors agent component")
         self.multi_service.shutdown(sig)
