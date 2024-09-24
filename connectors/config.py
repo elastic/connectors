@@ -28,8 +28,10 @@ def load_config(config_file):
     return configuration
 
 
-def add_defaults(config):
-    configuration = dict(_merge_dicts(_default_config(), config))
+def add_defaults(config, default_config=None):
+    if default_config is None:
+        default_config = _default_config()
+    configuration = dict(_merge_dicts(default_config, config))
     return configuration
 
 
