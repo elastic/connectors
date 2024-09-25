@@ -44,4 +44,4 @@ notion-client==2.2.1
 certifi==2024.7.4
 aioboto3==12.4.0
 pyasn1<0.6.1
-smbprotocol==1.14.0
+smbprotocol==1.10.1
