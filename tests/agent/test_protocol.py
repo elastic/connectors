@@ -96,6 +96,7 @@ class TestConnectorCheckingHandler:
         unit_mock = Mock()
         unit_mock.unit_type = proto.UnitType.OUTPUT
         unit_mock.config.source = {"elasticsearch": {"api_key": 123}}
+        unit_mock.config.type = "elasticsearch"
 
         client_mock.units = [unit_mock]
 
@@ -105,7 +106,84 @@ class TestConnectorCheckingHandler:
 
         await checkin_handler.apply_from_client()
 
-        assert config_wrapper_mock.try_update.called_once_with(unit_mock.config.source)
+        assert config_wrapper_mock.try_update.called_once_with(unit_mock)
+        assert service_manager_mock.restart.called
+
+    @pytest.mark.asyncio
+    async def test_apply_from_client_when_units_with_multiple_outputs_and_updating_config(
+        self,
+    ):
+        client_mock = Mock()
+        config_wrapper_mock = Mock()
+
+        config_wrapper_mock.try_update.return_value = True
+
+        service_manager_mock = Mock()
+
+        unit_es = Mock()
+        unit_es.unit_type = proto.UnitType.OUTPUT
+        unit_es.config.type = "elasticsearch"
+        unit_es.config.id = "config-es"
+
+        unit_kafka = Mock()
+        unit_kafka.unit_type = proto.UnitType.OUTPUT
+        unit_kafka.config.type = "kafka"
+        unit_kafka.config.id = "config-kafka"
+
+        client_mock.units = [unit_kafka, unit_es]
+
+        checkin_handler = ConnectorCheckinHandler(
+            client_mock, config_wrapper_mock, service_manager_mock
+        )
+
+        await checkin_handler.apply_from_client()
+
+        # Only ES output from the policy should be used by connectors component
+        assert config_wrapper_mock.try_update.called_once()
+        called_unit = config_wrapper_mock.try_update.call_args[0][0]
+        assert called_unit.config.id == "config-es"
+
+        assert service_manager_mock.restart.called
+
+    @pytest.mark.asyncio
+    async def test_apply_from_client_when_units_with_multiple_mixed_outputs_and_updating_config(
+        self,
+    ):
+        client_mock = Mock()
+        config_wrapper_mock = Mock()
+
+        config_wrapper_mock.try_update.return_value = True
+
+        service_manager_mock = Mock()
+
+        unit_es_1 = Mock()
+        unit_es_1.unit_type = proto.UnitType.OUTPUT
+        unit_es_1.config.type = "elasticsearch"
+        unit_es_1.config.id = "config-es-1"
+
+        unit_es_2 = Mock()
+        unit_es_2.unit_type = proto.UnitType.OUTPUT
+        unit_es_2.config.type = "elasticsearch"
+        unit_es_2.config.id = "config-es-2"
+
+        unit_kafka = Mock()
+        unit_kafka.unit_type = proto.UnitType.OUTPUT
+        unit_kafka.config.type = "kafka"
+        unit_kafka.config.id = "config-kafka"
+
+        client_mock.units = [unit_kafka, unit_es_2, unit_es_1]
+
+        checkin_handler = ConnectorCheckinHandler(
+            client_mock, config_wrapper_mock, service_manager_mock
+        )
+
+        await checkin_handler.apply_from_client()
+
+        # First ES output from the policy should be used by connectors component
+        assert config_wrapper_mock.try_update.called_once()
+        called_unit = config_wrapper_mock.try_update.call_args[0][0]
+        assert called_unit.config.id == "config-es-2"
+
         assert service_manager_mock.restart.called
 
     @pytest.mark.asyncio
@@ -125,7 +203,7 @@ class TestConnectorCheckingHandler:
             config=proto.UnitExpectedConfig(
                 source=Struct(),
                 id="config-1",
-                type="test-config",
+                type="elasticsearch",
                 name="test-config-name",
                 revision=None,
                 meta=None,
