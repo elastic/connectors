@@ -84,7 +84,7 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                         "Multiple Elasticsearch outputs detected. The first ES output defined in the agent policy will be used."
                     )
 
-                logger.debug("Elasticse arch outputs found.")
+                logger.debug("Elasticsearch outputs found.")
 
                 configuration_changed = self.agent_connectors_config_wrapper.try_update(
                     elasticsearch_outputs[0]
