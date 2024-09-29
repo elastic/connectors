@@ -12,7 +12,7 @@ metadata:
   annotations:
     backstage.io/source-location: "url:https://github.com/elastic/connectors/"
     github.com/project-slug: "elastic/connectors"
-    github.com/team-slug: "elastic/ingestion-team"
+    github.com/team-slug: "elastic/search-extract-and-transform"
     buildkite.com/project-slug: "elastic/connectors"
   tags:
     - "python"
@@ -20,7 +20,7 @@ metadata:
 spec:
   type: "service"
   lifecycle: "production"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
 
 # ------------------------------------------------------------------------------
 # this is the main pipeline, triggered via pull requests and merges
@@ -36,7 +36,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -63,7 +63,7 @@ spec:
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 # ------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -112,7 +112,7 @@ spec:
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 ---
@@ -126,7 +126,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -158,7 +158,7 @@ spec:
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 ########
@@ -177,7 +177,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -201,7 +201,7 @@ spec:
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 ########
@@ -218,7 +218,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors-docker-build-publish"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -231,7 +231,7 @@ spec:
       provider_settings:
         trigger_mode: "none"
       teams:
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
         everyone:
           access_level: "READ_ONLY"

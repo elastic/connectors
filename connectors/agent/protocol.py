@@ -60,20 +60,39 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         agent expects the components to respond within 30 seconds.
         See comment in https://github.com/elastic/elastic-agent-client/blob/main/elastic-agent-client.proto#L29
         """
-        logger.info("There's new information for the components/units!")
+        logger.info("New information available for components/units")
+
         if self.client.units:
             logger.debug("Client reported units")
+
             outputs = [
                 unit
                 for unit in self.client.units
                 if unit.unit_type == proto.UnitType.OUTPUT
             ]
-            if len(outputs) > 0 and outputs[0].config:
-                logger.debug("Outputs were found")
 
-                changed = self.agent_connectors_config_wrapper.try_update(outputs[0])
-                if changed:
-                    logger.info("Updating connector service manager config")
+            # Filter Elasticsearch outputs from the available outputs
+            elasticsearch_outputs = [
+                output
+                for output in outputs
+                if output.config and output.config.type == "elasticsearch"
+            ]
+
+            if elasticsearch_outputs:
+                if len(elasticsearch_outputs) > 1:
+                    logger.warning(
+                        "Multiple Elasticsearch outputs detected. The first ES output defined in the agent policy will be used."
+                    )
+
+                logger.debug("Elasticsearch outputs found.")
+
+                configuration_changed = self.agent_connectors_config_wrapper.try_update(
+                    elasticsearch_outputs[0]
+                )
+                if configuration_changed:
+                    logger.info(
+                        "Connector service manager config updated. Restarting service manager."
+                    )
                     self.service_manager.restart()
                 else:
                     logger.debug("No changes to connectors config")
