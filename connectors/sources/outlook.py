@@ -690,9 +690,7 @@ class UserFactory:
     @staticmethod
     def create_user(configuration: dict) -> BaseOffice365User:
         if configuration.get("client_emails"):
-            client_emails = [
-                email.strip() for email in configuration["client_emails"].split(",")
-            ]
+            client_emails = [email.strip() for email in configuration["client_emails"]]
             return MultiOffice365Users(
                 client_id=configuration["client_id"],
                 client_secret=configuration["client_secret"],
@@ -865,7 +863,7 @@ class OutlookDataSource(BaseDataSource):
                 "order": 5,
                 "tooltip": "Specify the email addresses to limit data fetching to specific clients. If left empty, data will be fetched for all users.",
                 "required": False,
-                "type": "str",
+                "type": "list",
             },
             "exchange_server": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
