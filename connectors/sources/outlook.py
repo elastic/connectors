@@ -214,6 +214,18 @@ class SSLFailed(Exception):
     pass
 
 
+class OutlookUserFetchFailed(Exception):
+    """Exception class to notify that fetching a specific user from Outlook failed."""
+
+    pass
+
+
+class BatchRequestFailed(Exception):
+    """Exception class to notify that a batch request to fetch users failed."""
+
+    pass
+
+
 class ManageCertificate:
     async def store_certificate(self, certificate):
         async with aiofiles.open(CERT_FILE, "w") as file:
@@ -482,20 +494,41 @@ class MultiOffice365Users(BaseOffice365User):
 
     async def get_users(self):
         access_token = await self._fetch_token()
-        for email in self.client_emails:
-            url = f"https://graph.microsoft.com/v1.0/users/{email}"
+        errors = []
+        for i in range(0, len(self.client_emails), 20):
+            batch_emails = self.client_emails[i : i + 20]
+            requests = [
+                {"id": str(index + 1), "method": "GET", "url": f"/users/{email}"}
+                for index, email in enumerate(batch_emails)
+            ]
+            batch_request_body = {"requests": requests}
             try:
-                async with self._get_session.get(
-                    url=url,
+                async with self._get_session.post(
+                    url="https://graph.microsoft.com/v1.0/$batch",
                     headers={
                         "Authorization": f"Bearer {access_token}",
                         "Content-Type": "application/json",
                     },
+                    json=batch_request_body,
                 ) as response:
                     json_response = await response.json()
-                    yield json_response
-            except Exception:
-                raise
+                    for res in json_response.get("responses", []):
+                        user_id = res.get("id")
+                        status = res.get("status")
+                        if status == 200:
+                            yield res.get("body")
+                        else:
+                            msg = f"Error for user {user_id}: {res.get('body')}"
+                            errors.append(OutlookUserFetchFailed(msg))
+            except Exception as e:
+                msg = f"Batch request failed: {str(e)}"
+                errors.append(BatchRequestFailed(msg))
+
+        if errors:
+            msg = "Errors occurred while fetching users: " + "\n".join(
+                str(e) for e in errors
+            )
+            raise Exception(msg)
 
     async def get_user_accounts(self):
         async for user in self.get_users():
@@ -714,7 +747,8 @@ class OutlookClient:
             yield user
 
     async def ping(self):
-        await anext(self._get_user_instance.get_users())
+        async for _user in self._get_user_instance.get_users():
+            return
 
     async def get_mails(self, account):
         for mail_type in MAIL_TYPES:
