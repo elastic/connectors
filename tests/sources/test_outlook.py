@@ -426,6 +426,7 @@ def side_effect_function(client_emails=None):
         url, ssl: Params required for get call
         client_emails: Optional string of comma-separated email addresses
     """
+
     def inner(url, headers):
         if client_emails:
             emails = [email.strip() for email in client_emails.split(",")]
@@ -448,7 +449,7 @@ def side_effect_function(client_emails=None):
             return get_json_mock(
                 mock_response={"value": [{"mail": "dummy.user@gmail.com"}]}, status=200
             )
-    
+
     return inner
 
 
@@ -513,7 +514,7 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
                 "tenant_id": "foo",
                 "client_id": "bar",
                 "client_secret": "foo.bar",
-                "client_emails": None
+                "client_emails": None,
             }
         ),
         (
@@ -523,7 +524,7 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
                 "tenant_id": "foo",
                 "client_id": "bar",
                 "client_secret": "foo.bar",
-                "client_emails": "test.user@gmail.com"
+                "client_emails": "test.user@gmail.com",
             }
         ),
     ],

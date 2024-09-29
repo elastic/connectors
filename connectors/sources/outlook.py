@@ -411,7 +411,7 @@ class BaseOffice365User(ABC):
 
     @abstractmethod
     async def get_user_accounts(self):
-        pass 
+        pass
 
 
 class Office365Users(BaseOffice365User):
@@ -657,18 +657,20 @@ class UserFactory:
     @staticmethod
     def create_user(configuration: dict) -> BaseOffice365User:
         if configuration.get("client_emails"):
-            client_emails = [email.strip() for email in configuration["client_emails"].split(",")]
+            client_emails = [
+                email.strip() for email in configuration["client_emails"].split(",")
+            ]
             return MultiOffice365Users(
                 client_id=configuration["client_id"],
                 client_secret=configuration["client_secret"],
                 tenant_id=configuration["tenant_id"],
-                client_emails=client_emails
+                client_emails=client_emails,
             )
         else:
             return Office365Users(
                 client_id=configuration["client_id"],
                 client_secret=configuration["client_secret"],
-                tenant_id=configuration["tenant_id"]
+                tenant_id=configuration["tenant_id"],
             )
 
 
@@ -827,40 +829,41 @@ class OutlookDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_CLOUD}],
                 "label": "Client Email Addresses (comma-separated)",
                 "order": 5,
+                "tooltip": "Specify the email addresses to limit data fetching to specific clients. If left empty, data will be fetched for all users.",
                 "required": False,
                 "type": "str",
             },
             "exchange_server": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange Server",
-                "order": 5,
+                "order": 6,
                 "tooltip": "Exchange server's IP address. E.g. 127.0.0.1",
                 "type": "str",
             },
             "active_directory_server": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Active Directory Server",
-                "order": 6,
+                "order": 7,
                 "tooltip": "Active Directory server's IP address. E.g. 127.0.0.1",
                 "type": "str",
             },
             "username": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server username",
-                "order": 7,
+                "order": 8,
                 "type": "str",
             },
             "password": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server password",
-                "order": 8,
+                "order": 9,
                 "sensitive": True,
                 "type": "str",
             },
             "domain": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "label": "Exchange server domain name",
-                "order": 9,
+                "order": 10,
                 "tooltip": "Domain name such as gmail.com, outlook.com",
                 "type": "str",
             },
@@ -868,7 +871,7 @@ class OutlookDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
                 "display": "toggle",
                 "label": "Enable SSL",
-                "order": 10,
+                "order": 11,
                 "type": "bool",
                 "value": False,
             },
@@ -878,13 +881,13 @@ class OutlookDataSource(BaseDataSource):
                     {"field": "ssl_enabled", "value": True},
                 ],
                 "label": "SSL certificate",
-                "order": 11,
+                "order": 12,
                 "type": "str",
             },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 12,
+                "order": 13,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -893,7 +896,7 @@ class OutlookDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 13,
+                "order": 14,
                 "tooltip": "Document level security ensures identities and permissions set in Outlook are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
