@@ -263,18 +263,16 @@ class ConfluenceClient:
         while True:
             try:
                 self._logger.debug(f"Starting pagination for API endpoint {url}")
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    links = json_response.get("_links")
-                    yield json_response
-                    if links.get("next") is None:
-                        return
-                    url = os.path.join(
-                        self.host_url,
-                        links.get("next")[1:],
-                    )
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                links = json_response.get("_links")
+                yield json_response
+                if links.get("next") is None:
+                    return
+                url = os.path.join(
+                    self.host_url,
+                    links.get("next")[1:],
+                )
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
@@ -296,15 +294,13 @@ class ConfluenceClient:
                 self._logger.debug(
                     f"Starting pagination for API endpoint: {URLS[url_name].format(**url_kwargs)} to host: {self.host_url} with the following parameters -> start: {start}, limit: {LIMIT}"
                 )
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    yield json_response
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                yield json_response
 
-                    start = url_kwargs.get("start", 0)
-                    start += LIMIT
-                    url_kwargs["start"] = start
+                start = url_kwargs.get("start", 0)
+                start += LIMIT
+                url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
             except Exception as exception:
