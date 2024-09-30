@@ -20,12 +20,12 @@ source $CURDIR/publish-common.sh
 pushd $PROJECT_ROOT
 
 # set our complete tag name and build the image
-TAG_NAME="$BASE_TAG_NAME:${VERSION}-${ARCHITECTURE}"
+TAG_NAME="$BASE_TAG_NAME:${DOCKER_TAG_VERSION}-${ARCHITECTURE}"
 docker build -f $DOCKERFILE_PATH -t $TAG_NAME .
 
 # save the image to an archive file
 OUTPUT_PATH="$PROJECT_ROOT/.artifacts"
-OUTPUT_FILE="$OUTPUT_PATH/${DOCKER_ARTIFACT_KEY}-${VERSION}-${ARCHITECTURE}.tar.gz"
+OUTPUT_FILE="$OUTPUT_PATH/${DOCKER_ARTIFACT_KEY}-${DOCKER_TAG_VERSION}-${ARCHITECTURE}.tar.gz"
 mkdir -p $OUTPUT_PATH
 docker save $TAG_NAME | gzip > $OUTPUT_FILE
 

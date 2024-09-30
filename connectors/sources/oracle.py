@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Oracle source module is responsible to fetch documents from Oracle."""
+
 import asyncio
 import os
 from functools import cached_property, partial
@@ -143,7 +144,8 @@ class OracleClient:
             loop = asyncio.get_running_loop()
             if self.connection is None:
                 self.connection = await loop.run_in_executor(
-                    executor=None, func=self.engine.connect  # pyright: ignore
+                    executor=None,
+                    func=self.engine.connect,  # pyright: ignore
                 )
             cursor = await loop.run_in_executor(
                 executor=None,
@@ -349,6 +351,7 @@ class OracleDataSource(BaseDataSource):
                 "options": [],
                 "order": 8,
                 "type": "list",
+                "value": "*",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,

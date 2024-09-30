@@ -89,17 +89,25 @@
                         "type": "list",
                         "value": "*"
                 },
+                "index_labels": {
+                        "display": "toggle",
+                        "label": "Enable indexing labels",
+                        "order": 10,
+                        "tooltip": "Enabling this will increase the amount of network calls to the source, and may decrease performance",
+                        "type": "bool",
+                        "value": true
+                },
                 "ssl_enabled": {
                         "display": "toggle",
                         "label": "Enable SSL",
-                        "order": 10,
+                        "order": 11,
                         "type": "bool",
                         "value": false
                 },
                 "ssl_ca": {
                         "depends_on": [{"field": "ssl_enabled", "value": true}],
                         "label": "SSL certificate",
-                        "order": 11,
+                        "order": 12,
                         "type": "str",
                         "value": ""
                 },
@@ -107,7 +115,7 @@
                         "default_value": 3,
                         "display": "numeric",
                         "label": "Retries per request",
-                        "order": 12,
+                        "order": 13,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -117,7 +125,7 @@
                         "default_value": 50,
                         "display": "numeric",
                         "label": "Maximum concurrent downloads",
-                        "order": 13,
+                        "order": 14,
                         "required": false,
                         "type": "int",
                         "ui_restrictions": ["advanced"],
@@ -129,7 +137,7 @@
                 "use_document_level_security": {
                         "display": "toggle",
                         "label": "Enable document level security",
-                        "order": 14,
+                        "order": 15,
                         "tooltip": "Document level security ensures identities and permissions set in confluence are maintained in Elasticsearch. This enables you to restrict and personalize read-access users have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                         "type": "bool",
                         "value": false
@@ -140,7 +148,7 @@
                         "display": "toggle",
                         "label": "Use text extraction service",
                         "options": [],
-                        "order": 13,
+                        "order": 16,
                         "required": true,
                         "sensitive": false,
                         "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",

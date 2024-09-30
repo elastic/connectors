@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """GraphQL source module responsible to fetch documents based on GraphQL Query."""
+
 import json
 import re
 from copy import deepcopy
@@ -59,9 +60,9 @@ class FieldVisitor(Visitor):
             for arg in node.arguments:
                 self.fields_dict[node.name.value].append(arg.name.value)
                 if isinstance(arg.value, VariableNode):
-                    self.variables_dict[node.name.value][
-                        arg.name.value
-                    ] = arg.value.name.value
+                    self.variables_dict[node.name.value][arg.name.value] = (
+                        arg.value.name.value
+                    )
 
 
 class UnauthorizedException(Exception):
@@ -211,9 +212,9 @@ class GraphQLClient:
                 ) = self.extract_pagination_info(data)
 
                 if has_next_page and end_cursor:
-                    self.variables[
-                        visitor.variables_dict[pagination_key]["after"]
-                    ] = end_cursor
+                    self.variables[visitor.variables_dict[pagination_key]["after"]] = (
+                        end_cursor
+                    )
                     has_new_page = True
 
                 for documents in self.extract_graphql_data_items(data=data):

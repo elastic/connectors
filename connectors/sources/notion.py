@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Notion source module responsible to fetch documents from the Notion Platform."""
+
 import asyncio
 import json
 import os
@@ -173,9 +174,7 @@ class NotionClient:
                 ):
                     yield child_block
 
-                    async for grandchild in fetch_children_recursively(
-                        child_block
-                    ):  # pyright: ignore
+                    async for grandchild in fetch_children_recursively(child_block):  # pyright: ignore
                         yield grandchild
 
         try:
@@ -357,6 +356,7 @@ class NotionDataSource(BaseDataSource):
     name = "Notion"
     service_type = "notion"
     advanced_rules_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup the connection to the Notion instance.
@@ -622,8 +622,9 @@ class NotionDataSource(BaseDataSource):
                 else:
                     file_url = child_block.get("file", {}).get("file", {}).get("url")
                     child_block = self._format_doc(child_block)
-                    yield child_block, partial(
-                        self.get_content, copy(child_block), file_url
+                    yield (
+                        child_block,
+                        partial(self.get_content, copy(child_block), file_url),
                     )
 
         if self.index_comments is True:

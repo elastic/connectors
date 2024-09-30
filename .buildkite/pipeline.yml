@@ -1,30 +1,64 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-2"
-  useVault: true
-  image: family/enterprise-search-ubuntu-2204-connectors-py
+retry:
+  automatic:
+    - exit_status: -1  # Connection to the Agent was lost
+      signal_reason: none
+      limit: 2
+    - exit_status: 255  # Timeout
+      signal_reason: none
+      limit: 2
+    - signal_reason: 2  # Flaky test
+      limit: 2
+
+definitions:
+  steps:
+    - step: &test-agents
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-2"
+          useVault: true
+          image: family/enterprise-search-ubuntu-2204-connectors-py
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
   - label: ":face_with_peeking_eye: Lint"
-    command: "make lint"
+    <<: *test-agents
+    key: "lint"
+    command: ".buildkite/run_linter.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
-  - label: ":pytest: Test"
-    command: "make test"
+  - label: ":pytest: Test with Python {{ matrix }}"
+    <<: *test-agents
+    key: "unit_tests"
+    command: ".buildkite/run_tests.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
     timeout_in_minutes: 5
+    matrix:
+      - "3.10"
+      - "3.11"
 
   - label: ":shipit: Smoke test"
-    command: "make ftest NAME=dir DATA_SIZE=small"
+    key: "smoke_test"
+    command: ".buildkite/run_functional_test.sh"
+    env:
+      PYTHON_VERSION: "3.11" # TODO: can actually do a matrix too
+      CONNECTOR: "dir"
+      DATA_SIZE: "small"
     timeout_in_minutes: 45
     agents:
       machineType: "n1-standard-8"
+      provider: "gcp"
+      useVault: true
+      image: family/enterprise-search-ubuntu-2204-connectors-py
 
   - label: ":sweating: Checking for changes in connectors"
+    key: "relevant_ftests"
     plugins:
-      chronotc/monorepo-diff#v2.4.0:
+      monorepo-diff#v1.0.1:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
@@ -33,10 +67,16 @@ steps:
             - "tests/sources/fixtures/mysql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 MySQL"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mysql
               command:
-                - ".buildkite/run_nigthly.sh mysql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -45,10 +85,16 @@ steps:
             - "tests/sources/fixtures/network_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Network Drive"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=network_drive
               command:
-                - ".buildkite/run_nigthly.sh network_drive small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -57,10 +103,16 @@ steps:
             - "tests/sources/fixtures/s3/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Amazon S3"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=s3
               command:
-                - ".buildkite/run_nigthly.sh s3 small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -69,10 +121,16 @@ steps:
             - "tests/sources/fixtures/google_cloud_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_cloud_storage
               command:
-                - ".buildkite/run_nigthly.sh google_cloud_storage small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -81,10 +139,16 @@ steps:
             - "tests/sources/fixtures/azure_blob_storage/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=azure_blob_storage
               command:
-                - ".buildkite/run_nigthly.sh azure_blob_storage small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -93,10 +157,16 @@ steps:
             - "tests/sources/fixtures/postgresql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Postgresql"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=postgresql
               command:
-                - ".buildkite/run_nigthly.sh postgresql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -105,10 +175,16 @@ steps:
             - "tests/sources/fixtures/dir/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 System Directory"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=dir
               command:
-                - ".buildkite/run_nigthly.sh dir small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -117,10 +193,16 @@ steps:
             - "tests/sources/fixtures/oracle/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Oracle Database"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=oracle
               command:
-                - ".buildkite/run_nigthly.sh oracle small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -129,10 +211,16 @@ steps:
             - "tests/sources/fixtures/sharepoint_server/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sharepoint_server
               command:
-                - ".buildkite/run_nigthly.sh sharepoint_server small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -141,10 +229,16 @@ steps:
             - "tests/sources/fixtures/sharepoint_online/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=sharepoint_online
               command:
-                - ".buildkite/run_nigthly.sh sharepoint_online small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -153,10 +247,16 @@ steps:
             - "tests/sources/fixtures/mssql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mssql
               command:
-                - ".buildkite/run_nigthly.sh mssql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -166,10 +266,16 @@ steps:
             - "tests/sources/fixtures/jira/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Jira"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=jira
               command:
-                - ".buildkite/run_nigthly.sh jira small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -179,10 +285,16 @@ steps:
             - "tests/sources/fixtures/confluence/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Confluence"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=confluence
               command:
-                - ".buildkite/run_nigthly.sh confluence small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -191,10 +303,16 @@ steps:
             - "tests/sources/fixtures/servicenow/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 ServiceNow"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=servicenow
               command:
-                - ".buildkite/run_nigthly.sh servicenow small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -203,10 +321,16 @@ steps:
             - "tests/sources/fixtures/mongodb/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 MongoDB"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=mongodb
               command:
-                - ".buildkite/run_nigthly.sh mongodb small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -215,10 +339,16 @@ steps:
             - "tests/sources/fixtures/github/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 GitHub"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=github
               command:
-                - ".buildkite/run_nigthly.sh github small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -227,10 +357,16 @@ steps:
             - "tests/sources/fixtures/google_drive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Google Drive"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=google_drive
               command:
-                - ".buildkite/run_nigthly.sh google_drive small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -239,10 +375,16 @@ steps:
             - "tests/sources/fixtures/dropbox/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Dropbox"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=dropbox
               command:
-                - ".buildkite/run_nigthly.sh dropbox small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -251,10 +393,16 @@ steps:
             - "tests/sources/fixtures/onedrive/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 OneDrive"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=onedrive
               command:
-                - ".buildkite/run_nigthly.sh onedrive small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -263,10 +411,16 @@ steps:
             - "tests/sources/fixtures/salesforce/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Salesforce"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=salesforce
               command:
-                - ".buildkite/run_nigthly.sh salesforce small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -275,10 +429,16 @@ steps:
             - "tests/sources/fixtures/zoom/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Zoom"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=zoom
               command:
-                - ".buildkite/run_nigthly.sh zoom small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -287,10 +447,16 @@ steps:
             - "tests/sources/fixtures/box/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Box"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=box
               command:
-                - ".buildkite/run_nigthly.sh box small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -299,10 +465,16 @@ steps:
             - "tests/sources/fixtures/microsoft_teams/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=microsoft_teams
               command:
-                - ".buildkite/run_nigthly.sh microsoft_teams small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
 
@@ -311,20 +483,34 @@ steps:
             - "tests/sources/fixtures/notion/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Notion"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=notion
               command:
-                - ".buildkite/run_nigthly.sh notion small"
+                - ".buildkite/run_functional_test.sh"
+              artifact_paths:
+                - "perf8-report-*/**/*"
           
           - path:
             - "connectors/sources/redis.py"
             - "tests/sources/fixtures/redis/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 Redis"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=redis
               command:
-                - ".buildkite/run_nigthly.sh redis small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
             
@@ -333,21 +519,98 @@ steps:
             - "tests/sources/fixtures/graphql/**"
             - "tests/sources/fixtures/fixture.py"
             - "${DOCKERFILE_FTEST_PATH}"
+            - "requirements/**"
             config:
               label: "🔨 GraphQL"
+              <<: *test-agents
+              env:
+                - PYTHON_VERSION=3.11
+                - DATA_SIZE=small
+                - CONNECTOR=graphql
               command:
-                - ".buildkite/run_nigthly.sh graphql small"
+                - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
-            
-          - path:
-            - "connectors/sources/opentext_documentum.py"
-            - "tests/sources/fixtures/opentext_documentum/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            config:
-              label: "🔨 Opentext Documentum"
-              command:
-                - ".buildkite/run_nigthly.sh opentext_documentum small"
-              artifact_paths:
-                - "perf8-report-*/**/*"
+
+  # ----
+  # DRA publishing
+  # ----
+  - group: ":truck: Packaging and DRA"
+    key: "mbp_dra_group"
+    if: "(build.branch == \"main\" || build.branch == \"8.x\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    depends_on:
+      - "lint"
+      - "unit_tests"
+      - "smoke_test"
+      - "relevant_ftests"
+    steps:
+      # ----
+      # Docker builds for amd64
+      # ----
+      - label: "Building amd64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_docker_image_amd64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing amd64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        depends_on: "build_docker_image_amd64"
+        key: "test_docker_image_amd64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_amd64
+          - ".buildkite/publish/test-docker.sh"
+
+      # ----
+      # Docker builds for arm64
+      # ----
+      - label: "Building arm64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_docker_image_arm64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing arm64 Docker image"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile.wolfi"
+        depends_on: "build_docker_image_arm64"
+        key: "test_docker_image_arm64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64
+          - ".buildkite/publish/test-docker.sh"
+
+      - label: ":truck: Publish DRA Items"
+        <<: *test-agents
+        key: "publish-dra-artifacts"
+        timeout_in_minutes: 45
+        depends_on:
+          - test_docker_image_amd64
+          - test_docker_image_arm64
+        command: ".buildkite/publish/dra/init_dra_publishing.sh"

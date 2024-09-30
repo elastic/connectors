@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
+
 import ssl
 from functools import cached_property, partial
 from urllib.parse import quote
@@ -56,21 +57,21 @@ class PostgreSQLQueries(Queries):
         """Query to get the primary key"""
         return (
             f"SELECT a.attname AS c FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
-            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{kwargs['schema']}.{kwargs['table']}'::regclass "
+            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '\"{kwargs['schema']}\".\"{kwargs['table']}\"'::regclass "
             f"AND i.indisprimary"
         )
 
     def table_data(self, **kwargs):
         """Query to get the table data"""
-        return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
+        return f'SELECT * FROM "{kwargs["schema"]}"."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
 
     def table_last_update_time(self, **kwargs):
         """Query to get the last update time of the table"""
-        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
     def table_data_count(self, **kwargs):
         """Query to get the number of rows in the table"""
-        return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
+        return f'SELECT COUNT(*) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
     def all_schemas(self):
         """Query to get all schemas of database"""
@@ -83,6 +84,7 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "tables": {"type": "array", "minItems": 1},
             "query": {"type": "string", "minLength": 1},
+            "id_columns": {"type": "array", "minItems": 1},
         },
         "required": ["tables", "query"],
         "additionalProperties": False,
@@ -196,6 +198,7 @@ class PostgreSQLClient:
         Returns:
             cursor: Asynchronous cursor
         """
+        self._logger.debug(f"Retrieving the cursor for query '{query}'")
         try:
             async with self.engine.connect() as connection:  # pyright: ignore
                 cursor = await connection.execute(text(query))
@@ -218,6 +221,7 @@ class PostgreSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
+            self._logger.info("Fetching all tables")
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -231,6 +235,7 @@ class PostgreSQLClient:
             ):
                 yield row[0]
         else:
+            self._logger.info(f"Fetching user configured tables: {tables}")
             for table in tables:
                 yield table
 
@@ -266,9 +271,12 @@ class PostgreSQLClient:
             )
         ]
 
+        self._logger.debug(f"Found primary keys for table '{table}': {primary_keys}")
+
         return primary_keys
 
     async def get_table_last_update_time(self, table):
+        self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
@@ -282,6 +290,7 @@ class PostgreSQLClient:
                 retry_count=self.retry_count,
             )
         )
+        self._logger.debug(f"Last updated time for table '{table}': {last_update_time}")
         return last_update_time
 
     async def data_streamer(
@@ -299,8 +308,12 @@ class PostgreSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        record_count = 0
         if query is None and row_count is not None and order_by_columns is not None:
-            order_by_columns_list = ",".join(order_by_columns)
+            self._logger.debug(f"Streaming records from database for table '{table}'")
+            order_by_columns_list = ",".join(
+                [f'"{column}"' for column in order_by_columns]
+            )
             offset = 0
             fetch_columns = True
             while True:
@@ -321,13 +334,18 @@ class PostgreSQLClient:
                     fetch_size=self.fetch_size,
                     retry_count=self.retry_count,
                 ):
+                    record_count += 1
                     yield data
                 fetch_columns = False
                 offset += FETCH_LIMIT
 
                 if row_count <= offset:
+                    self._logger.info(
+                        f"Found {record_count} records from table '{table}'"
+                    )
                     return
         else:
+            self._logger.debug(f"Streaming records from database using query: {query}")
             async for data in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -342,7 +360,10 @@ class PostgreSQLClient:
                 fetch_size=self.fetch_size,
                 retry_count=self.retry_count,
             ):
+                record_count += 1
                 yield data
+
+            self._logger.info(f"Found {record_count} records for '{query}' query")
 
     def _get_connect_args(self):
         """Convert string to pem format and create an SSL context
@@ -436,6 +457,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 "order": 7,
                 "tooltip": "This configurable field is ignored when Advanced Sync Rules are used.",
                 "type": "list",
+                "value": "*",
             },
             "fetch_size": {
                 "default_value": DEFAULT_FETCH_SIZE,
@@ -475,10 +497,9 @@ class PostgreSQLDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
-        self._logger.info("Validating the Connector Configuration...")
+        self._logger.debug("Pinging the PostgreSQL instance")
         try:
             await self.postgresql_client.ping()
-            self._logger.info("Successfully connected to Postgresql.")
         except Exception as e:
             msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
             raise Exception(msg) from e
@@ -496,12 +517,13 @@ class PostgreSQLDataSource(BaseDataSource):
         return row
 
     async def get_primary_key(self, tables):
+        self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
             primary_key_columns.extend(
                 await self.postgresql_client.get_table_primary_key(table)
             )
-        primary_key_columns = sorted(primary_key_columns)
+
         return (
             map_column_names(
                 column_names=primary_key_columns, schema=self.schema, tables=tables
@@ -518,16 +540,17 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(f"Fetching records for table '{table}'")
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for table {table}. Error: {exception}"
+                f"Something went wrong while fetching document for table '{table}'. Error: {exception}"
             )
 
-    async def fetch_documents_from_query(self, tables, query):
+    async def fetch_documents_from_query(self, tables, query, id_columns):
         """Fetches all the data from the given query and format them in Elasticsearch documents
 
         Args:
@@ -537,32 +560,43 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(
+            f"Fetching records for {tables} tables using custom query: {query}"
+        )
         try:
-            docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
+            docs_generator = self._yield_docs_custom_query(
+                tables=tables, query=query, id_columns=id_columns
+            )
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
+                f"Something went wrong while fetching document for query '{query}' and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query):
+    async def _yield_docs_custom_query(self, tables, query, id_columns):
         primary_key_columns, _ = await self.get_primary_key(tables=tables)
+
+        if id_columns:
+            primary_key_columns = id_columns
+
         if not primary_key_columns:
             self._logger.warning(
                 f"Skipping tables {', '.join(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
             )
             return
 
-        last_update_times = list(
-            filter(
-                lambda update_time: update_time is not None,
-                [
+        last_update_times = []
+        for table in tables:
+            try:
+                last_update_time = (
                     await self.postgresql_client.get_table_last_update_time(table)
-                    for table in tables
-                ],
-            )
-        )
+                )
+                last_update_times.append(last_update_time)
+            except Exception:
+                self._logger.warning("Last update time is not found for Table: {table}")
+                last_update_times.append(iso_utc())
+
         last_update_time = (
             max(last_update_times) if len(last_update_times) else iso_utc()
         )
@@ -574,7 +608,10 @@ class PostgreSQLDataSource(BaseDataSource):
 
             yield self.serialize(
                 doc=self.row2doc(
-                    row=row, doc_id=doc_id, table=tables, timestamp=last_update_time
+                    row=row,
+                    doc_id=doc_id,
+                    table=tables,
+                    timestamp=last_update_time or iso_utc(),
                 )
             )
 
@@ -582,6 +619,7 @@ class PostgreSQLDataSource(BaseDataSource):
         row_count = await self.postgresql_client.get_table_row_count(table=table)
         if row_count > 0:
             # Query to get the table's primary key
+            self._logger.debug(f"Total '{row_count}' rows found in table '{table}'")
             keys, order_by_columns = await self.get_primary_key(tables=[table])
             if keys:
                 try:
@@ -592,7 +630,7 @@ class PostgreSQLDataSource(BaseDataSource):
                     )
                 except Exception:
                     self._logger.warning(
-                        f"Unable to fetch last_updated_time for {table}"
+                        f"Unable to fetch last_updated_time for table  '{table}'"
                     )
                     last_update_time = None
                 async for row in self.yield_rows_for_query(
@@ -614,10 +652,10 @@ class PostgreSQLDataSource(BaseDataSource):
                     )
             else:
                 self._logger.warning(
-                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                    f"Skipping table '{table}' from database '{self.database}' since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
                 )
         else:
-            self._logger.warning(f"No rows found for {table}.")
+            self._logger.warning(f"No rows found for table '{table}'")
 
     async def yield_rows_for_query(
         self,
@@ -644,7 +682,7 @@ class PostgreSQLDataSource(BaseDataSource):
                 yield row
         else:
             self._logger.warning(
-                f"Skipping query {query} for tables {', '.join(tables)} as primary key column name is not present in query."
+                f"Skipping query {query} for tables {', '.join(tables)} as primary key column or unique ID column name is not present in query."
             )
 
     async def get_docs(self, filtering=None):
@@ -653,14 +691,23 @@ class PostgreSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
+        self._logger.info("Successfully connected to Postgresql.")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
+            self._logger.info(
+                f"Fetching records from the database using advanced sync rules: {advanced_rules}"
+            )
             for rule in advanced_rules:
                 query = rule.get("query")
                 tables = rule.get("tables")
-
+                id_columns = rule.get("id_columns")
+                if id_columns:
+                    id_columns = [
+                        f"{self.schema}_{'_'.join(sorted(tables))}_{column}"
+                        for column in id_columns
+                    ]
                 async for row in self.fetch_documents_from_query(
-                    tables=tables, query=query
+                    tables=tables, query=query, id_columns=id_columns
                 ):
                     yield row, None
 
@@ -668,9 +715,6 @@ class PostgreSQLDataSource(BaseDataSource):
             table_count = 0
 
             async for table in self.postgresql_client.get_tables_to_fetch():
-                self._logger.debug(
-                    f"Found table: {table} in database: {self.database}."
-                )
                 table_count += 1
                 async for row in self.fetch_documents_from_table(
                     table=table,

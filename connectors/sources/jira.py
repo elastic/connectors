@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Jira source module responsible to fetch documents from Jira on-prem or cloud server.
-"""
+"""Jira source module responsible to fetch documents from Jira on-prem or cloud server."""
+
 import asyncio
 from copy import copy
 from datetime import datetime
@@ -239,7 +239,8 @@ class JiraClient:
             response: Return api response.
         """
         url = url_kwargs.get("url") or parse.urljoin(
-            self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
+            self.host_url,
+            URLS[url_name].format(**url_kwargs),  # pyright: ignore
         )
         self._logger.debug(f"Making a GET call for url: {url}")
         while True:
@@ -425,13 +426,13 @@ class JiraClient:
         await anext(self.api_call(url_name=PING))
 
     async def get_jira_fields(self):
-        response = await anext(self.api_call(url_name=ALL_FIELDS))
-        jira_fields = await response.json()
-        return {
-            field["id"]: field["name"]
-            for field in jira_fields
-            if field["custom"] is True
-        }
+        async for response in self.api_call(url_name=ALL_FIELDS):
+            jira_fields = await response.json()
+            yield {
+                field["id"]: field["name"]
+                for field in jira_fields
+                if field["custom"] is True
+            }
 
 
 class JiraDataSource(BaseDataSource):
@@ -513,9 +514,10 @@ class JiraDataSource(BaseDataSource):
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
-                "label": "Jira Cloud service account id",
+                "label": "Jira Cloud email address",
                 "order": 6,
                 "type": "str",
+                "tooltip": "Email address associated with Jira Cloud account. E.g. jane.doe@gmail.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
@@ -896,17 +898,25 @@ class JiraDataSource(BaseDataSource):
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
         ):
-            response_fields = {
-                self.custom_fields.get(k, k): v
-                for k, v in issue_metadata.get("fields").items()
-            }
+            response_custom_fields = {}
+            response_fields = copy(issue_metadata.get("fields"))
+            for k, v in response_fields.items():
+                if self.custom_fields.get(k):
+                    response_custom_fields[self.custom_fields[k]] = v
+
+            for k in self.custom_fields.keys():
+                if k in response_fields:
+                    del response_fields[k]
+
             document = {
                 "_id": f"{response_fields.get('project', {}).get('name')}-{issue_metadata.get('key')}",
                 "_timestamp": response_fields.get("updated"),
                 "Key": issue_metadata.get("key"),
                 "Type": response_fields.get("issuetype", {}).get("name"),
                 "Issue": response_fields,
+                "Custom_Fields": response_custom_fields,
             }
+
             if restrictions := [
                 restriction.get("restrictionValue")
                 for restriction in response_fields.get("issuerestriction", {})
@@ -931,9 +941,7 @@ class JiraDataSource(BaseDataSource):
             document_with_access_control = self._decorate_with_access_control(
                 document=document, access_control=issue_access_control
             )
-            await self.queue.put(
-                (document_with_access_control, None)
-            )  # pyright: ignore
+            await self.queue.put((document_with_access_control, None))  # pyright: ignore
             attachments = issue_metadata.get("fields", {}).get("attachment")
             if len(attachments) > 0:
                 await self._put_attachment(
@@ -1018,7 +1026,7 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
-        self.custom_fields = await self.jira_client.get_jira_fields()
+        self.custom_fields = await anext(self.jira_client.get_jira_fields())
 
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
