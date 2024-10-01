@@ -82,7 +82,7 @@ class AccessToken:
     async def get(self):
         if cached_value := self._token_cache.get_value():
             return cached_value
-        self._logger.debug("No token cache found; fetching new token")
+        logger.debug("No token cache found; fetching new token")
         await self._set_access_token()
         return self.access_token
 
