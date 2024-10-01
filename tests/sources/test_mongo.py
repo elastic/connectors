@@ -164,7 +164,7 @@ def build_resp():
 async def test_get_docs(*args):
     async with create_mongo_source() as source:
         num = 0
-        async for (doc, _) in source.get_docs():
+        async for doc, _ in source.get_docs():
             assert doc["id"] in ("one", "two")
             num += 1
 
@@ -323,12 +323,15 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
     configured_database_name = "hello"
     configured_collection_name = "third"
 
-    with mock.patch(
-        "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-        return_value=future_with_result(server_database_names),
-    ), mock.patch(
-        "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
-        return_value=future_with_result(server_collection_names),
+    with (
+        mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+            return_value=future_with_result(server_database_names),
+        ),
+        mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+            return_value=future_with_result(server_collection_names),
+        ),
     ):
         async with create_mongo_source(
             database=configured_database_name,
@@ -460,12 +463,15 @@ async def test_ssl_successful_connection(
     async with create_mongo_source(
         ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
     ) as source:
-        with mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-            return_value=future_with_result(["db"]),
-        ), mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
-            return_value=future_with_result(["col"]),
+        with (
+            mock.patch(
+                "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+                return_value=future_with_result(["db"]),
+            ),
+            mock.patch(
+                "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+                return_value=future_with_result(["col"]),
+            ),
         ):
             await source.validate_config()
 

@@ -13,7 +13,8 @@ from connectors.utils import CancellableSleeps
 
 
 class PreflightCheck:
-    def __init__(self, config):
+    def __init__(self, config, version):
+        self.version = version
         self.config = config
         self.elastic_config = config["elasticsearch"]
         self.service_config = config["service"]
@@ -40,21 +41,89 @@ class PreflightCheck:
         try:
             logger.info("Running preflight checks")
             self.running = True
-            if not (await self.es_management_client.wait()):
-                logger.critical(
-                    f"{self.elastic_config['host']} seems to be unreachable. Bye!"
-                )
-                return False
+
+            success, is_serverless = await self._check_es_server()
+            if not success:
+                return False, is_serverless
 
             await self._check_local_extraction_setup()
 
             valid_configuration = self._validate_configuration()
             available_system_indices = await self._check_system_indices_with_retries()
-            return valid_configuration and available_system_indices
+            return (valid_configuration and available_system_indices), is_serverless
         finally:
             self.stop()
             if self.es_management_client is not None:
                 await self.es_management_client.close()
+
+    async def _check_es_server(self):
+        """
+        Returns two values:
+
+        1. Whether or not the ES server is compatible with the running Connectors version
+        2. Whether or not the ES server is serverless
+        """
+
+        es_info = await self.es_management_client.wait()
+        if es_info is None:
+            logger.critical(
+                f"{self.elastic_config['host']} seems to be unreachable. Bye!"
+            )
+            return False, False
+
+        version = es_info.get("version", {}) or {}
+        is_serverless = version.get("build_flavor") == "serverless"
+        if is_serverless:
+            logger.info(
+                "Elasticsearch server is serverless, skipping version compatibility check."
+            )
+            return True, is_serverless
+
+        versions_compatible = await self._versions_compatible(version.get("number"))
+        return versions_compatible, is_serverless
+
+    async def _versions_compatible(self, es_version):
+        """
+        Checks if the Connector and ES versions are compatible
+        """
+
+        # array legend: 0 - major, 1 - minor, 2 - patch
+        es_version_parts = list(
+            map(int, es_version.replace("-SNAPSHOT", "").split("."))
+        )
+        connector_version_parts = list(map(int, self.version.split("+")[0].split(".")))
+
+        # major
+        if es_version_parts[0] != connector_version_parts[0]:
+            logger.critical(
+                f"Elasticsearch {es_version} and Connectors {self.version} are incompatible: major versions are different"
+            )
+            return False
+
+        # minor
+        if es_version_parts[1] < connector_version_parts[1]:
+            logger.critical(
+                f"Elasticsearch {es_version} and Connectors {self.version} are incompatible: Elasticsearch minor version is older than Connectors"
+            )
+            return False
+
+        if es_version_parts[1] > connector_version_parts[1]:
+            logger.warning(
+                f"Elasticsearch {es_version} minor version is newer than Connectors {self.version} which can lead to unexpected behavior"
+            )
+            return True
+
+        # patch
+        if es_version_parts[2] != connector_version_parts[2]:
+            logger.warning(
+                f"Elasticsearch {es_version} patch version is different than Connectors {self.version} which can lead to unexpected behavior"
+            )
+            return True
+
+        logger.info(
+            f"Elasticsearch {es_version} and Connectors {self.version} are compatible"
+        )
+        return True
 
     async def _check_local_extraction_setup(self):
         if self.extraction_config is None:

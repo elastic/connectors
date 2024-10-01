@@ -12,11 +12,14 @@ Main classes are :
 - SyncJob: represents a document in `.elastic-connectors-sync-jobs`
 
 """
+
 import socket
 from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
+
+from elasticsearch import ApiError
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
@@ -38,6 +41,7 @@ from connectors.utils import (
     nested_get_from_dict,
     next_run,
     parse_datetime_string,
+    with_utc_tz,
 )
 
 __all__ = [
@@ -142,14 +146,15 @@ class InvalidConnectorSetupError(Exception):
     pass
 
 
+class ProtocolError(Exception):
+    pass
+
+
 class ConnectorIndex(ESIndex):
     def __init__(self, elastic_config):
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
-        self.feature_use_connectors_api = elastic_config.get(
-            "feature_use_connectors_api"
-        )
 
     async def heartbeat(self, doc_id):
         if self.feature_use_connectors_api:
@@ -305,56 +310,99 @@ class SyncJob(ESDocument):
             msg = f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             raise InvalidFilteringError(msg)
 
+    def _wrap_errors(self, operation_name, e):
+        if isinstance(e, ApiError):
+            reason = None
+            if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
+                reason = e.info["error"]["reason"]
+            msg = f"Failed to {operation_name} for job {self.id} because Elasticsearch responded with status {e.status_code}.{f' Reason: {reason}' if reason else ''}"
+            raise ProtocolError(msg) from e
+        else:
+            msg = f"Failed to {operation_name} for job {self.id} because of {e.__class__.__name__}: {str(e)}"
+            raise ProtocolError(msg) from e
+
     async def claim(self, sync_cursor=None):
-        doc = {
-            "status": JobStatus.IN_PROGRESS.value,
-            "started_at": iso_utc(),
-            "last_seen": iso_utc(),
-            "worker_hostname": socket.gethostname(),
-            "connector.sync_cursor": sync_cursor,
-        }
-        await self.index.update(doc_id=self.id, doc=doc)
+        try:
+            if self.index.feature_use_connectors_api:
+                await self.index.api.connector_sync_job_claim(
+                    sync_job_id=self.id,
+                    worker_hostname=socket.gethostname(),
+                    sync_cursor=sync_cursor,
+                )
+            else:
+                doc = {
+                    "status": JobStatus.IN_PROGRESS.value,
+                    "started_at": iso_utc(),
+                    "last_seen": iso_utc(),
+                    "worker_hostname": socket.gethostname(),
+                    "connector.sync_cursor": sync_cursor,
+                }
+                await self.index.update(doc_id=self.id, doc=doc)
+        except Exception as e:
+            self._wrap_errors("claim job", e)
 
     async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
-        ingestion_stats = filter_ingestion_stats(ingestion_stats)
-        if connector_metadata is None:
-            connector_metadata = {}
+        try:
+            ingestion_stats = filter_ingestion_stats(ingestion_stats)
+            if self.index.feature_use_connectors_api:
+                await self.index.api.connector_sync_job_update_stats(
+                    sync_job_id=self.id,
+                    ingestion_stats=ingestion_stats,
+                    metadata=connector_metadata,
+                )
+            else:
+                if connector_metadata is None:
+                    connector_metadata = {}
 
-        doc = {
-            "last_seen": iso_utc(),
-        }
-        doc.update(ingestion_stats)
-        if len(connector_metadata) > 0:
-            doc["metadata"] = connector_metadata
-        await self.index.update(doc_id=self.id, doc=doc)
+                doc = {
+                    "last_seen": iso_utc(),
+                }
+                doc.update(ingestion_stats)
+                if len(connector_metadata) > 0:
+                    doc["metadata"] = connector_metadata
+                await self.index.update(doc_id=self.id, doc=doc)
+        except Exception as e:
+            self._wrap_errors("update metadata and stats", e)
 
     async def done(self, ingestion_stats=None, connector_metadata=None):
-        await self._terminate(
-            JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
-        )
+        try:
+            await self._terminate(
+                JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as completed", e)
 
     async def fail(self, error, ingestion_stats=None, connector_metadata=None):
-        if isinstance(error, str):
-            message = error
-        elif isinstance(error, Exception):
-            message = f"{error.__class__.__name__}"
-            if str(error):
-                message += f": {str(error)}"
-        else:
-            message = str(error)
-        await self._terminate(
-            JobStatus.ERROR, message, ingestion_stats, connector_metadata
-        )
+        try:
+            if isinstance(error, str):
+                message = error
+            elif isinstance(error, Exception):
+                message = f"{error.__class__.__name__}"
+                if str(error):
+                    message += f": {str(error)}"
+            else:
+                message = str(error)
+            await self._terminate(
+                JobStatus.ERROR, message, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as failed", e)
 
     async def cancel(self, ingestion_stats=None, connector_metadata=None):
-        await self._terminate(
-            JobStatus.CANCELED, None, ingestion_stats, connector_metadata
-        )
+        try:
+            await self._terminate(
+                JobStatus.CANCELED, None, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as canceled", e)
 
     async def suspend(self, ingestion_stats=None, connector_metadata=None):
-        await self._terminate(
-            JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
-        )
+        try:
+            await self._terminate(
+                JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
+            )
+        except Exception as e:
+            self._wrap_errors("terminate as suspended", e)
 
     async def _terminate(
         self, status, error=None, ingestion_stats=None, connector_metadata=None
@@ -596,6 +644,9 @@ class Connector(ESDocument):
         value = self.get(key)
         if value is not None:
             value = parse_datetime_string(value)  # pyright: ignore
+            # Ensure the datetime is in UTC for backward compatibility with historically naive timestamps.
+            # This guarantees that job scheduling logic with offset-aware timestamps works correctly.
+            value = with_utc_tz(value)
         return value
 
     @property
@@ -639,7 +690,7 @@ class Connector(ESDocument):
             await self.index.heartbeat(doc_id=self.id)
 
     def next_sync(self, job_type, now):
-        """Returns the datetime when the next sync for a given job type will run, return None if it's disabled."""
+        """Returns the datetime in UTC timezone when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
             case JobType.ACCESS_CONTROL:
@@ -659,7 +710,7 @@ class Connector(ESDocument):
     async def _update_datetime(self, field, new_ts):
         await self.index.update(
             doc_id=self.id,
-            doc={field: new_ts.isoformat()},
+            doc={field: iso_utc(new_ts)},
             if_seq_no=self._seq_no,
             if_primary_term=self._primary_term,
         )
@@ -931,21 +982,30 @@ class Connector(ESDocument):
         validation_result = await validator.validate_filtering(draft_filter)
         self.log_info(f"Filtering validation result: {validation_result.state.value}")
 
-        filtering = self.filtering.to_list()
-        for filter_ in filtering:
-            if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                filter_.get("draft", {"validation": {}})[
-                    "validation"
-                ] = validation_result.to_dict()
-                if validation_result.state == FilteringValidationState.VALID:
-                    filter_["active"] = filter_.get("draft")
+        if self.index.feature_use_connectors_api:
+            await self.index.api.connector_update_filtering_draft_validation(
+                connector_id=self.id, validation_result=validation_result.to_dict()
+            )
+            if validation_result.state == FilteringValidationState.VALID:
+                await self.index.api.connector_activate_filtering_draft(
+                    connector_id=self.id
+                )
+        else:
+            filtering = self.filtering.to_list()
+            for filter_ in filtering:
+                if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
+                    filter_.get("draft", {"validation": {}})["validation"] = (
+                        validation_result.to_dict()
+                    )
+                    if validation_result.state == FilteringValidationState.VALID:
+                        filter_["active"] = filter_.get("draft")
 
-        await self.index.update(
-            doc_id=self.id,
-            doc={"filtering": filtering},
-            if_seq_no=self._seq_no,
-            if_primary_term=self._primary_term,
-        )
+            await self.index.update(
+                doc_id=self.id,
+                doc={"filtering": filtering},
+                if_seq_no=self._seq_no,
+                if_primary_term=self._primary_term,
+            )
         await self.reload()
 
     async def document_count(self):
@@ -996,34 +1056,42 @@ class SyncJobIndex(ESIndex):
         )
 
     async def create(self, connector, trigger_method, job_type):
-        filtering = connector.filtering.get_active_filter().transform_filtering()
-        index_name = connector.index_name
+        if self.feature_use_connectors_api:
+            response = await self.api.connector_sync_job_create(
+                connector_id=connector.id,
+                trigger_method=trigger_method.value,
+                job_type=job_type.value,
+            )
+            return response["id"]
+        else:
+            filtering = connector.filtering.get_active_filter().transform_filtering()
+            index_name = connector.index_name
 
-        if job_type == JobType.ACCESS_CONTROL:
-            index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
+            if job_type == JobType.ACCESS_CONTROL:
+                index_name = f"{ACCESS_CONTROL_INDEX_PREFIX}{index_name}"
 
-        job_def = {
-            "connector": {
-                "id": connector.id,
-                "filtering": filtering,
-                "index_name": index_name,
-                "language": connector.language,
-                "pipeline": connector.pipeline.data,
-                "service_type": connector.service_type,
-                "configuration": connector.configuration.to_dict(),
-            },
-            "trigger_method": trigger_method.value,
-            "job_type": job_type.value,
-            "status": JobStatus.PENDING.value,
-            INDEXED_DOCUMENT_COUNT: 0,
-            INDEXED_DOCUMENT_VOLUME: 0,
-            DELETED_DOCUMENT_COUNT: 0,
-            "created_at": iso_utc(),
-            "last_seen": iso_utc(),
-        }
-        api_response = await self.index(job_def)
+            job_def = {
+                "connector": {
+                    "id": connector.id,
+                    "filtering": filtering,
+                    "index_name": index_name,
+                    "language": connector.language,
+                    "pipeline": connector.pipeline.data,
+                    "service_type": connector.service_type,
+                    "configuration": connector.configuration.to_dict(),
+                },
+                "trigger_method": trigger_method.value,
+                "job_type": job_type.value,
+                "status": JobStatus.PENDING.value,
+                INDEXED_DOCUMENT_COUNT: 0,
+                INDEXED_DOCUMENT_VOLUME: 0,
+                DELETED_DOCUMENT_COUNT: 0,
+                "created_at": iso_utc(),
+                "last_seen": iso_utc(),
+            }
+            api_response = await self.index(job_def)
 
-        return api_response["_id"]
+            return api_response["_id"]
 
     async def pending_jobs(self, connector_ids, job_types):
         if not job_types:

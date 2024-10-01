@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Box source class methods"""
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp

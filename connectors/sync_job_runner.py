@@ -10,9 +10,7 @@ import elasticsearch
 from elasticsearch import (
     AuthorizationException as ElasticAuthorizationException,
 )
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
-)
+from elasticsearch import NotFoundError as ElasticNotFoundError
 
 from connectors.config import DataSourceFrameworkConfig
 from connectors.es.client import License, with_concurrency_control
@@ -132,18 +130,19 @@ class SyncJobRunner:
 
         self.sync_job.log_debug(f"Starting execution of {job_type} sync job.")
 
-        await self.sync_starts()
-        sync_cursor = (
-            self.connector.sync_cursor
-            if self.sync_job.job_type == JobType.INCREMENTAL
-            else None
-        )
-        await self.sync_job.claim(sync_cursor=sync_cursor)
-        self._start_time = time.time()
-
-        self.sync_job.log_debug("Successfully claimed the sync job.")
+        await self.sync_starts()  # This MUST be the last line before the `try` begins
 
         try:
+            sync_cursor = (
+                self.connector.sync_cursor
+                if self.sync_job.job_type == JobType.INCREMENTAL
+                else None
+            )
+            self._start_time = time.time()
+            await self.sync_job.claim(sync_cursor=sync_cursor)
+
+            self.sync_job.log_debug("Successfully claimed the sync job.")
+
             self.data_provider = self.source_klass(
                 configuration=self.sync_job.configuration
             )
@@ -177,6 +176,7 @@ class SyncJobRunner:
             if (
                 self.connector.native
                 and self.connector.features.native_connector_api_keys_enabled()
+                and self.service_config.get("_use_native_connector_api_keys", True)
             ):
                 # Update the config so native connectors can use API key authentication during sync
                 await self._update_native_connector_authentication()
@@ -205,8 +205,12 @@ class SyncJobRunner:
             sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
             await self._sync_done(sync_status=sync_status, sync_error=sync_error)
         except asyncio.CancelledError:
+            self.sync_job.log_warning("Caught signal to suspend the job.")
+            self.sync_job.log_debug("with stack:", exc_info=True)
             await self._sync_done(sync_status=JobStatus.SUSPENDED)
         except ConnectorJobCanceledError:
+            self.sync_job.log_warning("Caught signal to cancel the job.")
+            self.sync_job.log_debug("with stack:", exc_info=True)
             await self._sync_done(sync_status=JobStatus.CANCELED)
         except ElasticAuthorizationException as e:
             error_msg = f"Connector is not authorized to access index [{self.sync_job.index_name}]. API key may need to be regenerated. Status code: [{e.status_code}]."
@@ -217,6 +221,7 @@ class SyncJobRunner:
             await self._sync_done(sync_status=JobStatus.ERROR, sync_error=e)
         finally:
             self.running = False
+            self.sync_job.log_info("Job terminated. Cleaning up.")
             if self.sync_orchestrator is not None:
                 await self.sync_orchestrator.close()
             if self.data_provider is not None:
@@ -339,12 +344,10 @@ class SyncJobRunner:
                 await self.job_reporting_task
             except asyncio.CancelledError:
                 self.sync_job.log_debug("Job reporting task is stopped.")
-        if (
-            self.sync_orchestrator is not None
-            and not self.sync_orchestrator.canceled
-            and sync_error is not None
-        ):
-            await self.sync_orchestrator.cancel()
+        if self.sync_orchestrator is not None:
+            await (
+                self.sync_orchestrator.cancel()
+            )  # in case the extractor/sink tasks are still running
 
         ingestion_stats = (
             {}
@@ -374,9 +377,13 @@ class SyncJobRunner:
 
         if await self.reload_connector():
             sync_cursor = (
-                self.data_provider.sync_cursor()
-                if self.sync_job.is_content_sync()
-                else None
+                None
+                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
+                else (
+                    self.data_provider.sync_cursor()
+                    if self.sync_job.is_content_sync()
+                    else None
+                )
             )
             await self.connector.sync_done(
                 self.sync_job if await self.reload_sync_job() else None,

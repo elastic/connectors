@@ -13,7 +13,7 @@ import platform
 import re
 import shutil
 import ssl
-import subprocess
+import subprocess  # noqa S404
 import time
 import urllib.parse
 from copy import deepcopy
@@ -22,9 +22,10 @@ from enum import Enum
 from time import strftime
 
 import dateutil.parser as parser
+import pytz
+import tzcron
 from base64io import Base64IO
 from bs4 import BeautifulSoup
-from cstriggers.core.trigger import QuartzCron
 from pympler import asizeof
 
 from connectors.logger import logger
@@ -93,6 +94,14 @@ def iso_utc(when=None):
     return when.isoformat()
 
 
+def with_utc_tz(ts):
+    """Ensure the timestmap has a timezone of UTC."""
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    else:
+        return ts.astimezone(timezone.utc)
+
+
 def iso_zulu():
     """Returns the current time in ISO Zulu format"""
     return datetime.now(timezone.utc).strftime(ISO_ZULU_TIMESTAMP_FORMAT)
@@ -104,9 +113,33 @@ def epoch_timestamp_zulu():
 
 
 def next_run(quartz_definition, now):
-    """Returns the datetime of the next run."""
-    cron_obj = QuartzCron(quartz_definition, now)
-    return cron_obj.next_trigger()
+    """Returns the datetime in UTC timezone of the next run."""
+    # Year is optional and is never present.
+    _, minutes, hours, day_of_month, month, day_of_week, year = (
+        quartz_definition.split(" ") + [None]
+    )[:7]
+
+    # Day of week is 1-7 starting from Sunday in Quartz and from Monday in regular Cron, adjust
+    # Days before: 1 - SUN, 2 - MON ... 7 - SAT
+    # Days after: 1 - MON, 2 - TUE ... 7 - SUN
+    if day_of_week.isnumeric():
+        day_of_week = (int(day_of_week) - 2) % 7 + 1
+
+    if not year:
+        year = "*"
+
+    # tzcron always expects year
+    repackaged_definition = (
+        f"{minutes} {hours} {day_of_month} {month} {day_of_week} {year}"
+    )
+
+    # ? comes from Quartz Cron, regular cron doesn't handle it well
+    repackaged_definition = repackaged_definition.replace("?", "*")
+
+    schedule = tzcron.Schedule(repackaged_definition, pytz.utc, now)
+
+    next_occurrence = next(schedule)
+    return with_utc_tz(next_occurrence)
 
 
 INVALID_CHARS = "\\", "/", "*", "?", '"', "<", ">", "|", " ", ",", "#"

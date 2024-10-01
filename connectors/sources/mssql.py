@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Microsoft SQL source module is responsible to fetch documents from Microsoft SQL."""
+
 import asyncio
 import os
 from functools import cached_property, partial
@@ -81,6 +82,7 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
         "properties": {
             "tables": {"type": "array", "minItems": 1},
             "query": {"type": "string", "minLength": 1},
+            "id_columns": {"type": "array", "minItems": 1},
         },
         "required": ["tables", "query"],
         "additionalProperties": False,
@@ -230,7 +232,8 @@ class MSSQLClient:
             loop = asyncio.get_running_loop()
             if self.connection is None:
                 self.connection = await loop.run_in_executor(
-                    executor=None, func=self.engine.connect  # pyright: ignore
+                    executor=None,
+                    func=self.engine.connect,  # pyright: ignore
                 )
             cursor = await loop.run_in_executor(
                 executor=None,
@@ -255,6 +258,11 @@ class MSSQLClient:
     async def get_tables_to_fetch(self, is_filtering=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
+            if is_filtering:
+                self._logger.info("Syncing all tables: advanced sync rules are enabled")
+            else:
+                self._logger.info("Syncing all tables: 'tables' is set to '*'")
+
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -268,6 +276,7 @@ class MSSQLClient:
             ):
                 yield row[0]
         else:
+            self._logger.info(f"Fetching configured tables: {tables}")
             for table in tables:
                 yield table
 
@@ -285,6 +294,7 @@ class MSSQLClient:
                 retry_count=self.retry_count,
             )
         )
+        self._logger.info(f'Table "{table}" has {row_count} records')
         return row_count
 
     async def get_table_primary_key(self, table):
@@ -302,23 +312,22 @@ class MSSQLClient:
                 retry_count=self.retry_count,
             )
         ]
+
+        self._logger.debug(f'Found primary keys for table "{table}": {primary_keys}')
+
         return primary_keys
 
     async def get_table_last_update_time(self, table):
-        [last_update_time] = await anext(
-            fetch(
-                cursor_func=partial(
-                    self.get_cursor,
-                    self.queries.table_last_update_time(
-                        schema=self.schema,
-                        table=table,
-                    ),
-                ),
-                fetch_size=1,
-                retry_count=self.retry_count,
-            )
-        )
-        return last_update_time
+        self._logger.debug(f"Fetching last updated time for table: {table}")
+        async for [last_update_time] in fetch(
+            cursor_func=partial(
+                self.get_cursor,
+                self.queries.table_last_update_time(schema=self.schema, table=table),
+            ),
+            fetch_size=1,
+            retry_count=self.retry_count,
+        ):
+            return last_update_time
 
     async def data_streamer(self, table=None, query=None):
         """Streaming data from a table
@@ -332,20 +341,27 @@ class MSSQLClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        record_count = 0
+        if query is not None:
+            cursor_query = query
+            self._logger.debug(f"Streaming records from database using query: {query}")
+        else:
+            cursor_query = self.queries.table_data(
+                schema=self.schema,
+                table=table,
+            )
+            self._logger.debug(f'Streaming records from database for table "{table}"')
+
         async for data in fetch(
             cursor_func=partial(
                 self.get_cursor,
-                self.queries.table_data(
-                    schema=self.schema,
-                    table=table,
-                )
-                if query is None
-                else query,
+                cursor_query,
             ),
             fetch_columns=True,
             fetch_size=self.fetch_size,
             retry_count=self.retry_count,
         ):
+            record_count += 1
             yield data
 
 
@@ -476,10 +492,9 @@ class MSSQLDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
-        self._logger.info("Validating the Connector Configuration...")
+        self._logger.debug("Validating the Connector Configuration...")
         try:
             await self.mssql_client.ping()
-            self._logger.info("Successfully connected to Microsoft SQL.")
         except Exception as e:
             msg = f"Can't connect to Microsoft SQL on {self.mssql_client.host}"
             raise Exception(msg) from e
@@ -497,6 +512,7 @@ class MSSQLDataSource(BaseDataSource):
         return row
 
     async def get_primary_key(self, tables):
+        self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
             primary_key_columns.extend(
@@ -517,7 +533,7 @@ class MSSQLDataSource(BaseDataSource):
             column_names=column_names, schema=self.schema, tables=tables
         )
 
-        if not set(primary_key_columns) - set(column_names):
+        if (not set(primary_key_columns) - set(column_names)) or primary_key_columns:
             async for row in streamer:
                 row = dict(zip(column_names, row, strict=True))
                 yield row
@@ -535,16 +551,17 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(f'Fetching records for table "{table}"')
         try:
             docs_generator = self._yield_all_docs_from_tables(table=table)
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for table {table}. Error: {exception}"
+                f'Something went wrong while fetching document for table "{table}". Error: {exception}'
             )
 
-    async def fetch_documents_from_query(self, tables, query):
+    async def fetch_documents_from_query(self, tables, query, id_columns):
         """Fetches all the data from the given query and format them in Elasticsearch documents
 
         Args:
@@ -554,8 +571,13 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             Dict: Document to be indexed
         """
+        self._logger.info(
+            f"Fetching records for tables {tables} using the custom query: {query} and available id_columns: {id_columns}"
+        )
         try:
-            docs_generator = self._yield_docs_custom_query(tables=tables, query=query)
+            docs_generator = self._yield_docs_custom_query(
+                tables=tables, query=query, id_columns=id_columns
+            )
             async for doc in docs_generator:
                 yield doc
         except (InternalClientError, ProgrammingError) as exception:
@@ -563,8 +585,12 @@ class MSSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query):
+    async def _yield_docs_custom_query(self, tables, query, id_columns=None):
         primary_key_columns = await self.get_primary_key(tables=tables)
+
+        if id_columns:
+            primary_key_columns = id_columns
+
         if not primary_key_columns:
             self._logger.warning(
                 f"Skipping tables {', '.join(tables)} from database {self.database} since no primary key is associated with them. Assign primary key to the tables to index it in the next sync interval."
@@ -580,12 +606,19 @@ class MSSQLDataSource(BaseDataSource):
                 ],
             )
         )
+
+        last_update_times = [
+            time_value for time_value in last_update_times if time_value is not None
+        ]
+
         last_update_time = (
             max(last_update_times) if len(last_update_times) else iso_utc()
         )
 
         async for row in self.yield_rows_for_query(
-            primary_key_columns=primary_key_columns, tables=tables, query=query
+            primary_key_columns=primary_key_columns,
+            tables=tables,
+            query=query,
         ):
             doc_id = f"{self.database}_{self.schema}_{hash_id(list(tables), row, primary_key_columns)}"
 
@@ -607,7 +640,7 @@ class MSSQLDataSource(BaseDataSource):
                     )
                 except Exception:
                     self._logger.warning(
-                        f"Unable to fetch last_updated_time for {table}"
+                        f'Unable to fetch last_updated_time for table "{table}"'
                     )
                     last_update_time = None
                 async for row in self.yield_rows_for_query(
@@ -626,10 +659,10 @@ class MSSQLDataSource(BaseDataSource):
                     )
             else:
                 self._logger.warning(
-                    f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                    f'"{self.database}"."{table}" has no primary key and is skipped. Assign primary key to the table to index it in the next sync interval.'
                 )
         else:
-            self._logger.warning(f"No rows found for {table}.")
+            self._logger.warning(f'No rows found for table "{table}"')
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch databases, tables and rows in async manner.
@@ -640,14 +673,27 @@ class MSSQLDataSource(BaseDataSource):
         Yields:
             dictionary: Row dictionary containing meta-data of the row.
         """
+        self._logger.info("Successfully connected to Microsoft SQL")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
+            self._logger.info(
+                f"Fetching records from the database using advanced sync rules: {advanced_rules}"
+            )
             for rule in advanced_rules:
                 query = rule.get("query")
                 tables = rule.get("tables")
+                id_columns = rule.get("id_columns", [])
+
+                id_columns_str = ""
+                for i, table in enumerate(tables):
+                    if i == 0:
+                        id_columns_str = f"{self.schema}_{table}"
+                    else:
+                        id_columns_str = f"{id_columns_str}_{table}"
+                id_columns = [f"{id_columns_str}_{column}" for column in id_columns]
 
                 async for row in self.fetch_documents_from_query(
-                    tables=tables, query=query
+                    tables=tables, query=query, id_columns=id_columns
                 ):
                     yield row, None
         else:
@@ -662,9 +708,6 @@ class MSSQLDataSource(BaseDataSource):
                     )
                     continue
 
-                self._logger.debug(
-                    f"Found table: {table} in database: {self.database}."
-                )
                 table_count += 1
                 async for row in self.fetch_documents_from_table(table=table):
                     yield row, None

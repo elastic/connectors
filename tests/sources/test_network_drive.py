@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Tests the Network Drive source class methods.
-"""
+"""Tests the Network Drive source class methods."""
+
 import asyncio
 import csv
 import datetime
@@ -853,6 +853,28 @@ async def test_get_access_control_dls_enabled():
                 )
 
         assert expected_user_access_control == user_access_control
+
+
+@pytest.mark.asyncio
+async def test_get_access_control_without_duplicate_ids():
+    async with create_source(NASDataSource) as source:
+        source._dls_enabled = MagicMock(return_value=True)
+        source.drive_type = LINUX
+        source.identity_mappings = "/a/b"
+
+        source.read_user_info_csv = MagicMock(
+            return_value=[
+                {"name": "user1", "user_sid": "S-1", "groups": ["S-11", "S-22"]},
+                {"name": "user2", "user_sid": "S-2", "groups": ["S-22"]},
+                {"name": "user3", "user_sid": "S-3", "groups": ["S-11"]},
+            ]
+        )
+
+        seen_users = set()
+        async for access_control in source.get_access_control():
+            seen_users.add(access_control["_id"])
+
+        assert len(seen_users) == 3
 
 
 @mock.patch.object(

@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Confluence source module responsible to fetch documents from Confluence Cloud/Server.
-"""
+"""Confluence source module responsible to fetch documents from Confluence Cloud/Server."""
+
 import asyncio
 import os
 from copy import copy
@@ -32,7 +32,9 @@ from connectors.utils import (
     ConcurrentTasks,
     MemQueue,
     RetryStrategy,
+    html_to_text,
     iso_utc,
+    nested_get_from_dict,
     retryable,
     ssl_context,
 )
@@ -41,7 +43,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 DEFAULT_RETRY_SECONDS = 30
 
-LIMIT = 100
+LIMIT = 50
 SPACE = "space"
 SPACE_PERMISSION = "space_permission"
 BLOGPOST = "blogpost"
@@ -54,10 +56,10 @@ USER = "user"
 USERS_FOR_DATA_CENTER = "users_for_data_center"
 SEARCH_FOR_DATA_CENTER = "search_for_data_center"
 USERS_FOR_SERVER = "users_for_server"
-SPACE_QUERY = "limit=100&expand=permissions"
-ATTACHMENT_QUERY = "limit=100&expand=version"
+SPACE_QUERY = "limit=100&expand=permissions,history"
+ATTACHMENT_QUERY = "limit=100&expand=version,history"
 CONTENT_QUERY = "limit=50&expand=ancestors,children.attachment,history.lastUpdated,body.storage,space,space.permissions,restrictions.read.restrictions.user,restrictions.read.restrictions.group"
-SEARCH_QUERY = "limit=100&expand=content.extensions,content.container,content.space,space.description"
+SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.container,content.space,content.body.storage,space.description,space.history"
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
 
@@ -86,6 +88,10 @@ CONFLUENCE_CLOUD = "confluence_cloud"
 CONFLUENCE_SERVER = "confluence_server"
 CONFLUENCE_DATA_CENTER = "confluence_data_center"
 WILDCARD = "*"
+
+
+class InvalidConfluenceDataSourceTypeError(ValueError):
+    pass
 
 
 class ThrottledError(Exception):
@@ -136,7 +142,7 @@ class ConfluenceClient:
         if self.session:
             return self.session
 
-        self._logger.debug("Creating a client session")
+        self._logger.debug(f"Creating a '{self.data_source_type}' client session")
         if self.data_source_type == CONFLUENCE_CLOUD:
             auth = (
                 self.configuration["account_email"],
@@ -147,11 +153,16 @@ class ConfluenceClient:
                 self.configuration["username"],
                 self.configuration["password"],
             )
-        else:
+        elif self.data_source_type == CONFLUENCE_DATA_CENTER:
             auth = (
                 self.configuration["data_center_username"],
                 self.configuration["data_center_password"],
             )
+        else:
+            msg = f"Unknown data source type '{self.data_source_type}' for Confluence connector"
+            self._logger.error(msg)
+
+            raise InvalidConfluenceDataSourceTypeError(msg)
 
         basic_auth = aiohttp.BasicAuth(login=auth[0], password=auth[1])
         timeout = aiohttp.ClientTimeout(total=None)  # pyright: ignore
@@ -183,23 +194,28 @@ class ConfluenceClient:
                     retry_seconds = int(response_headers["Retry-After"])
                 except (TypeError, ValueError) as exception:
                     self._logger.error(
-                        f"Error while reading value of retry-after header {exception}. Using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                        f"Rate limit reached but an unexpected error occurred while reading value of 'Retry-After' header: {exception}. Retrying in {DEFAULT_RETRY_SECONDS} seconds..."
                     )
             else:
                 self._logger.warning(
-                    f"Rate Limited but Retry-After header is not found, using default retry time: {DEFAULT_RETRY_SECONDS} seconds"
+                    f"Rate limit reached but no 'Retry-After' header was found. Retrying in {DEFAULT_RETRY_SECONDS} seconds..."
                 )
-            self._logger.debug(f"Rate Limit reached: retry in {retry_seconds} seconds")
+            self._logger.debug(
+                f"Rate Limit reached: retrying in {retry_seconds} seconds..."
+            )
 
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
         elif exception.status == 404:
-            self._logger.error(f"Getting Not Found Error for url: {url}")
+            self._logger.error(f"Received Not Found error for URL: {url}")
             raise NotFound
         elif exception.status == 500:
-            self._logger.error("Internal Server Error occurred")
+            self._logger.error(f"Internal Server Error occurred for URL: {url}")
             raise InternalServerError
         else:
+            self._logger.error(
+                f"Error while making a GET call for URL: {url}. Error details: {exception}"
+            )
             raise
 
     @retryable(
@@ -220,14 +236,17 @@ class ConfluenceClient:
         Yields:
             response: Client response
         """
-        self._logger.debug(f"Making a GET call for url: {url}")
+        self._logger.debug(f"Making a GET request to URL: {url}")
+
         try:
-            async with self._get_session().get(
+            return await self._get_session().get(
                 url=url,
                 ssl=self.ssl_ctx,
-            ) as response:
-                yield response
+            )
         except ServerDisconnectedError:
+            self._logger.error(
+                f"Server was disconnected during GET request to URL: {url}. Closing the session."
+            )
             await self.close_session()
             raise
         except ClientResponseError as exception:
@@ -240,24 +259,20 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url}"
-        )
         url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
         while True:
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    links = json_response.get("_links")
-                    yield json_response
-                    if links.get("next") is None:
-                        return
-                    url = os.path.join(
-                        self.host_url,
-                        links.get("next")[1:],
-                    )
+                self._logger.debug(f"Starting pagination for API endpoint {url}")
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                links = json_response.get("_links")
+                yield json_response
+                if links.get("next") is None:
+                    return
+                url = os.path.join(
+                    self.host_url,
+                    links.get("next")[1:],
+                )
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
@@ -271,22 +286,21 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> start: 0, limit: {LIMIT}"
-        )
+        start = 0
         while True:
             url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
             json_response = {}
             try:
-                async for response in self.api_call(
-                    url=url,
-                ):
-                    json_response = await response.json()
-                    yield json_response
+                self._logger.debug(
+                    f"Starting pagination for API endpoint: {URLS[url_name].format(**url_kwargs)} to host: {self.host_url} with the following parameters -> start: {start}, limit: {LIMIT}"
+                )
+                response = await self.api_call(url=url)
+                json_response = await response.json()
+                yield json_response
 
-                    start = url_kwargs.get("start", 0)
-                    start += LIMIT
-                    url_kwargs["start"] = start
+                start = url_kwargs.get("start", 0)
+                start += LIMIT
+                url_kwargs["start"] = start
                 if len(json_response.get("results", [])) < LIMIT:
                     break
             except Exception as exception:
@@ -294,6 +308,9 @@ class ConfluenceClient:
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
                 break
+
+    async def download_func(self, url):
+        yield await self.api_call(url)
 
     async def search_by_query(self, query):
         if self.data_source_type == CONFLUENCE_DATA_CENTER:
@@ -323,11 +340,9 @@ class ConfluenceClient:
 
     async def fetch_server_space_permission(self, url):
         try:
-            async for permissions in self.api_call(
-                url=os.path.join(self.host_url, url),
-            ):
-                permission = await permissions.json()
-                return permission
+            permissions = await self.api_call(url=os.path.join(self.host_url, url))
+            permission = await permissions.json()
+            return permission
         except ClientResponseError as exception:
             self._logger.warning(
                 f"Something went wrong. Make sure you have installed Extender for running confluence datacenter/server DLS. Exception: {exception}."
@@ -362,10 +377,8 @@ class ConfluenceClient:
                 yield attachment
 
     async def ping(self):
-        await anext(
-            self.api_call(
-                url=os.path.join(self.host_url, PING_URL),
-            )
+        await self.api_call(
+            url=os.path.join(self.host_url, PING_URL),
         )
 
     async def fetch_confluence_server_users(self):
@@ -381,19 +394,18 @@ class ConfluenceClient:
 
         while True:
             url_ = url.format(start=start_at, limit=limit)
-            async for users in self.api_call(url=url_):
-                response = await users.json()
-                if len(response.get(key)) == 0:
-                    return
-                yield response.get(key)
-                start_at += limit
+            users = await self.api_call(url=url_)
+            response = await users.json()
+            if len(response.get(key)) == 0:
+                return
+            yield response.get(key)
+            start_at += limit
 
     async def fetch_label(self, label_id):
-        async for label_data in self.api_call(
-            url=os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
-        ):
-            labels = await label_data.json()
-            return [label.get("name") for label in labels["results"]]
+        url = os.path.join(self.host_url, URLS[LABEL].format(id=label_id))
+        label_data = await self.api_call(url=url)
+        labels = await label_data.json()
+        return [label.get("name") for label in labels["results"]]
 
 
 class ConfluenceDataSource(BaseDataSource):
@@ -422,6 +434,11 @@ class ConfluenceDataSource(BaseDataSource):
         self.queue = MemQueue(maxsize=QUEUE_SIZE, maxmemsize=QUEUE_MEM_SIZE)
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.fetcher_count = 0
+        self.authorkey = (
+            "username"
+            if self.confluence_client.data_source_type == "confluence_data_center"
+            else "publicName"
+        )
 
     def _set_internal_logger(self):
         self.confluence_client.set_logger(self._logger)
@@ -697,13 +714,15 @@ class ConfluenceDataSource(BaseDataSource):
 
     async def get_user(self):
         url = os.path.join(self.configuration["confluence_url"], URLS[USER])
-        async for users in self.atlassian_access_control.fetch_all_users(url=url):
+        async for users in self.atlassian_access_control.fetch_all_users_for_confluence(
+            url=url
+        ):
             active_atlassian_users = filter(
                 self.atlassian_access_control.is_active_atlassian_user, users
             )
             tasks = [
                 anext(
-                    self.atlassian_access_control.fetch_user(
+                    self.atlassian_access_control.fetch_user_for_confluence(
                         url=f"{user_info.get('self')}&{USER_QUERY}"
                     )
                 )
@@ -836,9 +855,8 @@ class ConfluenceDataSource(BaseDataSource):
         """Verify the connection with Confluence"""
         try:
             await self.confluence_client.ping()
-            self._logger.info("Successfully connected to Confluence")
-        except Exception:
-            self._logger.exception("Error while connecting to Confluence")
+        except Exception as e:
+            self._logger.warning(f"Error while connecting to Confluence: {e}")
             raise
 
     def get_permission(self, permission):
@@ -858,9 +876,7 @@ class ConfluenceDataSource(BaseDataSource):
             return {}
 
         url = URLS[SPACE_PERMISSION].format(space_key=space_key)
-        self._logger.debug(
-            f"Fetching permissions for space '{space_key} from Confluence server'"
-        )
+        self._logger.info(f"Fetching permissions for '{space_key}' space")
         return await self.confluence_client.fetch_server_space_permission(url=url)
 
     async def fetch_documents(self, api_query):
@@ -875,7 +891,10 @@ class ConfluenceDataSource(BaseDataSource):
             List: List of permissions attached to document
             Dictionary: Dictionary of restrictions attached to document
         """
-        async for document, attachment_count in self.confluence_client.fetch_page_blog_documents(
+        async for (
+            document,
+            attachment_count,
+        ) in self.confluence_client.fetch_page_blog_documents(
             api_query=api_query,
         ):
             document_url = os.path.join(
@@ -893,19 +912,21 @@ class ConfluenceDataSource(BaseDataSource):
                 "title": document.get("title"),
                 "ancestors": ancestor_title,
                 "space": document["space"]["name"],
-                "body": document["body"]["storage"]["value"],
+                "body": html_to_text(document["body"]["storage"]["value"]),
                 "url": document_url,
+                "author": document["history"]["createdBy"][self.authorkey],
+                "createdDate": document["history"]["createdDate"],
             }
             if self.confluence_client.index_labels:
                 doc["labels"] = document["labels"]
-            yield doc, attachment_count, document.get("space", {}).get(
-                "key"
-            ), document.get("space", {}).get("permissions", []), document.get(
-                "restrictions", {}
-            ).get(
-                "read", {}
-            ).get(
-                "restrictions", {}
+            yield (
+                doc,
+                attachment_count,
+                document.get("space", {}).get("key"),
+                document.get("space", {}).get("permissions", []),
+                document.get("restrictions", {})
+                .get("read", {})
+                .get("restrictions", {}),
             )
 
     async def fetch_attachments(
@@ -924,7 +945,7 @@ class ConfluenceDataSource(BaseDataSource):
             String: Download link to get the content of the attachment
         """
         self._logger.info(
-            f"Fetching attachments for '{parent_name}' from '{parent_space}' space"
+            f"Fetching attachments for '{parent_name}' {parent_type} from '{parent_space}' space"
         )
         async for attachment in self.confluence_client.fetch_attachments(
             content_id=content_id,
@@ -933,16 +954,22 @@ class ConfluenceDataSource(BaseDataSource):
                 self.confluence_client.host_url,
                 attachment.get("_links", {}).get("webui", "")[1:],
             )
-            yield {
-                "type": attachment.get("type"),
-                "title": attachment.get("title"),
-                "_id": attachment.get("id"),
-                "space": parent_space,
-                parent_type: parent_name,
-                "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
-                "size": attachment.get("extensions", {}).get("fileSize", 0),
-                "url": attachment_url,
-            }, attachment.get("_links", {}).get("download")
+            yield (
+                {
+                    "type": attachment.get("type"),
+                    "title": attachment.get("title"),
+                    "_id": attachment.get("id"),
+                    "space": parent_space,
+                    parent_type: parent_name,
+                    "_timestamp": attachment.get("version", {}).get("when", iso_utc()),
+                    "size": attachment.get("extensions", {}).get("fileSize", 0),
+                    "url": attachment_url,
+                    "createdDate": nested_get_from_dict(
+                        attachment, ["history", "createdDate"]
+                    ),
+                },
+                attachment.get("_links", {}).get("download"),
+            )
 
     async def search_by_query(self, query):
         async for entity in self.confluence_client.search_by_query(query=query):
@@ -959,19 +986,37 @@ class ConfluenceDataSource(BaseDataSource):
                 "_id": entity_details.get("id"),
                 "title": entity.get("title"),
                 "_timestamp": entity.get("lastModified"),
-                "body": entity.get("excerpt"),
+                "body": html_to_text(
+                    entity_details.get("body", {}).get("storage", {}).get("value")
+                ),
                 "type": entity.get("entityType"),
                 "url": os.path.join(
                     self.confluence_client.host_url, entity.get("url")[1:]
                 ),
             }
             download_url = None
+            if (
+                document["type"] == "space"
+                and self.confluence_client.data_source_type == CONFLUENCE_CLOUD
+            ):
+                document["author"] = nested_get_from_dict(
+                    entity, ["space", "history", "createdBy", self.authorkey]
+                )
+                document["createdDate"] = nested_get_from_dict(
+                    entity, ["space", "history", "createdDate"]
+                )
             if document.get("type", "") == "content":
                 document.update(
                     {
                         "type": entity_details.get("type"),
                         "space": entity_details.get("space", {}).get("name"),
                     }
+                )
+                document["author"] = nested_get_from_dict(
+                    entity, ["content", "history", "createdBy", self.authorkey]
+                )
+                document["createdDate"] = nested_get_from_dict(
+                    entity, ["content", "history", "createdDate"]
                 )
 
                 if document.get("type", "") == "attachment":
@@ -1008,7 +1053,7 @@ class ConfluenceDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
-        self._logger.info(f"Downloading content for file: {filename}")
+        self._logger.debug(f"Downloading content for file: {filename}")
         document = {"_id": attachment["_id"], "_timestamp": attachment["_timestamp"]}
         return await self.download_and_extract_file(
             document,
@@ -1017,7 +1062,7 @@ class ConfluenceDataSource(BaseDataSource):
             partial(
                 self.generic_chunked_download_func,
                 partial(
-                    self.confluence_client.api_call,
+                    self.confluence_client.download_func,
                     url=os.path.join(self.confluence_client.host_url, url),
                 ),
             ),
@@ -1063,13 +1108,22 @@ class ConfluenceDataSource(BaseDataSource):
             self.confluence_client.host_url,
             space.get("_links", {}).get("webui", "")[1:],
         )
-        return {
+        document = {
             "_id": space.get("id"),
             "type": "Space",
             "title": space.get("name"),
             "_timestamp": iso_utc(),
             "url": space_url,
+            "key": space.get("key"),
         }
+        if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
+            document["createdDate"] = nested_get_from_dict(
+                space, ["history", "createdDate"]
+            )
+            document["author"] = nested_get_from_dict(
+                space, ["history", "createdBy", self.authorkey]
+            )
+        return document
 
     async def _space_coro(self):
         """Coroutine to add spaces documents to Queue"""
@@ -1098,12 +1152,10 @@ class ConfluenceDataSource(BaseDataSource):
                 space = self._decorate_with_access_control(
                     document=space, access_control=access_control
                 )
-                await self.queue.put((space, None))  # pyright: ignore
+                yield space
         except Exception as exception:
             self._logger.exception(f"Error while fetching spaces: {exception}")
             raise
-        finally:
-            await self.queue.put(END_SIGNAL)  # pyright: ignore
 
     async def _page_blog_coro(self, api_query, target_type):
         """Coroutine to add pages/blogposts to Queue
@@ -1116,9 +1168,16 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.info(
                 f"Fetching {target_type} and its permissions from Confluence"
             )
-            async for document, attachment_count, space_key, permissions, restrictions in self.fetch_documents(
-                api_query
-            ):
+            self._logger.debug(
+                f"Fetching {target_type} using Confluence query: '{api_query}'"
+            )
+            async for (
+                document,
+                attachment_count,
+                space_key,
+                permissions,
+                restrictions,
+            ) in self.fetch_documents(api_query):
                 # Pages and blog posts are open to viewing or editing by default,
                 # but you can restrict either viewing or editing to certain users or groups.
                 if self.confluence_client.data_source_type == CONFLUENCE_CLOUD:
@@ -1186,48 +1245,46 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
+        self._logger.info("Successfully connected to Confluence")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
             for query_info in advanced_rules:
                 query = query_info.get("query")
-                logger.debug(f"Fetching confluence content using custom query: {query}")
+                self._logger.debug(f"Fetching content using custom query: {query}")
                 async for document, download_link in self.search_by_query(query):
                     if download_link:
-                        yield document, partial(
-                            self.download_attachment,
-                            download_link[1:],
-                            copy(document),
+                        yield (
+                            document,
+                            partial(
+                                self.download_attachment,
+                                download_link[1:],
+                                copy(document),
+                            ),
                         )
                     else:
                         yield document, None
 
         else:
-            if self.spaces == [WILDCARD]:
-                logger.debug("Including docs from all spaces")
-                configured_spaces_query = "cql=type="
-            else:
-                quoted_spaces = "','".join(self.spaces)
-                logger.debug(
-                    f"Including docs from the following spaces: {quoted_spaces}"
+            async for space in self._space_coro():
+                yield space, None
+                self._logger.info(f"Fetching docs from space: {space['key']}")
+                configured_spaces_query = f"cql=space in ('{space['key']}') AND type="
+                await self.fetchers.put(
+                    partial(
+                        self._page_blog_coro,
+                        f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
+                        BLOGPOST,
+                    )
                 )
-                configured_spaces_query = f"cql=space in ('{quoted_spaces}') AND type="
-            await self.fetchers.put(self._space_coro)
-            await self.fetchers.put(
-                partial(
-                    self._page_blog_coro,
-                    f"{configured_spaces_query}{BLOGPOST}&{CONTENT_QUERY}",
-                    BLOGPOST,
+                await self.fetchers.put(
+                    partial(
+                        self._page_blog_coro,
+                        f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
+                        PAGE,
+                    )
                 )
-            )
-            await self.fetchers.put(
-                partial(
-                    self._page_blog_coro,
-                    f"{configured_spaces_query}{PAGE}&{CONTENT_QUERY}",
-                    PAGE,
-                )
-            )
-            self.fetcher_count += 3
+                self.fetcher_count += 2
 
-            async for item in self._consumer():
-                yield item
+                async for item in self._consumer():
+                    yield item
             await self.fetchers.join()

@@ -4,11 +4,13 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the PostgreSQL database source class methods"""
+
 import ssl
 from contextlib import asynccontextmanager
 from unittest.mock import ANY, Mock, patch
 
 import pytest
+from freezegun import freeze_time
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
@@ -20,6 +22,7 @@ from connectors.sources.postgresql import (
     PostgreSQLDataSource,
     PostgreSQLQueries,
 )
+from connectors.utils import iso_utc
 from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
@@ -29,6 +32,12 @@ POSTGRESQL_CONNECTION_STRING = (
 SCHEMA = "public"
 TABLE = "emp_table"
 CUSTOMER_TABLE = "customer"
+
+TIME = iso_utc()
+
+ID_ONE = "id1"
+ID_TWO = "id2"
+ID_THREE = "id3"
 
 
 @asynccontextmanager
@@ -288,6 +297,129 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
             assert validation_result == expected_validation_result
 
 
+@pytest.mark.parametrize(
+    "advanced_rules, id_in_source, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            {},
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: valid queries
+            [
+                {
+                    "tables": ["emp_table"],
+                    "query": "select * from emp_table",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: id_columns field missing
+            [
+                {
+                    "tables": ["emp_table"],
+                    "query": "select * from emp_table",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: tables not present in database
+            [
+                {
+                    "tables": ["table_name"],
+                    "query": "select * from table_name",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables key missing
+            [{"query": "select * from table_name", "id_columns": [ID_ONE]}],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: invalid key
+            [
+                {
+                    "tables": "table_name",
+                    "query": "select * from table_name",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables can be empty
+            [
+                {
+                    "tables": [],
+                    "query": "select * from table_name",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_when_id_in_source_available(
+    advanced_rules, id_in_source, expected_validation_result
+):
+    async with create_source(
+        PostgreSQLDataSource, database="xe", tables="*", schema="public", port=5432
+    ) as source:
+        with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
+            validation_result = await PostgreSQLAdvancedRulesValidator(source).validate(
+                advanced_rules
+            )
+
+            assert validation_result == expected_validation_result
+
+
+@freeze_time(TIME)
 @pytest.mark.asyncio
 async def test_get_docs():
     # Setup
@@ -324,6 +456,7 @@ async def test_get_docs():
             assert actual_response == expected_response
 
 
+@freeze_time(TIME)
 @pytest.mark.parametrize(
     "filtering, expected_response",
     [

@@ -17,6 +17,7 @@
 Elasticsearch <== Sink <== queue <== Extractor <== generator
 
 """
+
 import asyncio
 import copy
 import functools
@@ -197,7 +198,9 @@ class Sink:
             for item in res["items"]:
                 for op, data in item.items():
                     if "error" in data:
-                        self._logger.error(f"operation {op} failed, {data['error']}")
+                        self._logger.error(
+                            f"operation {op} failed for doc {data['_id']}, {data['error']}"
+                        )
 
         self._populate_stats(stats, res)
 
@@ -598,8 +601,18 @@ class Extractor:
                             "doc": doc,
                         }
                     )
+                # We try raising every loop to not miss a moment when
+                # too many errors happened when downloading
+                lazy_downloads.raise_any_exception()
 
                 await asyncio.sleep(0)
+
+            # Sit and wait until an error happens
+            await lazy_downloads.join(raise_on_error=True)
+        except Exception as ex:
+            self._logger.error(f"Extractor failed with an error: {ex}")
+            lazy_downloads.cancel()
+            raise
         finally:
             # wait for all downloads to be finished
             await lazy_downloads.join()
@@ -817,20 +830,22 @@ class SyncOrchestrator:
 
     async def close(self):
         await self.es_management_client.close()
+        await self.cancel()
 
     async def has_active_license_enabled(self, license_):
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
 
+    def extract_index_or_alias(self, get_index_response, expected_index_name):
+        return None
+
     async def prepare_content_index(self, index_name, language_code=None):
         """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
 
-        result = await self.es_management_client.get_index(
+        index = await self.es_management_client.get_index_or_alias(
             index_name, ignore_unavailable=True
         )
-
-        index = result.get(index_name, None)
 
         mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
 
@@ -845,7 +860,7 @@ class SyncOrchestrator:
             )
 
             await self.es_management_client.ensure_content_index_mappings(
-                index_name, mappings
+                index_name=index_name, index=index, desired_mappings=mappings
             )
         else:
             # Create a new index
@@ -882,12 +897,29 @@ class SyncOrchestrator:
 
     async def cancel(self):
         if self._sink_task_running():
+            self._logger.info(f"Canceling the Sink task: {self._sink_task.get_name()}")
             self._sink_task.cancel()
+        else:
+            self._logger.debug(
+                "Orchestrator cancel() called, but sink task is not running"
+            )
+
         if self._extractor_task_running():
+            self._logger.info(
+                f"Canceling the Extractor task: {self._extractor_task.get_name()}"
+            )
             self._extractor_task.cancel()
+        else:
+            self._logger.debug(
+                "Orchestrator cancel() called, but extractor task is not running"
+            )
+
         self.canceled = True
 
         cancelation_timeout = CANCELATION_TIMEOUT
+        self._logger.debug(
+            f"Allowing {cancelation_timeout} seconds for the orchestrator tasks to finish..."
+        )
         while cancelation_timeout > 0:
             await asyncio.sleep(1)
             cancelation_timeout -= 1
@@ -896,6 +928,10 @@ class SyncOrchestrator:
                     "Both Extractor and Sink tasks are successfully stopped."
                 )
                 return
+            self._logger.debug(f"Sink task running? {self._sink_task_running()}")
+            self._logger.debug(
+                f"Extractor task running? {self._extractor_task_running()}"
+            )
 
         self._logger.error(
             f"Sync job did not stop within {CANCELATION_TIMEOUT} seconds of canceling. Force-canceling."
@@ -990,7 +1026,8 @@ class SyncOrchestrator:
             skip_unchanged_documents=skip_unchanged_documents,
         )
         self._extractor_task = asyncio.create_task(
-            self._extractor.run(generator, job_type)
+            self._extractor.run(generator, job_type),
+            name=f"Extractor for {job_type} sync to {index}",
         )
         self._extractor_task.add_done_callback(
             functools.partial(self.extractor_task_callback)
@@ -1009,7 +1046,9 @@ class SyncOrchestrator:
             logger_=self._logger,
             enable_bulk_operations_logging=enable_bulk_operations_logging,
         )
-        self._sink_task = asyncio.create_task(self._sink.run())
+        self._sink_task = asyncio.create_task(
+            self._sink.run(), name=f"Sink for {job_type} sync to {index}"
+        )
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
     def sink_task_callback(self, task):

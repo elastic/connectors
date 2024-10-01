@@ -10,6 +10,7 @@ This is the main entry point of the framework. When the project is installed as
 a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
+
 import asyncio
 import functools
 import json
@@ -40,12 +41,16 @@ async def _start_service(actions, config, loop):
     - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
-    preflight = PreflightCheck(config)
+    preflight = PreflightCheck(config, __version__)
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
     try:
-        if not await preflight.run():
+        success, is_serverless = await preflight.run()
+        if not success:
             return -1
+
+        # injecting this value into the config allows us to avoid checking the server again before requests
+        config["elasticsearch"]["serverless"] = is_serverless
     finally:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.remove_signal_handler(sig)
@@ -68,13 +73,19 @@ async def _start_service(actions, config, loop):
         return await multi_service.run()
 
 
+def _get_uvloop():
+    import uvloop
+
+    return uvloop
+
+
 def get_event_loop(uvloop=False):
     if uvloop:
         # activate uvloop if lib is present
         try:
             import uvloop
 
-            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            asyncio.set_event_loop_policy(_get_uvloop().EventLoopPolicy())
         except Exception as e:
             logger.warning(
                 f"Unable to enable uvloop: {e}. Running with default event loop"
