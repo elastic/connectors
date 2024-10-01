@@ -6,6 +6,7 @@
 """Box source module responsible to fetch documents from Box"""
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
@@ -81,6 +82,7 @@ class AccessToken:
     async def get(self):
         if cached_value := self._token_cache.get_value():
             return cached_value
+        self._logger.debug("No token cache found; fetching new token")
         await self._set_access_token()
         return self.access_token
 
@@ -158,7 +160,7 @@ class BoxClient:
         raise Exception(msg)
 
     def debug_query_string(self, params):
-        if self._logger.level == 10:  # log level code for DEBUG
+        if self._logger.isEnabledFor(logging.DEBUG):
             return (
                 "&".join(f"{key}={value}" for key, value in params.items())
                 if params
@@ -316,8 +318,9 @@ class BoxDataSource(BaseDataSource):
     async def ping(self):
         try:
             await self.client.ping()
+            self._logger.debug("Successfully connected to Box")
         except Exception:
-            self._logger.warning("Error while connecting to Box.")
+            self._logger.warning("Error while connecting to Box")
             raise
 
     async def get_users_id(self):
@@ -473,7 +476,6 @@ class BoxDataSource(BaseDataSource):
                 yield item
 
     async def get_docs(self, filtering=None):
-        self._logger.info("Successfully connected to Box")
         seen_ids = set()
         root_folder = "0"
         if self.is_enterprise == BOX_ENTERPRISE:
