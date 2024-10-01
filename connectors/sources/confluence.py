@@ -1250,9 +1250,7 @@ class ConfluenceDataSource(BaseDataSource):
             advanced_rules = filtering.get_advanced_rules()
             for query_info in advanced_rules:
                 query = query_info.get("query")
-                self._logger.debug(
-                    f"Fetching content using custom query: {query}"
-                )
+                self._logger.debug(f"Fetching content using custom query: {query}")
                 async for document, download_link in self.search_by_query(query):
                     if download_link:
                         yield (
