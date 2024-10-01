@@ -162,6 +162,16 @@ class ConnectorIndex(ESIndex):
         else:
             await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
+    async def connector_put(
+        self, connector_id, service_type, connector_name=None, index_name=None
+    ):
+        await self.api.connector_put(
+            connector_id=connector_id,
+            service_type=service_type,
+            connector_name=connector_name,
+            index_name=index_name,
+        )
+
     async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
@@ -994,9 +1004,9 @@ class Connector(ESDocument):
             filtering = self.filtering.to_list()
             for filter_ in filtering:
                 if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                    filter_.get("draft", {"validation": {}})["validation"] = (
-                        validation_result.to_dict()
-                    )
+                    filter_.get("draft", {"validation": {}})[
+                        "validation"
+                    ] = validation_result.to_dict()
                     if validation_result.state == FilteringValidationState.VALID:
                         filter_["active"] = filter_.get("draft")
 

@@ -14,6 +14,7 @@ from connectors.agent.config import ConnectorsAgentConfigurationWrapper
 from connectors.agent.logger import get_logger
 from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 from connectors.agent.service_manager import ConnectorServiceManager
+from connectors.agent.connector_record_manager import ConnectorRecordManager
 from connectors.services.base import MultiService
 
 logger = get_logger("component")
@@ -58,8 +59,12 @@ class ConnectorsAgentComponent:
         client = new_v2_from_reader(self.buffer, self.ver, self.opts)
         action_handler = ConnectorActionHandler()
         self.connector_service_manager = ConnectorServiceManager(self.config_wrapper)
+        connector_record_manager = ConnectorRecordManager()
         checkin_handler = ConnectorCheckinHandler(
-            client, self.config_wrapper, self.connector_service_manager
+            client,
+            self.config_wrapper,
+            self.connector_service_manager,
+            connector_record_manager,
         )
 
         self.multi_service = MultiService(

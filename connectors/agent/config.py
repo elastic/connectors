@@ -24,48 +24,18 @@ class ConnectorsAgentConfigurationWrapper:
     def __init__(self):
         """Inits the class.
 
-        There's default config that allows us to run connectors natively (see _force_allow_native flag),
-        when final configuration is reported these defaults will be merged with defaults from Connectors
-        Service config and specific config coming from Agent.
+        There's default config that allows us to run connectors service.
         """
         self._default_config = {
             "service": {
                 "log_level": "INFO",
-                "_use_native_connector_api_keys": False,
             },
-            "_force_allow_native": True,
-            "native_service_types": [
-                "azure_blob_storage",
-                "box",
-                "confluence",
-                "dropbox",
-                "github",
-                "gmail",
-                "google_cloud_storage",
-                "google_drive",
-                "jira",
-                "mongodb",
-                "mssql",
-                "mysql",
-                "notion",
-                "onedrive",
-                "oracle",
-                "outlook",
-                "network_drive",
-                "postgresql",
-                "s3",
-                "salesforce",
-                "servicenow",
-                "sharepoint_online",
-                "slack",
-                "microsoft_teams",
-                "zoom",
-            ],
+            "connectors": [],
         }
 
         self.specific_config = {}
 
-    def try_update(self, unit):
+    def try_update(self, connector_id, service_type, output_unit):
         """Try update the configuration and see if it changed.
 
         This method takes the check-in event coming from Agent and checks if config needs an update.
@@ -74,7 +44,7 @@ class ConnectorsAgentConfigurationWrapper:
         the method returns False.
         """
 
-        source = unit.config.source
+        source = output_unit.config.source
 
         # TODO: find a good link to what this object is.
         has_hosts = source.fields.get("hosts")
@@ -83,9 +53,17 @@ class ConnectorsAgentConfigurationWrapper:
 
         assumed_configuration = {}
 
+        # Connector-related
+        assumed_configuration["connectors"] = [
+            {
+                "connector_id": connector_id,
+                "service_type": service_type,
+            }
+        ]
+
         # Log-related
         assumed_configuration["service"] = {}
-        assumed_configuration["service"]["log_level"] = unit.log_level
+        assumed_configuration["service"]["log_level"] = output_unit.log_level
 
         # Auth-related
         if has_hosts and (has_api_key or has_basic_auth):
@@ -154,12 +132,42 @@ class ConnectorsAgentConfigurationWrapper:
                 "elasticsearch"
             )
 
+        def _connectors_config_changes():
+            current_connectors = current_config.get("connectors", [])
+            new_connectors = new_config.get("connectors", [])
+
+            if len(current_connectors) != len(new_connectors):
+                return True
+
+            current_connectors_dict = {
+                connector["connector_id"]: connector for connector in current_connectors
+            }
+            new_connectors_dict = {
+                connector["connector_id"]: connector for connector in new_connectors
+            }
+
+            if set(current_connectors_dict.keys()) != set(new_connectors_dict.keys()):
+                return True
+
+            for connector_id in current_connectors_dict:
+                current_connector = current_connectors_dict[connector_id]
+                new_connector = new_connectors_dict[connector_id]
+
+                if current_connector != new_connector:
+                    return True
+
+            return False
+
         if _log_level_changed():
             logger.debug("log_level changed")
             return True
 
         if _elasticsearch_config_changed():
             logger.debug("elasticsearch changed")
+            return True
+
+        if _connectors_config_changes():
+            logger.debug("connectors changed")
             return True
 
         return False
@@ -182,3 +190,6 @@ class ConnectorsAgentConfigurationWrapper:
         configuration = dict(add_defaults(config))
 
         return configuration
+
+    def get_specific_config(self):
+        return self.specific_config
