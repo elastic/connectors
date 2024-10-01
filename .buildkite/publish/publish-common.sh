@@ -41,7 +41,7 @@ else
   export DOCKER_TAG_VERSION=${VERSION}
 fi
 
-export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/enterprise-search/elastic-connectors}
+export BASE_TAG_NAME=${DOCKER_IMAGE_NAME:-docker.elastic.co/integrations/elastic-connectors}
 export DOCKERFILE_PATH=${DOCKERFILE_PATH:-Dockerfile}
 export PROJECT_NAME=${PROJECT_NAME:-elastic-connectors}
 export DOCKER_ARTIFACT_KEY=${DOCKER_ARTIFACT_KEY:-${PROJECT_NAME}-docker}

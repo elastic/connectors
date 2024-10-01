@@ -6,7 +6,7 @@ PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
 
-DOCKER_IMAGE_NAME?=docker.elastic.co/enterprise-search/elastic-connectors
+DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
 DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
 
