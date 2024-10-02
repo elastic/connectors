@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Module to responsible to generate GitHub documents using the Flask framework.
-"""
+"""Module to responsible to generate GitHub documents using the Flask framework."""
+
 import base64
 import os
 
@@ -53,7 +53,7 @@ class GitHubAPI:
             self.get_commits
         )
         self.app.route("/api/graphql", methods=["POST"])(self.mock_graphql_response)
-        self.app.route("/api", methods=["HEAD"])(self.get_scopes)
+        self.app.route("/api/graphql", methods=["HEAD"])(self.get_scopes)
         self.files = {}
 
     def encode_cursor(self, value):

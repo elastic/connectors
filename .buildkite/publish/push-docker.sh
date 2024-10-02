@@ -18,7 +18,7 @@ source $CURDIR/publish-common.sh
 
 # Load the image from the artifact created in build-docker.sh
 echo "Loading image from archive file..."
-docker load < "$PROJECT_ROOT/.artifacts/${DOCKER_ARTIFACT_KEY}-${VERSION}-${ARCHITECTURE}.tar.gz"
+docker load < "$PROJECT_ROOT/.artifacts/${DOCKER_ARTIFACT_KEY}-${DOCKER_TAG_VERSION}-${ARCHITECTURE}.tar.gz"
 
 # ensure +x is set to avoid writing any sensitive information to the console
 set +x
@@ -30,6 +30,6 @@ vault read -address "${VAULT_ADDR}" -field secret_20230609 secret/ci/elastic-con
   docker login -u $DOCKER_USER --password-stdin docker.elastic.co
 
 # Set our tag name and push the image
-TAG_NAME="$BASE_TAG_NAME:${VERSION}-${ARCHITECTURE}"
+TAG_NAME="$BASE_TAG_NAME:${DOCKER_TAG_VERSION}-${ARCHITECTURE}"
 echo "Pushing image to docker with tag: $TAG_NAME"
 docker push $TAG_NAME

@@ -12,9 +12,9 @@ export CURDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )
 source $CURDIR/publish-common.sh
 
 # Set our tag name as well as the tag names of the indiividual platform images
-TAG_NAME="${BASE_TAG_NAME}:${VERSION}"
-AMD64_TAG="${BASE_TAG_NAME}:${VERSION}-amd64"
-ARM64_TAG="${BASE_TAG_NAME}:${VERSION}-arm64"
+TAG_NAME="${BASE_TAG_NAME}:${DOCKER_TAG_VERSION}"
+AMD64_TAG="${BASE_TAG_NAME}:${DOCKER_TAG_VERSION}-amd64"
+ARM64_TAG="${BASE_TAG_NAME}:${DOCKER_TAG_VERSION}-arm64"
 
 # Pull the images from the registry
 buildah pull $AMD64_TAG

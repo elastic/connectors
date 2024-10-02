@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the ServiceNow source class methods"""
+
 from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import Mock, patch
@@ -505,12 +506,15 @@ async def test_fetch_attachment_content_with_doit():
 
 @pytest.mark.asyncio
 async def test_fetch_attachment_content_with_extraction_service():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="Attachment Content",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="Attachment Content",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_service_now_source(
             use_text_extraction_service=True
@@ -986,3 +990,19 @@ async def test_fetch_access_control_for_public():
             assert sorted(access_control) == sorted(
                 ["user_id:user_id_1", "user_id:user_id_2"]
             )
+
+
+@pytest.mark.asyncio
+async def test_end_signal_is_added_to_queue_in_case_of_exception():
+    END_SIGNAL = "RECORD_TASK_FINISHED"
+    async with create_service_now_source() as source:
+        with patch.object(
+            source,
+            "_fetch_attachment_metadata",
+            side_effect=Exception("Error fetching attachments"),
+        ):
+            with pytest.raises(Exception):
+                await source._attachment_metadata_producer(
+                    records_ids=["record_1", "record_2"], access_control=[]
+                )
+                assert source.queue.get_nowait() == END_SIGNAL

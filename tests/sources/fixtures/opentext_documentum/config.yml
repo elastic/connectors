@@ -1,4 +1,0 @@
-connectors:
-  -
-    connector_id: 'opentext_documentum'
-    service_type: 'opentext_documentum'

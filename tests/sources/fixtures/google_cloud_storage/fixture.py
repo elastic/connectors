@@ -4,8 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Google Cloud Storage module responsible to generate blob(s) on the fake Google Cloud Storage server.
-"""
+"""Google Cloud Storage module responsible to generate blob(s) on the fake Google Cloud Storage server."""
+
 import os
 
 from google.auth.credentials import AnonymousCredentials
@@ -26,8 +26,8 @@ match DATA_SIZE:
         FIRST_BUCKET_FILE_COUNT = 500
         SECOND_BUCKET_FILE_COUNT = 1500
     case "medium":
-        FIRST_BUCKET_FILE_COUNT = 1000
-        SECOND_BUCKET_FILE_COUNT = 2500
+        FIRST_BUCKET_FILE_COUNT = 750
+        SECOND_BUCKET_FILE_COUNT = 2250
     case "large":
         FIRST_BUCKET_FILE_COUNT = 3000
         SECOND_BUCKET_FILE_COUNT = 7500

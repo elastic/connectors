@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Jira database source class methods"""
+
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
@@ -104,8 +105,8 @@ EXPECTED_ISSUE = {
             }
         ],
         "issuerestriction": {"issuerestrictions": {}},
-        "Author": "custom value",
     },
+    "Custom_Fields": {"Author": "custom value"},
 }
 
 MOCK_ISSUE_TYPE_BUG = {
@@ -157,6 +158,7 @@ EXPECTED_ISSUE_TYPE_BUG = {
             }
         },
     },
+    "Custom_Fields": {},
 }
 
 EXPECTED_ATTACHMENT_TYPE_BUG = {
@@ -321,6 +323,8 @@ MOCK_JIRA_FIELDS = [
         "custom": True,
     },
 ]
+
+EXPECTED_CUSTOM_FIELDS = {"customfield_001": "Author"}
 
 ACCESS_CONTROL = "_allow_access_control"
 
@@ -823,6 +827,14 @@ async def test_put_issue():
 
 
 @pytest.mark.asyncio
+async def test_get_custom_fields():
+    async with create_jira_source() as source:
+        with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
+            custom_fields = await anext(source.jira_client.get_jira_fields())
+            assert custom_fields == EXPECTED_CUSTOM_FIELDS
+
+
+@pytest.mark.asyncio
 async def test_put_attachment_positive():
     """Test _put_attachment method"""
 
@@ -863,12 +875,15 @@ async def test_get_content():
 @pytest.mark.asyncio
 async def test_get_content_with_text_extraction_enabled_adds_body():
     """Tests the get content method."""
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=RESPONSE_CONTENT,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=RESPONSE_CONTENT,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_jira_source(use_text_extraction_service=True) as source:
             with mock.patch(

@@ -41,6 +41,7 @@ from connectors.utils import (
     iso_utc,
     iso_zulu,
     iterable_batches_generator,
+    nested_get_from_dict,
     retryable,
     url_encode,
 )
@@ -436,7 +437,9 @@ class MicrosoftAPISession:
                     request_info=req_info,
                     headers=headers,
                     status=status,
-                    message=response.get("body", {}).get("error", {}).get("message"),
+                    message=nested_get_from_dict(
+                        response, ["body", "error", "message"]
+                    ),
                     history=(batch_resp),
                 )
 
@@ -586,14 +589,20 @@ class SharepointOnlineClient:
             return
 
     async def site_collections(self):
-        filter_ = url_encode("siteCollection/root ne null")
-        select = "siteCollection,webUrl"
+        try:
+            filter_ = url_encode("siteCollection/root ne null")
+            select = "siteCollection,webUrl"
 
-        async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/?$filter={filter_}&$select={select}"
-        ):
-            for site_collection in page:
-                yield site_collection
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/?$filter={filter_}&$select={select}"
+            ):
+                for site_collection in page:
+                    yield site_collection
+        except PermissionsMissing:
+            self._logger.warning(
+                "Looks like 'Sites.Read.All' permission is missing to fetch all root-level site collections, hence fetching only tenant root site"
+            )
+            yield await self._graph_api_client.fetch(url=f"{GRAPH_API_URL}/sites/root")
 
     async def site_role_assignments(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -715,16 +724,23 @@ class SharepointOnlineClient:
 
     async def _all_sites(self, sharepoint_host, allowed_root_sites):
         select = ""
-        async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
-        ):
-            for site in page:
-                # Filter out site collections that are not needed
-                if [WILDCARD] != allowed_root_sites and site[
-                    "name"
-                ] not in allowed_root_sites:
-                    continue
-                yield site
+        try:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
+            ):
+                for site in page:
+                    # Filter out site collections that are not needed
+                    if [WILDCARD] != allowed_root_sites and site[
+                        "name"
+                    ] not in allowed_root_sites:
+                        continue
+                    yield site
+        except PermissionsMissing as exception:
+            if allowed_root_sites == [WILDCARD]:
+                msg = "The configuration field 'Comma-separated list of sites' with '*' value is only compatible with 'Sites.Read.All' permission."
+            else:
+                msg = "To enumerate all sites, the connector requires 'Sites.Read.All' permission"
+            raise PermissionsMissing(msg) from exception
 
     async def _fetch_site_and_subsites_by_path(self, sharepoint_host, allowed_site):
         self._logger.debug(
@@ -755,7 +771,7 @@ class SharepointOnlineClient:
 
     async def _recurse_sites(self, site_with_subsites):
         subsites = site_with_subsites.pop("sites", [])
-        site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
+        site_with_subsites.pop("sites@odata.context", None)  # remove unnecessary field
         yield site_with_subsites
         if subsites:
             async for site in self._scroll_subsites_by_parent_id(
@@ -1179,6 +1195,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "tooltip": "A comma-separated list of sites to ingest data from. If enumerating all sites, use * to include all available sites, or specify a list of site names. Otherwise, specify a list of site paths.",
                 "order": 5,
                 "type": "list",
+                "value": "*",
             },
             "enumerate_all_sites": {
                 "display": "toggle",
@@ -1582,7 +1599,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         ):
             drive_item_id = permissions_response.get("id")
             drive_item = upsert_ids_to_items.get(drive_item_id)
-            permissions = permissions_response.get("body", {}).get("value", [])
+            permissions = nested_get_from_dict(
+                permissions_response, ["body", "value"], []
+            )
 
             if drive_item:
                 yield await self._with_drive_item_permissions(
@@ -1610,20 +1629,26 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_admin_access_control,
                 ) = await self._site_access_control(site)
 
-                yield self._decorate_with_access_control(
-                    site, site_access_control
-                ), None
+                yield (
+                    self._decorate_with_access_control(site, site_access_control),
+                    None,
+                )
 
                 async for site_drive in self.site_drives(site):
-                    yield self._decorate_with_access_control(
-                        site_drive, site_access_control
-                    ), None
+                    yield (
+                        self._decorate_with_access_control(
+                            site_drive, site_access_control
+                        ),
+                        None,
+                    )
 
                     async for page in self.client.drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
-                            async for drive_item in self._drive_items_batch_with_permissions(
+                            async for (
+                                drive_item
+                            ) in self._drive_items_batch_with_permissions(
                                 site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
@@ -1641,8 +1666,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         drive_item, site_access_control
                                     )
 
-                                yield drive_item, self.download_function(
-                                    drive_item, max_drive_item_age
+                                yield (
+                                    drive_item,
+                                    self.download_function(
+                                        drive_item, max_drive_item_age
+                                    ),
                                 )
 
                         self.update_drive_delta_link(
@@ -1704,17 +1732,23 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_admin_access_control,
                 ) = await self._site_access_control(site)
 
-                yield self._decorate_with_access_control(
-                    site, site_access_control
-                ), None, OP_INDEX
+                yield (
+                    self._decorate_with_access_control(site, site_access_control),
+                    None,
+                    OP_INDEX,
+                )
 
                 # Edit operation on a drive_item doesn't update the
-                # lastModifiedDateTime of the parent site_drive. Therfore, we
+                # lastModifiedDateTime of the parent site_drive. Therefore, we
                 # set check_timestamp to False when iterating over site_drives.
                 async for site_drive in self.site_drives(site, check_timestamp=False):
-                    yield self._decorate_with_access_control(
-                        site_drive, site_access_control
-                    ), None, OP_INDEX
+                    yield (
+                        self._decorate_with_access_control(
+                            site_drive, site_access_control
+                        ),
+                        None,
+                        OP_INDEX,
+                    )
 
                     delta_link = self.get_drive_delta_link(site_drive["id"])
 
@@ -1724,7 +1758,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
-                            async for drive_item in self._drive_items_batch_with_permissions(
+                            async for (
+                                drive_item
+                            ) in self._drive_items_batch_with_permissions(
                                 site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
@@ -1742,9 +1778,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         drive_item, site_access_control
                                     )
 
-                                yield drive_item, self.download_function(
-                                    drive_item, max_drive_item_age
-                                ), self.drive_item_operation(drive_item)
+                                yield (
+                                    drive_item,
+                                    self.download_function(
+                                        drive_item, max_drive_item_age
+                                    ),
+                                    self.drive_item_operation(drive_item),
+                                )
 
                         self.update_drive_delta_link(
                             drive_id=site_drive["id"], link=page.delta_link()
@@ -1867,10 +1907,10 @@ class SharepointOnlineDataSource(BaseDataSource):
             return drive_item
 
         def _get_id(permissions, label):
-            return permissions.get(label, {}).get("id")
+            return nested_get_from_dict(permissions, [label, "id"])
 
         def _get_email(permissions, label):
-            return permissions.get(label, {}).get("email")
+            return nested_get_from_dict(permissions, [label, "email"])
 
         def _get_login_name(permissions, label):
             identity = permissions.get(label, {})
@@ -1945,7 +1985,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     ):
         site_id = site.get("id")
         site_web_url = site.get("webUrl")
-        site_collection = site.get("siteCollection", {}).get("hostname")
+        site_collection = nested_get_from_dict(site, ["siteCollection", "hostname"])
         async for list_item in self.client.site_list_items(site_id, site_list_id):
             if not check_timestamp or (
                 check_timestamp
@@ -1962,10 +2002,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 content_type = list_item["contentType"]["name"]
 
-                if content_type in [
-                    "Web Template Extensions",
-                    "Client Side Component Manifests",
-                ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
+                if (
+                    content_type
+                    in [
+                        "Web Template Extensions",
+                        "Client Side Component Manifests",
+                    ]
+                ):  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                     continue
 
                 has_unique_role_assignments = False
@@ -1987,7 +2030,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         list_item_access_control = []
 
-                        async for role_assignment in self.client.site_list_item_role_assignments(
+                        async for (
+                            role_assignment
+                        ) in self.client.site_list_item_role_assignments(
                             site_web_url, site_list_name, list_item_natural_id
                         ):
                             list_item_access_control.extend(
@@ -2006,7 +2051,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     )
 
                 if "Attachments" in list_item["fields"]:
-                    async for list_item_attachment in self.client.site_list_item_attachments(
+                    async for (
+                        list_item_attachment
+                    ) in self.client.site_list_item_attachments(
                         site_web_url, site_list_name, list_item_natural_id
                     ):
                         list_item_attachment["_id"] = list_item_attachment["odata.id"]
@@ -2014,17 +2061,17 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item_attachment["_timestamp"] = list_item[
                             "lastModifiedDateTime"
                         ]
-                        list_item_attachment[
-                            "_original_filename"
-                        ] = list_item_attachment.get("FileName", "")
+                        list_item_attachment["_original_filename"] = (
+                            list_item_attachment.get("FileName", "")
+                        )
                         if (
                             "ServerRelativePath" in list_item_attachment
                             and "DecodedUrl"
                             in list_item_attachment.get("ServerRelativePath", {})
                         ):
-                            list_item_attachment[
-                                "webUrl"
-                            ] = f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                            list_item_attachment["webUrl"] = (
+                                f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                            )
                         else:
                             self._logger.debug(
                                 f"Unable to populate webUrl for list item attachment {list_item_attachment['_id']}"
@@ -2072,7 +2119,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         site_list_access_control = []
 
-                        async for role_assignment in self.client.site_list_role_assignments(
+                        async for (
+                            role_assignment
+                        ) in self.client.site_list_role_assignments(
                             site_url, site_list_name
                         ):
                             site_list_access_control.extend(
@@ -2120,7 +2169,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
                 base_permission_low = int(
-                    binding.get("BasePermissions", {}).get("Low", "0")
+                    nested_get_from_dict(binding, ["BasePermissions", "Low"], "0")  # pyright: ignore
                 )
                 role_type_kind = binding.get("RoleTypeKind", 0)
                 if (
@@ -2138,14 +2187,16 @@ class SharepointOnlineDataSource(BaseDataSource):
             return []
 
         access_control = []
-        identity_type = role_assignment.get("Member", {}).get("odata.type", "")
+        identity_type = nested_get_from_dict(
+            role_assignment, ["Member", "odata.type"], ""
+        )
         is_group = identity_type == "SP.Group"
         is_user = identity_type == "SP.User"
 
         if is_group:
-            users = role_assignment.get("Member", {}).get("Users", [])
+            users = nested_get_from_dict(role_assignment, ["Member", "Users"], [])
 
-            for user in users:
+            for user in users:  # pyright: ignore
                 access_control.extend(await self._access_control_for_member(user))
         elif is_user:
             member = role_assignment.get("Member", {})
@@ -2194,7 +2245,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         page_access_control = []
 
-                        async for role_assignment in self.client.site_page_role_assignments(
+                        async for (
+                            role_assignment
+                        ) in self.client.site_page_role_assignments(
                             url, site_page["Id"]
                         ):
                             page_access_control.extend(
@@ -2239,7 +2292,9 @@ class SharepointOnlineDataSource(BaseDataSource):
         self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
 
     def get_drive_delta_link(self, drive_id):
-        return self._sync_cursor.get(CURSOR_SITE_DRIVE_KEY, {}).get(drive_id)
+        return nested_get_from_dict(
+            self._sync_cursor, [CURSOR_SITE_DRIVE_KEY, drive_id]
+        )
 
     def drive_item_operation(self, item):
         if "deleted" in item:
@@ -2476,7 +2531,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         email = user.get("Email", user.get("mail"))
         user_id = user.get(
             "id"
-        )  # not captial "Id", Sharepoint REST uses this for non-unique IDs like `1`
+        )  # not capital "Id", Sharepoint REST uses this for non-unique IDs like `1`
 
         if user_principal_name:
             user_access_control.append(_prefix_user(user_principal_name))

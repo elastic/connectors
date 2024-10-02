@@ -17,9 +17,11 @@ These scripts can also be used as a starting place for adding Connectors to your
 
 ## Prerequisites
 * Linux or macOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
-* Python 3.10
+* Python 3.10 or 3.11
 * Docker with Docker Compose Installed
-* It is recommended to run Docker with at least 4GB of available RAM.
+    * It is recommended to run Docker with at least 4GB of available RAM.
+* Curl 8.7.1 or higher
+    * Versions before 8.6.0 should also work. Just avoid 8.6 due to a [regression](https://www.github.com/curl/curl/issues/13170) that will cause Kibana to not boot properly.
 
 ## Running the Stack
 
