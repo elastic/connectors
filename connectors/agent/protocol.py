@@ -86,9 +86,10 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
 
             # Filter Elasticsearch outputs from the available outputs
             elasticsearch_outputs = [
-                output
-                for output in outputs
-                if output.config and output.config.type == ELASTICSEARCH_OUTPUT_TYPE
+                output_unit
+                for output_unit in outputs
+                if output_unit.config
+                and output_unit.config.type == ELASTICSEARCH_OUTPUT_TYPE
             ]
 
             inputs = [
@@ -99,7 +100,9 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
 
             # Ensure only the single valid connector input is selected from the inputs
             connector_inputs = [
-                input for input in inputs if input.config.type == CONNECTORS_INPUT_TYPE
+                input_unit
+                for input_unit in inputs
+                if input_unit.config.type == CONNECTORS_INPUT_TYPE
             ]
 
             if connector_inputs:

@@ -4,7 +4,6 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from connectors.agent.logger import get_logger
-
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import ConnectorIndex
 
@@ -12,6 +11,10 @@ logger = get_logger("agent_connector_record_manager")
 
 
 class ConnectorRecordManager:
+    """
+    Manages connector records in Elasticsearch, ensuring that connectors tied to agent components
+    exist in the connector inded, if creates them if necessary.
+    """
 
     def __init__(self):
         self.connector_index = None

@@ -11,10 +11,10 @@ from elastic_agent_client.service.actions import ActionsService
 from elastic_agent_client.service.checkin import CheckinV2Service
 
 from connectors.agent.config import ConnectorsAgentConfigurationWrapper
+from connectors.agent.connector_record_manager import ConnectorRecordManager
 from connectors.agent.logger import get_logger
 from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 from connectors.agent.service_manager import ConnectorServiceManager
-from connectors.agent.connector_record_manager import ConnectorRecordManager
 from connectors.services.base import MultiService
 
 logger = get_logger("component")

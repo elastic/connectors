@@ -24,7 +24,9 @@ class ConnectorsAgentConfigurationWrapper:
     def __init__(self):
         """Inits the class.
 
-        There's default config that allows us to run connectors service.
+        There's default config that allows us to run connectors service. When final
+        configuration is reported these defaults will be merged with defaults from
+        Connectors Service config and specific config coming from Agent.
         """
         self._default_config = {
             "service": {
@@ -38,7 +40,8 @@ class ConnectorsAgentConfigurationWrapper:
     def try_update(self, connector_id, service_type, output_unit):
         """Try update the configuration and see if it changed.
 
-        This method takes the check-in event coming from Agent and checks if config needs an update.
+        This method takes the check-in event data (connector_id, service_type and output) coming
+        from Agent and checks if config needs an update.
 
         If update is needed, configuration is updated and method returns True. If no update is needed
         the method returns False.
