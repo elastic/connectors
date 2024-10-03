@@ -13,7 +13,7 @@ logger = get_logger("agent_connector_record_manager")
 class ConnectorRecordManager:
     """
     Manages connector records in Elasticsearch, ensuring that connectors tied to agent components
-    exist in the connector inded, if creates them if necessary.
+    exist in the connector index. It creates the connector record if necessary.
     """
 
     def __init__(self):
@@ -88,7 +88,4 @@ class ConnectorRecordManager:
             return False
 
     def _get_connectors(self, agent_config):
-        """
-        Extracts the connectors from the agent configuration.
-        """
         return agent_config.get("connectors")

@@ -8,6 +8,7 @@ from elastic_agent_client.generated import elastic_agent_client_pb2 as proto
 from elastic_agent_client.handler.action import BaseActionHandler
 from elastic_agent_client.handler.checkin import BaseCheckinHandler
 
+from connectors.agent.connector_record_manager import ConnectorRecordManager
 from connectors.agent.logger import get_logger
 
 logger = get_logger("protocol")
@@ -51,7 +52,6 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         client,
         agent_connectors_config_wrapper,
         service_manager,
-        connector_record_manager,
     ):
         """Inits the class.
 
@@ -60,7 +60,7 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         super().__init__(client)
         self.agent_connectors_config_wrapper = agent_connectors_config_wrapper
         self.service_manager = service_manager
-        self.connector_record_manager = connector_record_manager
+        self.connector_record_manager = ConnectorRecordManager()
 
     async def apply_from_client(self):
         """Implementation of BaseCheckinHandler.apply_from_client

@@ -66,8 +66,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper_mock,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
 
@@ -90,8 +90,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper_mock,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
 
@@ -118,8 +118,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper_mock,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
 
@@ -147,8 +147,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper_mock,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
 
@@ -182,8 +182,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper_mock,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
 
@@ -227,8 +227,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper_mock,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
 
@@ -273,8 +273,8 @@ class TestConnectorCheckingHandler:
             client_mock,
             config_wrapper,
             service_manager_mock,
-            connector_record_manager_mock,
         )
+        checkin_handler.connector_record_manager = connector_record_manager_mock
 
         await checkin_handler.apply_from_client()
         assert service_manager_mock.restart.called
