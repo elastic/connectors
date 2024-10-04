@@ -116,7 +116,8 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                 connector_input = connector_inputs[0]
 
                 def _extract_unit_config_value(unit, field_name):
-                    return unit.config.source.fields.get(field_name).string_value
+                    field_value = unit.config.source.fields.get(field_name)
+                    return field_value.string_value if field_value else None
 
                 service_type = _extract_unit_config_value(
                     connector_input, "service_type"

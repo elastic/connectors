@@ -3,6 +3,9 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import secrets
+import string
+
 from connectors.agent.logger import get_logger
 from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import ConnectorIndex
@@ -40,7 +43,10 @@ class ConnectorRecordManager:
             )
 
             if not connector_name:
-                connector_name = f"[Agentless] {service_type} connector"
+                random_connector_name_id = self._generate_random_connector_name_id(
+                    length=4
+                )
+                connector_name = f"[Elastic-managed] {service_type} connector {random_connector_name_id}"
 
             if not await self._connector_exists(connector_id):
                 try:
@@ -84,8 +90,15 @@ class ConnectorRecordManager:
         except DocumentNotFoundError:
             return False
         except Exception as e:
-            logger.error(f"Error checking existence of connector '{connector_id}': {e}")
-            return False
+            logger.error(
+                f"Error while checking existence of connector '{connector_id}': {e}"
+            )
+            raise e
 
     def _get_connectors(self, agent_config):
         return agent_config.get("connectors")
+
+    def _generate_random_connector_name_id(self, length=4):
+        return "".join(
+            secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
+        )

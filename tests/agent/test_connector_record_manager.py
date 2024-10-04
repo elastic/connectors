@@ -3,7 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -43,13 +43,15 @@ async def test_ensure_connector_records_exist_creates_connectors_if_not_exist(
     manager.connector_index = mock_connector_index
     mock_connector_index.fetch_by_id.side_effect = DocumentNotFoundError
     mock_connector_index.connector_put = AsyncMock()
+    connector_ui_id = "1234"
+    manager._generate_random_connector_name_id = Mock(return_value=connector_ui_id)
 
     await manager.ensure_connector_records_exist(mock_agent_config)
     assert mock_connector_index.connector_put.call_count == 1
     mock_connector_index.connector_put.assert_any_await(
         connector_id="1",
         service_type="service1",
-        connector_name="[Agentless] service1 connector",
+        connector_name=f"[Elastic-managed] service1 connector {connector_ui_id}",
     )
 
 
@@ -60,6 +62,22 @@ async def test_ensure_connector_records_exist_connector_already_exists(
     connector_record_manager._connector_exists = AsyncMock(return_value=True)
     await connector_record_manager.ensure_connector_records_exist(mock_agent_config)
     assert connector_record_manager.connector_index.connector_put.call_count == 0
+
+
+@pytest.mark.asyncio
+@patch("connectors.protocol.ConnectorIndex", new_callable=AsyncMock)
+async def test_ensure_connector_records_raises_on_non_404_error(
+    mock_connector_index, mock_agent_config
+):
+    manager = ConnectorRecordManager()
+    manager.connector_index = mock_connector_index
+    mock_connector_index.fetch_by_id.side_effect = Exception("Unexpected error")
+    mock_connector_index.connector_put = AsyncMock()
+
+    with pytest.raises(Exception, match="Unexpected error"):
+        await manager.ensure_connector_records_exist(mock_agent_config)
+
+    assert mock_connector_index.connector_put.call_count == 0
 
 
 @pytest.mark.asyncio
@@ -102,12 +120,12 @@ async def test_connector_exists_returns_false_when_not_found(connector_record_ma
 
 
 @pytest.mark.asyncio
-async def test_connector_exists_handles_exception(connector_record_manager):
+async def test_connector_exists_raises_non_404_exception(connector_record_manager):
     connector_record_manager.connector_index.fetch_by_id = AsyncMock(
         side_effect=Exception("Fetch error")
     )
-    exists = await connector_record_manager._connector_exists("1")
-    assert exists is False
+    with pytest.raises(Exception, match="Fetch error"):
+        await connector_record_manager._connector_exists("1")
 
 
 def test_agent_config_ready_with_valid_config(
