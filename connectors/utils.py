@@ -457,7 +457,7 @@ class ConcurrentTasks:
             )
         elif task.exception():
             logger.error(
-                f"Exception found for task {task.get_name()}: {task.exception()}",
+                f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
     def _add_task(self, coroutine, name=None):
