@@ -98,6 +98,19 @@ class ESApi(ESClient):
             partial(self._api_wrapper.connector_check_in, connector_id)
         )
 
+    async def connector_put(
+        self, connector_id, service_type, connector_name, index_name
+    ):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.put,
+                connector_id=connector_id,
+                service_type=service_type,
+                name=connector_name,
+                index_name=index_name,
+            )
+        )
+
     async def connector_update_filtering_draft_validation(
         self, connector_id, validation_result
     ):
