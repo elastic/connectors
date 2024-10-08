@@ -59,7 +59,9 @@ class ConnectorsAgentComponent:
         action_handler = ConnectorActionHandler()
         self.connector_service_manager = ConnectorServiceManager(self.config_wrapper)
         checkin_handler = ConnectorCheckinHandler(
-            client, self.config_wrapper, self.connector_service_manager
+            client,
+            self.config_wrapper,
+            self.connector_service_manager,
         )
 
         self.multi_service = MultiService(
