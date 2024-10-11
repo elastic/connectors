@@ -8,7 +8,7 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
-Please refer to the following Docker image registry to access and pull available versions of our service: [Elastic Connectors Docker Registry](https://www.docker.elastic.co/r/enterprise-search/elastic-connectors).
+Please refer to the following Docker image registry to access and pull available versions of our service: [Elastic Connectors Docker Registry](https://www.docker.elastic.co/r/integrations/elastic-connectors).
 
 Follow these steps:
 
@@ -72,7 +72,7 @@ For example, if you've created a custom version of MongoDB connector, you can ta
 docker build -t connector/custom-mongodb:1.0 .
 ```
 
-You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` in the next step to run the Docker image.
+You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT` in the next step to run the Docker image.
 
 If you're an Elastic employee, you may want to build a Chainguard-based image using `Dockerfile.wolfi`:
 
@@ -90,7 +90,7 @@ docker run \
 --network "elastic" \
 --tty \
 --rm \
-docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT \
+docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT \
 /app/bin/elastic-ingest \
 -c /config/config.yml
 ```
@@ -99,9 +99,9 @@ You might need to adjust some details here:
 
 - `-v ~/connectors-config:/config \` - replace `~/connectors-config` with the directory that you've created in step 2 if you've chosen a different name for it.
 - `--network "elastic"` - replace `elastic` with the network that you've created in step 1 if you've chosen a different name for it.
-- `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
+- `docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
   - For Elasticsearch of version `<VERSION>` you can use `elastic-connectors:<VERSION>`for a stable revision of the connectors, or `elastic-connectors:<VERSION>-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).
-  - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
+  - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
 - `-c /config/config.yml` - replace `config.yml` with the name of the config file you've put in the directory you've created in step 2.
 
 > [!TIP]

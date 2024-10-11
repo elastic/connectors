@@ -34,6 +34,7 @@ In this case, we can trigger a manual release buildkite job.
    - Choose the maintenance branch you want to release from. For example, `8.16` if you want to release between 8.16.0 and 8.16.1
    - Click on "New Build"
    - Enter a descriptive message, and leave HEAD as the commit
+   - By default the docker image will be pushed to namespace `integrations`. To push the image to `enterprise-search`, add environment variable `DOCKER_IMAGE_NAME=docker.elastic.co/enterprise-search/elastic-connectors`.
    - Press "Create Build" and wait for the build to finish
 
 This will produce Connectors artifacts like **MAJOR.MINOR.PATCH+build<TIMESTAMP>**.

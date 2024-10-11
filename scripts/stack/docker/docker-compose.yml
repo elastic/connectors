@@ -43,7 +43,7 @@ services:
       XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: c69548d9027afcf4d55146b1d425a9f4c69548d9027afcf4d55146b1d425a9f4
 
   elastic-connectors:
-    image: docker.elastic.co/enterprise-search/elastic-connectors:${CONNECTORS_VERSION}
+    image: docker.elastic.co/integrations/elastic-connectors:${CONNECTORS_VERSION}
     depends_on:
       - elasticsearch
       - kibana
