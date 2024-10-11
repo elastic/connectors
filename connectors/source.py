@@ -398,6 +398,8 @@ class BaseDataSource:
         self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
         self._sync_cursor = None
+        # Similar thing, but for checkpointing to restart sync from the approximate place it crashed/suspended
+        self._checkpoint = None
 
         if self.configuration.get("use_text_extraction_service"):
             self.extraction_service = ContentExtraction()
@@ -687,6 +689,12 @@ class BaseDataSource:
     def sync_cursor(self):
         """Returns the sync cursor of the current sync"""
         return self._sync_cursor
+
+    def set_checkpoint(self, checkpoint):
+        self._checkpoint = checkpoint
+
+    def checkpoint(self):
+        return self._checkpoint
 
     @staticmethod
     def is_premium():

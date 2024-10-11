@@ -7,6 +7,7 @@
 
 import json
 import time
+from datetime import datetime, timezone
 from enum import Enum
 from functools import cached_property, partial
 
@@ -2075,6 +2076,22 @@ class GitHubDataSource(BaseDataSource):
                         access_control.append(_prefix_email(email=user_email))
         return access_control
 
+    def _is_repo_processed(self, repo_name):
+        print(f"CHECKING IF REPO WAS PROCESSED")
+        print(self._checkpoint)
+        if self._checkpoint is None:
+            return False
+
+        return self._checkpoint.get(repo_name)
+
+    def _mark_repo_as_processed(self, repo_name):
+        print(f"MARKING REPO AS PROCESSED:{repo_name}")
+        if self._checkpoint is None:
+            self._checkpoint = {}
+
+        when = datetime.now(timezone.utc)
+        self._checkpoint[repo_name] = when
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GitHub objects in async manner.
 
@@ -2142,24 +2159,15 @@ class GitHubDataSource(BaseDataSource):
                         else:
                             yield file_document, None
 
-                if path := rule["filter"].get(ObjectType.PATH.value):
-                    async for (
-                        file_document,
-                        attachment_metadata,
-                    ) in self._fetch_files_by_path(repo_name=repo_name, path=path):
-                        if file_document["type"] == FILE:
-                            attachment_metadata["url"] = attachment_metadata["git_url"]
-                            yield (
-                                file_document,
-                                partial(
-                                    self.get_content, attachment=attachment_metadata
-                                ),
-                            )
-                        else:
-                            yield file_document, None
+                self._mark_repo_as_processed(repo_name)
         else:
             async for repo in self._fetch_repos():
-                if self.is_previous_repo(repo["nameWithOwner"]):
+                repo_name = repo.get("nameWithOwner")
+                if self.is_previous_repo(repo_name):
+                    continue
+
+                if self._is_repo_processed(repo_name):
+                    print("ALREADY PROCESSED THIS PLACE")
                     continue
 
                 access_control = []
@@ -2181,7 +2189,6 @@ class GitHubDataSource(BaseDataSource):
                 else:
                     yield repo, None
 
-                repo_name = repo.get("nameWithOwner")
                 default_branch = (
                     repo.get("defaultBranchRef", {}).get("name")
                     if repo.get("defaultBranchRef")
@@ -2248,3 +2255,4 @@ class GitHubDataSource(BaseDataSource):
                                 )
                             else:
                                 yield file_document, None
+                self._mark_repo_as_processed(repo_name)

@@ -151,6 +151,13 @@ class SyncJobRunner:
                 self._data_source_framework_config()
             )
 
+            # Only full syncs restart from a checkpoint
+            print("CHECKING WHAT NEEDS TO BE DONE")
+            print(self.sync_job.checkpoint)
+            if self.sync_job.checkpoint and self.sync_job.job_type == JobType.FULL:
+                print("SETTING")
+                self.data_provider.set_checkpoint(self.sync_job.checkpoint)
+
             self.sync_job.log_debug("Instantiated data provider for the sync job.")
 
             if not await self.data_provider.changed():
@@ -522,13 +529,30 @@ class SyncJobRunner:
             if not await self.reload_sync_job():
                 break
 
+            checkpoint = (
+                None
+                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
+                else (
+                    self.data_provider.checkpoint()
+                    if self.sync_job.is_content_sync()
+                    else None
+                )
+            )
+
+            print("#"*50)
+            print("CHECKPOINT")
+            print("#"*50)
+            print(checkpoint)
+
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
                 INDEXED_DOCUMENT_COUNT: result.get(INDEXED_DOCUMENT_COUNT, 0),
                 INDEXED_DOCUMENT_VOLUME: result.get(INDEXED_DOCUMENT_VOLUME, 0),
                 DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
-            await self.sync_job.update_metadata(ingestion_stats=ingestion_stats)
+            await self.sync_job.update_metadata(
+                ingestion_stats=ingestion_stats, checkpoint=checkpoint
+            )
 
     async def check_job(self):
         if not await self.reload_connector():
