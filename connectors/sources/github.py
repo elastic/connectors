@@ -2077,15 +2077,15 @@ class GitHubDataSource(BaseDataSource):
         return access_control
 
     def _is_repo_processed(self, repo_name):
-        print(f"CHECKING IF REPO WAS PROCESSED")
-        print(self._checkpoint)
         if self._checkpoint is None:
+            self._logger.debug(f"{repo_name} was not processed by this job before.")
             return False
 
+        self._logger.info(f"Skipping repository {repo_name} - has already been processed.")
         return self._checkpoint.get(repo_name)
 
     def _mark_repo_as_processed(self, repo_name):
-        print(f"MARKING REPO AS PROCESSED:{repo_name}")
+        self._logger.debug(f"Setting a checkpoint for {repo_name}.")
         if self._checkpoint is None:
             self._checkpoint = {}
 
@@ -2110,6 +2110,9 @@ class GitHubDataSource(BaseDataSource):
                 )
                 yield repo, None
                 repo_name = repo.get("nameWithOwner")
+
+                if self._is_repo_processed(repo_name):
+                    continue
 
                 if pull_request_query := rule["filter"].get(ObjectType.PR.value):
                     query_status, pull_request_query = self._filter_rule_query(
@@ -2167,7 +2170,6 @@ class GitHubDataSource(BaseDataSource):
                     continue
 
                 if self._is_repo_processed(repo_name):
-                    print("ALREADY PROCESSED THIS PLACE")
                     continue
 
                 access_control = []
