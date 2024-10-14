@@ -117,7 +117,8 @@ class ForceFlushSignal:
 
     def trigger(self):
         if self._flush_event.is_set():
-            raise Exception("Flush event already set")
+            msg = "Flush event already set"
+            raise Exception(msg)
 
         self._flush_event.set()
 
@@ -378,11 +379,13 @@ class Sink:
                     force_flush = True
                 elif doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
-                else: 
+                else:
                     operation = doc["_op_type"]
                     doc_id = doc["_id"]
                     if not doc_id:
-                        self._logger.warning(f"Skip document {doc} as '_id' is missing.")
+                        self._logger.warning(
+                            f"Skip document {doc} as '_id' is missing."
+                        )
                         continue
                     if operation == OP_DELETE:
                         stats[operation][doc_id] = 0
@@ -402,7 +405,11 @@ class Sink:
 
                     bulk_size += doc_size
 
-                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size or force_flush:
+                if (
+                    len(batch) >= self.chunk_size
+                    or bulk_size > self.chunk_mem_size
+                    or force_flush
+                ):
                     if force_flush:
                         self._logger.info("Flushing batch forcefully")
 
@@ -507,11 +514,8 @@ class Extractor:
         self._canceled = True
 
     async def trigger_flush(self):
-        print("1")
         flush_trigger = ForceFlushSignal()
-        print("2")
         await self.queue.put(flush_trigger)
-        print("3")
         await flush_trigger.wait_for_flush()
 
     async def put_doc(self, doc):
@@ -1094,13 +1098,15 @@ class SyncOrchestrator:
     def sink_task_callback(self, task):
         if task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}", exc_info=task.exception(),
+                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
 
     def extractor_task_callback(self, task):
         if task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}", exc_info=task.exception(),
+                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()

@@ -153,7 +153,9 @@ class SyncJobRunner:
 
             # Only full syncs restart from a checkpoint
             if self.sync_job.checkpoint and self.sync_job.job_type == JobType.FULL:
-                self.sync_job.log_info("Found a checkpoint for the job - starting from the checkpoint")
+                self.sync_job.log_info(
+                    "Found a checkpoint for the job - starting from the checkpoint"
+                )
                 self.data_provider.set_checkpoint(self.sync_job.checkpoint)
 
             self.sync_job.log_debug("Instantiated data provider for the sync job.")
@@ -539,13 +541,13 @@ class SyncJobRunner:
                 )
             )
 
-            print(checkpoint)
-            print(last_checkpoint)
             if checkpoint != last_checkpoint:
-                self.sync_job.log_info("Found a new checkpoint, triggering batch flush before saving")
+                self.sync_job.log_debug(
+                    "Found a new checkpoint, triggering batch flush before saving"
+                )
                 last_checkpoint = checkpoint
                 await self.sync_orchestrator.trigger_flush()
-                print("left")
+                self.sync_job.log_debug("Flushed the data before saving the checkpoint")
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {

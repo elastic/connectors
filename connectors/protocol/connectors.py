@@ -295,10 +295,6 @@ class SyncJob(ESDocument):
         return self.get("checkpoint")
 
     @property
-    def terminated(self):
-        return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
-
-    @property
     def indexed_document_count(self):
         return self.get(INDEXED_DOCUMENT_COUNT, default=0)
 
@@ -427,7 +423,11 @@ class SyncJob(ESDocument):
     ):
         try:
             await self._terminate(
-                JobStatus.CANCELED, None, ingestion_stats, connector_metadata, checkpoint
+                JobStatus.CANCELED,
+                None,
+                ingestion_stats,
+                connector_metadata,
+                checkpoint,
             )
         except Exception as e:
             self._wrap_errors("terminate as canceled", e)
@@ -437,7 +437,11 @@ class SyncJob(ESDocument):
     ):
         try:
             await self._terminate(
-                JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata, checkpoint
+                JobStatus.SUSPENDED,
+                None,
+                ingestion_stats,
+                connector_metadata,
+                checkpoint,
             )
         except Exception as e:
             self._wrap_errors("terminate as suspended", e)
@@ -727,7 +731,9 @@ class Connector(ESDocument):
         return self.get("api_key_secret_id")
 
     async def heartbeat(self, interval):
-        self.log_debug(f"Now: {datetime.now(timezone.utc)}. Last seen: {self.last_seen}. Interval: {interval} seconds.")
+        self.log_debug(
+            f"Now: {datetime.now(timezone.utc)}. Last seen: {self.last_seen}. Interval: {interval} seconds."
+        )
         if (
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
