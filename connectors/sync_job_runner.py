@@ -539,10 +539,12 @@ class SyncJobRunner:
                 )
             )
 
-            print("#"*50)
-            print("CHECKPOINT")
-            print("#"*50)
-            print(checkpoint)
+            if checkpoint:
+                print("#"*50)
+                print("CHECKPOINT")
+                print("#"*50)
+                print(checkpoint)
+                await self.sync_orchestrator._sink.force_flush()
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {

@@ -152,6 +152,7 @@ class Sink:
         self._logger = logger_ or logger
         self._canceled = False
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
+        self._flush_once = False
         self.counters = Counters()
 
     def _bulk_op(self, doc, operation=OP_INDEX):
@@ -338,6 +339,20 @@ class Sink:
                 return
             raise
 
+    async def force_flush(self):
+        # Naive
+        if self._flush_once is True:
+            raise Exception("Already flushing")
+
+        self._flush_once = True
+        self._logger.error("Forcing batch flush")
+
+        while self._flush_once:
+            await asyncio.sleep(1)
+
+        self._logger.error("Flush happened, exiting")
+
+
     async def _run(self):
         """Creates batches of bulk calls given a queue of items.
 
@@ -382,7 +397,9 @@ class Sink:
                 batch.extend(self._bulk_op(doc, operation))
 
                 bulk_size += doc_size
-                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
+                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size or self._flush_once:
+                    if self._flush_once:
+                        self._logger.error("Flushing cause I was asked to")
                     await self.bulk_tasks.put(
                         functools.partial(
                             self._batch_bulk,
@@ -392,6 +409,7 @@ class Sink:
                         name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
                     )
                     batch.clear()
+                    self._flush_once = False
                     stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
                     bulk_size = 0
 
