@@ -411,7 +411,7 @@ class Sink:
                     or force_flush
                 ):
                     if force_flush:
-                        self._logger.info("Flushing batch forcefully")
+                        self._logger.debug("Flushing batch forcefully")
 
                     await self.bulk_tasks.put(
                         functools.partial(
@@ -424,7 +424,7 @@ class Sink:
 
                     if force_flush:
                         # Release whoever was waiting for flush to happen
-                        self._logger.info("Releasing the flush operation awaiter")
+                        self._logger.debug("Releasing the flush operation awaiter")
                         doc.trigger()
 
                     batch.clear()

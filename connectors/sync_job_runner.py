@@ -543,11 +543,11 @@ class SyncJobRunner:
 
             if checkpoint != last_checkpoint:
                 self.sync_job.log_debug(
-                    "Found a new checkpoint, triggering batch flush before saving"
+                    "Connector reported a new checkpoint, triggering batch flush before saving"
                 )
                 last_checkpoint = checkpoint
                 await self.sync_orchestrator.trigger_flush()
-                self.sync_job.log_debug("Flushed the data before saving the checkpoint")
+                self.sync_job.log_debug("Data was successfully flushed before saving the checkpoint")
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
