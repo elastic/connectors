@@ -112,6 +112,20 @@ class ElasticsearchOverloadedError(Exception):
 
 
 class ForceFlushSignal:
+    """A signal that if sent to the queue forces the flush into Elasticsearch
+
+    Normally the queue sends data to Elasticsearch if thresholds are met, but
+    in certain cases we need to send data immediately, not waiting for thresholds.
+
+    One case is saving state of the job to resume job from this state if something bad
+    happens to the host and job is suspended/failed.
+
+    Thus the interface of this object has methods:
+    - await signal.wait_for_flush() is there so that the code that created this signal
+      can get a callback once the flush has happened
+    - signal.trigger() is there for the sink to report that the flush has happened, so that
+      the owner of the signal can understand that flush has happened
+    """
     def __init__(self):
         self._flush_event = asyncio.Event()
 
@@ -1093,6 +1107,8 @@ class SyncOrchestrator:
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
     async def trigger_flush(self):
+        # It's just a proxy method so that if some things change inside
+        # the caller will not have to do any changes on its side
         await self._extractor.trigger_flush()
 
     def sink_task_callback(self, task):
