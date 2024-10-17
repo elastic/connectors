@@ -2,6 +2,7 @@
   "targetBranchChoices": [
     { "name": "main", "checked": true },
     "8.x",
+    "8.16",
     "8.15",
     "8.14",
     "8.13",
