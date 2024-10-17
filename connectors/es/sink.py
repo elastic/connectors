@@ -111,6 +111,35 @@ class ElasticsearchOverloadedError(Exception):
         self.__cause__ = cause
 
 
+class ForceFlushSignal:
+    """A signal that if sent to the queue forces the flush into Elasticsearch
+
+    Normally the queue sends data to Elasticsearch if thresholds are met, but
+    in certain cases we need to send data immediately, not waiting for thresholds.
+
+    One case is saving state of the job to resume job from this state if something bad
+    happens to the host and job is suspended/failed.
+
+    Thus the interface of this object has methods:
+    - await signal.wait_for_flush() is there so that the code that created this signal
+      can get a callback once the flush has happened
+    - signal.trigger() is there for the sink to report that the flush has happened, so that
+      the owner of the signal can understand that flush has happened
+    """
+    def __init__(self):
+        self._flush_event = asyncio.Event()
+
+    def trigger(self):
+        if self._flush_event.is_set():
+            msg = "Flush event already set"
+            raise Exception(msg)
+
+        self._flush_event.set()
+
+    async def wait_for_flush(self):
+        await self._flush_event.wait()
+
+
 class Sink:
     """Send bulk operations in batches by consuming a queue.
 
@@ -356,33 +385,48 @@ class Sink:
             batch_num = 0
 
             while True:
+                force_flush = False
                 batch_num += 1
                 doc_size, doc = await self.fetch_doc()
-                if doc in (END_DOCS, EXTRACTOR_ERROR):
+                if isinstance(doc, ForceFlushSignal):
+                    self._logger.debug("Found ForceFlushSignal")
+                    force_flush = True
+                elif doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
-                operation = doc["_op_type"]
-                doc_id = doc["_id"]
-                if not doc_id:
-                    self._logger.warning(f"Skip document {doc} as '_id' is missing.")
-                    continue
-                if operation == OP_DELETE:
-                    stats[operation][doc_id] = 0
                 else:
-                    # the doc_size also includes _op_type, _index and _id,
-                    # which we want to exclude when calculating the size.
-                    if overhead_size is None:
-                        overhead = {
-                            "_op_type": operation,
-                            "_index": doc["_index"],
-                            "_id": doc_id,
-                        }
-                        overhead_size = get_size(overhead)
-                    stats[operation][doc_id] = max(doc_size - overhead_size, 0)
-                self.counters.increment(operation, namespace=BULK_OPERATIONS)
-                batch.extend(self._bulk_op(doc, operation))
+                    operation = doc["_op_type"]
+                    doc_id = doc["_id"]
+                    if not doc_id:
+                        self._logger.warning(
+                            f"Skip document {doc} as '_id' is missing."
+                        )
+                        continue
+                    if operation == OP_DELETE:
+                        stats[operation][doc_id] = 0
+                    else:
+                        # the doc_size also includes _op_type, _index and _id,
+                        # which we want to exclude when calculating the size.
+                        if overhead_size is None:
+                            overhead = {
+                                "_op_type": operation,
+                                "_index": doc["_index"],
+                                "_id": doc_id,
+                            }
+                            overhead_size = get_size(overhead)
+                        stats[operation][doc_id] = max(doc_size - overhead_size, 0)
+                    self.counters.increment(operation, namespace=BULK_OPERATIONS)
+                    batch.extend(self._bulk_op(doc, operation))
 
-                bulk_size += doc_size
-                if len(batch) >= self.chunk_size or bulk_size > self.chunk_mem_size:
+                    bulk_size += doc_size
+
+                if (
+                    len(batch) >= self.chunk_size
+                    or bulk_size > self.chunk_mem_size
+                    or force_flush
+                ):
+                    if force_flush:
+                        self._logger.debug("Flushing batch forcefully")
+
                     await self.bulk_tasks.put(
                         functools.partial(
                             self._batch_bulk,
@@ -391,6 +435,12 @@ class Sink:
                         ),
                         name=f"Elasticsearch Sink: _bulk batch #{batch_num}",
                     )
+
+                    if force_flush:
+                        # Release whoever was waiting for flush to happen
+                        self._logger.debug("Releasing the flush operation awaiter")
+                        doc.trigger()
+
                     batch.clear()
                     stats = {OP_INDEX: {}, OP_UPDATE: {}, OP_DELETE: {}}
                     bulk_size = 0
@@ -476,6 +526,11 @@ class Extractor:
 
     def force_cancel(self):
         self._canceled = True
+
+    async def trigger_flush(self):
+        flush_trigger = ForceFlushSignal()
+        await self.queue.put(flush_trigger)
+        await flush_trigger.wait_for_flush()
 
     async def put_doc(self, doc):
         if self._canceled:
@@ -1051,16 +1106,23 @@ class SyncOrchestrator:
         )
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
+    async def trigger_flush(self):
+        # It's just a proxy method so that if some things change inside
+        # the caller will not have to do any changes on its side
+        await self._extractor.trigger_flush()
+
     def sink_task_callback(self, task):
         if task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
 
     def extractor_task_callback(self, task):
         if task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
