@@ -86,7 +86,7 @@ default-config: install
 	.venv/bin/elastic-ingest --action config --service-type $(SERVICE_TYPE)
 
 docker-build: $(DOCKERFILE_PATH)
-	docker build -f $(DOCKERFILE_PATH) -t $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT .
+	docker build --no-cache -f $(DOCKERFILE_PATH) -t $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT .
 
 docker-run:
 	docker run -v $(PWD):/config $(DOCKER_IMAGE_NAME):$(VERSION)-SNAPSHOT /app/.venv/bin/elastic-ingest -c /config/config.yml --log-level=DEBUG
