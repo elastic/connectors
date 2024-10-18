@@ -88,7 +88,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
 
         logger.info(f"Updating configuration for '{connector_name}' connector")
 
-        await connector_index.connector_update_configuratiom(
+        await connector_index.connector_update_configuration(
             connector_id=config["connectors"][0]["connector_id"],
             schema=connector_configuration,
         )

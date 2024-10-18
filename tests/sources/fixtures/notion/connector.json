@@ -1,7 +1,7 @@
 {
     "configuration": {
         "notion_secret_key": {
-            "display": "string",
+            "display": "text",
             "label": "Notion Secret Key",
             "order": 1,
             "required": true,
@@ -11,23 +11,19 @@
         },
         "databases": {
             "label": "List of Databases",
-            "display": "string",
+            "display": "text",
             "order": 2,
             "required": true,
             "type": "list",
-            "value": [
-                "*"
-            ]
+            "value": "*"
         },
         "pages": {
             "label": "List of Pages",
-            "display": "string",
+            "display": "text",
             "order": 3,
             "required": true,
             "type": "list",
-            "value": [
-                "*"
-            ]
+            "value": "*"
         },
         "index_comments": {
             "display": "toggle",

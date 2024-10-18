@@ -190,7 +190,7 @@ class ConnectorIndex(ESIndex):
             connector_id=connector_id, scheduling=scheduling
         )
 
-    async def connector_update_configuratiom(
+    async def connector_update_configuration(
         self, connector_id, schema=None, values=None
     ):
         await self.api.connector_update_configuration(
