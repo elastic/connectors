@@ -47,4 +47,4 @@ A Docker compose file that needs to run the whole stack:
 connector.json
 ==========
 
-This file should be a JSON representation of the connector document as it would exist in Elastic.
+This file should be a JSON representation of the connector’s `configuration`, with the schema populated as it would appear in an Elastic document See the [example connector.json file](../fixtures/sharepoint_online/connector.json) for reference.

@@ -1,188 +1,145 @@
 {
-        "name": "oracle",
-        "index_name": "search-oracle",
-        "service_type": "oracle",
-        "sync_cursor": null,
-        "is_native": false,
-        "api_key_id": null,
-        "status": "configured",
-        "language": "en",
-        "last_access_control_sync_error": null,
-        "last_access_control_sync_status": null,
-        "last_sync_status": "canceled",
-        "last_sync_error": null,
-        "last_synced": null,
-        "last_seen": null,
-        "created_at": null,
-        "updated_at": null,
-        "configuration": {
-                "host": {
-                        "label": "Host",
-                        "order": 1,
-                        "type": "str",
-                        "value": "127.0.0.1"
-                },
-                "port": {
-                        "display": "numeric",
-                        "label": "Port",
-                        "order": 2,
-                        "type": "int",
-                        "value": 1521
-                },
-                "username": {
-                        "label": "Username",
-                        "order": 3,
-                        "type": "str",
-                        "value": "c##admin"
-                },
-                "password": {
-                        "label": "Password",
-                        "order": 4,
-                        "sensitive": true,
-                        "type": "str",
-                        "value": "Password_123"
-                },
-                "connection_source": {
-                        "display": "dropdown",
-                        "label": "Connection Source",
-                        "options": [
-                            {"label": "SID", "value": "sid"},
-                            {"label": "Service Name", "value": "service_name"}
-                        ],
-                        "order": 5,
-                        "type": "str",
-                        "value": "sid"
-                },
-                "sid": {
-                        "depends_on": [{"field": "connection_source", "value": "sid"}],
-                        "label": "SID",
-                        "order": 6,
-                        "type": "str",
-                        "value": "FREE"
-                    },
-                "service_name": {
-                        "depends_on": [{"field": "connection_source", "value": "service_name"}],
-                        "label": "Service Name",
-                        "order": 7,
-                        "type": "str",
-                        "value": "FREE"
-                    },
-                "tables": {
-                        "display": "textarea",
-                        "label": "Comma-separated list of tables",
-                        "options": [],
-                        "order": 8,
-                        "type": "list",
-                        "value": "*"
-                },
-                "fetch_size": {
-                        "default_value": 50,
-                        "display": "numeric",
-                        "label": "Rows fetched per request",
-                        "order": 9,
-                        "required": false,
-                        "type": "int",
-                        "ui_restrictions": ["advanced"],
-                        "value": null
-                },
-                "retry_count": {
-                        "default_value": 3,
-                        "display": "numeric",
-                        "label": "Retries per request",
-                        "order": 10,
-                        "required": false,
-                        "type": "int",
-                        "ui_restrictions": ["advanced"],
-                        "value": null
-                },
-                "oracle_protocol": {
-                        "display": "dropdown",
-                        "label": "Oracle connection protocol",
-                        "options": [
-                                {"label": "TCP", "value": "TCP"},
-                                {"label": "TCPS", "value": "TCPS"}
-                        ],
-                        "order": 11,
-                        "type": "str",
-                        "value": "TCP",
-                        "ui_restrictions": ["advanced"]
-                },
-                "oracle_home": {
-                        "default_value": "",
-                        "label": "Path to Oracle Home",
-                        "order": 12,
-                        "required": false,
-                        "type": "str",
-                        "value": "",
-                        "ui_restrictions": ["advanced"]
-                },
-                "wallet_configuration_path": {
-                        "default_value": "",
-                        "label": "Path to SSL Wallet configuration files",
-                        "order": 13,
-                        "required": false,
-                        "type": "str",
-                        "value": "",
-                        "ui_restrictions": ["advanced"]
-                }
+    "configuration": {
+        "host": {
+            "label": "Host",
+            "order": 1,
+            "type": "str",
+            "value": "127.0.0.1"
         },
-        "filtering": [
+        "port": {
+            "display": "numeric",
+            "label": "Port",
+            "order": 2,
+            "type": "int",
+            "value": 1521
+        },
+        "username": {
+            "label": "Username",
+            "order": 3,
+            "type": "str",
+            "value": "c##admin"
+        },
+        "password": {
+            "label": "Password",
+            "order": 4,
+            "sensitive": true,
+            "type": "str",
+            "value": "Password_123"
+        },
+        "connection_source": {
+            "display": "dropdown",
+            "label": "Connection Source",
+            "options": [
                 {
-                        "domain": "DEFAULT",
-                        "draft": {
-                            "advanced_snippet": {
-                                "updated_at": "2023-01-31T16:41:27.341Z",
-                                "created_at": "2023-01-31T16:38:49.244Z",
-                                "value": {}
-                            },
-                            "rules": [
-                                {
-                                    "field": "_",
-                                    "updated_at": "2023-01-31T16:41:27.341Z",
-                                    "created_at": "2023-01-31T16:38:49.244Z",
-                                    "rule": "regex",
-                                    "id": "DEFAULT",
-                                    "value": ".*",
-                                    "order": 1,
-                                    "policy": "include"
-                                }
-                            ],
-                            "validation": {
-                                "state": "valid",
-                                "errors": []
-                            }
-                        },
-                        "active": {
-                            "advanced_snippet": {
-                                "updated_at": "2023-01-31T16:41:27.341Z",
-                                "created_at": "2023-01-31T16:38:49.244Z",
-                                "value": {}
-                            },
-                            "rules": [
-                                {
-                                    "field": "_",
-                                    "updated_at": "2023-01-31T16:41:27.341Z",
-                                    "created_at": "2023-01-31T16:38:49.244Z",
-                                    "rule": "regex",
-                                    "id": "DEFAULT",
-                                    "value": ".*",
-                                    "order": 1,
-                                    "policy": "include"
-                                }
-                            ],
-                            "validation": {
-                                "state": "valid",
-                                "errors": []
-                            }
-                        }
+                    "label": "SID",
+                    "value": "sid"
+                },
+                {
+                    "label": "Service Name",
+                    "value": "service_name"
                 }
-
-        ],
-        "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
-        "pipeline": {
-                "extract_binary_content": true,
-                "name": "ent-search-generic-ingestion",
-                "reduce_whitespace": true,
-                "run_ml_inference": true
+            ],
+            "order": 5,
+            "type": "str",
+            "value": "sid"
+        },
+        "sid": {
+            "depends_on": [
+                {
+                    "field": "connection_source",
+                    "value": "sid"
+                }
+            ],
+            "label": "SID",
+            "order": 6,
+            "type": "str",
+            "value": "FREE"
+        },
+        "service_name": {
+            "depends_on": [
+                {
+                    "field": "connection_source",
+                    "value": "service_name"
+                }
+            ],
+            "label": "Service Name",
+            "order": 7,
+            "type": "str",
+            "value": "FREE"
+        },
+        "tables": {
+            "display": "textarea",
+            "label": "Comma-separated list of tables",
+            "options": [],
+            "order": 8,
+            "type": "list",
+            "value": "*"
+        },
+        "fetch_size": {
+            "default_value": 50,
+            "display": "numeric",
+            "label": "Rows fetched per request",
+            "order": 9,
+            "required": false,
+            "type": "int",
+            "ui_restrictions": [
+                "advanced"
+            ],
+            "value": null
+        },
+        "retry_count": {
+            "default_value": 3,
+            "display": "numeric",
+            "label": "Retries per request",
+            "order": 10,
+            "required": false,
+            "type": "int",
+            "ui_restrictions": [
+                "advanced"
+            ],
+            "value": null
+        },
+        "oracle_protocol": {
+            "display": "dropdown",
+            "label": "Oracle connection protocol",
+            "options": [
+                {
+                    "label": "TCP",
+                    "value": "TCP"
+                },
+                {
+                    "label": "TCPS",
+                    "value": "TCPS"
+                }
+            ],
+            "order": 11,
+            "type": "str",
+            "value": "TCP",
+            "ui_restrictions": [
+                "advanced"
+            ]
+        },
+        "oracle_home": {
+            "default_value": "",
+            "label": "Path to Oracle Home",
+            "order": 12,
+            "required": false,
+            "type": "str",
+            "value": "",
+            "ui_restrictions": [
+                "advanced"
+            ]
+        },
+        "wallet_configuration_path": {
+            "default_value": "",
+            "label": "Path to SSL Wallet configuration files",
+            "order": 13,
+            "required": false,
+            "type": "str",
+            "value": "",
+            "ui_restrictions": [
+                "advanced"
+            ]
         }
+    }
 }
