@@ -93,12 +93,6 @@ async def prepare(service_type, index_name, config, connector_definition=None):
             schema=connector_configuration,
         )
 
-        # await es.upsert(
-        #     index_name=CONNECTORS_INDEX,
-        #     _id=config["connectors"][0]["connector_id"],
-        #     doc=connector_definition,
-        # )
-
         logger.info(f"Prepare {index_name}")
         await upsert_index(es, index_name)
         logger.info("Done")
