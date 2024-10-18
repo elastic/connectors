@@ -111,6 +111,25 @@ class ESApi(ESClient):
             )
         )
 
+    async def connector_update_scheduling(self, connector_id, scheduling):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.update_scheduling,
+                connector_id=connector_id,
+                scheduling=scheduling,
+            )
+        )
+
+    async def connector_update_configuration(self, connector_id, configuration, values):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.update_configuration,
+                connector_id=connector_id,
+                configuration=configuration,
+                values=values,
+            )
+        )
+
     async def connector_update_filtering_draft_validation(
         self, connector_id, validation_result
     ):
