@@ -1,20 +1,4 @@
 {
-    "name": "dropbox",
-    "service_type": "dropbox",
-    "index_name": "search-dropbox",
-    "sync_cursor": null,
-    "is_native": false,
-    "api_key_id": null,
-    "status": "configured",
-    "language": "en",
-    "last_access_control_sync_error": null,
-    "last_access_control_sync_status": null,
-    "last_sync_status": null,
-    "last_sync_error": null,
-    "last_synced": null,
-    "last_seen": null,
-    "created_at": null,
-    "updated_at": null,
     "configuration": {
         "path": {
             "label": "Path to fetch files/folders",
@@ -51,7 +35,9 @@
             "order": 5,
             "required": false,
             "type": "int",
-            "ui_restrictions": ["advanced"],
+            "ui_restrictions": [
+                "advanced"
+            ],
             "value": 3
         },
         "concurrent_downloads": {
@@ -61,7 +47,9 @@
             "order": 6,
             "required": false,
             "type": "int",
-            "ui_restrictions": ["advanced"],
+            "ui_restrictions": [
+                "advanced"
+            ],
             "value": 100
         },
         "use_text_extraction_service": {
@@ -93,7 +81,7 @@
             "value": false,
             "order": 8,
             "ui_restrictions": []
-          },
+        },
         "include_inherited_users_and_groups": {
             "default_value": null,
             "depends_on": [],
@@ -109,12 +97,5 @@
             "validations": [],
             "value": false
         }
-    },
-    "scheduling": {"full": {"enabled": true, "interval": "1 * * * * *"}},
-    "pipeline": {
-        "extract_binary_content": true,
-        "name": "ent-search-generic-ingestion",
-        "reduce_whitespace": true,
-        "run_ml_inference": true
     }
 }
