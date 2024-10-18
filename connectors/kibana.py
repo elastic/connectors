@@ -12,10 +12,9 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from connectors.config import load_config
 from connectors.es.management_client import ESManagementClient
-from connectors.protocol import ConnectorIndex
-
 from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.logger import set_extra_logger
+from connectors.protocol import ConnectorIndex
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
@@ -61,7 +60,6 @@ async def prepare(service_type, index_name, config, connector_definition=None):
     )
 
     try:
-
         if connector_definition is not None:
             connector_configuration = connector_definition["configuration"]
         else:
