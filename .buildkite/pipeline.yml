@@ -14,7 +14,7 @@ definitions:
     - step: &test-agents
         agents:
           provider: "gcp"
-          machineType: "n1-standard-2"
+          machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
 
@@ -537,7 +537,7 @@ steps:
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"8.x\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"8.x\" || build.branch == \"8.16\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
