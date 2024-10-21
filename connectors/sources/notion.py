@@ -451,7 +451,7 @@ class NotionDataSource(BaseDataSource):
         """
         return {
             "notion_secret_key": {
-                "display": "string",
+                "display": "text",
                 "label": "Notion Secret Key",
                 "order": 1,
                 "required": True,
@@ -460,14 +460,14 @@ class NotionDataSource(BaseDataSource):
             },
             "databases": {
                 "label": "List of Databases",
-                "display": "string",
+                "display": "text",
                 "order": 2,
                 "required": True,
                 "type": "list",
             },
             "pages": {
                 "label": "List of Pages",
-                "display": "string",
+                "display": "text",
                 "order": 3,
                 "required": True,
                 "type": "list",
