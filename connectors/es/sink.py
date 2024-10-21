@@ -1052,15 +1052,25 @@ class SyncOrchestrator:
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
     def sink_task_callback(self, task):
-        if task.exception():
+        if task.cancelled():
+            self._logger.warning(
+                f"{type(self._sink).__name__}: {task.get_name()} was cancelled before completion"
+            )
+        elif task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
 
     def extractor_task_callback(self, task):
-        if task.exception():
+        if task.cancelled():
+            self._logger.warning(
+                f"{type(self._extractor).__name__}: {task.get_name()} was cancelled before completion"
+            )
+        elif task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
