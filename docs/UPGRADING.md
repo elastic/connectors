@@ -21,8 +21,8 @@ Always. 👏 Snapshot. 👏 First 👏.
 
 ### Always read release notes
 The `connectors` repository is part of Elastic Enterprise Search's connectors framework.
-You can find the [release notes for Enterprise Search here](https://www.elastic.co/guide/en/enterprise-search/current/changelog.html).
-You can find the list of [known issues for connectors here](https://www.elastic.co/guide/en/enterprise-search/current/connectors-known-issues.html).
+You can find the [release notes for Enterprise Search here](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-changelog.html).
+You can find the list of [known issues for connectors here](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-known-issues.html).
 
 ### Limit changes to your own connectors
 This means, rather than modifying an existing data source, it is often better to copy-and-rename a data source (and its tests!), and modify the new copy.

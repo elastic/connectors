@@ -5,7 +5,7 @@ The Elastic Opentext Documentum connector is written in Python using the [Elasti
 ## Availability and prerequisites
 
 This connector is available as a self-managed connector client.
-To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html).
 
 This connector is a **tech preview connector** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties.
 
@@ -13,7 +13,7 @@ This connector is a **tech preview connector** and is subject to change. The des
 
 To use this connector as a **connector client**, select the **Opentext Documentum** tile when creating a new connector under **Search -> Connectors**.
 
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
+For additional operations, see [Usage](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-usage.html).
 
 ## Connecting to Opentext Documentum
 
@@ -70,7 +70,7 @@ MIID+jCCAuKgAwIBAgIGAJJMzlxLMA0GCSqGSIb3DQEBCwUAMHoxCzAJBgNVBAYT
 
 ### Content Extraction
 
-Refer to [content extraction](https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html) in the official docs.
+Refer to [content extraction](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-content-extraction.html) in the official docs.
 
 ## Documents and syncs
 
@@ -84,13 +84,13 @@ The connector syncs the following objects and entities:
 - Permissions are not synced. **All documents** indexed to an Elastic deployment will be visible to **all users with access** to the destination Elasticsearch index.
 
 ### Sync types
-[Full syncs](https://www.elastic.co/guide/en/enterprise-search/current/connectors-sync-types.html#connectors-sync-types-full) are supported by default for all connectors.
+[Full syncs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-sync-types.html#connectors-sync-types-full) are supported by default for all connectors.
 
-This connector currently does not support [incremental syncs](https://www.elastic.co/guide/en/enterprise-search/current/connectors-sync-types.html#connectors-sync-types-incremental).
+This connector currently does not support [incremental syncs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-sync-types.html#connectors-sync-types-incremental).
 
 ## Sync rules
 
-[Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
+[Basic sync rules](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
 
 ## Advanced Sync Rules
 
@@ -100,7 +100,7 @@ Advanced sync rules are not available for this connector in the present version.
 
 ### End-to-end Testing
 
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html#build-connector-testing) for more details.
 
 To perform E2E testing for Opentext Documentum connector, run the following command:
 
@@ -114,12 +114,12 @@ $ make ftest NAME=opentext_documentum
 
 ## Known issues
 
-- There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+- There are no known issues for this connector. Refer to [Known issues](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-known-issues.html) for a list of known issues for all connectors.
 
 ## Troubleshooting
 
-See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+See [Troubleshooting](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-troubleshooting.html).
 
 ## Security
 
-See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
+See [security](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-security.html).

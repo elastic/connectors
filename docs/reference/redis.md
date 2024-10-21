@@ -1,10 +1,10 @@
 # Redis Connector
 
-The [Elastic Redis connector](../connectors/sources/redis.py) is built with the Elastic connectors Python framework and is available as a self-managed [connector client](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html).
+The [Elastic Redis connector](../connectors/sources/redis.py) is built with the Elastic connectors Python framework and is available as a self-managed [connector client](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html).
 
 ## Availability and prerequisites
 
-This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+This connector is available as a **connector client** from the **Python connectors framework**. To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html).
 
 This connector is in **beta** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Beta features are not subject to the support SLA of official GA features.
 
@@ -12,7 +12,7 @@ This connector is in **beta** and is subject to change. The design and code is l
 
 To use this connector as a **connector client**, use the **Redis** tile from the connectors list or **Customized connector** workflow.
 
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
+For additional operations, see [Usage](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-usage.html).
 
 ## Configuration
 
@@ -83,7 +83,7 @@ The connector syncs the following objects and entities:
 
 ## Sync rules
 
-[Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
+[Basic sync rules](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
 
 ## Advanced Sync Rules
 
@@ -191,7 +191,7 @@ Provide at least one of the following: `key_pattern` or `type`, or both.
 
 ### End-to-end Testing
 
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html#build-connector-testing) for more details.
 
 To perform E2E testing for Redis server/cloud connector, run the following command:
 
@@ -207,12 +207,12 @@ $ make ftest NAME=redis
 
 - The last modified time is unavailable when retrieving keys/values from the Redis database. As a result, **all objects** are indexed each time an advanced sync rule query is executed.
 
-Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+Refer to [Known issues](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-known-issues.html) for a list of known issues for all connectors.
 
 ## Troubleshooting
 
-See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+See [Troubleshooting](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-troubleshooting.html).
 
 ## Security
 
-See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
+See [security](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-security.html).

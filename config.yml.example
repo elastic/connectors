@@ -213,7 +213,7 @@
 ##    These configurations are optional and are not included by default.
 ##    The presence of these configurations enables local content extraction.
 ##    By default, this whole object is `null`.
-##    See: https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html#connectors-content-extraction-local
+##    See: https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-content-extraction.html#connectors-content-extraction-local
 #
 #
 ##  The host of the local extraction service.

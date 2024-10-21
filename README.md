@@ -9,21 +9,21 @@ This repository contains the source code for all Elastic connectors, developed b
 Use connectors to sync data from popular data sources to Elasticsearch.
 
 These connectors are available as:
-- [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) to be self-managed on your own infrastructure
-- [**Native connectors**](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) using our fully managed service on Elastic Cloud
+- [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) to be self-managed on your own infrastructure
+- [**Elastic managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-native-connectors.html) using our fully managed service on Elastic Cloud
 
-ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) in the official Elastic documentation.
+ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
 
 To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
 
 ### Connector documentation
 
-The main documentation for _using_ connectors lives in the Search solution's docs.
+The main documentation for _using_ connectors lives in the Elasticsearch docs.
 Here are the main pages:
 
-- [Connectors overview](https://www.elastic.co/guide/en/enterprise-search/current/connectors.html)
-- [Connector clients](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html)
-- [Native connectors](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html)
+- [Connectors overview](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html)
+- [Self-managed connectors](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html)
+- [Elastic managed connectors](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-native-connectors.html)
 
 You'll also find the individual references for each connector there.
 For everything to do with _developing_ connectors, you'll find that here in this repo.

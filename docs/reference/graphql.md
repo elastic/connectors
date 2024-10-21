@@ -5,7 +5,7 @@ The Elastic GraphQL connector connector is written in Python using the [Elastic 
 ## Availability and prerequisites
 
 This connector is available as a self-managed connector client.
-To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html).
+To use this connector, satisfy all [connector client requirements](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html).
 
 This connector is in **technical preview** and is subject to change. The design and code is less mature than official GA features and is being provided as-is with no warranties. Technical preview features are not subject to the support SLA of official GA features.
 
@@ -13,7 +13,7 @@ This connector is in **technical preview** and is subject to change. The design 
 
 To use this connector as a **connector client**, select the **GraphQL** tile when creating a new connector under **Search -> Connectors**.
 
-For additional operations, see [Usage](https://www.elastic.co/guide/en/enterprise-search/master/connectors-usage.html).
+For additional operations, see [Usage](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-usage.html).
 
 ## Configuration
 
@@ -131,13 +131,13 @@ The `connection_timeout` specifies the maximum time in seconds to wait for a res
 The connector syncs the objects and entities based on GraphQL Query and GraphQL Object List.
 
 ### Sync types
-[Full syncs](https://www.elastic.co/guide/en/enterprise-search/current/connectors-sync-types.html#connectors-sync-types-full) are supported by default for all connectors.
+[Full syncs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-sync-types.html#connectors-sync-types-full) are supported by default for all connectors.
 
-This connector currently does not support [incremental syncs](https://www.elastic.co/guide/en/enterprise-search/current/connectors-sync-types.html#connectors-sync-types-incremental).
+This connector currently does not support [incremental syncs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-sync-types.html#connectors-sync-types-incremental).
 
 ## Sync rules
 
-[Basic sync rules](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
+[Basic sync rules](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-sync-rules.html#sync-rules-basic) are identical for all connectors and are available by default.
 
 ## Advanced Sync Rules
 
@@ -147,7 +147,7 @@ Advanced sync rules are not available for this connector in the present version.
 
 ### End-to-end Testing
 
-The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/enterprise-search/master/build-connector.html#build-connector-testing) for more details.
+The connector framework enables operators to run functional tests against a real data source. Refer to [Connector testing](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html#build-connector-testing) for more details.
 
 To perform E2E testing for GraphQL connector, run the following command:
 
@@ -163,13 +163,13 @@ $ make ftest NAME=graphql
 
 - Every Document will be updated in every sync.
 - In case of same field name and different types across different objects, the connector might raise a mapping parser exception.
-- Refer to [Known issues](https://www.elastic.co/guide/en/enterprise-search/master/connectors-known-issues.html) for a list of known issues for all connectors.
+- Refer to [Known issues](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-known-issues.html) for a list of known issues for all connectors.
 
 ## Troubleshooting
 
-See [Troubleshooting](https://www.elastic.co/guide/en/enterprise-search/master/connectors-troubleshooting.html).
+See [Troubleshooting](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-troubleshooting.html).
 
 ## Security
 
-See [security](https://www.elastic.co/guide/en/enterprise-search/master/connectors-security.html).
+See [security](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-security.html).
 
