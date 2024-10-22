@@ -12,7 +12,7 @@ These connectors are available as:
 - [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) to be self-managed on your own infrastructure
 - [**Elastic managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-native-connectors.html) using our fully managed service on Elastic Cloud
 
-ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
+ℹ️ For an overview of the steps involved in deploying self-managed connectors refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
 
 To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
 
@@ -44,7 +44,7 @@ This is shared code that is not used by individual connectors, but helps to coor
 
 ## Connector framework
 
-This repo is also the home of the Elastic connector framework. This framework enables developers to build Elastic-supported connector clients.
+This repo is also the home of the Elastic connector framework. This framework enables developers to build Elastic-supported self-managed connectors.
 The framework implements common functionalities out of the box, so developers can focus on the logic specific to integrating their chosen data source.
 
 The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
@@ -60,7 +60,7 @@ For more information, instructions, and options, see the [README file](./scripts
 The framework serves two distinct, but related use cases:
 
 - Customizing an existing Elastic connector client
-- Building a new connector client
+- Building a new self-managed connector
 
 ### Guides for using the framework
 

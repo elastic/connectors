@@ -31,7 +31,7 @@ You'll need to carry out the following steps:
     make run
     ```
 
-### ℹ️ **NOTE: API keys for connector clients**
+### ℹ️ **NOTE: API keys for self-managed connectors**
 
 As of `v8.10.0` you can configure multiple connectors in your `config.yml` file.
 

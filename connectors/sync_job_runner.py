@@ -231,7 +231,7 @@ class SyncJobRunner:
         """
         The connector secrets API endpoint can only be accessed by the Enterprise Search system role,
         so we need to use a client initialised with the config's username and password to first fetch
-        the API key for native connectors.
+        the API key for Elatic managed connectors.
         After that, we can provide the API key to the sync orchestrator to initialise a new client
         so that an API key can be used for the sync.
         This function should not be run for connector clients.

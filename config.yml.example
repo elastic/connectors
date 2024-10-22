@@ -7,7 +7,7 @@
 #
 ## ------------------------------- Connectors -------------------------------
 #
-##  The list of connector clients/customized connectors configurations.
+##  The list of self-managed connectors/customized connectors configurations.
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
 ##    connectors:
@@ -18,12 +18,12 @@
 #
 #
 ##  The ID of the connector.
-##    (Deprecated. Configure the connector client in an object in the `connectors` list)
+##    (Deprecated. Configure the self-managed connectors in an object in the `connectors` list)
 #connector_id: null
 #
 #
 ##  The service type of the connector.
-##    (Deprecated. Configure the connector client in an object in the `connectors` list)
+##    (Deprecated. Configure the self-managed connectors in an object in the `connectors` list)
 #service_type: null
 #
 #
