@@ -20,7 +20,7 @@ Do not tell yourself it is overkill.
 Always. 👏 Snapshot. 👏 First 👏.
 
 ### Always read release notes
-The `connectors` repository is part of Elasticsearch's connectors framework.
+The `connectors` repository is part of the Elastic connectors framework.
 You can find the [release notes for Elasticsearch here](https://www.elastic.co/guide/en/elasticsearch/reference/current/release-highlights.html).
 You can find the list of [known issues for connectors here](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-known-issues.html).
 
