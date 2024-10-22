@@ -86,7 +86,7 @@ Then, to complete this in Kibana:
   * Finally, set your schedule and sync
 
 Note - some of the connectors require a valid Elasticsearch license above `basic`.
-To see which connectors require a higher license tier, see the [Connectors reference](https://www.elastic.co/guide/en/enterprise-search/current/connectors-references.html).
+To see which connectors require a higher license tier, see the [Connectors reference](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-refs.html).
 
 ## Manual Configuration
 
