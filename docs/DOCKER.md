@@ -106,8 +106,16 @@ You might need to adjust some details here:
 
 > [!TIP]
 > When starting a Docker container with the connector service against a local Elasticsearch cluster that has security and SSL enabled (like the [docker compose example](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html#docker-compose-file) from the Elasticsearch docs), it's crucial to handle the self-signed certificate correctly:
-> 1. Ensure the Docker container running the connector service has the volume attached that contains the generated certificate. When using Docker Compose, Docker automatically adds a project-specific prefix to volume names based on the directory where your `docker-compose.yml` is located. When starting the connector service with `docker run`, use `-v <your_project>_certs:/usr/share/connectors/config/certs` to reference it. Replace `<your_project>` with the actual prefix, such as `elastic_docker_certs` if your `docker-compose.yml` that starts the Elasticsearch stack is in a directory named `elastic_docker`.
-> 2. Make sure the connector service's `config.yml` correctly references the certificate with:
+> 1. Configure the SSL option in connector service's `config.yml` with:
+> ```
+> elasticsearch.ssl: true
+> ```
+> 2. Ensure the Docker container running the connector service has the volume attached that contains the generated certificate. When using Docker Compose, Docker automatically adds a project-specific prefix to volume names based on the directory where your `docker-compose.yml` is located. When starting the connector service with `docker run`, use `-v <your_project>_certs:/usr/share/connectors/config/certs` to reference it. Replace `<your_project>` with the actual prefix, such as `elastic_docker_certs` if your `docker-compose.yml` that starts the Elasticsearch stack is in a directory named `elastic_docker`.
+> 3. Make sure the connector service's `config.yml` correctly references the certificate with:
 > ```
 > elasticsearch.ca_certs: /usr/share/connectors/config/certs/ca/ca.crt
+> ```
+> 4. To avoid the certificate verification, configure `verify_certs` parameter which is `true` by default when SSL is enabled in connector service's `config.yml` as:
+> ```
+> elasticsearch.verify_certs: false
 > ```
