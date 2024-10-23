@@ -157,7 +157,7 @@
 #
 #
 ##  Enable usage of Connectors API instead of calling connectors indices directly
-#elasticsearch.feature_use_connectors_api: false
+#elasticsearch.feature_use_connectors_api: true
 ## ------------------------------- Service ----------------------------------
 #
 ##  Connector service/framework related configurations
