@@ -87,11 +87,14 @@ class ESClient:
             logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
 
         if config.get("ssl", False):
-            options["verify_certs"] = True
-            if "ca_certs" in config:
-                ca_certs = config["ca_certs"]
-                logger.debug(f"Verifying cert with {ca_certs}")
-                options["ca_certs"] = ca_certs
+            options["verify_certs"] = config.get("verify_certs", True)
+            if options["verify_certs"]:
+                if "ca_certs" in config:
+                    ca_certs = config["ca_certs"]
+                    logger.debug(f"Verifying cert with {ca_certs}")
+                    options["ca_certs"] = ca_certs
+                else:
+                    logger.debug("Verifying cert with system certificates")
 
         level = config.get("log_level", "INFO").upper()
         es_logger = logging.getLogger("elastic_transport.node")
