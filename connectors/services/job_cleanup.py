@@ -75,7 +75,7 @@ class JobCleanUpService(BaseService):
                     f"Successfully marked #{marked_count} out of #{total_count} orphaned idle jobs as error."
                 )
         except Exception as e:
-            self.logger.critical(e, exc_info=True)
+            self.logger.error(e, exc_info=True)
             self.raise_if_spurious(e)
 
     async def _process_idle_jobs(self):
@@ -128,5 +128,5 @@ class JobCleanUpService(BaseService):
                     f"Successfully marked #{marked_count} out of #{total_count} idle jobs as error."
                 )
         except Exception as e:
-            self.logger.critical(e, exc_info=True)
+            self.logger.error(e, exc_info=True)
             self.raise_if_spurious(e)

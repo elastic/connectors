@@ -62,7 +62,7 @@ class JobSchedulingService(BaseService):
             return
         except DataSourceError as e:
             await connector.error(e)
-            connector.log_critical(e, exc_info=True)
+            connector.log_error(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
@@ -160,7 +160,7 @@ class JobSchedulingService(BaseService):
                         await self._schedule(connector)
 
                 except Exception as e:
-                    self.logger.critical(e, exc_info=True)
+                    self.logger.error(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
@@ -214,7 +214,7 @@ class JobSchedulingService(BaseService):
                 next_sync = connector.next_sync(job_type, last_wake_up_time)
                 connector.log_debug(f"Next '{job_type_value}' sync is at {next_sync}")
             except Exception as e:
-                connector.log_critical(e, exc_info=True)
+                connector.log_error(e, exc_info=True)
                 await connector.error(str(e))
                 return False
 

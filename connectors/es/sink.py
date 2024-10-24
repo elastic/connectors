@@ -514,7 +514,7 @@ class Extractor:
                 )
                 return
 
-            self._logger.critical("Document extractor failed", exc_info=True)
+            self._logger.error("Document extractor failed", exc_info=True)
             await self.put_doc(EXTRACTOR_ERROR)
             self.error = e
 
