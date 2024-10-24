@@ -217,18 +217,18 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        if not self.serverless:
-            await self._retrier.execute_with_retry(
-                partial(self.client.indices.refresh, index=self.index_name)
-            )
-
         try:
+            if not self.serverless:
+                await self._retrier.execute_with_retry(
+                    partial(self.client.indices.refresh, index=self.index_name)
+                )
+
             resp = await self._retrier.execute_with_retry(
                 partial(self.client.get, index=self.index_name, id=doc_id)
             )
         except ApiError as e:
-            logger.critical(f"The server returned {e.status_code}")
-            logger.critical(e.body, exc_info=True)
+            logger.error(f"The server returned {e.status_code}")
+            logger.error(e.body, exc_info=True)
             if e.status_code == 404:
                 msg = f"Couldn't find document in {self.index_name} by id {doc_id}"
                 raise DocumentNotFoundError(msg) from e
