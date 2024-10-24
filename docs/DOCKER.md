@@ -12,11 +12,12 @@ Please refer to the following Docker image registry to access and pull available
 
 Follow these steps:
 
-1. [Create network](#1-create-a-docker-network)
-2. [Create directory](#2-create-a-directory-to-be-mounted-into-the-docker-image)
-3. [Download config file](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
-4. [Update config file](#4-update-the-configuration-file-for-your-self-managed-connectorhttpswwwelasticcoguideenenterprise-searchcurrentbuild-connectorhtmlbuild-connector-usage)
-5. [Run the docker image](#5-run-the-docker-image)
+- [Run Connector Service in Docker](#run-connector-service-in-docker)
+  - [1. Create a Docker network.](#1-create-a-docker-network)
+  - [2. Create a directory to be mounted into the Docker image.](#2-create-a-directory-to-be-mounted-into-the-docker-image)
+  - [3. Download sample configuration file from this repository into newly created directory.](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
+  - [4. Update the configuration file for your self-managed connector](#4-update-the-configuration-file-for-your-self-managed-connector)
+  - [5. Run the Docker image.](#5-run-the-docker-image)
 
 ## 1. Create a Docker network.
 
@@ -106,16 +107,13 @@ You might need to adjust some details here:
 
 > [!TIP]
 > When starting a Docker container with the connector service against a local Elasticsearch cluster that has security and SSL enabled (like the [docker compose example](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html#docker-compose-file) from the Elasticsearch docs), it's crucial to handle the self-signed certificate correctly:
-> 1. Configure the SSL option in connector service's `config.yml` with:
-> ```
-> elasticsearch.ssl: true
-> ```
-> 2. Ensure the Docker container running the connector service has the volume attached that contains the generated certificate. When using Docker Compose, Docker automatically adds a project-specific prefix to volume names based on the directory where your `docker-compose.yml` is located. When starting the connector service with `docker run`, use `-v <your_project>_certs:/usr/share/connectors/config/certs` to reference it. Replace `<your_project>` with the actual prefix, such as `elastic_docker_certs` if your `docker-compose.yml` that starts the Elasticsearch stack is in a directory named `elastic_docker`.
-> 3. Make sure the connector service's `config.yml` correctly references the certificate with:
+> 1. Ensure the Docker container running the connector service has the volume attached that contains the generated certificate. When using Docker Compose, Docker automatically adds a project-specific prefix to volume names based on the directory where your `docker-compose.yml` is located. When starting the connector service with `docker run`, use `-v <your_project>_certs:/usr/share/connectors/config/certs` to reference it. Replace `<your_project>` with the actual prefix, such as `elastic_docker_certs` if your `docker-compose.yml` that starts the Elasticsearch stack is in a directory named `elastic_docker`.
+> 2. Make sure the connector service's `config.yml` correctly references the certificate with:
 > ```
 > elasticsearch.ca_certs: /usr/share/connectors/config/certs/ca/ca.crt
 > ```
-> 4. To avoid the certificate verification, configure `verify_certs` parameter which is `true` by default when SSL is enabled in connector service's `config.yml` as:
+> 3. To avoid the certificate verification, configure `verify_certs` parameter which is `true` by default when SSL is enabled in connector service's `config.yml` as:
 > ```
 > elasticsearch.verify_certs: false
 > ```
+> Disclaimer: Setting `verify_certs` to `false` is not recommended in a production environment, as it may expose your application to security vulnerabilities.

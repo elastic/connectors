@@ -55,6 +55,7 @@
 #
 #
 ##  Whether to perform verification checks for server certificates using CA bundle.
+##    This option should be avoided in production.
 #elasticsearch.verify_certs: true
 #
 #
