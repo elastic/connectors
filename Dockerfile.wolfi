@@ -1,6 +1,7 @@
-FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:753969215551a0703a7f244684a3894716105c00fdd25cd9c8f6902f247d94f1
+FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:01727f31b918b782d871a3e493764932ecbbd7c8624bbe9975b97442a2c7c281
 USER root
 COPY . /app
 WORKDIR /app
 RUN make clean install
+RUN ln -s .venv/bin /app/bin
 ENTRYPOINT []

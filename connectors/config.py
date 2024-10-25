@@ -64,6 +64,7 @@ def _default_config():
             "username": "elastic",
             "password": "changeme",
             "ssl": True,
+            "verify_certs": True,
             "bulk": {
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,
@@ -86,7 +87,7 @@ def _default_config():
             "initial_backoff_duration": 1,
             "backoff_multiplier": 2,
             "log_level": "info",
-            "feature_use_connectors_api": False,
+            "feature_use_connectors_api": True,
         },
         "service": {
             "idling": 30,

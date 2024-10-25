@@ -172,6 +172,31 @@ class ConnectorIndex(ESIndex):
             index_name=index_name,
         )
 
+    async def connector_update_scheduling(
+        self, connector_id, full=None, incremental=None, access_control=None
+    ):
+        scheduling = {}
+
+        if full is not None:
+            scheduling["full"] = full
+
+        if incremental is not None:
+            scheduling["incremental"] = incremental
+
+        if access_control is not None:
+            scheduling["access_control"] = access_control
+
+        await self.api.connector_update_scheduling(
+            connector_id=connector_id, scheduling=scheduling
+        )
+
+    async def connector_update_configuration(
+        self, connector_id, schema=None, values=None
+    ):
+        await self.api.connector_update_configuration(
+            connector_id=connector_id, configuration=schema, values=values
+        )
+
     async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
