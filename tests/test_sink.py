@@ -33,6 +33,7 @@ from connectors.es.sink import (
     ElasticsearchOverloadedError,
     Extractor,
     ForceCanceledError,
+    ForceFlushSignal,
     Sink,
     SyncOrchestrator,
 )
@@ -42,6 +43,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
+from connectors.utils import MemQueue
 from tests.commons import AsyncIterator
 
 INDEX = "some-index"
@@ -378,6 +380,27 @@ async def test_async_bulk(mock_responses):
         await es.async_bulk("search-some-index", get_docs(), pipeline, JobType.FULL)
 
     await es.close()
+
+@patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
+@pytest.mark.asyncio
+async def test_sync_orchestrator_trigger_flush_proxies_to_extractor(mock_responses):
+    config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
+    set_responses(mock_responses)
+
+    es = SyncOrchestrator(config)
+    es._sink = AsyncMock()
+    es._extractor = AsyncMock()
+    es._extractor.trigger_flush = AsyncMock()
+
+    async def get_docs():
+        for i in range(100):
+            yield {"_id": i}, None, "index"
+
+    await es.trigger_flush()
+
+    await es.close()
+
+    es._extractor.trigger_flush.assert_awaited()
 
 
 def index_operation(doc):
@@ -1518,6 +1541,76 @@ async def test_extractor_run_when_mem_full_is_raised():
     queue.clear.assert_called_once()
     assert isinstance(extractor.error, ElasticsearchOverloadedError)
 
+@pytest.mark.asyncio
+async def test_adding_force_flush_signal_actually_flushes_current_batch():
+    doc_1 = {"_id": 1, "_index": "some-content-index"}
+    doc_2 = {"_id": 2, "_index": "some-content-index"}
+    doc_3 = {"_id": 3, "_index": "some-content-index"}
+    doc_4 = {"_id": 4, "_index": "some-content-index"}
+
+    es_client = AsyncMock()
+    es_client.yield_existing_documents_metadata = Mock(return_value=AsyncIterator([]))
+
+    queue = MemQueue()
+
+    extractor = Extractor(
+        es_client,
+        queue,
+        INDEX,
+    )
+
+    client = Mock()
+    client.bulk_insert = AsyncMock(
+        return_value={"items": [successful_bulk_action(DOC_ONE_ID, "index", {})]}
+    )
+    sink = Sink(
+        client=client,
+        queue=queue,
+        chunk_size=50000,
+        pipeline={"name": "pipeline"},
+        chunk_mem_size=50000,
+        max_concurrency=1,
+        max_retries=3,
+        retry_interval=10,
+        enable_bulk_operations_logging=True,
+    )
+
+    async def _iterator():
+        yield doc_1, None, OP_INDEX
+        yield doc_2, None, OP_INDEX
+        # To emulate the fact that there needs to be a flush here.
+        # Unfortunately can't call trigger_flush directly cause it'll
+        # wait for flush to happen, we need it to be emulated more
+        # naturally
+        flush_trigger = ForceFlushSignal()
+        await queue.put(flush_trigger)
+        yield doc_3, None, OP_INDEX
+        yield doc_4, None, OP_INDEX
+
+    await asyncio.gather(
+        extractor.run(_iterator(), JobType.FULL),
+        sink.run()
+    )
+
+    # Assert called first for [doc_1, doc_2], and then for [doc_3, doc_4]
+    assert client.bulk_insert.call_count == 2
+    first_call = client.bulk_insert.call_args_list[0]
+    # Example of first_call[0]:
+    #    ([{'index': {'_index': 'some-index', '_id': 1}},
+    #  {'_index': 'some-content-index',
+    #   'id': 1,
+    #   '_timestamp': '2024-10-25T12:44:37.470775+00:00'},
+    #  {'index': {'_index': 'some-index', '_id': 2}},
+    #  {'_index': 'some-content-index',
+    #   'id': 2,
+    #   '_timestamp': '2024-10-25T12:44:37.470934+00:00'}],
+    # 'pipeline')
+    assert first_call[0][0][0][OP_INDEX]['_id'] == doc_1["id"]
+    assert first_call[0][0][2][OP_INDEX]['_id'] == doc_2["id"]
+
+    second_call = client.bulk_insert.call_args_list[1]
+    assert second_call[0][0][0][OP_INDEX]['_id'] == doc_3["id"]
+    assert second_call[0][0][2][OP_INDEX]['_id'] == doc_4["id"]
 
 @pytest.mark.asyncio
 async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(
