@@ -91,13 +91,13 @@ def create_runner(
     connector=None,
     service_config=None,
     es_config=None,
-    checkpoint=None
+    data_provider_checkpoint=None
 ):
     source_klass = Mock()
     data_provider = Mock()
     data_provider.tweak_bulk_options = Mock()
     data_provider.changed = AsyncMock(return_value=source_changed)
-    data_provider.checkpoint = Mock(return_value=checkpoint)
+    data_provider.checkpoint = Mock(return_value=data_provider_checkpoint)
     data_provider.set_features = Mock()
     data_provider.validate_config_fields = Mock()
     data_provider.validate_config = AsyncMock(side_effect=validate_config_exception)
@@ -683,6 +683,38 @@ async def test_sync_job_runner_reporting_metadata(
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+    sync_orchestrator_mock.trigger_flush.assert_not_awaited()
+
+@pytest.mark.parametrize(
+    "job_type, sync_cursor",
+    [
+        (JobType.FULL, SYNC_CURSOR),
+        (JobType.INCREMENTAL, SYNC_CURSOR),
+    ],
+)
+@pytest.mark.asyncio
+@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+async def test_sync_job_runner_metadata_update_checkpoint_if_changed(
+    job_type, sync_cursor, sync_orchestrator_mock
+):
+    ingestion_stats = {
+        "indexed_document_count": 15,
+        "indexed_document_volume": 230,
+        "deleted_document_count": 10,
+    }
+    new_checkpoint = { "hey": "i've got new checkpoint!"}
+    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
+    sync_orchestrator_mock.done.return_value = False
+    sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor, data_provider_checkpoint=new_checkpoint)
+    task = asyncio.create_task(sync_job_runner.execute())
+    asyncio.get_event_loop().call_later(0.1, task.cancel)
+    await task
+
+    sync_job_runner.sync_job.update_metadata.assert_awaited_with(
+        ingestion_stats=ingestion_stats, checkpoint=new_checkpoint
+    )
+    sync_orchestrator_mock.trigger_flush.assert_awaited()
 
 
 @pytest.mark.parametrize(
