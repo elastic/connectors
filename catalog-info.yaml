@@ -12,7 +12,7 @@ metadata:
   annotations:
     backstage.io/source-location: "url:https://github.com/elastic/connectors/"
     github.com/project-slug: "elastic/connectors"
-    github.com/team-slug: "elastic/ingestion-team"
+    github.com/team-slug: "elastic/search-extract-and-transform"
     buildkite.com/project-slug: "elastic/connectors"
   tags:
     - "python"
@@ -20,7 +20,7 @@ metadata:
 spec:
   type: "service"
   lifecycle: "production"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
 
 # ------------------------------------------------------------------------------
 # this is the main pipeline, triggered via pull requests and merges
@@ -36,7 +36,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -48,12 +48,22 @@ spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
       repository: "elastic/connectors"
+      schedules:
+        Daily main:
+          branch: main
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `main` DRA artifacts"
+        Daily 8.x:
+          branch: 8.x
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `8.x` DRA artifacts"
       provider_settings:
         skip_pull_request_builds_for_existing_commits: false
+        build_pull_request_labels_changed: true
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 # ------------------------------------------------------------------------------
@@ -70,7 +80,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -87,14 +97,18 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_13:
-          branch: '8.13'
+        Daily 8_16:
+          branch: '8.16'
           cronline: '@daily'
-          message: "Runs daily `8.13` e2e test"
-        Daily 8_14:
-          branch: '8.14'
+          message: "Runs daily `8.16` e2e test"
+        Daily 8_15:
+          branch: '8.15'
           cronline: '@daily'
-          message: "Runs daily `8.14` e2e test"
+          message: "Runs daily `8.15` e2e test"
+        Daily 8_x:
+          branch: '8.x'
+          cronline: '@daily'
+          message: "Runs daily `8.x` e2e test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -102,7 +116,7 @@ spec:
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 ---
@@ -116,7 +130,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -133,14 +147,18 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_13:
-          branch: '8.13'
+        Daily 8_16:
+          branch: '8.16'
           cronline: '@daily'
-          message: "Runs daily `8.13` e2e aarch64 test"
-        Daily 8_14:
-          branch: '8.14'
+          message: "Runs daily `8.16` e2e aarch64 test"
+        Daily 8_15:
+          branch: '8.15'
           cronline: '@daily'
-          message: "Runs daily `8.14` e2e aarch64 test"
+          message: "Runs daily `8.15` e2e aarch64 test"
+        Daily 8_x:
+          branch: '8.x'
+          cronline: '@daily'
+          message: "Runs daily `8.x` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -148,9 +166,14 @@ spec:
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
+########
+# Nightly Docker SNAPSHOT image build and publish
+#  This is in place to release versions < 8.16
+#  Once we are no longer maintaining versions that old, this can be removed
+########
 ---
 apiVersion: "backstage.io/v1alpha1"
 kind: "Resource"
@@ -162,7 +185,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -179,22 +202,14 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily 8_13:
-          branch: '8.13'
+        Daily 8_15:
+          branch: '8.15'
           cronline: '@daily'
-          message: "Builds and pushes daily `8.13` docker images"
-        Daily 8_14:
-          branch: '8.14'
-          cronline: '@daily'
-          message: "Builds and pushes daily `8.14` docker images"
-        Daily main:
-          branch: main
-          cronline: '@daily'
-          message: "Builds and pushes daily `main` docker images"
+          message: "Builds and pushes daily `8.15` docker images"
       teams:
         everyone:
           access_level: "READ_ONLY"
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
 
 ########
@@ -211,7 +226,7 @@ metadata:
       url: "https://buildkite.com/elastic/connectors-docker-build-publish"
 spec:
   type: "buildkite-pipeline"
-  owner: "group:ingestion-team"
+  owner: "group:search-extract-and-transform"
   system: "buildkite"
   implementation:
     apiVersion: "buildkite.elastic.dev/v1"
@@ -224,7 +239,7 @@ spec:
       provider_settings:
         trigger_mode: "none"
       teams:
-        ingestion-team: {}
+        search-extract-and-transform: {}
         search-productivity-team: {}
         everyone:
           access_level: "READ_ONLY"

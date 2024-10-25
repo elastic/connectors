@@ -54,6 +54,11 @@
 #elasticsearch.ssl: true
 #
 #
+##  Whether to perform verification checks for server certificates using CA bundle.
+##    This option should be avoided in production.
+#elasticsearch.verify_certs: true
+#
+#
 ##  Path to a CA bundle, e.g. /path/to/ca.crt
 #elasticsearch.ca_certs: null
 #
@@ -151,6 +156,14 @@
 ##    This will be logged on 'DEBUG' log level. Note: this depends on the service.log_level, not elasticsearch.log_level
 #elasticsearch.bulk.enable_operations_logging: false
 #
+## ------------------------------- Elasticsearch: Experimental ------------------------
+#
+##  Experimental configuration options for Elasticsearch interactions.
+#
+#
+##  Enable usage of Connectors API instead of calling connectors indices directly
+##  Using direct index access is deprecated, and will be disallowed entirely in a future version
+#elasticsearch.feature_use_connectors_api: true
 ## ------------------------------- Service ----------------------------------
 #
 ##  Connector service/framework related configurations

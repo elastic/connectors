@@ -8,15 +8,16 @@ This guide uses generally-available unix commands to demonstrate how to run the 
 
 Windows users might have to run them in [Unix Subsystem](https://learn.microsoft.com/en-us/windows/wsl/about), rewrite the commands in PowerShell, or execute them manually.
 
-Please refer to the following Docker image registry to access and pull available versions of our service: [Elastic Connectors Docker Registry](https://www.docker.elastic.co/r/enterprise-search/elastic-connectors).
+Please refer to the following Docker image registry to access and pull available versions of our service: [Elastic Connectors Docker Registry](https://www.docker.elastic.co/r/integrations/elastic-connectors).
 
 Follow these steps:
 
-1. [Create network](#1-create-a-docker-network)
-2. [Create directory](#2-create-a-directory-to-be-mounted-into-the-docker-image)
-3. [Download config file](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
-4. [Update config file](#4-update-the-configuration-file-for-your-self-managed-connectorhttpswwwelasticcoguideenenterprise-searchcurrentbuild-connectorhtmlbuild-connector-usage)
-5. [Run the docker image](#5-run-the-docker-image)
+- [Run Connector Service in Docker](#run-connector-service-in-docker)
+  - [1. Create a Docker network.](#1-create-a-docker-network)
+  - [2. Create a directory to be mounted into the Docker image.](#2-create-a-directory-to-be-mounted-into-the-docker-image)
+  - [3. Download sample configuration file from this repository into newly created directory.](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
+  - [4. Update the configuration file for your self-managed connector](#4-update-the-configuration-file-for-your-self-managed-connector)
+  - [5. Run the Docker image.](#5-run-the-docker-image)
 
 ## 1. Create a Docker network.
 
@@ -72,7 +73,7 @@ For example, if you've created a custom version of MongoDB connector, you can ta
 docker build -t connector/custom-mongodb:1.0 .
 ```
 
-You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` in the next step to run the Docker image.
+You can later use `<TAG_OF_THE_IMAGE>` instead of `docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT` in the next step to run the Docker image.
 
 If you're an Elastic employee, you may want to build a Chainguard-based image using `Dockerfile.wolfi`:
 
@@ -90,7 +91,7 @@ docker run \
 --network "elastic" \
 --tty \
 --rm \
-docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT \
+docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT \
 /app/bin/elastic-ingest \
 -c /config/config.yml
 ```
@@ -99,7 +100,20 @@ You might need to adjust some details here:
 
 - `-v ~/connectors-config:/config \` - replace `~/connectors-config` with the directory that you've created in step 2 if you've chosen a different name for it.
 - `--network "elastic"` - replace `elastic` with the network that you've created in step 1 if you've chosen a different name for it.
-- `docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
+- `docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT` - adjust the version for the connectors to match your Elasticsearch deployment version.
   - For Elasticsearch of version `<VERSION>` you can use `elastic-connectors:<VERSION>`for a stable revision of the connectors, or `elastic-connectors:<VERSION>-SNAPSHOT` if you want the latest nightly build of the connectors (not recommended).
-  - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/enterprise-search/elastic-connectors:<VERSION>-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
+  - If you are using nightly builds, you will need to run `docker pull docker.elastic.co/integrations/elastic-connectors:<VERSION>-SNAPSHOT` before starting the service. This ensures you're using the latest version of the Docker image.
 - `-c /config/config.yml` - replace `config.yml` with the name of the config file you've put in the directory you've created in step 2.
+
+> [!TIP]
+> When starting a Docker container with the connector service against a local Elasticsearch cluster that has security and SSL enabled (like the [docker compose example](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html#docker-compose-file) from the Elasticsearch docs), it's crucial to handle the self-signed certificate correctly:
+> 1. Ensure the Docker container running the connector service has the volume attached that contains the generated certificate. When using Docker Compose, Docker automatically adds a project-specific prefix to volume names based on the directory where your `docker-compose.yml` is located. When starting the connector service with `docker run`, use `-v <your_project>_certs:/usr/share/connectors/config/certs` to reference it. Replace `<your_project>` with the actual prefix, such as `elastic_docker_certs` if your `docker-compose.yml` that starts the Elasticsearch stack is in a directory named `elastic_docker`.
+> 2. Make sure the connector service's `config.yml` correctly references the certificate with:
+> ```
+> elasticsearch.ca_certs: /usr/share/connectors/config/certs/ca/ca.crt
+> ```
+> 3. To avoid the certificate verification, configure `verify_certs` parameter which is `true` by default when SSL is enabled in connector service's `config.yml` as:
+> ```
+> elasticsearch.verify_certs: false
+> ```
+> Disclaimer: Setting `verify_certs` to `false` is not recommended in a production environment, as it may expose your application to security vulnerabilities.

@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Jira source module responsible to fetch documents from Jira on-prem or cloud server.
-"""
+"""Jira source module responsible to fetch documents from Jira on-prem or cloud server."""
+
 import asyncio
 from copy import copy
 from datetime import datetime
@@ -239,7 +239,8 @@ class JiraClient:
             response: Return api response.
         """
         url = url_kwargs.get("url") or parse.urljoin(
-            self.host_url, URLS[url_name].format(**url_kwargs)  # pyright: ignore
+            self.host_url,
+            URLS[url_name].format(**url_kwargs),  # pyright: ignore
         )
         self._logger.debug(f"Making a GET call for url: {url}")
         while True:
@@ -513,9 +514,10 @@ class JiraDataSource(BaseDataSource):
             },
             "account_email": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
-                "label": "Jira Cloud service account id",
+                "label": "Jira Cloud email address",
                 "order": 6,
                 "type": "str",
+                "tooltip": "Email address associated with Jira Cloud account. E.g. jane.doe@gmail.com",
             },
             "api_token": {
                 "depends_on": [{"field": "data_source", "value": JIRA_CLOUD}],
@@ -939,9 +941,7 @@ class JiraDataSource(BaseDataSource):
             document_with_access_control = self._decorate_with_access_control(
                 document=document, access_control=issue_access_control
             )
-            await self.queue.put(
-                (document_with_access_control, None)
-            )  # pyright: ignore
+            await self.queue.put((document_with_access_control, None))  # pyright: ignore
             attachments = issue_metadata.get("fields", {}).get("attachment")
             if len(attachments) > 0:
                 await self._put_attachment(

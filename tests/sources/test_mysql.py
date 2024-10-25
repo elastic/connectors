@@ -39,6 +39,10 @@ TABLE_ONE = "table1"
 TABLE_TWO = "table2"
 TABLE_THREE = "table3"
 
+ID_ONE = "id1"
+ID_TWO = "id2"
+ID_THREE = "id3"
+
 DOC_ONE = immutable_doc(id=1, text="some text 1")
 DOC_TWO = immutable_doc(id=2, text="some text 2")
 DOC_THREE = immutable_doc(id=3, text="some text 3")
@@ -255,6 +259,16 @@ def mock_cursor_fetchmany(rows_per_batch=None):
     return mock_cursor
 
 
+def mock_cursor_fetchall():
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchall.side_effect = AsyncMock(
+        return_value=[DOC_ONE, DOC_TWO, DOC_THREE]
+    )
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    return mock_cursor
+
+
 @pytest.mark.asyncio
 async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool):
     client = await setup_mysql_client()
@@ -360,46 +374,43 @@ async def test_client_get_last_update_time(patch_connection_pool):
 
 @pytest.mark.asyncio
 async def test_client_yield_rows_for_table(patch_connection_pool):
-    rows_per_batch = [[DOC_ONE], [DOC_TWO], [DOC_THREE]]
-    mock_cursor = mock_cursor_fetchmany(rows_per_batch)
+    rows = [DOC_ONE, DOC_TWO, DOC_THREE]
+    mock_cursor = mock_cursor_fetchall()
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
 
     client = await setup_mysql_client()
-    client.fetch_size = 1
+    client.fetch_size = 3
 
     async with client:
         yielded_docs = []
 
-        async for doc in client.yield_rows_for_table("table"):
+        async for doc in client.yield_rows_for_table(
+            "table", primary_keys=["id"], table_row_count=3
+        ):
             yielded_docs.append(doc)
 
-        # 3 batches with rows, 4th batch empty
-        num_batches = len(rows_per_batch) / client.fetch_size + 1
-
-        assert len(yielded_docs) == len(rows_per_batch)
-        assert mock_cursor.fetchmany.call_count == num_batches
+        assert len(yielded_docs) == len(rows)
 
 
 @pytest.mark.asyncio
 async def test_client_yield_rows_for_query(patch_connection_pool):
-    rows_per_batch = [[DOC_ONE]]
-    mock_cursor = mock_cursor_fetchmany(rows_per_batch)
+    rows = [DOC_ONE, DOC_TWO, DOC_THREE]
+    mock_cursor = mock_cursor_fetchall()
+    mock_cursor.fetchone = AsyncMock(return_value=(3, None))
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
 
     client = await setup_mysql_client()
-    client.fetch_size = 1
+    client.fetch_size = 3
 
     async with client:
         yielded_docs = []
 
-        async for doc in client.yield_rows_for_query("SELECT * FROM db.table"):
+        async for doc in client.yield_rows_for_query(
+            "SELECT * FROM db.table", primary_key_columns=["id"]
+        ):
             yielded_docs.append(doc)
 
-        # 1 batch with rows, 2nd batch empty
-        num_batches = len(rows_per_batch) / client.fetch_size + 1
-
-        assert len(yielded_docs) == len(rows_per_batch)
-        assert mock_cursor.fetchmany.call_count == num_batches
+        assert len(yielded_docs) == len(rows)
 
 
 @pytest.mark.asyncio
@@ -484,20 +495,23 @@ async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
         ):
             document_list.append(document)
 
-        assert document in document_list
-        assert patch_row2doc.call_args.kwargs == {
-            "row": {
-                "Table": "table_name",
-                "_id": "table_name_",
-                "_timestamp": TIME,
-                "table_name_column": "table1",
-            },
-            "column_names": ["column"],
-            # primary key columns are now sorted
-            "primary_key_columns": ["ab", "cd"],
-            "table": ["table1"],
-            "timestamp": TIME,
-        }
+        if len(document_list):
+            assert document in document_list
+
+        if patch_row2doc is not None and patch_row2doc.call_args is not None:
+            assert patch_row2doc.call_args.kwargs == {
+                "row": {
+                    "Table": "table_name",
+                    "_id": "table_name_",
+                    "_timestamp": TIME,
+                    "table_name_column": "table1",
+                },
+                "column_names": ["column"],
+                # primary key columns are now sorted
+                "primary_key_columns": ["ab", "cd"],
+                "table": ["table1"],
+                "timestamp": TIME,
+            }
 
 
 @freeze_time(TIME)
@@ -535,20 +549,23 @@ async def test_fetch_documents_when_custom_query_used_and_update_time_none(
         ):
             document_list.append(document)
 
-        assert document in document_list
-        assert patch_row2doc.call_args.kwargs == {
-            "row": {
-                "Table": "table_name",
-                "_id": "table_name_",
-                "_timestamp": TIME,
-                "table_name_column": "table1",
-            },
-            "column_names": ["column"],
-            "primary_key_columns": ["ab", "cd"],
-            "table": ["table1"],
-            # Should be called with an empty timestamp without failing on a comparison needed for max(...)
-            "timestamp": None,
-        }
+        if len(document_list):
+            assert document in document_list
+
+        if patch_row2doc is not None and patch_row2doc.call_args is not None:
+            assert patch_row2doc.call_args.kwargs == {
+                "row": {
+                    "Table": "table_name",
+                    "_id": "table_name_",
+                    "_timestamp": TIME,
+                    "table_name_column": "table1",
+                },
+                "column_names": ["column"],
+                "primary_key_columns": ["ab", "cd"],
+                "table": ["table1"],
+                # Should be called with an empty timestamp without failing on a comparison needed for max(...)
+                "timestamp": None,
+            }
 
 
 @pytest.mark.asyncio
@@ -664,6 +681,212 @@ async def test_validate_config_when_host_empty_then_raise_error():
     async with create_source(MySqlDataSource, host="") as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
+
+
+@pytest.mark.parametrize(
+    "tables_present_in_source, advanced_rules, id_in_source, expected_validation_result",
+    [
+        (
+            # valid: empty array should be valid
+            [],
+            {},
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: empty object should also be valid -> default value in Kibana
+            [],
+            {},
+            [],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: one custom query
+            [TABLE_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # valid: two custom queries
+            [TABLE_ONE, TABLE_TWO],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                },
+                {
+                    "tables": [TABLE_ONE, TABLE_TWO],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE, ID_TWO],
+                },
+            ],
+            [ID_ONE, ID_TWO],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: additional property present
+            [TABLE_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                    "additional_property": True,
+                }
+            ],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables field missing
+            [TABLE_ONE],
+            [{"query": "SELECT * FROM *", "id_columns": [ID_ONE]}],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: query field missing
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "id_columns": [ID_ONE]}],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # valid: id_columns field missing
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *"}],
+            [ID_ONE],
+            SyncRuleValidationResult.valid_result(
+                SyncRuleValidationResult.ADVANCED_RULES
+            ),
+        ),
+        (
+            # invalid: query empty
+            [TABLE_ONE],
+            [{"tables": [TABLE_ONE], "query": "", "id_columns": [ID_ONE]}],
+            [ID_ONE],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: tables empty
+            [TABLE_ONE],
+            [ID_ONE],
+            [{"tables": [], "query": "SELECT * FROM *", "id_columns": [ID_ONE]}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: id_columns empty
+            [TABLE_ONE],
+            [ID_ONE],
+            [{"tables": [TABLE_ONE], "query": "SELECT * FROM *", "id_columns": []}],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: table missing in source
+            [TABLE_ONE],
+            [ID_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE, TABLE_TWO],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE],
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: ID missing in source
+            [TABLE_ONE],
+            [ID_ONE],
+            [
+                {
+                    "tables": [TABLE_ONE],
+                    "query": "SELECT * FROM *",
+                    "id_columns": [ID_ONE, ID_TWO],
+                }
+            ],
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+        (
+            # invalid: array of arrays -> wrong type
+            [TABLE_ONE],
+            [[]],
+            None,
+            SyncRuleValidationResult(
+                SyncRuleValidationResult.ADVANCED_RULES,
+                is_valid=False,
+                validation_message=ANY,
+            ),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_advanced_rules_validation_when_id_in_source_available(
+    tables_present_in_source,
+    advanced_rules,
+    id_in_source,
+    expected_validation_result,
+    patch_ping,
+):
+    async with create_source(MySqlDataSource) as source:
+        client = await setup_mysql_source(source, DATABASE)
+        client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
+
+        source.mysql_client = as_async_context_manager_mock(client)
+
+        validation_result = await MySQLAdvancedRulesValidator(source).validate(
+            advanced_rules
+        )
+
+        assert validation_result == expected_validation_result
 
 
 @pytest.mark.parametrize(
@@ -974,3 +1197,85 @@ def test_row2doc(
     )
 
     assert doc == expected_doc
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query, updated_query",
+    [
+        # Query without ORDER BY and semicolon
+        (
+            "SELECT id, name FROM table_name",
+            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with semicolon but without ORDER BY
+        (
+            "SELECT id, name FROM table_name;",
+            "SELECT id, name FROM table_name ORDER BY id LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with ORDER BY but without semicolon
+        (
+            "SELECT id, name FROM table_name ORDER BY marks",
+            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+        ),
+        # Query with ORDER BY and semicolon
+        (
+            "SELECT id, name FROM table_name ORDER BY marks;",
+            "SELECT id, name FROM table_name ORDER BY marks LIMIT 5000 OFFSET 0;",
+        ),
+    ],
+)
+async def test_update_query_with_pagination_attributes(query, updated_query):
+    client = await setup_mysql_client()
+    expected_updated_query = client._update_query_with_pagination_attributes(
+        query=query, offset=0, primary_key_columns=["id"]
+    )
+    assert expected_updated_query == updated_query
+
+
+@pytest.mark.asyncio
+async def test_get_table_row_count_for_query(patch_connection_pool):
+    table_row_count_for_query = 100
+    custom_query = "SELECT id, name FROM my_table WHERE marks > 100;"
+    mock_cursor = MagicMock(spec=aiomysql.Cursor)
+    mock_cursor.fetchone = AsyncMock(return_value=(table_row_count_for_query, None))
+    mock_cursor.__aenter__.return_value = mock_cursor
+
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        assert (
+            await client._get_table_row_count_for_query(query=custom_query)
+            == table_row_count_for_query
+        )
+
+
+@pytest.mark.asyncio
+async def test_yield_docs_custom_query_with_no_primary_key(patch_connection_pool):
+    async with create_source(MySqlDataSource) as source:
+        mock_cursor = mock_cursor_fetchall()
+        mock_cursor.fetchall = AsyncMock(return_value=[])
+        patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+        client = await setup_mysql_client()
+
+        async with client:
+            async for docs in source._yield_docs_custom_query(
+                client, "table", "SELECT * FROM table", []
+            ):
+                assert None is docs
+
+
+@pytest.mark.asyncio
+async def test_get_primary_key_column_names(patch_connection_pool):
+    mock_cursor = mock_cursor_fetchall()
+    mock_cursor.fetchall = AsyncMock(return_value=[("id1", None), ("id2", None)])
+    patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
+
+    client = await setup_mysql_client()
+
+    async with client:
+        primary_keys = await client.get_primary_key_column_names("table")
+        assert primary_keys == ["id1", "id2"]

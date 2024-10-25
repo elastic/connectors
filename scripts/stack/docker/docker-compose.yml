@@ -1,7 +1,9 @@
 version: "3"
 
 networks:
-  connectors_stack_net:
+  elastic:
+    name: 'elastic'
+    external: true
 
 services:
   elasticsearch:
@@ -19,7 +21,7 @@ services:
         soft: -1
         hard: -1
     networks:
-      - connectors_stack_net
+      - elastic
     ports:
       - 9200:9200
     volumes:
@@ -32,7 +34,7 @@ services:
     depends_on:
       - elasticsearch
     networks:
-      - connectors_stack_net
+      - elastic
     environment:
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
@@ -41,14 +43,14 @@ services:
       XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: c69548d9027afcf4d55146b1d425a9f4c69548d9027afcf4d55146b1d425a9f4
 
   elastic-connectors:
-    image: docker.elastic.co/enterprise-search/elastic-connectors:${CONNECTORS_VERSION}
+    image: docker.elastic.co/integrations/elastic-connectors:${CONNECTORS_VERSION}
     depends_on:
       - elasticsearch
       - kibana
     volumes:
       - ${CURDIR}/connectors-config:/config
     command: /app/bin/elastic-ingest -c /config/config.yml
-    network_mode: "host"
+    network_mode: "elastic"
 
 volumes:
   conn-es-data:

@@ -3,14 +3,13 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-""" Helpers to build sources + FQN-based Registry
-"""
+"""Helpers to build sources + FQN-based Registry"""
 
 import asyncio
 import importlib
 import re
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from functools import cache
@@ -140,7 +139,7 @@ class Field:
             return value
 
         # list requires special type casting
-        if cast_type == list:
+        if cast_type is list:
             if isinstance(value, str):
                 return [item.strip() for item in value.split(",")] if value else []
             elif isinstance(value, int):
@@ -670,7 +669,7 @@ class BaseDataSource:
             elif isinstance(value, dict):
                 for key, svalue in value.items():
                     value[key] = _serialize(svalue)
-            elif isinstance(value, (datetime, date)):
+            elif isinstance(value, (datetime, date, time)):
                 value = value.isoformat()
             elif isinstance(value, Decimal128):
                 value = value.to_decimal()

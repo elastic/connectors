@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Salesforce source class methods"""
+
 import re
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -825,8 +826,12 @@ async def test_generate_token_with_bad_credentials_raises_error(
             },
             repeat=True,
         )
-        with pytest.raises(InvalidCredentialsException):
+        with pytest.raises(InvalidCredentialsException) as error:
             await source.salesforce_client.api_token.token()
+        assert (
+            str(error.value)
+            == "The `client_id` and `client_secret` provided could not be used to generate a token. Status: 400, message: Bad Request, details: invalid_client, description: Invalid client credentials"
+        )
 
 
 @pytest.mark.asyncio
@@ -1534,12 +1539,15 @@ async def test_get_all_with_content_docs_when_success(
 
 @pytest.mark.asyncio
 async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value="chunk1",
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value="chunk1",
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_salesforce_source(use_text_extraction_service=True) as source:
             expected_doc = {

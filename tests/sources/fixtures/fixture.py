@@ -128,7 +128,7 @@ async def _fetch_connector_metadata(es_client):
     connector = response["hits"]["hits"][0]
 
     connector_id = connector["_id"]
-    last_synced = connector["_source"]["last_synced"]
+    last_synced = connector["_source"].get("last_synced")
 
     return (connector_id, last_synced)
 
@@ -141,11 +141,13 @@ async def _monitor_service(pid):
         start = time.time()
 
         # Fetch connector
-        connector_id, last_synced = await _fetch_connector_metadata(es_client)
+        _, last_synced = await _fetch_connector_metadata(es_client)
         while True:
             _, new_last_synced = await _fetch_connector_metadata(es_client)
             lapsed = time.time() - start
-            if last_synced != new_last_synced or lapsed > sync_job_timeout:
+            if new_last_synced is not None and (
+                last_synced != new_last_synced or lapsed > sync_job_timeout
+            ):
                 if lapsed > sync_job_timeout:
                     logger.error(
                         f"Took too long to complete the sync job (over {sync_job_timeout} minutes), give up!"

@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Jira database source class methods"""
+
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
@@ -874,12 +875,15 @@ async def test_get_content():
 @pytest.mark.asyncio
 async def test_get_content_with_text_extraction_enabled_adds_body():
     """Tests the get content method."""
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=RESPONSE_CONTENT,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=RESPONSE_CONTENT,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_jira_source(use_text_extraction_service=True) as source:
             with mock.patch(

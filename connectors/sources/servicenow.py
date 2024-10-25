@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """ServiceNow source module responsible to fetch documents from ServiceNow."""
+
 import base64
 import json
 import os
@@ -320,7 +321,9 @@ class ServiceNowClient:
 
             for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
                 batched_apis = record_apis[
-                    batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+                    batched_apis_index : (
+                        batched_apis_index + TABLE_BATCH_SIZE
+                    )  # noqa
                 ]
                 async for table_data in self.get_data(batched_apis=batched_apis):
                     for mapping in table_data:  # pyright: ignore
@@ -410,7 +413,7 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
             return SyncRuleValidationResult(
                 SyncRuleValidationResult.ADVANCED_RULES,
                 is_valid=False,
-                validation_message=f"Services '{', '.join(invalid_services)}' are not available. Available services are: '{', '.join(set(services_to_filter)-set(invalid_services))}'",
+                validation_message=f"Services '{', '.join(invalid_services)}' are not available. Available services are: '{', '.join(set(services_to_filter) - set(invalid_services))}'",
             )
 
         await self.source.servicenow_client.close_session()
@@ -425,6 +428,7 @@ class ServiceNowDataSource(BaseDataSource):
 
     name = "ServiceNow"
     service_type = "servicenow"
+    advanced_rules_enabled = True
     dls_enabled = True
     incremental_sync_enabled = True
 
@@ -671,28 +675,39 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
-
-        await self.queue.put(EndSignal.ATTACHMENT)
+        finally:
+            await self.queue.put(EndSignal.ATTACHMENT)
 
     async def _attachment_metadata_producer(self, record_ids, table_access_control):
-        attachment_apis = self.servicenow_client.get_attachment_apis(
-            url=ENDPOINTS["ATTACHMENT"], ids=record_ids
-        )
-
-        for batched_apis_index in range(0, len(attachment_apis), ATTACHMENT_BATCH_SIZE):
-            batched_apis = attachment_apis[
-                batched_apis_index : (  # noqa
-                    batched_apis_index + ATTACHMENT_BATCH_SIZE
-                )
-            ]
-            await self.fetchers.put(
-                partial(
-                    self._fetch_attachment_metadata, batched_apis, table_access_control
-                )
+        attachment_apis = None
+        try:
+            attachment_apis = self.servicenow_client.get_attachment_apis(
+                url=ENDPOINTS["ATTACHMENT"], ids=record_ids
             )
-            self.task_count += 1
 
-        await self.queue.put(EndSignal.RECORD)
+            for batched_apis_index in range(
+                0, len(attachment_apis), ATTACHMENT_BATCH_SIZE
+            ):
+                batched_apis = attachment_apis[
+                    batched_apis_index :   (  # noqa
+                        batched_apis_index + ATTACHMENT_BATCH_SIZE
+                    )
+                ]
+                await self.fetchers.put(
+                    partial(
+                        self._fetch_attachment_metadata,
+                        batched_apis,
+                        table_access_control,
+                    )
+                )
+                self.task_count += 1
+        except Exception as exception:
+            self._logger.exception(
+                f"Skipping attachment metadata for {attachment_apis}. Exception: {exception}."
+            )
+            raise
+        finally:
+            await self.queue.put(EndSignal.RECORD)
 
     async def _yield_table_data(self, batched_apis):
         try:
@@ -741,8 +756,8 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping batch data for {batched_apis}. Exception: {exception}."
             )
-
-        await self.queue.put(EndSignal.RECORD)
+        finally:
+            await self.queue.put(EndSignal.RECORD)
 
     async def _fetch_access_controls(self, table_name):
         access_control, user_roles, roles = [], [], {}
@@ -803,7 +818,9 @@ class ServiceNowDataSource(BaseDataSource):
 
         for batched_apis_index in range(0, len(record_apis), TABLE_BATCH_SIZE):
             batched_apis = record_apis[
-                batched_apis_index : (batched_apis_index + TABLE_BATCH_SIZE)  # noqa
+                batched_apis_index : (
+                    batched_apis_index + TABLE_BATCH_SIZE
+                )  # noqa
             ]
             yield batched_apis
 
@@ -831,8 +848,8 @@ class ServiceNowDataSource(BaseDataSource):
             self._logger.warning(
                 f"Skipping table data for {service_name}. Exception: {exception}."
             )
-
-        await self.queue.put(EndSignal.SERVICE)
+        finally:
+            await self.queue.put(EndSignal.SERVICE)
 
     async def _consumer(self):
         """Consume the queue for the documents.

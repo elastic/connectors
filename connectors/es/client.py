@@ -5,7 +5,6 @@
 #
 import functools
 import logging
-import os
 import time
 from enum import Enum
 
@@ -47,9 +46,7 @@ class ESClient:
     user_agent = f"{USER_AGENT_BASE}/service"
 
     def __init__(self, config):
-        # We don't have a way to ask the server, but it's planned
-        # for now we just use an env flag
-        self.serverless = "SERVERLESS" in os.environ
+        self.serverless = config.get("serverless", False)
         self.config = config
         self.configured_host = config.get("host", "http://localhost:9200")
         self.host = url_to_node_config(
@@ -90,11 +87,14 @@ class ESClient:
             logger.debug(f"Connecting using Basic Auth (user: {config['username']})")
 
         if config.get("ssl", False):
-            options["verify_certs"] = True
-            if "ca_certs" in config:
-                ca_certs = config["ca_certs"]
-                logger.debug(f"Verifying cert with {ca_certs}")
-                options["ca_certs"] = ca_certs
+            options["verify_certs"] = config.get("verify_certs", True)
+            if options["verify_certs"]:
+                if "ca_certs" in config:
+                    ca_certs = config["ca_certs"]
+                    logger.debug(f"Verifying cert with {ca_certs}")
+                    options["ca_certs"] = ca_certs
+                else:
+                    logger.debug("Verifying cert with system certificates")
 
         level = config.get("log_level", "INFO").upper()
         es_logger = logging.getLogger("elastic_transport.node")
@@ -162,7 +162,7 @@ class ESClient:
         while time.time() - start < self.max_wait_duration:
             if not self._keep_waiting:
                 await self.close()
-                return False
+                return None
 
             logger.info(
                 f"Waiting for Elasticsearch at {self.configured_host} (so far: {int(time.time() - start)} secs)"
@@ -170,28 +170,32 @@ class ESClient:
             logger.debug(
                 f"Seed node configuration: {self.client.transport.node_pool._seed_nodes}"
             )
-            if await self.ping():
-                return True
+            response = await self.ping()
+            if response is not None:
+                return response
             await self._sleeps.sleep(backoff)
             backoff *= self.backoff_multiplier
 
         await self.close()
-        return False
+        return None
 
     async def ping(self):
         try:
-            await self.client.info()
+            response = await self.client.info()
+            logger.debug(
+                f"Connected to Elasticsearch server with version '{response['version']['number']}' and build flavor '{response['version']['build_flavor']}'"
+            )
+            return response
         except ApiError as e:
             logger.error(f"The Elasticsearch server returned a {e.status_code} code")
             if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
                 logger.error(e.info["error"]["reason"])
-            return False
+            return None
         except ElasticConnectionError as e:
             logger.error("Could not connect to the Elasticsearch server")
             if e.message is not None:
                 logger.error(e.message)
-            return False
-        return True
+            return None
 
 
 class RetryInterruptedError(Exception):

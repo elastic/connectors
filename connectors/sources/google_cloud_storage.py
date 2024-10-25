@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Google Cloud Storage source module responsible to fetch documents from Google Cloud Storage.
-"""
+"""Google Cloud Storage source module responsible to fetch documents from Google Cloud Storage."""
+
 import os
 import urllib.parse
 from functools import cached_property, partial
@@ -329,9 +329,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         for elasticsearch_field, google_cloud_storage_field in BLOB_ADAPTER.items():
             blob_document[elasticsearch_field] = blob.get(google_cloud_storage_field)
         blob_name = urllib.parse.quote(blob_document["name"], safe="'")
-        blob_document[
-            "url"
-        ] = f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self._google_storage_client.user_project_id}"
+        blob_document["url"] = (
+            f"{CLOUD_STORAGE_BASE_URL}{blob_document['bucket_name']}/{blob_name};tab=live_object?project={self._google_storage_client.user_project_id}"
+        )
         return blob_document
 
     def get_blob_document(self, blobs):
