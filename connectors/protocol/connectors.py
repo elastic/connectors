@@ -23,6 +23,7 @@ from elasticsearch import ApiError
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
+from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
@@ -171,6 +172,18 @@ class ConnectorIndex(ESIndex):
             connector_name=connector_name,
             index_name=index_name,
         )
+
+    async def connector_exists(self, connector_id):
+        try:
+            doc = await self.fetch_by_id(connector_id)
+            return doc is not None
+        except DocumentNotFoundError:
+            return False
+        except Exception as e:
+            logger.error(
+                f"Error while checking existence of connector '{connector_id}': {e}"
+            )
+            raise e
 
     async def connector_update_scheduling(
         self, connector_id, full=None, incremental=None, access_control=None

@@ -3,12 +3,10 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import secrets
-import string
 
 from connectors.agent.logger import get_logger
-from connectors.es.index import DocumentNotFoundError
 from connectors.protocol import ConnectorIndex
+from connectors.utils import generate_random_id
 
 logger = get_logger("agent_connector_record_manager")
 
@@ -30,25 +28,27 @@ class ConnectorRecordManager:
         """
 
         if not self._agent_config_ready(agent_config):
+            logger.debug(
+                "Agent configuration is not ready to create a connector record."
+            )
             return
 
         # Initialize the ES client if it's not already initialized
         if not self.connector_index:
             self.connector_index = ConnectorIndex(agent_config.get("elasticsearch"))
 
-        for connector_config in self._get_connectors(agent_config):
+        for connector_config in agent_config.get("connectors"):
             connector_id, service_type = (
                 connector_config["connector_id"],
                 connector_config["service_type"],
             )
 
             if not connector_name:
-                random_connector_name_id = self._generate_random_connector_name_id(
-                    length=4
-                )
+                logger.debug("Connector name not provided, generating a random one.")
+                random_connector_name_id = generate_random_id(length=4)
                 connector_name = f"[Elastic-managed] {service_type} connector {random_connector_name_id}"
 
-            if not await self._connector_exists(connector_id):
+            if not await self.connector_index.connector_exists(connector_id):
                 try:
                     await self.connector_index.connector_put(
                         connector_id=connector_id,
@@ -82,23 +82,3 @@ class ConnectorRecordManager:
             return False
 
         return True
-
-    async def _connector_exists(self, connector_id):
-        try:
-            doc = await self.connector_index.fetch_by_id(connector_id)
-            return doc is not None
-        except DocumentNotFoundError:
-            return False
-        except Exception as e:
-            logger.error(
-                f"Error while checking existence of connector '{connector_id}': {e}"
-            )
-            raise e
-
-    def _get_connectors(self, agent_config):
-        return agent_config.get("connectors")
-
-    def _generate_random_connector_name_id(self, length=4):
-        return "".join(
-            secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
-        )
