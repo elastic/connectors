@@ -389,7 +389,7 @@ class Sink:
                 batch_num += 1
                 doc_size, doc = await self.fetch_doc()
                 if isinstance(doc, ForceFlushSignal):
-                    self._logger.debug("Found ForceFlushSignal")
+                    self._logger.debug("Received flush signal")
                     force_flush = True
                 elif doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
@@ -425,7 +425,7 @@ class Sink:
                     or force_flush
                 ):
                     if force_flush:
-                        self._logger.debug("Flushing batch forcefully")
+                        self._logger.debug("Flushing batch due to flush signal")
 
                     await self.bulk_tasks.put(
                         functools.partial(
