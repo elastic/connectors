@@ -91,7 +91,7 @@ def create_runner(
     connector=None,
     service_config=None,
     es_config=None,
-    data_provider_checkpoint=None
+    data_provider_checkpoint=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -685,6 +685,7 @@ async def test_sync_job_runner_reporting_metadata(
     )
     sync_orchestrator_mock.trigger_flush.assert_not_awaited()
 
+
 @pytest.mark.parametrize(
     "job_type, sync_cursor",
     [
@@ -703,10 +704,14 @@ async def test_sync_job_runner_metadata_update_checkpoint_if_changed(
         "indexed_document_volume": 230,
         "deleted_document_count": 10,
     }
-    new_checkpoint = { "hey": "i've got new checkpoint!"}
+    new_checkpoint = {"hey": "i've got new checkpoint!"}
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
     sync_orchestrator_mock.done.return_value = False
-    sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor, data_provider_checkpoint=new_checkpoint)
+    sync_job_runner = create_runner(
+        job_type=job_type,
+        sync_cursor=sync_cursor,
+        data_provider_checkpoint=new_checkpoint,
+    )
     task = asyncio.create_task(sync_job_runner.execute())
     asyncio.get_event_loop().call_later(0.1, task.cancel)
     await task

@@ -381,6 +381,7 @@ async def test_async_bulk(mock_responses):
 
     await es.close()
 
+
 @patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_sync_orchestrator_trigger_flush_proxies_to_extractor(mock_responses):
@@ -1541,6 +1542,7 @@ async def test_extractor_run_when_mem_full_is_raised():
     queue.clear.assert_called_once()
     assert isinstance(extractor.error, ElasticsearchOverloadedError)
 
+
 @pytest.mark.asyncio
 async def test_adding_force_flush_signal_actually_flushes_current_batch():
     doc_1 = {"_id": 1, "_index": "some-content-index"}
@@ -1587,10 +1589,7 @@ async def test_adding_force_flush_signal_actually_flushes_current_batch():
         yield doc_3, None, OP_INDEX
         yield doc_4, None, OP_INDEX
 
-    await asyncio.gather(
-        extractor.run(_iterator(), JobType.FULL),
-        sink.run()
-    )
+    await asyncio.gather(extractor.run(_iterator(), JobType.FULL), sink.run())
 
     # Assert called first for [doc_1, doc_2], and then for [doc_3, doc_4]
     assert client.bulk_insert.call_count == 2
@@ -1605,12 +1604,13 @@ async def test_adding_force_flush_signal_actually_flushes_current_batch():
     #   'id': 2,
     #   '_timestamp': '2024-10-25T12:44:37.470934+00:00'}],
     # 'pipeline')
-    assert first_call[0][0][0][OP_INDEX]['_id'] == doc_1["id"]
-    assert first_call[0][0][2][OP_INDEX]['_id'] == doc_2["id"]
+    assert first_call[0][0][0][OP_INDEX]["_id"] == doc_1["id"]
+    assert first_call[0][0][2][OP_INDEX]["_id"] == doc_2["id"]
 
     second_call = client.bulk_insert.call_args_list[1]
-    assert second_call[0][0][0][OP_INDEX]['_id'] == doc_3["id"]
-    assert second_call[0][0][2][OP_INDEX]['_id'] == doc_4["id"]
+    assert second_call[0][0][0][OP_INDEX]["_id"] == doc_3["id"]
+    assert second_call[0][0][2][OP_INDEX]["_id"] == doc_4["id"]
+
 
 @pytest.mark.asyncio
 async def test_should_not_log_bulk_operations_if_doc_id_tracing_is_disabled(

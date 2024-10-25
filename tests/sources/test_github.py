@@ -1629,6 +1629,7 @@ async def test_get_docs():
             actual_response.append(document)
         assert expected_response == actual_response
 
+
 @pytest.mark.asyncio
 async def test_get_docs_saves_checkpoint_for_repo():
     async with create_github_source() as source:
