@@ -382,23 +382,18 @@ class SyncJob(ESDocument):
         except Exception as e:
             self._wrap_errors("update metadata and stats", e)
 
-    async def done(
-        self, ingestion_stats=None, connector_metadata=None, checkpoint=None
-    ):
+    async def done(self, ingestion_stats=None, connector_metadata=None):
         try:
             await self._terminate(
                 JobStatus.COMPLETED,
                 None,
                 ingestion_stats,
                 connector_metadata,
-                checkpoint,
             )
         except Exception as e:
             self._wrap_errors("terminate as completed", e)
 
-    async def fail(
-        self, error, ingestion_stats=None, connector_metadata=None, checkpoint=None
-    ):
+    async def fail(self, error, ingestion_stats=None, connector_metadata=None):
         try:
             if isinstance(error, str):
                 message = error
@@ -413,35 +408,28 @@ class SyncJob(ESDocument):
                 message,
                 ingestion_stats,
                 connector_metadata,
-                checkpoint,
             )
         except Exception as e:
             self._wrap_errors("terminate as failed", e)
 
-    async def cancel(
-        self, ingestion_stats=None, connector_metadata=None, checkpoint=None
-    ):
+    async def cancel(self, ingestion_stats=None, connector_metadata=None):
         try:
             await self._terminate(
                 JobStatus.CANCELED,
                 None,
                 ingestion_stats,
                 connector_metadata,
-                checkpoint,
             )
         except Exception as e:
             self._wrap_errors("terminate as canceled", e)
 
-    async def suspend(
-        self, ingestion_stats=None, connector_metadata=None, checkpoint=None
-    ):
+    async def suspend(self, ingestion_stats=None, connector_metadata=None):
         try:
             await self._terminate(
                 JobStatus.SUSPENDED,
                 None,
                 ingestion_stats,
                 connector_metadata,
-                checkpoint,
             )
         except Exception as e:
             self._wrap_errors("terminate as suspended", e)
@@ -452,7 +440,6 @@ class SyncJob(ESDocument):
         error=None,
         ingestion_stats=None,
         connector_metadata=None,
-        checkpoint=None,
     ):
         ingestion_stats = filter_ingestion_stats(ingestion_stats)
         if connector_metadata is None:
@@ -468,8 +455,6 @@ class SyncJob(ESDocument):
         if status == JobStatus.CANCELED:
             doc["canceled_at"] = iso_utc()
         doc.update(ingestion_stats)
-        if checkpoint:
-            doc["checkpoint"] = checkpoint
         if len(connector_metadata) > 0:
             doc["metadata"] = connector_metadata
         await self.index.update(doc_id=self.id, doc=doc)

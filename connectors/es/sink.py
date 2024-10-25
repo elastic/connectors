@@ -126,6 +126,7 @@ class ForceFlushSignal:
     - signal.trigger() is there for the sink to report that the flush has happened, so that
       the owner of the signal can understand that flush has happened
     """
+
     def __init__(self):
         self._flush_event = asyncio.Event()
 

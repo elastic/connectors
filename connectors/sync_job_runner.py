@@ -551,7 +551,9 @@ class SyncJobRunner:
                 # This is done to avoid data inconsistencies - if we don't flush, then
                 # we can store checkpoint before the data that preceded this checkpoint was ingested.
                 await self.sync_orchestrator.trigger_flush()
-                self.sync_job.log_debug("Data was successfully flushed before saving the checkpoint")
+                self.sync_job.log_debug(
+                    "Data was successfully flushed before saving the checkpoint"
+                )
 
             result = self.sync_orchestrator.ingestion_stats()
             ingestion_stats = {
