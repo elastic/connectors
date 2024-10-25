@@ -2081,10 +2081,14 @@ class GitHubDataSource(BaseDataSource):
             self._logger.debug(f"{repo_name} was not processed by this job before.")
             return False
 
-        self._logger.info(
-            f"Skipping repository {repo_name} - has already been processed."
-        )
-        return self._checkpoint.get(repo_name)
+        processed = self._checkpoint.get(repo_name)
+
+        if processed:
+            self._logger.info(
+                f"Skipping repository {repo_name} - has already been processed."
+            )
+
+        return processed
 
     def _mark_repo_as_processed(self, repo_name):
         self._logger.debug(f"Setting a checkpoint for {repo_name}.")

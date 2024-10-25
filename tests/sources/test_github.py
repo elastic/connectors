@@ -1649,6 +1649,26 @@ async def test_get_docs_saves_checkpoint_for_repo():
         assert source._checkpoint is not None
         assert source._checkpoint[PUBLIC_REPO["nameWithOwner"]] is not None
 
+@pytest.mark.asyncio
+async def test_get_docs_with_existing_checkpoint_skips_repo():
+    async with create_github_source() as source:
+        source._fetch_repos = Mock(return_value=AsyncIterator([deepcopy(PUBLIC_REPO)]))
+        source._fetch_issues = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ISSUE)])
+        )
+        source._fetch_pull_requests = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_PULL)])
+        )
+        source._fetch_files = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ATTACHMENTS)])
+        )
+        source._checkpoint = { PUBLIC_REPO["nameWithOwner"]: 1}
+
+        document_count = 0
+        async for _, _ in source.get_docs():
+            document_count+=1
+
+        assert document_count == 0
 
 @pytest.mark.asyncio
 async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo():
