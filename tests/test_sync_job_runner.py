@@ -75,6 +75,7 @@ def mock_sync_job(job_type, index_name):
     sync_job.suspend = AsyncMock()
     sync_job.reload = AsyncMock()
     sync_job.validate_filtering = AsyncMock()
+    sync_job.checkpoint = None
     sync_job.update_metadata = AsyncMock()
 
     return sync_job
@@ -90,11 +91,13 @@ def create_runner(
     connector=None,
     service_config=None,
     es_config=None,
+    checkpoint=None
 ):
     source_klass = Mock()
     data_provider = Mock()
     data_provider.tweak_bulk_options = Mock()
     data_provider.changed = AsyncMock(return_value=source_changed)
+    data_provider.checkpoint = Mock(return_value=checkpoint)
     data_provider.set_features = Mock()
     data_provider.validate_config_fields = Mock()
     data_provider.validate_config = AsyncMock(side_effect=validate_config_exception)
@@ -139,6 +142,7 @@ def sync_orchestrator_mock():
         sync_orchestrator_mock.cancel = AsyncMock()
         sync_orchestrator_mock.ingestion_stats = Mock(return_value={})
         sync_orchestrator_mock.close = AsyncMock()
+        sync_orchestrator_mock.trigger_flush = AsyncMock()
         sync_orchestrator_mock.has_active_license_enabled = AsyncMock(
             return_value=(True, License.PLATINUM)
         )
@@ -668,7 +672,7 @@ async def test_sync_job_runner_reporting_metadata(
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_orchestrator.async_bulk.assert_awaited()
     sync_job_runner.sync_job.update_metadata.assert_awaited_with(
-        ingestion_stats=ingestion_stats
+        ingestion_stats=ingestion_stats, checkpoint=None
     )
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
