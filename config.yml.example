@@ -54,6 +54,11 @@
 #elasticsearch.ssl: true
 #
 #
+##  Whether to perform verification checks for server certificates using CA bundle.
+##    This option should be avoided in production.
+#elasticsearch.verify_certs: true
+#
+#
 ##  Path to a CA bundle, e.g. /path/to/ca.crt
 #elasticsearch.ca_certs: null
 #
@@ -157,7 +162,8 @@
 #
 #
 ##  Enable usage of Connectors API instead of calling connectors indices directly
-#elasticsearch.feature_use_connectors_api: false
+##  Using direct index access is deprecated, and will be disallowed entirely in a future version
+#elasticsearch.feature_use_connectors_api: true
 ## ------------------------------- Service ----------------------------------
 #
 ##  Connector service/framework related configurations
