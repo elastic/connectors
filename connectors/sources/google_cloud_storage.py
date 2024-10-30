@@ -123,6 +123,7 @@ class GoogleCloudStorageClient:
                         )
                     resource_object = getattr(storage_client, resource)
                     method_object = getattr(resource_object, method)
+                    self._logger.debug(f"Calling '{resource}.{method}' with args: '{dict(**kwargs)}'")
                     if full_response:
                         first_page_with_next_attached = (
                             await google_client.as_service_account(
