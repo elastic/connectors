@@ -1,14 +1,3 @@
-retry:
-  automatic:
-    - exit_status: -1  # Connection to the Agent was lost
-      signal_reason: none
-      limit: 2
-    - exit_status: 255  # Timeout
-      signal_reason: none
-      limit: 2
-    - signal_reason: 2  # Flaky test
-      limit: 2
-
 definitions:
   steps:
     - step: &test-agents
@@ -40,6 +29,17 @@ steps:
     matrix:
       - "3.10"
       - "3.11"
+    retry:
+      automatic:
+        - exit_status: -1  # Connection to the Agent was lost
+          signal_reason: none
+          limit: 2
+        - exit_status: 255  # Timeout
+          signal_reason: none
+          limit: 2
+        - signal_reason: 2  # Flaky test
+          limit: 2
+
 
   - label: ":shipit: Smoke test"
     key: "smoke_test"
@@ -54,6 +54,16 @@ steps:
       provider: "gcp"
       useVault: true
       image: family/enterprise-search-ubuntu-2204-connectors-py
+    retry:
+      automatic:
+        - exit_status: -1  # Connection to the Agent was lost
+          signal_reason: none
+          limit: 2
+        - exit_status: 255  # Timeout
+          signal_reason: none
+          limit: 2
+        - signal_reason: 2  # Flaky test
+          limit: 2
 
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
