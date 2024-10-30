@@ -6,29 +6,7 @@ definitions:
           machineType: "n1-standard-8"
           useVault: true
           image: family/enterprise-search-ubuntu-2204-connectors-py
-
-env:
-  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
-
-steps:
-  - label: ":face_with_peeking_eye: Lint"
-    <<: *test-agents
-    key: "lint"
-    command: ".buildkite/run_linter.sh"
-    env:
-      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
-    timeout_in_minutes: 5
-
-  - label: ":pytest: Test with Python {{ matrix }}"
-    <<: *test-agents
-    key: "unit_tests"
-    command: ".buildkite/run_tests.sh"
-    env:
-      PYTHON_VERSION: "{{ matrix }}"
-    timeout_in_minutes: 5
-    matrix:
-      - "3.10"
-      - "3.11"
+  retries: &retries
     retry:
       automatic:
         - exit_status: -1  # Connection to the Agent was lost
@@ -41,8 +19,33 @@ steps:
           signal_reason: none
           limit: 2
 
+env:
+  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+
+steps:
+  - label: ":face_with_peeking_eye: Lint"
+    <<: *test-agents
+    <<: *retries
+    key: "lint"
+    command: ".buildkite/run_linter.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
+    timeout_in_minutes: 5
+
+  - label: ":pytest: Test with Python {{ matrix }}"
+    <<: *test-agents
+    <<: *retries
+    key: "unit_tests"
+    command: ".buildkite/run_tests.sh"
+    env:
+      PYTHON_VERSION: "{{ matrix }}"
+    timeout_in_minutes: 5
+    matrix:
+      - "3.10"
+      - "3.11"
 
   - label: ":shipit: Smoke test"
+    <<: *retries
     key: "smoke_test"
     command: ".buildkite/run_functional_test.sh"
     env:
@@ -55,17 +58,6 @@ steps:
       provider: "gcp"
       useVault: true
       image: family/enterprise-search-ubuntu-2204-connectors-py
-    retry:
-      automatic:
-        - exit_status: -1  # Connection to the Agent was lost
-          signal_reason: none
-          limit: 2
-        - exit_status: 255  # Timeout
-          signal_reason: none
-          limit: 2
-        - exit_status: 2  # Flaky test
-          signal_reason: none
-          limit: 2
 
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
@@ -82,6 +74,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MySQL"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -100,6 +93,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Network Drive"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -118,6 +112,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Amazon S3"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -136,6 +131,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -154,6 +150,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -172,6 +169,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Postgresql"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -190,6 +188,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 System Directory"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -208,6 +207,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Oracle Database"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -226,6 +226,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -244,6 +245,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -262,6 +264,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -281,6 +284,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Jira"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -300,6 +304,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Confluence"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -318,6 +323,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 ServiceNow"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -336,6 +342,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MongoDB"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -354,6 +361,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GitHub"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -372,6 +380,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Drive"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -390,6 +399,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Dropbox"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -408,6 +418,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 OneDrive"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -426,6 +437,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Salesforce"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -444,6 +456,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Zoom"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -462,6 +475,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Box"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -480,6 +494,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -498,6 +513,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Notion"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -516,6 +532,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Redis"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
@@ -534,6 +551,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GraphQL"
+              <<: *retries
               <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
