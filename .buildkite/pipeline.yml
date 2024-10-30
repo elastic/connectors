@@ -13,8 +13,10 @@ definitions:
           signal_reason: none
           limit: 2
         - exit_status: 255  # Timeout
+          signal_reason: none
           limit: 2
         - exit_status: 2  # Flaky test
+          signal_reason: none
           limit: 2
 
 env:
@@ -60,7 +62,7 @@ steps:
   - label: ":sweating: Checking for changes in connectors"
     key: "relevant_ftests"
     plugins:
-      monorepo-diff#v1.0.1:
+      monorepo-diff#v1.1.0:
         diff: ".buildkite/diff ${BUILDKITE_COMMIT}"
         wait: false
         watch:
