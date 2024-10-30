@@ -37,7 +37,8 @@ steps:
         - exit_status: 255  # Timeout
           signal_reason: none
           limit: 2
-        - signal_reason: 2  # Flaky test
+        - exit_status: 2  # Flaky test
+          signal_reason: none
           limit: 2
 
 
@@ -62,7 +63,8 @@ steps:
         - exit_status: 255  # Timeout
           signal_reason: none
           limit: 2
-        - signal_reason: 2  # Flaky test
+        - exit_status: 2  # Flaky test
+          signal_reason: none
           limit: 2
 
   - label: ":sweating: Checking for changes in connectors"
