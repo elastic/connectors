@@ -13,10 +13,8 @@ definitions:
           signal_reason: none
           limit: 2
         - exit_status: 255  # Timeout
-          signal_reason: none
           limit: 2
         - exit_status: 2  # Flaky test
-          signal_reason: none
           limit: 2
 
 env:
