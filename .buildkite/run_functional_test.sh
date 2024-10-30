@@ -1,11 +1,11 @@
 #!/bin/bash
 
+exit -1
+
 # !!! WARNING DO NOT add -x to avoid leaking vault passwords
 set -euo pipefail
 
 MACHINE_TYPE=`uname -m`
-
-exit -1
 
 if [ "$MACHINE_TYPE" != "x86_64" ] && [ -v SKIP_AARCH64 ]; then
   echo "Running on aarch64 and skipping"
