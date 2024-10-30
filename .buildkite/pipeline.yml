@@ -75,7 +75,6 @@ steps:
             config:
               label: "🔨 MySQL"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -94,7 +93,6 @@ steps:
             config:
               label: "🔨 Network Drive"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -113,7 +111,6 @@ steps:
             config:
               label: "🔨 Amazon S3"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -132,7 +129,6 @@ steps:
             config:
               label: "🔨 Google Cloud Storage"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -151,7 +147,6 @@ steps:
             config:
               label: "🔨 Azure Blob Storage"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -170,7 +165,6 @@ steps:
             config:
               label: "🔨 Postgresql"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -189,7 +183,6 @@ steps:
             config:
               label: "🔨 System Directory"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -208,7 +201,6 @@ steps:
             config:
               label: "🔨 Oracle Database"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -227,7 +219,6 @@ steps:
             config:
               label: "🔨 Sharepoint Server"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -246,7 +237,6 @@ steps:
             config:
               label: "🔨 Sharepoint Online"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -265,7 +255,6 @@ steps:
             config:
               label: "🔨 Microsoft SQL"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -285,7 +274,6 @@ steps:
             config:
               label: "🔨 Jira"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -305,7 +293,6 @@ steps:
             config:
               label: "🔨 Confluence"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -324,7 +311,6 @@ steps:
             config:
               label: "🔨 ServiceNow"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -343,7 +329,6 @@ steps:
             config:
               label: "🔨 MongoDB"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -362,7 +347,6 @@ steps:
             config:
               label: "🔨 GitHub"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -381,7 +365,6 @@ steps:
             config:
               label: "🔨 Google Drive"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -400,7 +383,6 @@ steps:
             config:
               label: "🔨 Dropbox"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -419,7 +401,6 @@ steps:
             config:
               label: "🔨 OneDrive"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -438,7 +419,6 @@ steps:
             config:
               label: "🔨 Salesforce"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -457,7 +437,6 @@ steps:
             config:
               label: "🔨 Zoom"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -476,7 +455,6 @@ steps:
             config:
               label: "🔨 Box"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -495,7 +473,6 @@ steps:
             config:
               label: "🔨 Microsoft Teams"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -514,7 +491,6 @@ steps:
             config:
               label: "🔨 Notion"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -533,7 +509,6 @@ steps:
             config:
               label: "🔨 Redis"
               <<: *retries
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
@@ -551,22 +526,10 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GraphQL"
-              <<: *test-agents
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
                 - CONNECTOR=graphql
-              retry:
-                automatic:
-                  - exit_status: -1  # Connection to the Agent was lost
-                    signal_reason: none
-                    limit: 2
-                  - exit_status: 255  # Timeout
-                    signal_reason: none
-                    limit: 2
-                  - exit_status: 2  # Flaky test
-                    signal_reason: none
-                    limit: 2
               command:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:

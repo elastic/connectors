@@ -1,7 +1,5 @@
 #!/bin/bash
 
-exit -1
-
 # !!! WARNING DO NOT add -x to avoid leaking vault passwords
 set -euo pipefail
 
