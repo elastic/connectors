@@ -8,5 +8,6 @@ source ~/.bash_profile
 pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
+exit -1
 
 make test
