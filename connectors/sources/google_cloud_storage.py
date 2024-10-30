@@ -123,6 +123,9 @@ class GoogleCloudStorageClient:
                         )
                     resource_object = getattr(storage_client, resource)
                     method_object = getattr(resource_object, method)
+                    self._logger.debug(
+                        f"Calling '{resource}.{method}' with args: '{dict(**kwargs)}'"
+                    )
                     if full_response:
                         first_page_with_next_attached = (
                             await google_client.as_service_account(
@@ -251,7 +254,6 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     projectId=self._google_storage_client.user_project_id,
                 )
             )
-            self._logger.info("Successfully connected to the Google Cloud Storage.")
         except Exception:
             self._logger.exception(
                 "Error while connecting to the Google Cloud Storage."
@@ -267,6 +269,9 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched buckets from Google Cloud Storage.
         """
         if "*" in buckets:
+            self._logger.info(
+                "Fetching all buckets as the configuration field 'buckets' is set to '*'"
+            )
             async for bucket in self._google_storage_client.api_call(
                 resource="buckets",
                 method="list",
@@ -276,6 +281,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             ):
                 yield bucket
         else:
+            self._logger.info(f"Fetching user configured buckets: {buckets}")
             for bucket in buckets:
                 yield {"items": [{"id": bucket, "name": bucket}]}
 
@@ -289,6 +295,8 @@ class GoogleCloudStorageDataSource(BaseDataSource):
             Dictionary: Contains the list of fetched blobs from Google Cloud Storage.
         """
         for bucket in buckets.get("items", []):
+            blob_count = 0
+            self._logger.info(f"Fetching blobs for '{bucket['id']}' bucket")
             try:
                 async for blob in self._google_storage_client.api_call(
                     resource="objects",
@@ -297,7 +305,11 @@ class GoogleCloudStorageDataSource(BaseDataSource):
                     bucket=bucket["id"],
                     userProject=self._google_storage_client.user_project_id,
                 ):
+                    blob_count += 1
                     yield blob
+                self._logger.info(
+                    f"Total {blob_count} blobs fetched for bucket '{bucket.get('name')}'"
+                )
             except HTTPError as exception:
                 exception_log_msg = f"Permission denied for {bucket['name']} while fetching blobs. Exception: {exception}."
                 if exception.res.status_code == 403:
@@ -348,8 +360,15 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Returns:
             dictionary: Content document with id, timestamp & text
         """
+        if not doit:
+            self._logger.debug(f"Skipping attachment downloading for {blob['name']}")
+            return
+
         file_size = int(blob["size"])
-        if not (doit and file_size):
+        if file_size <= 0:
+            self._logger.warning(
+                f"Skipping file '{blob['name']}' as file size is {file_size}"
+            )
             return
 
         filename = blob["name"]
@@ -357,6 +376,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         if not self.can_file_be_downloaded(file_extension, filename, file_size):
             return
 
+        self._logger.debug(f"Downloading content for file: {filename}")
         document = {
             "_id": blob["id"],
             "_timestamp": blob["_timestamp"],
@@ -391,6 +411,7 @@ class GoogleCloudStorageDataSource(BaseDataSource):
         Yields:
             dictionary: Documents from Google Cloud Storage.
         """
+        self._logger.info("Successfully connected to the Google Cloud Storage.")
         async for bucket in self.fetch_buckets(self.configuration["buckets"]):
             async for blobs in self.fetch_blobs(
                 buckets=bucket,
