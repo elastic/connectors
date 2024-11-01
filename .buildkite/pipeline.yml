@@ -74,6 +74,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MySQL"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -92,6 +93,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Network Drive"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -110,6 +112,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Amazon S3"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -128,6 +131,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -146,6 +150,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -164,6 +169,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Postgresql"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -182,6 +188,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 System Directory"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -200,6 +207,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Oracle Database"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -218,6 +226,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -236,6 +245,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -254,6 +264,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -273,6 +284,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Jira"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -292,6 +304,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Confluence"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -310,6 +323,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 ServiceNow"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -328,6 +342,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 MongoDB"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -346,6 +361,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GitHub"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -364,6 +380,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Google Drive"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -382,6 +399,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Dropbox"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -400,6 +418,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 OneDrive"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -418,6 +437,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Salesforce"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -436,6 +456,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Zoom"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -454,6 +475,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Box"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -472,6 +494,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -490,6 +513,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Notion"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -508,6 +532,7 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 Redis"
+              <<: *test-agents
               <<: *retries
               env:
                 - PYTHON_VERSION=3.11
@@ -526,6 +551,8 @@ steps:
             - "requirements/**"
             config:
               label: "🔨 GraphQL"
+              <<: *test-agents
+              <<: *retries
               env:
                 - PYTHON_VERSION=3.11
                 - DATA_SIZE=small
