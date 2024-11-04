@@ -2168,6 +2168,21 @@ class GitHubDataSource(BaseDataSource):
                         else:
                             yield file_document, None
 
+                if path := rule["filter"].get(ObjectType.PATH.value):
+                    async for (
+                        file_document,
+                        attachment_metadata,
+                    ) in self._fetch_files_by_path(repo_name=repo_name, path=path):
+                        if file_document["type"] == FILE:
+                            attachment_metadata["url"] = attachment_metadata["git_url"]
+                            yield (
+                                file_document,
+                                partial(
+                                    self.get_content, attachment=attachment_metadata
+                                ),
+                            )
+                        else:
+                            yield file_document, None
                 self._mark_repo_as_processed(repo_name)
         else:
             async for repo in self._fetch_repos():
