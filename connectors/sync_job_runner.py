@@ -533,7 +533,7 @@ class SyncJobRunner:
 
             checkpoint = (
                 None
-                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
+                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the checkpoint
                 else (
                     self.data_provider.checkpoint()
                     if self.sync_job.is_content_sync()
