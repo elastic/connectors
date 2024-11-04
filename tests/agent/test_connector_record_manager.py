@@ -109,7 +109,7 @@ async def test_ensure_connector_records_exist_exception_on_create(
 def test_agent_config_ready_with_valid_config(
     connector_record_manager, mock_agent_config
 ):
-    ready = connector_record_manager._agent_config_ready(mock_agent_config)
+    ready, _ = connector_record_manager._check_agent_config_ready(mock_agent_config)
     assert ready is True
 
 
@@ -119,7 +119,7 @@ def test_agent_config_ready_with_invalid_config_missing_connectors(
     invalid_config = {
         "elasticsearch": {"host": "http://localhost:9200", "api_key": "dummy_key"}
     }
-    ready = connector_record_manager._agent_config_ready(invalid_config)
+    ready, _ = connector_record_manager._check_agent_config_ready(invalid_config)
     assert ready is False
 
 
@@ -127,5 +127,5 @@ def test_agent_config_ready_with_invalid_config_missing_elasticsearch(
     connector_record_manager,
 ):
     invalid_config = {"connectors": [{"connector_id": "1", "service_type": "service1"}]}
-    ready = connector_record_manager._agent_config_ready(invalid_config)
+    ready, _ = connector_record_manager._check_agent_config_ready(invalid_config)
     assert ready is False

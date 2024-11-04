@@ -27,9 +27,11 @@ class ConnectorRecordManager:
         If the connector record with a given ID doesn't exist, create a new one.
         """
 
-        if not self._agent_config_ready(agent_config):
+        config_ready, msg = self._check_agent_config_ready(agent_config)
+
+        if not config_ready:
             logger.debug(
-                "Agent configuration is not ready to create a connector record."
+                f"Agent configuration is not ready to create a connector record. Skipping. Reason: {msg} "
             )
             return
 
@@ -62,23 +64,42 @@ class ConnectorRecordManager:
                     )
                     raise e
 
-    def _agent_config_ready(self, agent_config):
+    def _check_agent_config_ready(self, agent_config):
         """
         Validates the agent configuration to check if all info is present to create a connector record.
+
+        Returns:
+            tuple: (bool, str or None) - True and None if valid, otherwise False and an error message.
         """
+
         connectors = agent_config.get("connectors")
-        if connectors is None or len(connectors) == 0:
-            return False
+        if connectors is None:
+            return False, "No 'connectors' key found in the service configuration."
+
+        if len(connectors) == 0:
+            return False, "Empty connectors array found in the service configuration."
 
         for connector in connectors:
-            if "connector_id" not in connector or "service_type" not in connector:
-                return False
+            if "connector_id" not in connector:
+                return (
+                    False,
+                    "No 'connector_id' key found in the connector object.",
+                )
+
+            if "service_type" not in connector:
+                return (
+                    False,
+                    "No 'service_type' key found in the connector object.",
+                )
 
         elasticsearch_config = agent_config.get("elasticsearch")
         if not elasticsearch_config:
-            return False
+            return False, "No 'elasticsearch' key found in the service configuration."
 
-        if "host" not in elasticsearch_config or "api_key" not in elasticsearch_config:
-            return False
+        if "host" not in elasticsearch_config:
+            return False, "No 'host' key found in the elasticsearch configuration."
 
-        return True
+        if "api_key" not in elasticsearch_config:
+            return False, "No 'api_key' key found in the elasticsearch configuration."
+
+        return True, None
