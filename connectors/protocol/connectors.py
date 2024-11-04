@@ -404,6 +404,7 @@ class SyncJob(ESDocument):
                 if checkpoint:
                     doc["checkpoint"] = checkpoint
                 await self.index.update(doc_id=self.id, doc=doc)
+                self.log_debug("Sync job metadata was updated successfully")
         except Exception as e:
             self._wrap_errors("update metadata and stats", e)
 
