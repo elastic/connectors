@@ -523,36 +523,35 @@ class SyncJobRunner:
                 raise UnsupportedJobType
 
     async def update_ingestion_stats(self, interval):
-        last_checkpoint = None
-
+        last_cursor = None
         while True:
             await asyncio.sleep(interval)
 
             if not await self.reload_sync_job():
                 break
 
-            checkpoint = (
+            cursor = (
                 None
                 if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the checkpoint
                 else (
-                    self.data_provider.checkpoint()
+                    self.data_provider.sync_cursor()
                     if self.sync_job.is_content_sync()
                     else None
                 )
             )
 
-            if checkpoint != last_checkpoint:
+            if cursor != last_cursor:
                 self.sync_job.log_debug(
-                    "Connector reported a new checkpoint, triggering batch flush before saving"
+                    "Connector reported a new cursor, triggering batch flush before saving"
                 )
-                last_checkpoint = checkpoint
+                last_cursor = cursor
                 # Fun stuff happens here - this will block until the data is flushed
                 # to Elasticsearch. Once it's flushed, we can continue and save the job state
                 # This is done to avoid data inconsistencies - if we don't flush, then
-                # we can store checkpoint before the data that preceded this checkpoint was ingested.
+                # we can store cursors before the data that preceded this cursor was ingested.
                 await self.sync_orchestrator.trigger_flush()
                 self.sync_job.log_debug(
-                    "Data was successfully flushed before saving the checkpoint"
+                    "Data was successfully flushed before saving the cursor"
                 )
 
             result = self.sync_orchestrator.ingestion_stats()
@@ -562,7 +561,7 @@ class SyncJobRunner:
                 DELETED_DOCUMENT_COUNT: result.get(DELETED_DOCUMENT_COUNT, 0),
             }
             await self.sync_job.update_metadata(
-                ingestion_stats=ingestion_stats, checkpoint=checkpoint
+                ingestion_stats=ingestion_stats, cursor=cursor
             )
 
     async def check_job(self):

@@ -1631,7 +1631,7 @@ async def test_get_docs():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_saves_checkpoint_for_repo():
+async def test_get_docs_saves_sync_cursor_for_repo():
     async with create_github_source() as source:
         source._fetch_repos = Mock(return_value=AsyncIterator([deepcopy(PUBLIC_REPO)]))
         source._fetch_issues = Mock(
@@ -1646,8 +1646,8 @@ async def test_get_docs_saves_checkpoint_for_repo():
         async for _, _ in source.get_docs():
             pass
 
-        assert source._checkpoint is not None
-        assert source._checkpoint[PUBLIC_REPO["nameWithOwner"]] is not None
+        assert source._sync_cursor is not None
+        assert source._sync_cursor[PUBLIC_REPO["nameWithOwner"]] is not None
 
 
 @pytest.mark.asyncio
@@ -1663,7 +1663,7 @@ async def test_get_docs_with_existing_checkpoint_skips_repo():
         source._fetch_files = Mock(
             return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ATTACHMENTS)])
         )
-        source._checkpoint = {PUBLIC_REPO["nameWithOwner"]: 1}
+        source._sync_cursor = {PUBLIC_REPO["nameWithOwner"]: 1}
 
         document_count = 0
         async for _, _ in source.get_docs():

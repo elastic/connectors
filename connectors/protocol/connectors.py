@@ -381,7 +381,7 @@ class SyncJob(ESDocument):
             self._wrap_errors("claim job", e)
 
     async def update_metadata(
-        self, ingestion_stats=None, connector_metadata=None, checkpoint=None
+        self, ingestion_stats=None, connector_metadata=None, cursor=None
     ):
         try:
             ingestion_stats = filter_ingestion_stats(ingestion_stats)
@@ -401,8 +401,8 @@ class SyncJob(ESDocument):
                 doc.update(ingestion_stats)
                 if len(connector_metadata) > 0:
                     doc["metadata"] = connector_metadata
-                if checkpoint:
-                    doc["checkpoint"] = checkpoint
+                if cursor:
+                    doc["sync_cursor"] = cursor
                 await self.index.update(doc_id=self.id, doc=doc)
                 self.log_debug("Sync job metadata was updated successfully")
         except Exception as e:

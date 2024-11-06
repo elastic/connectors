@@ -31,7 +31,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
+from connectors.source import BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
@@ -1147,6 +1147,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         self._client = None
         self.site_group_cache = {}
+        self._temporary_cursor = None
 
     def _set_internal_logger(self):
         self.client.set_logger(self._logger)
@@ -1610,8 +1611,10 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         max_drive_item_age = None
+        timestamp = iso_zulu()
 
-        self.init_sync_cursor()
+        if not self._temporary_cursor:
+            self._temporary_cursor = {CURSOR_SITE_DRIVE_KEY: {}}
 
         if filtering is not None and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
@@ -1704,14 +1707,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                         site_page, site_admin_access_control
                     )
                     yield site_page, None
+        # Finally store the cursor for incremental sync
+        self.save_sync_cursor(timestamp)
 
     async def get_docs_incrementally(self, sync_cursor, filtering=None):
-        self._sync_cursor = sync_cursor
-        timestamp = iso_zulu()
-
-        if not self._sync_cursor:
+        if not sync_cursor:
             msg = "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
             raise SyncCursorEmpty(msg)
+
+        self._temporary_cursor = sync_cursor
+        timestamp = iso_zulu()
 
         max_drive_item_age = None
 
@@ -1823,7 +1828,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     )
                     yield site_page, None, OP_INDEX
 
-        self.update_sync_timestamp_cursor(timestamp)
+        self.save_sync_cursor(timestamp)
 
     async def site_collections(self):
         async for site_collection in self.client.site_collections():
@@ -2276,24 +2281,31 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield site_page
 
-    def init_sync_cursor(self):
-        if not self._sync_cursor:
-            self._sync_cursor = {
-                CURSOR_SITE_DRIVE_KEY: {},
-                CURSOR_SYNC_TIMESTAMP: iso_zulu(),
-            }
-
-        return self._sync_cursor
+    # Temporary cursor is there because a cursor here is used for incremental syncs
+    # So we keep the temporary cursor in-memory. Once the full sync ends we store the
+    # content of temporary cursor to _sync_cursor so that it's saved for usage in
+    # incremental syncs.
+    def save_sync_cursor(self, timestamp):
+        if self._temporary_cursor:
+            self._logger.debug("Saving new cursor for Sharepoint Online")
+            self._sync_cursor = self._temporary_cursor
+            self.update_sync_timestamp_cursor(timestamp)
 
     def update_drive_delta_link(self, drive_id, link):
         if not link:
             return
 
-        self._sync_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
+        if not self._temporary_cursor:
+            self._temporary_cursor = {}
+
+        if not self._temporary_cursor[CURSOR_SITE_DRIVE_KEY]:
+            self._temporary_cursor[CURSOR_SITE_DRIVE_KEY] = {}
+
+        self._temporary_cursor[CURSOR_SITE_DRIVE_KEY][drive_id] = link
 
     def get_drive_delta_link(self, drive_id):
         return nested_get_from_dict(
-            self._sync_cursor, [CURSOR_SITE_DRIVE_KEY, drive_id]
+            self._temporary_cursor, [CURSOR_SITE_DRIVE_KEY, drive_id]
         )
 
     def drive_item_operation(self, item):

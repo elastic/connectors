@@ -7,7 +7,6 @@
 
 import json
 import time
-from datetime import datetime, timezone
 from enum import Enum
 from functools import cached_property, partial
 
@@ -37,6 +36,7 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
+    iso_zulu,
     nested_get_from_dict,
     retryable,
     ssl_context,
@@ -2032,6 +2032,10 @@ class GitHubDataSource(BaseDataSource):
             return False, query
 
     def is_previous_repo(self, repo_name):
+        # TODO: this might be really unnecessary after cursor support was added.
+        # This function does repo processing deduplication: do not process repos that were already processed.
+        # Cursors are organised per repo as well, so they duplicate each other.
+        # It's not a problem by itself, but we might consider refactoring this.
         if repo_name in self.prev_repos:
             return True
         self.prev_repos.append(repo_name)
@@ -2077,11 +2081,11 @@ class GitHubDataSource(BaseDataSource):
         return access_control
 
     def _is_repo_processed(self, repo_name):
-        if self._checkpoint is None:
+        if self._sync_cursor is None:
             self._logger.debug(f"{repo_name} was not processed by this job before.")
             return False
 
-        processed = self._checkpoint.get(repo_name)
+        processed = self._sync_cursor.get(repo_name)
 
         if processed:
             self._logger.info(
@@ -2092,11 +2096,13 @@ class GitHubDataSource(BaseDataSource):
 
     def _mark_repo_as_processed(self, repo_name):
         self._logger.debug(f"Setting a checkpoint for {repo_name}.")
-        if self._checkpoint is None:
-            self._checkpoint = {}
+        if self._sync_cursor is None:
+            self._sync_cursor = {}
 
-        when = datetime.now(timezone.utc)
-        self._checkpoint[repo_name] = when
+        ts = iso_zulu()
+
+        self._sync_cursor[repo_name] = ts
+        self.update_sync_timestamp_cursor(ts)
 
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GitHub objects in async manner.
