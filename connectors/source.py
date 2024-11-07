@@ -690,11 +690,8 @@ class BaseDataSource:
         """Returns the sync cursor of the current sync"""
         return self._sync_cursor
 
-    def set_checkpoint(self, checkpoint):
-        self._checkpoint = checkpoint
-
-    def checkpoint(self):
-        return self._checkpoint
+    def set_sync_cursor(self, sync_cursor):
+        self._sync_cursor = sync_cursor
 
     @staticmethod
     def is_premium():

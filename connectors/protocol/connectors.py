@@ -316,10 +316,6 @@ class SyncJob(ESDocument):
         return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
     @property
-    def checkpoint(self):
-        return self.get("checkpoint")
-
-    @property
     def indexed_document_count(self):
         return self.get(INDEXED_DOCUMENT_COUNT, default=0)
 
@@ -374,7 +370,9 @@ class SyncJob(ESDocument):
                     "started_at": iso_utc(),
                     "last_seen": iso_utc(),
                     "worker_hostname": socket.gethostname(),
-                    "connector.sync_cursor": sync_cursor,
+                    "connector": {
+                        "sync_cursor": sync_cursor,
+                    },
                 }
                 await self.index.update(doc_id=self.id, doc=doc)
         except Exception as e:
@@ -402,7 +400,7 @@ class SyncJob(ESDocument):
                 if len(connector_metadata) > 0:
                     doc["metadata"] = connector_metadata
                 if cursor:
-                    doc["sync_cursor"] = cursor
+                    doc["connector"] = {"sync_cursor": cursor}
                 await self.index.update(doc_id=self.id, doc=doc)
                 self.log_debug("Sync job metadata was updated successfully")
         except Exception as e:

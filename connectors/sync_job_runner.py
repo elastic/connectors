@@ -135,7 +135,7 @@ class SyncJobRunner:
         try:
             sync_cursor = (
                 self.connector.sync_cursor
-                if self.sync_job.job_type == JobType.INCREMENTAL
+                if self.sync_job.job_type in (JobType.INCREMENTAL, JobType.FULL)
                 else None
             )
             self._start_time = time.time()
@@ -151,12 +151,12 @@ class SyncJobRunner:
                 self._data_source_framework_config()
             )
 
-            # Only full syncs restart from a checkpoint
-            if self.sync_job.checkpoint and self.sync_job.job_type == JobType.FULL:
-                self.sync_job.log_info(
-                    "Found a checkpoint for the job - starting from the checkpoint"
+            # Only full syncs restart from a checkpoint that's stored in a sync job
+            if self.sync_job.sync_cursor and self.sync_job.job_type == JobType.FULL:
+                self.sync_job.log_debug(
+                    "Found a sync_cursor for the job - connector will start from it if possible"
                 )
-                self.data_provider.set_checkpoint(self.sync_job.checkpoint)
+                self.data_provider.set_sync_cursor(self.sync_job.sync_cursor)
 
             self.sync_job.log_debug("Instantiated data provider for the sync job.")
 
@@ -494,7 +494,6 @@ class SyncJobRunner:
         skip_unchanged_documents = self._skip_unchanged_documents_enabled(
             self.sync_job.job_type, self.data_provider
         )
-
         match [self.sync_job.job_type, skip_unchanged_documents]:
             case [JobType.FULL, _]:
                 async for doc, lazy_download in self.data_provider.get_docs(

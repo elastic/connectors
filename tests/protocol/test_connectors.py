@@ -786,7 +786,9 @@ async def test_sync_job_claim():
         "started_at": ANY,
         "last_seen": ANY,
         "worker_hostname": ANY,
-        "connector.sync_cursor": SYNC_CURSOR,
+        "connector": {
+            "sync_cursor": SYNC_CURSOR,
+        },
     }
 
     sync_job = SyncJob(elastic_index=index, doc_source=source)
