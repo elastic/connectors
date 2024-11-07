@@ -1,19 +1,23 @@
-retry:
-  automatic:
-    - exit_status: -1  # Connection to the Agent was lost
-      signal_reason: none
-      limit: 2
-    - exit_status: 255  # Timeout
-      signal_reason: none
-      limit: 2
-    - signal_reason: 2  # Flaky test
-      limit: 2
+definitions:
+  retries: &retries
+    retry:
+      automatic:
+        - exit_status: -1  # Connection to the Agent was lost
+          signal_reason: none
+          limit: 2
+        - exit_status: 255  # Timeout
+          signal_reason: none
+          limit: 2
+        - exit_status: 2  # Flaky test
+          signal_reason: none
+          limit: 2
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
   - label: "🔨 [Python {{ matrix }}] MySQL"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -25,6 +29,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Network Drive"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -36,6 +41,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Amazon S3"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -47,6 +53,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Google Cloud Storage"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -58,6 +65,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Azure Blob Storage"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -69,6 +77,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Postgresql"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -80,6 +89,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] System Directory"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -91,6 +101,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Oracle Database"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -103,6 +114,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Sharepoint Server"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -114,6 +126,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Sharepoint Online"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -125,17 +138,20 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Microsoft SQL"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
       CONNECTOR: "mssql"
       DATA_SIZE: "small"
+      SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
     matrix:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Jira"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -147,6 +163,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Confluence"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -158,6 +175,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] ServiceNow"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -169,6 +187,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] MongoDB"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -180,6 +199,7 @@ steps:
       - "3.10"
       - "3.11"
 #   - label: "🔨 [Python {{ matrix }}] MongoDB Serverless"
+    <<: *retries
 #     command: ".buildkite/run_functional_test.sh"
 #     env:
 #       PYTHON_VERSION: "{{ matrix }}"
@@ -191,6 +211,7 @@ steps:
 #     artifact_paths:
 #       - "perf8-report-*/**/*"
   - label: "🔨 [Python {{ matrix }}] GitHub"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -202,6 +223,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Google Drive"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -213,6 +235,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Dropbox"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -224,6 +247,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] OneDrive"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -235,6 +259,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Salesforce"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -246,6 +271,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Zoom"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -257,6 +283,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Box"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -268,6 +295,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Notion"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -279,6 +307,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] Redis"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
@@ -290,6 +319,7 @@ steps:
       - "3.10"
       - "3.11"
   - label: "🔨 [Python {{ matrix }}] GraphQL"
+    <<: *retries
     command: ".buildkite/run_functional_test.sh"
     env:
       PYTHON_VERSION: "{{ matrix }}"
