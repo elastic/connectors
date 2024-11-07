@@ -905,7 +905,7 @@ class Connector(ESDocument):
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
-            self.log_critical(e, exc_info=True)
+            self.log_error(e, exc_info=True)
             msg = f"Could not instantiate {fqn} for {configured_service_type}"
             raise DataSourceError(msg) from e
 
