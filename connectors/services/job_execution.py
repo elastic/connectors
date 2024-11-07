@@ -141,7 +141,7 @@ class JobExecutionService(BaseService):
                         ):
                             await self._sync(sync_job)
                 except Exception as e:
-                    self.logger.critical(e, exc_info=True)
+                    self.logger.error(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
