@@ -77,7 +77,7 @@ class ConnectorRecordManager:
             return False, "No 'connectors' key found in the service configuration."
 
         if len(connectors) == 0:
-            return False, "Empty connectors array found in the service configuration."
+            return False, "Empty 'connectors' array found in the service configuration."
 
         for connector in connectors:
             if "connector_id" not in connector:
