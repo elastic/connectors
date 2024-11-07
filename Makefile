@@ -1,6 +1,6 @@
 .PHONY: install clean lint autoformat test release ftest ftrace install run default-config release docker-build docker-run docker-push
 
-PYTHON?=python3
+PYTHON?=python3.11
 ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
@@ -34,7 +34,7 @@ install-agent: .venv/bin/elastic-ingest
 .venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/tests.txt
-	
+
 
 .venv/bin/pytest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
