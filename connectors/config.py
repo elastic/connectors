@@ -64,6 +64,7 @@ def _default_config():
             "username": "elastic",
             "password": "changeme",
             "ssl": True,
+            "verify_certs": True,
             "bulk": {
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,

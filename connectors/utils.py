@@ -11,8 +11,10 @@ import inspect
 import os
 import platform
 import re
+import secrets
 import shutil
 import ssl
+import string
 import subprocess  # noqa S404
 import time
 import urllib.parse
@@ -754,10 +756,10 @@ def truncate_id(_id):
 
 def has_duplicates(strings_list):
     seen = set()
-    for string in strings_list:
-        if string in seen:
+    for s in strings_list:
+        if s in seen:
             return True
-        seen.add(string)
+        seen.add(s)
     return False
 
 
@@ -994,3 +996,9 @@ class Counters:
 
     def to_dict(self):
         return deepcopy(self._storage)
+
+
+def generate_random_id(length=4):
+    return "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
+    )
