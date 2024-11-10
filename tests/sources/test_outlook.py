@@ -423,17 +423,29 @@ def get_stream_reader():
 def side_effect_function(client_emails=None):
     """Dynamically changing return values for API calls
     Args:
-        url, ssl: Params required for get call
         client_emails: Optional string of comma-separated email addresses
     """
 
-    def inner(url, headers):
-        if client_emails:
-            emails = [email.strip() for email in client_emails.split(",")]
-            for email in emails:
-                if url == f"https://graph.microsoft.com/v1.0/users/{email}":
-                    users_response = {"value": [{"mail": email}]}
-                    return get_json_mock(mock_response=users_response, status=200)
+    def inner(url, headers=None, json=None, data=None):
+        if "oauth2/v2.0/token" in url and data:
+            return get_json_mock(
+                mock_response={"access_token": "mocked_access_token"},
+                status=200,
+            )
+        if url == "https://graph.microsoft.com/v1.0/$batch" and json:
+            return get_json_mock(
+                mock_response={
+                    "responses": [
+                        {
+                            "id": req.get("id"),
+                            "status": 200,
+                            "body": {"mail": f"mocked_{req.get('url').split('/')[-1]}"},
+                        }
+                        for req in json.get("requests", [])
+                    ]
+                },
+                status=200,
+            )
         elif url == "https://graph.microsoft.com/v1.0/users?$top=999":
             return get_json_mock(
                 mock_response={
@@ -632,41 +644,20 @@ async def test_get_users_for_cloud():
                     users.extend(user_mails)
                 assert users == ["test.user@gmail.com", "dummy.user@gmail.com"]
 
-    client_emails = "one.user@gmail.com"
-    async with create_outlook_source(client_emails=client_emails) as source:
-        users = []
-        with mock.patch(
-            "aiohttp.ClientSession.post",
-            return_value=get_json_mock(
-                mock_response={"access_token": "fake-token"}, status=200
-            ),
-        ):
-            with mock.patch(
-                "aiohttp.ClientSession.get",
-                side_effect=side_effect_function(client_emails),
-            ):
-                async for response in source.client._get_user_instance.get_users():
-                    user_mails = [user["mail"] for user in response["value"]]
-                    users.extend(user_mails)
-                assert users == ["one.user@gmail.com"]
 
-    client_emails = "first.user@gmail.com, second.user@gmail.com"
+@pytest.mark.asyncio
+async def test_get_users_for_cloud_with_client_emails():
+    client_emails = ",".join([f"test.user{i}@gmail.com" for i in range(25)])
     async with create_outlook_source(client_emails=client_emails) as source:
         users = []
         with mock.patch(
             "aiohttp.ClientSession.post",
-            return_value=get_json_mock(
-                mock_response={"access_token": "fake-token"}, status=200
-            ),
+            side_effect=side_effect_function(client_emails),
         ):
-            with mock.patch(
-                "aiohttp.ClientSession.get",
-                side_effect=side_effect_function(client_emails),
-            ):
-                async for response in source.client._get_user_instance.get_users():
-                    user_mails = [user["mail"] for user in response["value"]]
-                    users.extend(user_mails)
-                assert set(users) == {"first.user@gmail.com", "second.user@gmail.com"}
+            async for response in source.client._get_user_instance.get_users():
+                users.append(response["mail"])
+        assert users == [f"mocked_{email}" for email in client_emails.split(",")]
+        assert len(users) == 25
 
 
 @pytest.mark.asyncio
