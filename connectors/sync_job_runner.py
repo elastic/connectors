@@ -539,7 +539,7 @@ class SyncJobRunner:
                 )
             )
 
-            if cursor != last_cursor:
+            if cursor != last_cursor and cursor != None:
                 self.sync_job.log_debug(
                     "Connector reported a new cursor, triggering batch flush before saving"
                 )
