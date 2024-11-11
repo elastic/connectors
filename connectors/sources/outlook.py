@@ -419,11 +419,11 @@ class BaseOffice365User(ABC):
 
     @abstractmethod
     async def get_users(self):
-        pass
+        yield
 
     @abstractmethod
     async def get_user_accounts(self):
-        pass
+        yield
 
 
 class Office365Users(BaseOffice365User):
