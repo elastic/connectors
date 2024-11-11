@@ -31,12 +31,13 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
     CancellableSleeps,
     convert_to_b64,
+    epoch_timestamp_zulu,
     html_to_text,
     iso_utc,
     iso_zulu,
@@ -2290,6 +2291,19 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._logger.debug("Saving new cursor for Sharepoint Online")
             self._sync_cursor = self._temporary_cursor
             self.update_sync_timestamp_cursor(timestamp)
+
+    # We're also overriding last_sync_time and update_sync_timestamp_cursor
+    # So that it operated on temporary cursor for the reasons specified above
+    def last_sync_time(self):
+        default_time = epoch_timestamp_zulu()
+        if not self._temporary_cursor:
+            return default_time
+        return self._temporary_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)
+
+    def update_sync_timestamp_cursor(self, timestamp):
+        if self._temporary_cursor is None:
+            self._temporary_cursor = {}
+        self._temporary_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
 
     def update_drive_delta_link(self, drive_id, link):
         if not link:

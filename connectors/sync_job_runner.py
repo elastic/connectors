@@ -119,6 +119,14 @@ class SyncJobRunner:
             "enable_operations_logging"
         )
 
+    def _fetch_job_cursor(self):
+        if self.sync_job.job_type == JobType.INCREMENTAL:
+            return self.connector.sync_cursor
+        elif self.sync_job.job_type == JobType.FULL and self.sync_job.status == JobStatus.SUSPENDED:
+            return self.sync_job.sync_cursor
+        
+        return None
+
     async def execute(self):
         if self.running:
             msg = f"Sync job {self.sync_job.id} is already running."
@@ -133,11 +141,7 @@ class SyncJobRunner:
         await self.sync_starts()  # This MUST be the last line before the `try` begins
 
         try:
-            sync_cursor = (
-                self.connector.sync_cursor
-                if self.sync_job.job_type in (JobType.INCREMENTAL, JobType.FULL)
-                else None
-            )
+            sync_cursor = self._fetch_job_cursor()
             self._start_time = time.time()
             await self.sync_job.claim(sync_cursor=sync_cursor)
 
@@ -152,13 +156,14 @@ class SyncJobRunner:
             )
 
             # Only full syncs restart from a sync_cursor that's stored in a sync job
+            # Incremental syncs set cursor differently
             if self.sync_job.job_type == JobType.FULL:
                 if self.sync_job.sync_cursor:
                     self.sync_job.log_info(
                         "Found a sync_cursor for the job - connector will start from it if possible"
                     )
                 else:
-                    self.sync_job.log_info("No sync_cursor found for the job")
+                    self.sync_job.log_info("No sync_cursor found for the full sync job")
                 self.data_provider.set_sync_cursor(self.sync_job.sync_cursor)
 
             self.sync_job.log_debug("Instantiated data provider for the sync job.")
@@ -211,6 +216,7 @@ class SyncJobRunner:
             while not self.sync_orchestrator.done():
                 await self.check_job()
                 await asyncio.sleep(JOB_CHECK_INTERVAL)
+
             sync_error = self.sync_orchestrator.get_error()
             sync_status = JobStatus.COMPLETED if sync_error is None else JobStatus.ERROR
             await self._sync_done(sync_status=sync_status, sync_error=sync_error)
@@ -542,7 +548,9 @@ class SyncJobRunner:
                 )
             )
 
-            if cursor != last_cursor and cursor is not None:
+            cursor_changed = cursor != last_cursor and cursor is not None
+
+            if cursor_changed:
                 self.sync_job.log_debug(
                     "Connector reported a new cursor, triggering batch flush before saving"
                 )
@@ -565,6 +573,10 @@ class SyncJobRunner:
             await self.sync_job.update_metadata(
                 ingestion_stats=ingestion_stats, cursor=cursor
             )
+            if cursor_changed:
+                self.sync_job.log_info(
+                    "Stored job progress to be able to continue later"
+                )
 
     async def check_job(self):
         if not await self.reload_connector():

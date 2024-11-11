@@ -2285,3 +2285,6 @@ class GitHubDataSource(BaseDataSource):
                             else:
                                 yield file_document, None
                 self._mark_repo_as_processed(repo_name)
+        # There is no incremental sync implemented, so just for simplicity let's remove cursor
+        # so that it's never stored in the connector record
+        self._sync_cursor = None
