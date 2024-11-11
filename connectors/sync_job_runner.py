@@ -153,7 +153,7 @@ class SyncJobRunner:
 
             # Only full syncs restart from a checkpoint that's stored in a sync job
             if self.sync_job.sync_cursor and self.sync_job.job_type == JobType.FULL:
-                self.sync_job.log_debug(
+                self.sync_job.log_info(
                     "Found a sync_cursor for the job - connector will start from it if possible"
                 )
                 self.data_provider.set_sync_cursor(self.sync_job.sync_cursor)
