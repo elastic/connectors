@@ -122,9 +122,12 @@ class SyncJobRunner:
     def _fetch_job_cursor(self):
         if self.sync_job.job_type == JobType.INCREMENTAL:
             return self.connector.sync_cursor
-        elif self.sync_job.job_type == JobType.FULL and self.sync_job.status == JobStatus.SUSPENDED:
+        elif (
+            self.sync_job.job_type == JobType.FULL
+            and self.sync_job.status == JobStatus.SUSPENDED
+        ):
             return self.sync_job.sync_cursor
-        
+
         return None
 
     async def execute(self):
