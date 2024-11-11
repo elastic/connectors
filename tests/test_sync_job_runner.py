@@ -283,24 +283,35 @@ async def test_connector_content_claim_fails():
 
 
 @pytest.mark.parametrize(
-    "job_type, sync_cursor_to_claim, sync_cursor_to_update",
+    "job_type, connector_sync_cursor, job_sync_cursor, sync_cursor_to_claim, sync_cursor_to_update",
     [
-        (JobType.FULL, SYNC_CURSOR, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR, SYNC_CURSOR),
-        (JobType.ACCESS_CONTROL, None, None),
+        (JobType.FULL, None, None, None, None),
+        (
+            JobType.FULL,
+            SYNC_CURSOR,
+            None,
+            None,
+            None,
+        ),  # for FULL jobs sync cursor is not taken from connector record
+        (JobType.INCREMENTAL, SYNC_CURSOR, SYNC_CURSOR, SYNC_CURSOR, SYNC_CURSOR),
+        (JobType.ACCESS_CONTROL, None, None, None, None),
     ],
 )
 @pytest.mark.asyncio
 async def test_source_not_changed(
-    job_type, sync_cursor_to_claim, sync_cursor_to_update
+    job_type,
+    connector_sync_cursor,
+    job_sync_cursor,
+    sync_cursor_to_claim,
+    sync_cursor_to_update,
 ):
     connector = mock_connector()
-    connector.sync_cursor = sync_cursor_to_claim
+    connector.sync_cursor = job_sync_cursor
     sync_job_runner = create_runner(
         source_changed=False,
         job_type=job_type,
         connector=connector,
-        sync_cursor=sync_cursor_to_claim,
+        sync_cursor=job_sync_cursor,
     )
     await sync_job_runner.execute()
 
