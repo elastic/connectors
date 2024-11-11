@@ -724,7 +724,7 @@ async def test_sync_job_runner_metadata_update_sync_cursor_if_changed(
         "indexed_document_volume": 230,
         "deleted_document_count": 10,
     }
-    new_sync_cursor = {"hey": "i've got new checkpoint!"}
+    new_sync_cursor = {"hey": "i've got new sync_cursor!"}
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
     sync_orchestrator_mock.done.return_value = False
     sync_job_runner = create_runner(

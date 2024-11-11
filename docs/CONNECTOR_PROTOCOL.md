@@ -402,7 +402,6 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
   total_document_count: number; -> Number of documents in the index after the job completes
   trigger_method: string; -> How the job is triggered. Possible values are on_demand, scheduled.
   worker_hostname: string; -> The hostname of the worker to run the job,
-  checkpoint: object; -> Latest known state of the sync. If sync is suspended and then resumed, connector will continue from this state
 }
 ```
 
@@ -492,7 +491,6 @@ In addition to the connector index `.elastic-connectors`, we have an additional 
     "total_document_count" : { "type" : "integer" },
     "trigger_method" : { "type" : "keyword" },
     "worker_hostname" : { "type" : "keyword" },
-    "checkpoint" : { "type" : "object" },
   }
 }
 ```

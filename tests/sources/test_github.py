@@ -1651,7 +1651,7 @@ async def test_get_docs_saves_sync_cursor_for_repo():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_existing_checkpoint_skips_repo():
+async def test_get_docs_with_existing_sync_cursor_skips_repo():
     async with create_github_source() as source:
         source._fetch_repos = Mock(return_value=AsyncIterator([deepcopy(PUBLIC_REPO)]))
         source._fetch_issues = Mock(

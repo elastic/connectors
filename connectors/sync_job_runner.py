@@ -151,11 +151,14 @@ class SyncJobRunner:
                 self._data_source_framework_config()
             )
 
-            # Only full syncs restart from a checkpoint that's stored in a sync job
-            if self.sync_job.sync_cursor and self.sync_job.job_type == JobType.FULL:
-                self.sync_job.log_info(
-                    "Found a sync_cursor for the job - connector will start from it if possible"
-                )
+            # Only full syncs restart from a sync_cursor that's stored in a sync job
+            if self.sync_job.job_type == JobType.FULL:
+                if self.sync_job.sync_cursor:
+                    self.sync_job.log_info(
+                        "Found a sync_cursor for the job - connector will start from it if possible"
+                    )
+                else:
+                    self.sync_job.log_info("No sync_cursor found for the job")
                 self.data_provider.set_sync_cursor(self.sync_job.sync_cursor)
 
             self.sync_job.log_debug("Instantiated data provider for the sync job.")
@@ -531,7 +534,7 @@ class SyncJobRunner:
 
             cursor = (
                 None
-                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the checkpoint
+                if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the job sync_cursor
                 else (
                     self.data_provider.sync_cursor()
                     if self.sync_job.is_content_sync()

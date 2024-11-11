@@ -2095,7 +2095,7 @@ class GitHubDataSource(BaseDataSource):
         return processed
 
     def _mark_repo_as_processed(self, repo_name):
-        self._logger.debug(f"Setting a checkpoint for {repo_name}.")
+        self._logger.debug(f"Marking {repo_name} as processed.")
         if self._sync_cursor is None:
             self._sync_cursor = {}
 
