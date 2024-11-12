@@ -8,7 +8,7 @@ The default configs can all be seen in the [`config.yml.example`](../config.yml.
 
 To run a self-managed connector client on your own infrastructure, you have two options:
 
-- [Run from source](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-service-source) or [Use Docker](DOCKER.md)
+- [Run from source](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html#build-connector-service-source) or [Use Docker](DOCKER.md)
 
 You'll need to carry out the following steps:
 
@@ -31,7 +31,7 @@ You'll need to carry out the following steps:
     make run
     ```
 
-### ℹ️ **NOTE: API keys for connector clients**
+### ℹ️ **NOTE: API keys for self-managed connectors**
 
 As of `v8.10.0` you can configure multiple connectors in your `config.yml` file.
 
