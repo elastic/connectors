@@ -18,7 +18,7 @@ To get started quickly with self-managed connectors using Docker Compose, check 
 
 ### Connector documentation
 
-The main documentation for _using_ connectors lives in the Elasticsearch docs.
+The main documentation for using connectors lives in the Elasticsearch docs.
 Here are the main pages:
 
 - [Connectors overview](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html)
