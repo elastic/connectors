@@ -53,6 +53,8 @@ RETRY_INTERVAL = 2
 
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 
+GRAPH_API_BATCH_SIZE = 20  # Max batch size supported for fetching users from Graph API
+
 OUTLOOK_SERVER = "outlook_server"
 OUTLOOK_CLOUD = "outlook_cloud"
 API_SCOPE = "https://graph.microsoft.com/.default"
@@ -495,8 +497,8 @@ class MultiOffice365Users(BaseOffice365User):
     async def get_users(self):
         access_token = await self._fetch_token()
         errors = []
-        for i in range(0, len(self.client_emails), 20):
-            batch_emails = self.client_emails[i : i + 20]
+        for i in range(0, len(self.client_emails), GRAPH_API_BATCH_SIZE):
+            batch_emails = self.client_emails[i : i + GRAPH_API_BATCH_SIZE]
             requests = [
                 {"id": str(index + 1), "method": "GET", "url": f"/users/{email}"}
                 for index, email in enumerate(batch_emails)
