@@ -57,6 +57,10 @@ spec:
           branch: 8.x
           cronline: '@daily'
           message: "Builds, tests, and pushes daily `8.x` DRA artifacts"
+        Daily 8.16:
+          branch: 8.16
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `8.16` DRA artifacts"
       provider_settings:
         skip_pull_request_builds_for_existing_commits: false
         build_pull_request_labels_changed: true
