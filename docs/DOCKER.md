@@ -41,7 +41,7 @@ You can download the file manually, or simply run the command below. Make sure t
 curl https://raw.githubusercontent.com/elastic/connectors/main/config.yml.example --output ~/connectors-config/config.yml
 ```
 
-## 4. Update the configuration file for your [self-managed connector](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html#build-connector-usage)
+## 4. Update the configuration file for your [self-managed connector](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html#build-connector-usage)
 
 If you're running the Connector Service against a dockerised version of Elasticsearch and Kibana, your config file will look like this:
 
