@@ -57,6 +57,8 @@ steps:
   - label: "🔨 Microsoft SQL"
     command:
       - ".buildkite/run_nigthly.sh mssql"
+    env:
+      SKIP_AARCH64: "true"
     artifact_paths:
       - "perf8-report-*/**/*"
   - label: "🔨 Jira"
