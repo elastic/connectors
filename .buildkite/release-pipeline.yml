@@ -7,7 +7,6 @@ env:
 steps:
   - group: "Release setup"
     key: "release_setup"
-    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
     steps:
     # ----
     # Set the build timestamp (for the verion suffix)
@@ -28,7 +27,6 @@ steps:
   # ----
   - group: ":package: amd64 Build and Test"
     key: "build_and_test_amd64"
-    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
     depends_on:
       - release_setup
     steps:
@@ -61,7 +59,6 @@ steps:
   # ----
   - group: ":package: arm64 Build and Test"
     key: "build_and_test_arm64"
-    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
     depends_on:
       - release_setup
     steps:
@@ -96,7 +93,6 @@ steps:
 
   - group: "Release cleanup"
     key: "release_cleanup"
-    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
     depends_on:
       - step: "build_and_test_amd64"
         allow_failure: true
@@ -111,7 +107,6 @@ steps:
   # Multiarch Docker image build and push
   # ----
   - group: ":truck: Publish images"
-    if: "build.branch =~ /^[0-9]+\\.[0-9x]+.*/"
     depends_on:
       - "build_and_test_amd64"
       - "build_and_test_arm64"
