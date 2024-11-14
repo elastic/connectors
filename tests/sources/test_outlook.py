@@ -14,6 +14,7 @@ from aiohttp import StreamReader
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.outlook import (
+    GRAPH_API_BATCH_SIZE,
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
     WILDCARD,
@@ -426,27 +427,49 @@ def side_effect_function(client_emails=None):
     Args:
         client_emails: Optional string of comma-separated email addresses
     """
+    email_counter = 0
 
     def inner(url, headers=None, json=None, data=None):
+        nonlocal email_counter
+
         if "oauth2/v2.0/token" in url and data:
             return get_json_mock(
-                mock_response={"access_token": "mocked_access_token"},
+                mock_response={"access_token": "fake-token"},
                 status=200,
             )
         if url == "https://graph.microsoft.com/v1.0/$batch" and json:
-            return get_json_mock(
-                mock_response={
-                    "responses": [
-                        {
-                            "id": req.get("id"),
-                            "status": 200,
-                            "body": {"mail": f"{req.get('url').split('/')[-1]}"},
-                        }
-                        for req in json.get("requests", [])
-                    ]
-                },
-                status=200,
-            )
+            batch_requests = json.get("requests", [])[:GRAPH_API_BATCH_SIZE]
+
+            if client_emails:
+                email_list = client_emails.split(",")
+
+                responses = []
+                for request in batch_requests:
+                    if email_counter < len(email_list):
+                        responses.append(
+                            {
+                                "id": request.get("id"),
+                                "status": 200,
+                                "body": {
+                                    "value": [{"mail": email_list[email_counter]}]
+                                },
+                            }
+                        )
+                        email_counter += 1
+                    else:
+                        break
+            else:
+                responses = [
+                    {
+                        "id": request.get("id"),
+                        "status": 200,
+                        "body": {"value": [{"mail": f"user{email_counter}@test.com"}]},
+                    }
+                    for request in batch_requests
+                ]
+                email_counter += len(batch_requests)
+
+            return get_json_mock(mock_response={"responses": responses}, status=200)
         elif url == "https://graph.microsoft.com/v1.0/users?$top=999":
             return get_json_mock(
                 mock_response={
@@ -656,7 +679,8 @@ async def test_get_users_for_cloud_with_client_emails():
             side_effect=side_effect_function(client_emails),
         ):
             async for response in source.client._get_user_instance.get_users():
-                users.append(response["mail"])
+                user_mails = [user["mail"] for user in response["value"]]
+                users.extend(user_mails)
         assert users == list(client_emails.split(","))
         assert len(users) == 25
 
