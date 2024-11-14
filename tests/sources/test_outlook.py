@@ -16,6 +16,7 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.outlook import (
     OUTLOOK_CLOUD,
     OUTLOOK_SERVER,
+    WILDCARD,
     Forbidden,
     NotFound,
     OutlookDataSource,
@@ -385,7 +386,7 @@ async def create_outlook_source(
     use_text_extraction_service=False,
 ):
     if client_emails is None:
-        client_emails = ""
+        client_emails = WILDCARD
 
     async with create_source(
         OutlookDataSource,
@@ -439,7 +440,7 @@ def side_effect_function(client_emails=None):
                         {
                             "id": req.get("id"),
                             "status": 200,
-                            "body": {"mail": f"mocked_{req.get('url').split('/')[-1]}"},
+                            "body": {"mail": f"{req.get('url').split('/')[-1]}"},
                         }
                         for req in json.get("requests", [])
                     ]
@@ -487,7 +488,7 @@ def side_effect_function(client_emails=None):
                 "tenant_id": "foo",
                 "client_id": "bar",
                 "client_secret": "",
-                "client_emails": None,
+                "client_emails": WILDCARD,
             }
         ),
     ],
@@ -526,7 +527,7 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
                 "tenant_id": "foo",
                 "client_id": "bar",
                 "client_secret": "foo.bar",
-                "client_emails": None,
+                "client_emails": WILDCARD,
             }
         ),
         (
@@ -656,7 +657,7 @@ async def test_get_users_for_cloud_with_client_emails():
         ):
             async for response in source.client._get_user_instance.get_users():
                 users.append(response["mail"])
-        assert users == [f"mocked_{email}" for email in client_emails.split(",")]
+        assert users == list(client_emails.split(","))
         assert len(users) == 25
 
 

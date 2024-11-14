@@ -11,7 +11,6 @@ from abc import ABC, abstractmethod
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
-from typing import List
 
 import aiofiles
 import aiohttp
@@ -50,6 +49,7 @@ from connectors.utils import (
 
 RETRIES = 3
 RETRY_INTERVAL = 2
+WILDCARD = "*"
 
 QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
 
@@ -490,7 +490,7 @@ class Office365Users(BaseOffice365User):
 class MultiOffice365Users(BaseOffice365User):
     """Fetch multiple Office365 users based on a list of email addresses."""
 
-    def __init__(self, client_id, client_secret, tenant_id, client_emails: List[str]):
+    def __init__(self, client_id, client_secret, tenant_id, client_emails):
         super().__init__(client_id, client_secret, tenant_id)
         self.client_emails = client_emails
 
@@ -691,19 +691,20 @@ class UserFactory:
 
     @staticmethod
     def create_user(configuration: dict) -> BaseOffice365User:
-        if configuration.get("client_emails"):
-            client_emails = [email.strip() for email in configuration["client_emails"]]
+        client_emails = configuration.get("client_emails", WILDCARD)
+        if client_emails == WILDCARD or client_emails == [WILDCARD]:
+            return Office365Users(
+                client_id=configuration["client_id"],
+                client_secret=configuration["client_secret"],
+                tenant_id=configuration["tenant_id"],
+            )
+        else:
+            client_emails = [email.strip() for email in client_emails]
             return MultiOffice365Users(
                 client_id=configuration["client_id"],
                 client_secret=configuration["client_secret"],
                 tenant_id=configuration["tenant_id"],
                 client_emails=client_emails,
-            )
-        else:
-            return Office365Users(
-                client_id=configuration["client_id"],
-                client_secret=configuration["client_secret"],
-                tenant_id=configuration["tenant_id"],
             )
 
 
@@ -863,9 +864,10 @@ class OutlookDataSource(BaseDataSource):
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_CLOUD}],
                 "label": "Client Email Addresses (comma-separated)",
                 "order": 5,
-                "tooltip": "Specify the email addresses to limit data fetching to specific clients. If left empty, data will be fetched for all users.",
+                "tooltip": "Specify the email addresses to limit data fetching to specific clients. If set to *, data will be fetched for all users.",
                 "required": False,
                 "type": "list",
+                "value": "*",
             },
             "exchange_server": {
                 "depends_on": [{"field": "data_source", "value": OUTLOOK_SERVER}],
