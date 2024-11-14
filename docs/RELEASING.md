@@ -18,24 +18,36 @@ Take care of the branching (minor releases only):
 
 The VERSION file should match that of the Elastic stack.
 
-On the day of the Feature Freeze, `#mission-control` will notifiy the release manager that it's time to create a new maintenance branch.
+On the day of the Feature Freeze, `#mission-control` will notify the release manager that it's time to create a new maintenance branch.
 
-On the day of the release, `#mission-control` will notify the releae manager that it's time to bump the VERSION to the next PATCH.
+Make sure that the `catalog-info.yml` on the `main` branch is running nightly builds for any new maintenance branch.
+
+On the day of the release, `#mission-control` will notify the release manager that it's time to bump the VERSION to the next PATCH.
 
 The Unified Release build will take care of producing git tags and official artifacts from our most recent DRA artifacts.
 
 ### In-Between releases
 
-Sometimes, we need to release Connectors independently from the Elastic unified-release.
+Sometimes, we need to release Connectors independently of the Elastic unified-release.
 For instance, if a user reports a critical bug in Connectors, and we want to ship a fix as soon as possible.
 
-In this case, we can trigger a manual release buildkite job.
-1. Go to https://buildkite.com/elastic, find "connectors-docker-build-publish" pipeline and trigger a Build:
-   - Choose the maintenance branch you want to release from. For example, `8.16` if you want to release between 8.16.0 and 8.16.1
+In this case, we can follow the below process:
+
+1. create a new dev branch from the branch you want to release from. e.g:
+    ```
+    git checkout 8.16 && git checkout -b seanstory/release-8.16.0-20241108 && git push origin seanstory/release-8.16.0-20241108
+    ```
+2. Go to https://buildkite.com/elastic, find "connectors-docker-build-publish" pipeline and trigger a Build:
+   - Choose the dev branch you just created. In this example, `seanstory/release-8.16.0-20241108`
    - Click on "New Build"
    - Enter a descriptive message, and leave HEAD as the commit
    - By default the docker image will be pushed to namespace `integrations`. To push the image to `enterprise-search`, add environment variable `DOCKER_IMAGE_NAME=docker.elastic.co/enterprise-search/elastic-connectors`.
    - Press "Create Build" and wait for the build to finish
+3. The build will have created a few commits and a git tag. 
+  To make sure the commits are visible in the right places, you now need to make a PR from your dev branch to the maintenance branch.
+  In this example: `8.16 <- seanstory/release-8.16.0-20241108`.
+  Note, the PR might have an empty diff. This is ok.
+4. Once that PR is merged, you're done.
 
 This will produce Connectors artifacts like **MAJOR.MINOR.PATCH+build<TIMESTAMP>**.
 These versions are compatible with SEMVER (Semantic Versioning).

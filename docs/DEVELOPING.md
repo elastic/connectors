@@ -472,7 +472,7 @@ Seeing any of none, ever-decreasing, or ever-increasing file handles while monit
 Sync rules are made up of basic and advanced rules.
 Basic rules are implemented generically on the framework-level and work out-of-the-box for every new connector.
 Advanced rules are specific to each data source.
-Learn more about sync rules [in the Enterprise Search documentation](https://www.elastic.co/guide/en/enterprise-search/current/sync-rules.html).
+Learn more about sync rules [in the Elasticsearch documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-sync-rules.html).
 
 Example:
 
