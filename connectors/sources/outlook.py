@@ -43,7 +43,8 @@ from connectors.utils import (
     hash_id,
     html_to_text,
     iso_utc,
-    retryable, url_encode,
+    retryable,
+    url_encode,
 )
 
 RETRIES = 3
