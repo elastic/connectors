@@ -121,9 +121,9 @@ class ForceFlushSignal:
     happens to the host and job is suspended/failed.
 
     Thus the interface of this object has methods:
-    - await signal.wait_for_flush() is there so that the code that created this signal
+    - async wait_for_flush() is there so that the code that created this signal
       can get a callback once the flush has happened
-    - signal.trigger() is there for the sink to report that the flush has happened, so that
+    - trigger() is there for the sink to report that the flush has happened, so that
       the owner of the signal can understand that flush has happened
     """
 
