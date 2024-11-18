@@ -3033,7 +3033,7 @@ Apache Software License
 UNKNOWN
 
 elastic-transport
-8.15.0
+8.15.1
 Apache Software License
 
                                  Apache License
@@ -3441,7 +3441,7 @@ SOFTWARE
   to the Commercial Software.
 
 elasticsearch
-8.15.0
+8.16.0
 Apache Software License
 
                                  Apache License
