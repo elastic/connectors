@@ -14,13 +14,115 @@ VIRTUAL_ENV="$ROOT_DIR/.venv"
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
+CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
+ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
 
 export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-Dockerfile.ftest}
 export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
-export VERSION='9.0.0-SNAPSHOT'
+export VERSION="${CONNECTORS_VERSION}-SNAPSHOT"
+
+# Download and load ES Docker images from DRA artifacts instead of relying on the snapshot image in the registry.
+# This is needed for the release process when the ES snapshot image may not yet be available.
+# Snapshot images are pushed to the registry by the unified release workflow.
+
+# Function to resolve the DRA manifest URL
+function resolve_dra_manifest {
+  DRA_ARTIFACT=$1
+  DRA_VERSION=$2
+
+  # Perform the curl request and capture the output and exit code
+  RESPONSE=$(curl -sS -f $ARTIFACT_BASE_URL/$DRA_ARTIFACT/latest/$DRA_VERSION.json 2>&1)
+  CURL_EXIT_CODE=$?
+
+  # Check if the curl command failed
+  if [ $CURL_EXIT_CODE -ne 0 ]; then
+    echo "Error: Failed to fetch DRA manifest for artifact $DRA_ARTIFACT and version $DRA_VERSION."
+    echo "Details: $RESPONSE"
+    exit 1
+  fi
+
+  # Extract the manifest_url using jq
+  MANIFEST_URL=$(echo "$RESPONSE" | jq -r '.manifest_url' 2>/dev/null)
+
+  # Check if the jq command succeeded and if manifest_url is non-empty
+  if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" == "null" ]; then
+    echo "Error: No manifest_url found in the response for artifact $DRA_ARTIFACT and version $DRA_VERSION."
+    echo "Response: $RESPONSE"
+    exit 1
+  fi
+
+  # Output the manifest URL
+  echo "$MANIFEST_URL"
+}
+
+# Function to download the Docker image tarball
+function download_docker_tarball {
+  TAR_URL=$1
+  TAR_FILE=$2
+
+  echo "Downloading Docker image tarball from $TAR_URL..."
+  curl -O "$TAR_URL"
+
+  if [ ! -f "$TAR_FILE" ]; then
+    echo "Error: Download failed. File $TAR_FILE not found."
+    exit 1
+  fi
+}
+
+# Function to load the Docker image directly from the tarball
+function load_docker_image {
+  TAR_FILE=$1
+  echo "Loading Docker image from $TAR_FILE..."
+  docker load < "$TAR_FILE"
+}
+
+# Determine system architecture
+ARCH=$(uname -m)
+
+# Normalize architecture name
+if [[ $ARCH == "arm64" ]]; then
+  ARCH="aarch64"
+fi
+
+# Select the appropriate Docker tarball name based on architecture
+case $ARCH in
+  x86_64)
+    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image.tar.gz"
+    ;;
+  aarch64)
+    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-aarch64.tar.gz"
+    ;;
+  *)
+    echo "Error: Unsupported architecture $ARCH"
+    exit 1
+    ;;
+esac
+
+# Get the DRA manifest URL for Elasticsearch
+ELASTICSEARCH_DRA_MANIFEST=$(resolve_dra_manifest "elasticsearch" $VERSION)
+
+# Parse Docker image tarball information
+DOCKER_TARBALL_URL=$(curl -sS "$ELASTICSEARCH_DRA_MANIFEST" | jq -r ".projects.elasticsearch.packages.\"$DOCKER_TARBALL_NAME\".url")
+
+if [ -z "$DOCKER_TARBALL_URL" ] || [ "$DOCKER_TARBALL_URL" == "null" ]; then
+  echo "Error: Docker tarball URL not found in the manifest."
+  exit 1
+fi
+
+# Execute the functions to download and load the image
+download_docker_tarball "$DOCKER_TARBALL_URL" "$DOCKER_TARBALL_NAME"
+load_docker_image "$DOCKER_TARBALL_NAME"
+
+# Export image name following DRA conventions
+export ELASTICSEARCH_DRA_DOCKER_IMAGE="elasticsearch:$ARCH"
+
+echo "Docker image for Elasticsearch $VERSION loaded successfully. Image name: $ELASTICSEARCH_DRA_DOCKER_IMAGE"
+
+echo "Cleaning up the downloaded tarball..."
+rm -f "$DOCKER_TARBALL_NAME"
 
 if [ "$PERF8_TRACE" == true ]; then
     echo 'Tracing is enabled, memray stats will be delivered'
