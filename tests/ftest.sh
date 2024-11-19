@@ -24,10 +24,9 @@ export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION="${CONNECTORS_VERSION}-SNAPSHOT"
 
-# Since the Docker image is published to the official registry as part of a unified release process,
-# and our functional test step must succeed in the pipeline building the connector DRA artifact,
-# we rely on downloading and loading ES image tarballs from DRA instead of pulling the snapshot image
-# directly from the registry. During the release the ES image won't be available in the registry yet.
+# Download and load ES Docker images from DRA artifacts instead of relying on the snapshot image in the registry.
+# This is needed for the release process when the ES snapshot image may not yet be available.
+# Snapshot images are pushed to the registry by the unified release workflow.
 
 # Function to resolve the DRA manifest URL
 function resolve_dra_manifest {
@@ -40,7 +39,7 @@ function resolve_dra_manifest {
 
   # Check if the curl command failed
   if [ $CURL_EXIT_CODE -ne 0 ]; then
-    echo "Error: Failed to fetch DRA manifest for artifact '$DRA_ARTIFACT' and version '$DRA_VERSION'."
+    echo "Error: Failed to fetch DRA manifest for artifact $DRA_ARTIFACT and version $DRA_VERSION."
     echo "Details: $RESPONSE"
     exit 1
   fi
@@ -50,7 +49,7 @@ function resolve_dra_manifest {
 
   # Check if the jq command succeeded and if manifest_url is non-empty
   if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" == "null" ]; then
-    echo "Error: No 'manifest_url' found in the response for artifact '$DRA_ARTIFACT' and version '$DRA_VERSION'."
+    echo "Error: No manifest_url found in the response for artifact $DRA_ARTIFACT and version $DRA_VERSION."
     echo "Response: $RESPONSE"
     exit 1
   fi
