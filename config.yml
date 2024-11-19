@@ -1,0 +1,7 @@
+connectors:
+-
+  connector_id: "MDD3Q5MB_-XUO6lS0vqt"
+  service_type: "mssql"
+elasticsearch:
+  host: "http://localhost:9200"
+  api_key: ""
