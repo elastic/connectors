@@ -183,7 +183,6 @@ async def main(args=None):
     if action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if action == "start_stack":
-            await _exec_shell("docker compose pull")
             await _exec_shell("docker compose up -d")
         else:
             await _exec_shell("docker compose down --volumes")
