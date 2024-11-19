@@ -56,6 +56,7 @@ class ConnectorRecordManager:
                         connector_id=connector_id,
                         service_type=service_type,
                         connector_name=connector_name,
+                        is_native=True,
                     )
                     logger.info(f"Created connector record for {connector_id}")
                 except Exception as e:
