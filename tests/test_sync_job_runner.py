@@ -8,13 +8,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 from elasticsearch import (
-    AuthorizationException as ElasticAuthorizationException,
-)
-from elasticsearch import (
     ConflictError,
-)
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
 )
 
 from connectors.es.client import License
@@ -24,7 +18,6 @@ from connectors.protocol import Filter, JobStatus, JobType, Pipeline
 from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
-    ApiKeyNotFoundError,
     SyncJobRunner,
     SyncJobStartError,
 )
