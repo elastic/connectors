@@ -895,14 +895,20 @@ class ConfluenceDataSource(BaseDataSource):
             doc = {
                 "_id": str(document["id"]),
                 "type": document["type"],
-                "_timestamp": document["history"]["lastUpdated"]["when"],
+                "_timestamp": nested_get_from_dict(
+                    document, ["history", "lastUpdated", "when"]
+                ),
                 "title": document.get("title"),
                 "ancestors": ancestor_title,
-                "space": document["space"]["name"],
-                "body": document["body"]["storage"]["value"],
+                "space": nested_get_from_dict(document, ["space", "name"]),
+                "body": nested_get_from_dict(document, ["body", "storage", "value"]),
                 "url": document_url,
-                "author": document["history"]["createdBy"][self.authorkey],
-                "createdDate": document["history"]["createdDate"],
+                "author": nested_get_from_dict(
+                    document, ["history", "createdBy", self.authorkey]
+                ),
+                "createdDate": nested_get_from_dict(
+                    document, ["history", "createdDate"]
+                ),
             }
             if self.confluence_client.index_labels:
                 doc["labels"] = document["labels"]
