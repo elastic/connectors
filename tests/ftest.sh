@@ -62,9 +62,10 @@ function resolve_dra_manifest {
 function download_docker_tarball {
   TAR_URL=$1
   TAR_FILE=$2
+  MAX_RETRIES=3
 
   echo "Downloading Docker image tarball from $TAR_URL..."
-  curl -O "$TAR_URL"
+  curl --retry $MAX_RETRIES --retry-connrefused -O "$TAR_URL"
 
   if [ ! -f "$TAR_FILE" ]; then
     echo "Error: Download failed. File $TAR_FILE not found."
