@@ -921,7 +921,9 @@ class ConfluenceDataSource(BaseDataSource):
                 "author": nested_get_from_dict(
                     document, ["history", "createdBy", self.authorkey]
                 ),
-                "createdDate": document["history"]["createdDate"],
+                "createdDate": nested_get_from_dict(
+                    document, ["history", "createdDate"]
+                ),
             }
             if self.confluence_client.index_labels:
                 doc["labels"] = document["labels"]
