@@ -54,6 +54,7 @@ async def test_ensure_connector_records_exist_creates_connectors_if_not_exist(
             connector_id="1",
             service_type="service1",
             connector_name=f"[Elastic-managed] service1 connector {random_connector_name_id}",
+            is_native=True,
         )
 
 

@@ -125,7 +125,16 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
                 connector_name = _extract_unit_config_value(
                     connector_input, "connector_name"
                 )
-                connector_id = _extract_unit_config_value(connector_input, "id")
+
+                connector_id = _extract_unit_config_value(
+                    connector_input, "connector_id"
+                )
+                # If "connector_id" is not explicitly provided as a policy parameter,
+                # use the "id" from the fleet policy as a fallback for the connector ID.
+                # The connector ID must be encoded in the policy to associate the integration
+                # with the connector being managed by the policy.
+                if not connector_id:
+                    connector_id = _extract_unit_config_value(connector_input, "id")
 
                 logger.info(
                     f"Connector input found. Service type: {service_type}, Connector ID: {connector_id}, Connector Name: {connector_name}"
