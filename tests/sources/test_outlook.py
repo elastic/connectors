@@ -419,7 +419,10 @@ def side_effect_function(url, headers):
     Args:
         url, ssl: Params required for get call
     """
-    if url == "https://graph.microsoft.com/v1.0/users?$top=999":
+    if (
+        url
+        == "https://graph.microsoft.com/v1.0/users?$top=999&$filter=accountEnabled%20eq%20true"
+    ):
         return get_json_mock(
             mock_response={
                 "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token",
