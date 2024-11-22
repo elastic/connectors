@@ -44,6 +44,7 @@ from connectors.utils import (
     html_to_text,
     iso_utc,
     retryable,
+    url_encode,
 )
 
 RETRIES = 3
@@ -410,7 +411,8 @@ class Office365Users:
     )
     async def get_users(self):
         access_token = await self._fetch_token()
-        url = f"https://graph.microsoft.com/v1.0/users?$top={TOP}"
+        filter_ = url_encode("accountEnabled eq true")
+        url = f"https://graph.microsoft.com/v1.0/users?$top={TOP}&$filter={filter_}"
         while True:
             try:
                 async with self._get_session.get(
