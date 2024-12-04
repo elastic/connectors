@@ -36,6 +36,7 @@ from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
+    iso_zulu,
     nested_get_from_dict,
     retryable,
     ssl_context,
@@ -2031,6 +2032,10 @@ class GitHubDataSource(BaseDataSource):
             return False, query
 
     def is_previous_repo(self, repo_name):
+        # TODO: this might be really unnecessary after cursor support was added.
+        # This function does repo processing deduplication: do not process repos that were already processed.
+        # Cursors are organised per repo as well, so they duplicate each other.
+        # It's not a problem by itself, but we might consider refactoring this.
         if repo_name in self.prev_repos:
             return True
         self.prev_repos.append(repo_name)
@@ -2075,6 +2080,30 @@ class GitHubDataSource(BaseDataSource):
                         access_control.append(_prefix_email(email=user_email))
         return access_control
 
+    def _is_repo_processed(self, repo_name):
+        if self._sync_cursor is None:
+            self._logger.debug(f"{repo_name} was not processed by this job before.")
+            return False
+
+        processed = self._sync_cursor.get(repo_name)
+
+        if processed:
+            self._logger.info(
+                f"Skipping repository {repo_name} - has already been processed."
+            )
+
+        return processed
+
+    def _mark_repo_as_processed(self, repo_name):
+        self._logger.debug(f"Marking {repo_name} as processed.")
+        if self._sync_cursor is None:
+            self._sync_cursor = {}
+
+        ts = iso_zulu()
+
+        self._sync_cursor[repo_name] = ts
+        self.update_sync_timestamp_cursor(ts)
+
     async def get_docs(self, filtering=None):
         """Executes the logic to fetch GitHub objects in async manner.
 
@@ -2093,6 +2122,9 @@ class GitHubDataSource(BaseDataSource):
                 )
                 yield repo, None
                 repo_name = repo.get("nameWithOwner")
+
+                if self._is_repo_processed(repo_name):
+                    continue
 
                 if pull_request_query := rule["filter"].get(ObjectType.PR.value):
                     query_status, pull_request_query = self._filter_rule_query(
@@ -2157,9 +2189,14 @@ class GitHubDataSource(BaseDataSource):
                             )
                         else:
                             yield file_document, None
+                self._mark_repo_as_processed(repo_name)
         else:
             async for repo in self._fetch_repos():
-                if self.is_previous_repo(repo["nameWithOwner"]):
+                repo_name = repo.get("nameWithOwner")
+                if self.is_previous_repo(repo_name):
+                    continue
+
+                if self._is_repo_processed(repo_name):
                     continue
 
                 access_control = []
@@ -2181,7 +2218,6 @@ class GitHubDataSource(BaseDataSource):
                 else:
                     yield repo, None
 
-                repo_name = repo.get("nameWithOwner")
                 default_branch = (
                     repo.get("defaultBranchRef", {}).get("name")
                     if repo.get("defaultBranchRef")
@@ -2248,3 +2284,7 @@ class GitHubDataSource(BaseDataSource):
                                 )
                             else:
                                 yield file_document, None
+                self._mark_repo_as_processed(repo_name)
+        # There is no incremental sync implemented, so just for simplicity let's remove cursor
+        # so that it's never stored in the connector record
+        self._sync_cursor = None

@@ -236,8 +236,8 @@ PUBLIC_REPO = {
 }
 PRIVATE_REPO = {
     "name": "demo_repo",
-    "nameWithOwner": "demo_user/demo_repo",
-    "url": "https://github.com/demo_user/demo_repo",
+    "nameWithOwner": "demo_user/demo_repo_private",
+    "url": "https://github.com/demo_user/demo_repo_private",
     "description": "Demo repo for poc",
     "visibility": "PRIVATE",
     "primaryLanguage": {"name": "Python"},
@@ -1628,6 +1628,58 @@ async def test_get_docs():
         async for document, _ in source.get_docs():
             actual_response.append(document)
         assert expected_response == actual_response
+
+
+@pytest.mark.asyncio
+async def test_get_docs_does_not_save_cursor_for_repo():
+    async with create_github_source() as source:
+        source._fetch_repos = Mock(
+            return_value=AsyncIterator([deepcopy(PUBLIC_REPO), deepcopy(PRIVATE_REPO)])
+        )
+        source._fetch_issues = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ISSUE)])
+        )
+        source._fetch_pull_requests = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_PULL)])
+        )
+        source._fetch_files = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ATTACHMENTS)])
+        )
+
+        intermediate_cursor = None
+
+        async for _, _ in source.get_docs():
+            if source._sync_cursor is not None:
+                intermediate_cursor = source._sync_cursor
+
+        # At the end of sync cursor is deleted
+        assert source._sync_cursor is None
+
+        # But at the meantime cursor was updated
+        assert intermediate_cursor is not None
+        assert intermediate_cursor[PUBLIC_REPO["nameWithOwner"]] is not None
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_existing_sync_cursor_skips_repo():
+    async with create_github_source() as source:
+        source._fetch_repos = Mock(return_value=AsyncIterator([deepcopy(PUBLIC_REPO)]))
+        source._fetch_issues = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ISSUE)])
+        )
+        source._fetch_pull_requests = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_PULL)])
+        )
+        source._fetch_files = Mock(
+            return_value=AsyncIterator([deepcopy(MOCK_RESPONSE_ATTACHMENTS)])
+        )
+        source._sync_cursor = {PUBLIC_REPO["nameWithOwner"]: 1}
+
+        document_count = 0
+        async for _, _ in source.get_docs():
+            document_count += 1
+
+        assert document_count == 0
 
 
 @pytest.mark.asyncio

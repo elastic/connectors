@@ -27,6 +27,7 @@ SEARCH_INDEX_NAME = "search-mysql"
 ACCESS_CONTROL_INDEX_NAME = ".search-acl-filter-search-mysql"
 TOTAL_DOCUMENT_COUNT = 100
 SYNC_CURSOR = {"foo": "bar"}
+NEXT_SYNC_CURSOR = {"foo": "bar", "hehe": "not_hehe"}
 
 
 def mock_connector():
@@ -68,6 +69,7 @@ def mock_sync_job(job_type, index_name):
     sync_job.suspend = AsyncMock()
     sync_job.reload = AsyncMock()
     sync_job.validate_filtering = AsyncMock()
+    sync_job.sync_cursor = None
     sync_job.update_metadata = AsyncMock()
 
     return sync_job
@@ -81,6 +83,7 @@ def create_runner(
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
     connector=None,
+    sync_job=None,
     service_config=None,
     es_config=None,
 ):
@@ -97,13 +100,13 @@ def create_runner(
     data_provider.sync_cursor = Mock(return_value=sync_cursor)
     data_provider.close = AsyncMock()
 
-    # mock get_docs_incrementally to not rely on a call to `execute`
     data_provider.get_docs_incrementally = Mock()
     data_provider.get_docs_incrementally.__func__ = Mock()
 
     source_klass.return_value = data_provider
 
-    sync_job = mock_sync_job(job_type=job_type, index_name=index_name)
+    if not sync_job:
+        sync_job = mock_sync_job(job_type=job_type, index_name=index_name)
     if not connector:
         connector = mock_connector()
 
@@ -132,6 +135,7 @@ def sync_orchestrator_mock():
         sync_orchestrator_mock.cancel = AsyncMock()
         sync_orchestrator_mock.ingestion_stats = Mock(return_value={})
         sync_orchestrator_mock.close = AsyncMock()
+        sync_orchestrator_mock.trigger_flush = AsyncMock()
         sync_orchestrator_mock.has_active_license_enabled = AsyncMock(
             return_value=(True, License.PLATINUM)
         )
@@ -257,18 +261,36 @@ async def test_connector_content_claim_fails():
 
 
 @pytest.mark.parametrize(
-    "job_type, sync_cursor_to_claim, sync_cursor_to_update",
+    "job_type, connector_sync_cursor, job_sync_cursor, sync_cursor_to_claim, sync_cursor_to_update",
     [
-        (JobType.FULL, None, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR, SYNC_CURSOR),
-        (JobType.ACCESS_CONTROL, None, None),
+        (JobType.FULL, None, None, None, None),
+        (
+            JobType.FULL,
+            SYNC_CURSOR,
+            None,
+            None,
+            None,
+        ),  # for FULL jobs sync cursor is not taken from connector record
+        (JobType.INCREMENTAL, SYNC_CURSOR, SYNC_CURSOR, SYNC_CURSOR, SYNC_CURSOR),
+        (JobType.ACCESS_CONTROL, None, None, None, None),
     ],
 )
 @pytest.mark.asyncio
 async def test_source_not_changed(
-    job_type, sync_cursor_to_claim, sync_cursor_to_update
+    job_type,
+    connector_sync_cursor,
+    job_sync_cursor,
+    sync_cursor_to_claim,
+    sync_cursor_to_update,
 ):
-    sync_job_runner = create_runner(source_changed=False, job_type=job_type)
+    connector = mock_connector()
+    connector.sync_cursor = job_sync_cursor
+    sync_job_runner = create_runner(
+        source_changed=False,
+        job_type=job_type,
+        connector=connector,
+        sync_cursor=job_sync_cursor,
+    )
     await sync_job_runner.execute()
 
     ingestion_stats = {
@@ -496,22 +518,35 @@ async def test_access_control_sync_fails_with_insufficient_license(
 
 
 @pytest.mark.parametrize(
-    "job_type, sync_cursor",
+    "job_type, sync_cursor_before_sync, sync_cursor_after_sync",
     [
-        (JobType.FULL, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR),
-        (JobType.ACCESS_CONTROL, None),
+        (JobType.FULL, None, SYNC_CURSOR),
+        (JobType.INCREMENTAL, SYNC_CURSOR, NEXT_SYNC_CURSOR),
+        (JobType.ACCESS_CONTROL, None, None),
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_job_runner(job_type, sync_cursor, sync_orchestrator_mock):
+async def test_sync_job_runner(
+    job_type, sync_cursor_before_sync, sync_cursor_after_sync, sync_orchestrator_mock
+):
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
         "deleted_document_count": 20,
     }
+
+    def _async_bulk(*args, **kwargs):
+        # Side effect to update cursor after sync
+        sync_job_runner.data_provider.sync_cursor = Mock(
+            return_value=sync_cursor_after_sync
+        )
+
+    sync_orchestrator_mock.async_bulk.side_effect = _async_bulk
+
     sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor)
+    sync_job_runner = create_runner(
+        job_type=job_type, sync_cursor=sync_cursor_before_sync
+    )
     await sync_job_runner.execute()
 
     ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
@@ -524,7 +559,7 @@ async def test_sync_job_runner(job_type, sync_cursor, sync_orchestrator_mock):
     sync_job_runner.sync_job.cancel.assert_not_awaited()
     sync_job_runner.sync_job.suspend.assert_not_awaited()
     sync_job_runner.connector.sync_done.assert_awaited_with(
-        sync_job_runner.sync_job, cursor=sync_cursor
+        sync_job_runner.sync_job, cursor=sync_cursor_after_sync
     )
     sync_job_runner.sync_orchestrator.cancel.assert_called_once()
 
@@ -619,8 +654,8 @@ async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_lim
 @pytest.mark.parametrize(
     "job_type, sync_cursor",
     [
-        (JobType.FULL, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR),
+        (JobType.FULL, None),
+        (JobType.INCREMENTAL, None),
         (JobType.ACCESS_CONTROL, None),
     ],
 )
@@ -646,7 +681,7 @@ async def test_sync_job_runner_reporting_metadata(
     sync_job_runner.sync_job.claim.assert_awaited()
     sync_job_runner.sync_orchestrator.async_bulk.assert_awaited()
     sync_job_runner.sync_job.update_metadata.assert_awaited_with(
-        ingestion_stats=ingestion_stats
+        ingestion_stats=ingestion_stats, cursor=sync_cursor
     )
     sync_job_runner.sync_job.done.assert_not_awaited()
     sync_job_runner.sync_job.fail.assert_not_awaited()
@@ -657,6 +692,42 @@ async def test_sync_job_runner_reporting_metadata(
     sync_job_runner.connector.sync_done.assert_awaited_with(
         sync_job_runner.sync_job, cursor=sync_cursor
     )
+    sync_orchestrator_mock.trigger_flush.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "job_type",
+    [
+        (JobType.FULL),
+        (JobType.INCREMENTAL),
+    ],
+)
+@pytest.mark.asyncio
+@patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
+@patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
+async def test_sync_job_runner_metadata_update_sync_cursor_if_changed(
+    job_type, sync_orchestrator_mock
+):
+    ingestion_stats = {
+        "indexed_document_count": 15,
+        "indexed_document_volume": 230,
+        "deleted_document_count": 10,
+    }
+    new_sync_cursor = {"hey": "i've got new sync_cursor!"}
+    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
+    sync_orchestrator_mock.done.return_value = False
+    sync_job_runner = create_runner(
+        job_type=job_type,
+        sync_cursor=new_sync_cursor,
+    )
+    task = asyncio.create_task(sync_job_runner.execute())
+    asyncio.get_event_loop().call_later(0.1, task.cancel)
+    await task
+
+    sync_job_runner.sync_job.update_metadata.assert_awaited_with(
+        ingestion_stats=ingestion_stats, cursor=new_sync_cursor
+    )
+    sync_orchestrator_mock.trigger_flush.assert_awaited()
 
 
 @pytest.mark.parametrize(

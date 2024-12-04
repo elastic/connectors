@@ -688,6 +688,9 @@ class BaseDataSource:
         """Returns the sync cursor of the current sync"""
         return self._sync_cursor
 
+    def set_sync_cursor(self, sync_cursor):
+        self._sync_cursor = sync_cursor
+
     @staticmethod
     def is_premium():
         """Returns True if this DataSource is a Premium (paid license gated) connector.

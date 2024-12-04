@@ -2437,6 +2437,7 @@ class TestSharepointOnlineDataSource:
             source.site_group_users = AsyncMock(return_value=self.site_group_users)
 
         sync_cursor = {"site_drives": {}, "cursor_timestamp": self.month_ago}
+        source.set_sync_cursor(sync_cursor)
         for site_drive in self.site_drives:
             sync_cursor["site_drives"][site_drive["id"]] = (
                 "http://fakesharepoint.com/deltalink"

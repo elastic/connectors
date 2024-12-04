@@ -388,13 +388,17 @@ class SyncJob(ESDocument):
                     "started_at": iso_utc(),
                     "last_seen": iso_utc(),
                     "worker_hostname": socket.gethostname(),
-                    "connector.sync_cursor": sync_cursor,
+                    "connector": {
+                        "sync_cursor": sync_cursor,
+                    },
                 }
                 await self.index.update(doc_id=self.id, doc=doc)
         except Exception as e:
             self._wrap_errors("claim job", e)
 
-    async def update_metadata(self, ingestion_stats=None, connector_metadata=None):
+    async def update_metadata(
+        self, ingestion_stats=None, connector_metadata=None, cursor=None
+    ):
         try:
             ingestion_stats = filter_ingestion_stats(ingestion_stats)
             if self.index.feature_use_connectors_api:
@@ -413,14 +417,20 @@ class SyncJob(ESDocument):
                 doc.update(ingestion_stats)
                 if len(connector_metadata) > 0:
                     doc["metadata"] = connector_metadata
+                if cursor:
+                    doc["connector"] = {"sync_cursor": cursor}
                 await self.index.update(doc_id=self.id, doc=doc)
+                self.log_debug("Sync job metadata was updated successfully")
         except Exception as e:
             self._wrap_errors("update metadata and stats", e)
 
     async def done(self, ingestion_stats=None, connector_metadata=None):
         try:
             await self._terminate(
-                JobStatus.COMPLETED, None, ingestion_stats, connector_metadata
+                JobStatus.COMPLETED,
+                None,
+                ingestion_stats,
+                connector_metadata,
             )
         except Exception as e:
             self._wrap_errors("terminate as completed", e)
@@ -436,7 +446,10 @@ class SyncJob(ESDocument):
             else:
                 message = str(error)
             await self._terminate(
-                JobStatus.ERROR, message, ingestion_stats, connector_metadata
+                JobStatus.ERROR,
+                message,
+                ingestion_stats,
+                connector_metadata,
             )
         except Exception as e:
             self._wrap_errors("terminate as failed", e)
@@ -444,7 +457,10 @@ class SyncJob(ESDocument):
     async def cancel(self, ingestion_stats=None, connector_metadata=None):
         try:
             await self._terminate(
-                JobStatus.CANCELED, None, ingestion_stats, connector_metadata
+                JobStatus.CANCELED,
+                None,
+                ingestion_stats,
+                connector_metadata,
             )
         except Exception as e:
             self._wrap_errors("terminate as canceled", e)
@@ -452,13 +468,20 @@ class SyncJob(ESDocument):
     async def suspend(self, ingestion_stats=None, connector_metadata=None):
         try:
             await self._terminate(
-                JobStatus.SUSPENDED, None, ingestion_stats, connector_metadata
+                JobStatus.SUSPENDED,
+                None,
+                ingestion_stats,
+                connector_metadata,
             )
         except Exception as e:
             self._wrap_errors("terminate as suspended", e)
 
     async def _terminate(
-        self, status, error=None, ingestion_stats=None, connector_metadata=None
+        self,
+        status,
+        error=None,
+        ingestion_stats=None,
+        connector_metadata=None,
     ):
         ingestion_stats = filter_ingestion_stats(ingestion_stats)
         if connector_metadata is None:
@@ -735,6 +758,9 @@ class Connector(ESDocument):
         return self.get("api_key_secret_id")
 
     async def heartbeat(self, interval):
+        self.log_debug(
+            f"Now: {datetime.now(timezone.utc)}. Last seen: {self.last_seen}. Interval: {interval} seconds."
+        )
         if (
             self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
