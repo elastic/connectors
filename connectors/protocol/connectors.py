@@ -734,9 +734,10 @@ class Connector(ESDocument):
     def api_key_secret_id(self):
         return self.get("api_key_secret_id")
 
-    async def heartbeat(self, interval):
+    async def heartbeat(self, interval, force=False):
         if (
-            self.last_seen is None
+            force
+            or self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
             self.log_debug("Sending heartbeat")

@@ -37,9 +37,14 @@ class JobSchedulingService(BaseService):
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
+        self.first_run = True
         self.last_wake_up_time = datetime.now(timezone.utc)
 
     async def _schedule(self, connector):
+        # To do some first-time stuff
+        just_started = self.first_run
+        self.first_run = False
+
         if self.running is False:
             connector.log_debug("Skipping run because service is terminating")
             return
@@ -66,7 +71,7 @@ class JobSchedulingService(BaseService):
             raise
 
         # the heartbeat is always triggered
-        await connector.heartbeat(self.heartbeat_interval)
+        await connector.heartbeat(self.heartbeat_interval, force=just_started)
 
         connector.log_debug(f"Status is {connector.status}")
 
