@@ -545,7 +545,8 @@ class Extractor:
                 if count % self.display_every == 0:
                     self._log_progress()
 
-                doc_id = doc["id"] = doc.pop("_id")
+                doc_id = doc.pop("_id")
+                doc["id"] = str(doc_id)
 
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
