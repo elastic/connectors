@@ -1264,7 +1264,7 @@ async def test_sync_orchestrator_done_and_cleanup(
 
 @pytest.mark.asyncio
 async def test_extractor_put_doc():
-    doc = {"id": "123"}
+    doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
     extractor = Extractor(
@@ -1307,7 +1307,7 @@ async def test_extractor_get_docs_when_downloads_fail(
 
 @pytest.mark.asyncio
 async def test_force_canceled_extractor_put_doc():
-    doc = {"id": "123"}
+    doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
     extractor = Extractor(
