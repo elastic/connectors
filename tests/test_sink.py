@@ -383,7 +383,8 @@ async def test_async_bulk(mock_responses):
 def index_operation(doc):
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
-    doc_id = doc_copy["id"] = doc_copy.pop("_id")
+    doc_id = doc_copy.pop("_id")
+    doc_copy["id"] = str(doc_id)
 
     return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
@@ -391,7 +392,8 @@ def index_operation(doc):
 def update_operation(doc):
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
-    doc_id = doc_copy["id"] = doc_copy.pop("_id")
+    doc_id = doc_copy.pop("_id")
+    doc_copy["id"] = str(doc_id)
 
     return {"_op_type": "update", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
