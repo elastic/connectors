@@ -28,8 +28,8 @@ from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
+from connectors.es import TIMESTAMP_FIELD
 from connectors.es.management_client import ESManagementClient
-from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
@@ -847,21 +847,9 @@ class SyncOrchestrator:
             index_name, ignore_unavailable=True
         )
 
-        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
-
         if index:
             # Update the index mappings if needed
             self._logger.debug(f"{index_name} exists")
-
-            # Settings contain analyzers which are being used in the index mappings
-            # Therefore settings must be applied before mappings
-            await self.es_management_client.ensure_content_index_settings(
-                index_name=index_name, index=index, language_code=language_code
-            )
-
-            await self.es_management_client.ensure_content_index_mappings(
-                index_name=index_name, index=index, desired_mappings=mappings
-            )
         else:
             # Create a new index
             self._logger.info(f"Creating content index: {index_name}")
