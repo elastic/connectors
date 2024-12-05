@@ -438,3 +438,25 @@ async def test_run_when_connector_validate_config_fails(
     data_source_mock.close.assert_awaited_once()
 
     connector.error.assert_awaited_with(error)
+
+
+@pytest.mark.asyncio
+async def test_initial_loop_run_heartbeat_only_once(
+    connector_index_mock, sync_job_index_mock, set_env
+):
+    connector = mock_connector(next_sync=None)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator(
+        [connector, connector, connector, connector]
+    )  # to emulate 4 runs
+    await create_and_run_service(JobSchedulingService)
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+    assert connector.heartbeat.call_count == 4
+    # Only the first call to heartbeat should pass "True"
+    assert connector.heartbeat.call_args_list[0].kwargs["force"] is True
+    assert connector.heartbeat.call_args_list[1].kwargs["force"] is False
+    assert connector.heartbeat.call_args_list[2].kwargs["force"] is False
+    assert connector.heartbeat.call_args_list[3].kwargs["force"] is False
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
+    sync_job_index_mock.create.assert_not_awaited()
