@@ -12,11 +12,12 @@ Please refer to the following Docker image registry to access and pull available
 
 Follow these steps:
 
-1. [Create network](#1-create-a-docker-network)
-2. [Create directory](#2-create-a-directory-to-be-mounted-into-the-docker-image)
-3. [Download config file](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
-4. [Update config file](#4-update-the-configuration-file-for-your-self-managed-connectorhttpswwwelasticcoguideenenterprise-searchcurrentbuild-connectorhtmlbuild-connector-usage)
-5. [Run the docker image](#5-run-the-docker-image)
+- [Run Connector Service in Docker](#run-connector-service-in-docker)
+  - [1. Create a Docker network.](#1-create-a-docker-network)
+  - [2. Create a directory to be mounted into the Docker image.](#2-create-a-directory-to-be-mounted-into-the-docker-image)
+  - [3. Download sample configuration file from this repository into newly created directory.](#3-download-sample-configuration-file-from-this-repository-into-newly-created-directory)
+  - [4. Update the configuration file for your self-managed connector](#4-update-the-configuration-file-for-your-self-managed-connector)
+  - [5. Run the Docker image.](#5-run-the-docker-image)
 
 ## 1. Create a Docker network.
 
@@ -111,3 +112,8 @@ You might need to adjust some details here:
 > ```
 > elasticsearch.ca_certs: /usr/share/connectors/config/certs/ca/ca.crt
 > ```
+> 3. To avoid the certificate verification, configure `verify_certs` parameter which is `true` by default when SSL is enabled in connector service's `config.yml` as:
+> ```
+> elasticsearch.verify_certs: false
+> ```
+> Disclaimer: Setting `verify_certs` to `false` is not recommended in a production environment, as it may expose your application to security vulnerabilities.
