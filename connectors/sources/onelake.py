@@ -81,7 +81,9 @@ class OneLakeDataSource(BaseDataSource):
 
         try:
             await self._get_directory_paths(self.configuration["data_path"])
-            self._logger.info("Connection to OneLake successful")
+            self._logger.info(
+                f"Connection to OneLake successful to {self.configuration['data_path']}"
+            )
 
         except Exception:
             self._logger.exception("Error while connecting to OneLake.")
@@ -275,6 +277,9 @@ class OneLakeDataSource(BaseDataSource):
         )
 
         if not can_be_downloaded:
+            self._logger.warning(
+                f"File {file_properties.name} cannot be downloaded. Skipping."
+            )
             return doc
 
         extracted_doc = await self.download_and_extract_file(
@@ -309,6 +314,7 @@ class OneLakeDataSource(BaseDataSource):
             tuple: dictionary with meta-data of each file and a partial function to get the file content.
         """
 
+        self._logger.info(f"Fetching files from OneLake datalake {self.data_path}")
         directory_paths = await self._get_directory_paths(
             self.configuration["data_path"]
         )
