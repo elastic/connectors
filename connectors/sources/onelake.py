@@ -282,6 +282,7 @@ class OneLakeDataSource(BaseDataSource):
             )
             return doc
 
+        self._logger.debug(f"Downloading file {file_properties.name}...")
         extracted_doc = await self.download_and_extract_file(
             doc=doc,
             source_filename=file_properties.name.split("/")[-1],
@@ -319,6 +320,7 @@ class OneLakeDataSource(BaseDataSource):
             self.configuration["data_path"]
         )
 
+        self._logger.debug(f"Found {len(directory_paths)} files in {self.data_path}")
         async for file in self.prepare_files(directory_paths):
             file_dict = file
 
