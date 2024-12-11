@@ -113,7 +113,7 @@ class OneLakeDataSource(BaseDataSource):
             self._logger.error(f"Error while getting token credentials: {e}")
             raise
 
-    def _get_service_client(self):
+    async def _get_service_client(self):
         """Get the service client for OneLake
 
         Returns:
@@ -129,21 +129,23 @@ class OneLakeDataSource(BaseDataSource):
             self._logger.error(f"Error while getting service client: {e}")
             raise
 
-    def _get_file_system_client(self):
+    async def _get_file_system_client(self):
         """Get the file system client for OneLake
 
         Returns:
             obj: File system client
         """
         try:
-            return self._get_service_client().get_file_system_client(
+            service_client = await self._get_service_client()
+
+            return service_client.get_file_system_client(
                 self.configuration["workspace_name"]
             )
         except Exception as e:
             self._logger.error(f"Error while getting file system client: {e}")
             raise
 
-    def _get_directory_client(self):
+    async def _get_directory_client(self):
         """Get the directory client for OneLake
 
         Returns:
@@ -151,7 +153,9 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            return self._get_file_system_client().get_directory_client(
+            file_system_client = await self._get_file_system_client()
+
+            return file_system_client.get_directory_client(
                 self.configuration["data_path"]
             )
         except Exception as e:
@@ -169,7 +173,9 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            return self._get_directory_client().get_file_client(file_name)
+            directory_client = await self._get_directory_client()
+
+            return directory_client.get_file_client(file_name)
         except Exception as e:
             self._logger.error(f"Error while getting file client: {e}")
             raise
@@ -185,14 +191,14 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            paths = self._get_file_system_client().get_paths(path=directory_path)
+            file_system_client = await self._get_file_system_client()
 
-            return paths
+            return file_system_client.get_paths(path=directory_path)
         except Exception as e:
             self._logger.error(f"Error while getting directory paths: {e}")
             raise
 
-    async def format_file(self, file_client):
+    def format_file(self, file_client):
         """Format file_client to be processed
 
         Args:
@@ -310,6 +316,6 @@ class OneLakeDataSource(BaseDataSource):
         )
 
         async for file in self.prepare_files(directory_paths):
-            file_dict = await file
+            file_dict = file
 
             yield file_dict, partial(self.get_content, file_dict["name"])
