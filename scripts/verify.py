@@ -32,15 +32,18 @@ async def verify(service_type, index_name, size, config):
         resp = await client.count(index=index_name)
         count = resp["count"]
 
-        print(f"Found {count} documents")
-        if count < size:
-            raise Exception(f"We want {size} docs")
+        if count == 0:
+            raise Exception("Nothing found in the content index")
 
         # checking one doc
         res = await client.search(index=index_name, query={"match_all": {}})
         first_doc = res["hits"]["hits"][0]["_source"]
         print("First doc")
         print(first_doc)
+
+        print(f"Found {count} documents")
+        if count < size:
+            raise Exception(f"We want {size} docs")
 
         if len(first_doc.keys()) < 3:
             raise Exception("The doc does not look right")
