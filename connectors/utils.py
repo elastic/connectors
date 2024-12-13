@@ -986,6 +986,7 @@ def sanitize(doc):
 
     return doc
 
+
 class Counters:
     """
     A utility to provide code readability to managing a collection of counts

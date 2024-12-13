@@ -485,14 +485,18 @@ class Extractor:
         await self.queue.put(doc)
 
     async def run(self, generator, job_type):
-        sanitized_generator = ((sanitize(doc), *other) async for doc, *other in generator)
+        sanitized_generator = (
+            (sanitize(doc), *other) async for doc, *other in generator
+        )
         try:
             match job_type:
                 case JobType.FULL:
                     await self.get_docs(sanitized_generator)
                 case JobType.INCREMENTAL:
                     if self.skip_unchanged_documents:
-                        await self.get_docs(sanitized_generator, skip_unchanged_documents=True)
+                        await self.get_docs(
+                            sanitized_generator, skip_unchanged_documents=True
+                        )
                     else:
                         await self.get_docs_incrementally(sanitized_generator)
                 case JobType.ACCESS_CONTROL:
