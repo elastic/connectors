@@ -51,6 +51,11 @@ def generate_folder():
         )
 
 
+
+
+
+
+
 def generate_files():
     """Method for generating files on Network Drive server"""
     try:

@@ -973,6 +973,12 @@ class SyncOrchestrator:
         - content_extraction_enabled: if enabled, will download content -- default: `True`
         - options: dict of options (from `elasticsearch.bulk` in the config file)
         """
+
+        index_def = await self.es_management_client.get_index_or_alias(index)
+        self._logger.warning("MAPPINGS FOR CONTENT INDEX");
+        self._logger.warning(index_def)
+
+
         if self._extractor_task is not None or self._sink_task is not None:
             msg = "Async bulk task has already started."
             raise AsyncBulkRunningError(msg)
