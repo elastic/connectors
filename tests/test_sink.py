@@ -361,8 +361,8 @@ async def test_async_bulk(mock_responses):
 def index_operation(doc):
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
-    doc_id = doc_copy.pop("_id")
-    doc_copy["id"] = str(doc_id)
+    doc_id = str(doc_copy.pop("_id"))
+    doc_copy["id"] = doc_id
 
     return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
@@ -370,14 +370,14 @@ def index_operation(doc):
 def update_operation(doc):
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
-    doc_id = doc_copy.pop("_id")
-    doc_copy["id"] = str(doc_id)
+    doc_id = str(doc_copy.pop("_id"))
+    doc_copy["id"] = doc_id
 
     return {"_op_type": "update", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
 def delete_operation(doc):
-    return {"_op_type": "delete", "_index": INDEX, "_id": doc["_id"]}
+    return {"_op_type": "delete", "_index": INDEX, "_id": str(doc["_id"])}
 
 
 def end_docs_operation():
@@ -730,7 +730,7 @@ async def test_get_docs(
     lazy_downloads = await lazy_downloads_mock()
 
     yield_existing_documents_metadata.return_value = AsyncIterator(
-        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+        [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
 
     with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
@@ -1020,7 +1020,7 @@ async def test_get_access_control_docs(
     expected_total_docs_deleted,
 ):
     yield_existing_documents_metadata.return_value = AsyncIterator(
-        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+        [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
 
     queue = await queue_mock()

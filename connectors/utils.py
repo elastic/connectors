@@ -978,6 +978,14 @@ def nested_get_from_dict(dictionary, keys, default=None):
     return nested_get(dictionary, keys, default)
 
 
+def sanitize(doc):
+    if doc["_id"]:
+        # guarantee that IDs are strings, and not numeric
+        doc["_id"] = str(doc["_id"])
+        doc["id"] = doc["_id"]
+
+    return doc
+
 class Counters:
     """
     A utility to provide code readability to managing a collection of counts
