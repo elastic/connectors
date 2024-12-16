@@ -53,6 +53,7 @@ from connectors.utils import (
     get_size,
     iso_utc,
     retryable,
+    sanitize,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -484,17 +485,22 @@ class Extractor:
         await self.queue.put(doc)
 
     async def run(self, generator, job_type):
+        sanitized_generator = (
+            (sanitize(doc), *other) async for doc, *other in generator
+        )
         try:
             match job_type:
                 case JobType.FULL:
-                    await self.get_docs(generator)
+                    await self.get_docs(sanitized_generator)
                 case JobType.INCREMENTAL:
                     if self.skip_unchanged_documents:
-                        await self.get_docs(generator, skip_unchanged_documents=True)
+                        await self.get_docs(
+                            sanitized_generator, skip_unchanged_documents=True
+                        )
                     else:
-                        await self.get_docs_incrementally(generator)
+                        await self.get_docs_incrementally(sanitized_generator)
                 case JobType.ACCESS_CONTROL:
-                    await self.get_access_control_docs(generator)
+                    await self.get_access_control_docs(sanitized_generator)
                 case _:
                     raise UnsupportedJobType
         except asyncio.CancelledError:
@@ -546,7 +552,7 @@ class Extractor:
                     self._log_progress()
 
                 doc_id = doc.pop("_id")
-                doc["id"] = str(doc_id)
+                doc["id"] = doc_id
 
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
@@ -662,7 +668,7 @@ class Extractor:
                     self._log_progress()
 
                 doc_id = doc.pop("_id")
-                doc["id"] = str(doc_id)
+                doc["id"] = doc_id
 
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
@@ -719,13 +725,7 @@ class Extractor:
         self._logger.info("Starting access control doc lookups")
         generator = self._decorate_with_metrics_span(generator)
 
-        existing_ids = {
-            doc_id: last_update_timestamp
-            async for (
-                doc_id,
-                last_update_timestamp,
-            ) in self.client.yield_existing_documents_metadata(self.index)
-        }
+        existing_ids = await self._load_existing_docs()
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
@@ -740,7 +740,7 @@ class Extractor:
                 self._log_progress()
 
             doc_id = doc.pop("_id")
-            doc["id"] = str(doc_id)
+            doc["id"] = doc_id
             doc_exists = doc_id in existing_ids
 
             if doc_exists:
