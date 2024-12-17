@@ -180,7 +180,7 @@ This is our main communication index, used to communicate the connector's config
   "_meta" : {
     "pipeline" : {
       "default_extract_binary_content" : true,
-      "default_name" : "ent-search-generic-ingestion",
+      "default_name" : "search-default-ingestion",
       "default_reduce_whitespace" : true,
       "default_run_ml_inference" : true
     },
