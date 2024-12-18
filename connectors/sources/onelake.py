@@ -267,7 +267,6 @@ class OneLakeDataSource(BaseDataSource):
 
         doc = {
             "_id": f"{file_client.file_system_name}_{file_properties.name}",  # id in format <file_system_name>_<file_name>
-            "_timestamp": file_properties.last_modified,
         }
 
         can_be_downloaded = self.can_file_be_downloaded(
