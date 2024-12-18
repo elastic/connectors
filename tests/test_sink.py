@@ -262,7 +262,7 @@ def set_responses(mock_responses, ts=None):
     )
 
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
+        "http://nowhere.com:9200/_bulk?pipeline=search-default-ingestion",
         payload={
             "took": 7,
             "errors": False,

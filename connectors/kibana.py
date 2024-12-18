@@ -53,7 +53,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
     connector_index = ConnectorIndex(config["elasticsearch"])
 
     await es.ensure_ingest_pipeline_exists(
-        "ent-search-generic-ingestion",
+        "search-default-ingestion",
         DEFAULT_PIPELINE["version"],
         DEFAULT_PIPELINE["description"],
         DEFAULT_PIPELINE["processors"],

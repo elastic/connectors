@@ -33,7 +33,7 @@ def test_main_exits_on_sigterm(mock_responses):
     mock_responses.head(f"{host}/.elastic-connectors", headers=headers)
     mock_responses.head(f"{host}/.elastic-connectors-sync-jobs", headers=headers)
     mock_responses.get(
-        f"{host}/_ingest/pipeline/ent-search-generic-ingestion", headers=headers
+        f"{host}/_ingest/pipeline/search-default-ingestion", headers=headers
     )
 
     async def kill():

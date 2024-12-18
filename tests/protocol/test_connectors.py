@@ -2300,7 +2300,7 @@ def test_has_validation_state(
 @pytest.mark.parametrize(
     "key, value, default_value",
     [
-        ("name", "foobar", "ent-search-generic-ingestion"),
+        ("name", "foobar", "search-default-ingestion"),
         ("extract_binary_content", False, True),
         ("reduce_whitespace", False, True),
         ("run_ml_inference", False, True),

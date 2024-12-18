@@ -555,7 +555,7 @@ class Filter(dict):
 
 
 PIPELINE_DEFAULT = {
-    "name": "ent-search-generic-ingestion",
+    "name": "search-default-ingestion",
     "extract_binary_content": True,
     "reduce_whitespace": True,
     "run_ml_inference": True,
