@@ -167,7 +167,7 @@ class Connector:
                 "custom_scheduling": {},
                 "pipeline": {
                     "extract_binary_content": True,
-                    "name": "ent-search-generic-ingestion",
+                    "name": "search-default-ingestion",
                     "reduce_whitespace": True,
                     "run_ml_inference": True,
                 },
