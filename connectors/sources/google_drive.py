@@ -4,15 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import asyncio
-import time
-import random
-import aiohttp
-import requests
 import base64
 import os
+import time
 from functools import cached_property, partial
-from openai import AsyncAzureOpenAI
+
+import requests
 from aiogoogle import HTTPError
+from openai import AsyncAzureOpenAI
 
 from connectors.access_control import (
     ACCESS_CONTROL,
@@ -33,14 +32,12 @@ from connectors.sources.google import (
     validate_service_account_json,
 )
 from connectors.utils import (
+    EMAIL_REGEX_PATTERN,
     ConcurrentTasks,
     RetryStrategy,
-    iso_utc,
-    retryable,
-    get_base64_value,
-    sleeps_for_retryable,
-    EMAIL_REGEX_PATTERN,
     iso_zulu,
+    retryable,
+    sleeps_for_retryable,
     validate_email_address,
 )
 
@@ -62,7 +59,13 @@ DRIVE_ITEMS_FIELDS_WITH_PERMISSIONS = f"{DRIVE_ITEMS_FIELDS},permissions"
 SLIDES_MIME_TYPE = "application/vnd.google-apps.presentation"
 SLIDES_FIELDS = "slides(objectId,slideProperties(isSkipped,notesPage(pageElements(shape(text(textElements)))))),title"
 
-AUDIO_VIDEO_MIME_TYPES = {"audio/mpeg","audio/wav","audio/x-wav","video/mp4","video/quicktime"}
+AUDIO_VIDEO_MIME_TYPES = {
+    "audio/mpeg",
+    "audio/wav",
+    "audio/x-wav",
+    "video/mp4",
+    "video/quicktime",
+}
 
 MB_TO_BYTES = 1024 * 1024
 
@@ -76,6 +79,7 @@ GOOGLE_MIME_TYPES_MAPPING = {
     "application/vnd.google-apps.presentation": "text/plain",
     "application/vnd.google-apps.spreadsheet": "text/csv",
 }
+
 
 class GoogleSlidesExtractor(GoogleServiceAccountClient):
     """Handles API interactions and content extraction for Google Slides."""
@@ -122,30 +126,36 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
         )
 
     @retryable(
-        retries=RETRIES, interval=RETRY_INTERVAL, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _get_presentation(self, presentation_id, fields):
-       """
+        """
         Retrieves the presentation metadata from Google Slides API
 
         Args:
            presentation_id (str): The presentation ID.
            fields (str): Fields to fetch.
-        
+
         Returns:
             dict: Presentation metadata
-       """
-       return await self.api_call(
-                resource="presentations",
-                method="get",
-                presentationId=presentation_id,
-                fields=fields,
+        """
+        return await self.api_call(
+            resource="presentations",
+            method="get",
+            presentationId=presentation_id,
+            fields=fields,
         )
 
     @retryable(
-        retries=RETRIES, interval=RETRY_INTERVAL, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _get_thumbnail_url(self, presentation_id, page_id, mime_type="PNG", thumbnail_size="MEDIUM"):
+    async def _get_thumbnail_url(
+        self, presentation_id, page_id, mime_type="PNG", thumbnail_size="MEDIUM"
+    ):
         """Retrieves the URL of a slide's thumbnail from the Google Slides API.
 
         Args:
@@ -160,26 +170,36 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
             Exception: If the API response does not contain a contentUrl.
         """
 
-        self.logger.info(f"[Presentation ID: {presentation_id}] Fetching thumbnail URL for slide {page_id}")
+        self.logger.info(
+            f"[Presentation ID: {presentation_id}] Fetching thumbnail URL for slide {page_id}"
+        )
         response = await self.api_call_custom(
-                api_service="slides",
-                url_path=f"/presentations/{presentation_id}/pages/{page_id}/thumbnail",
-                params={
-                    "thumbnailProperties.mimeType": "PNG",
-                    "thumbnailProperties.thumbnailSize": "MEDIUM",
-                },
-            )
-        self.logger.debug(f"[Presentation ID: {presentation_id}] Google Slides API response: {response}")
+            api_service="slides",
+            url_path=f"/presentations/{presentation_id}/pages/{page_id}/thumbnail",
+            params={
+                "thumbnailProperties.mimeType": "PNG",
+                "thumbnailProperties.thumbnailSize": "MEDIUM",
+            },
+        )
+        self.logger.debug(
+            f"[Presentation ID: {presentation_id}] Google Slides API response: {response}"
+        )
         thumbnail_url = response.get("contentUrl")
         if not thumbnail_url:
-            self.logger.error(f"[Presentation ID: {presentation_id}] No contentUrl found in thumbnail API response: {response}")
-            raise Exception("No thumbnail URL found.")
-        self.logger.info(f"[Presentation ID: {presentation_id}] Retrieved thumbnail URL: {thumbnail_url}")
+            self.logger.error(
+                f"[Presentation ID: {presentation_id}] No contentUrl found in thumbnail API response: {response}"
+            )
+            msg = "No thumbnail URL found."
+            raise Exception(msg)
+        self.logger.info(
+            f"[Presentation ID: {presentation_id}] Retrieved thumbnail URL: {thumbnail_url}"
+        )
         return thumbnail_url
 
-    
     @retryable(
-        retries=RETRIES, interval=RETRY_INTERVAL, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def _get_thumbnail_data(self, presentation_id, thumbnail_url):
         """Downloads and encodes thumbnail data from a given URL.
@@ -195,17 +215,23 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
             requests.exceptions.HTTPError: If there's an HTTP error during the download.
             Exception: For any other errors during the download or encoding process.
         """
-        self.logger.info(f"[Presentation ID: {presentation_id}] Downloading thumbnail data from: {thumbnail_url}")
+        self.logger.info(
+            f"[Presentation ID: {presentation_id}] Downloading thumbnail data from: {thumbnail_url}"
+        )
         image_response = requests.get(thumbnail_url, timeout=DRIVE_API_TIMEOUT)
         image_response.raise_for_status()
 
-        self.logger.debug(f"[Presentation ID: {presentation_id}] Thumbnail download successful. Status code: {image_response.status_code}")
+        self.logger.debug(
+            f"[Presentation ID: {presentation_id}] Thumbnail download successful. Status code: {image_response.status_code}"
+        )
 
         image_data = image_response.content
         content_type = image_response.headers.get("content-type", "image/png")
         encoded_image = base64.b64encode(image_data).decode("utf-8")
         thumbnail_encoded_type = f"data:{content_type};base64,{encoded_image}"
-        self.logger.debug(f"[Presentation ID: {presentation_id}] Thumbnail encoded successfully.")
+        self.logger.debug(
+            f"[Presentation ID: {presentation_id}] Thumbnail encoded successfully."
+        )
         return thumbnail_encoded_type
 
     async def process_presentation(self, presentation_id, fields):
@@ -223,13 +249,16 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
             self.logger.info(f"[Presentation ID: {presentation_id}] Fetching metadata")
             presentation = await self._get_presentation(presentation_id, fields)
             slides = presentation.get("slides", [])
-            self.logger.info(f"[Presentation ID: {presentation_id}] Processing {len(slides)} slides")
+            self.logger.info(
+                f"[Presentation ID: {presentation_id}] Processing {len(slides)} slides"
+            )
             body = await self._process_slides(presentation_id, slides)
             return {"title": presentation.get("title", "Untitled"), "body": body}
         except Exception as e:
-            self.logger.error(f"[Presentation ID: {presentation_id}] Failed to process: {e}")
+            self.logger.error(
+                f"[Presentation ID: {presentation_id}] Failed to process: {e}"
+            )
             raise
-
 
     async def _process_slides(self, presentation_id, slides):
         """
@@ -249,7 +278,9 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
 
             # Skip slides marked as skipped
             if slide.get("slideProperties", {}).get("isSkipped", False):
-                self.logger.info(f"[Presentation ID: {presentation_id}] Skipping slide {slide_number} (marked as skipped).")
+                self.logger.info(
+                    f"[Presentation ID: {presentation_id}] Skipping slide {slide_number} (marked as skipped)."
+                )
                 combined_content.append(f"### Slide {slide_number}\n\nSkipped.")
                 continue
 
@@ -264,44 +295,68 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
                         shape = element.get("shape", {})
                         if "text" in shape:
                             for text_element in shape.get("textElements", []):
-                                if isinstance(text_element, dict) and "textRun" in text_element:
-                                    note_content = text_element["textRun"].get("content", "").strip()
+                                if (
+                                    isinstance(text_element, dict)
+                                    and "textRun" in text_element
+                                ):
+                                    note_content = (
+                                        text_element["textRun"]
+                                        .get("content", "")
+                                        .strip()
+                                    )
                                     if note_content:
                                         speaker_notes.append(note_content)
             except Exception as e:
-                self.logger.error(f"[Presentation ID: {presentation_id}] Error extracting speaker notes for slide {slide_number}: {e}")
+                self.logger.error(
+                    f"[Presentation ID: {presentation_id}] Error extracting speaker notes for slide {slide_number}: {e}"
+                )
 
             speaker_notes = "\n".join(speaker_notes)
 
             # Get thumbnail
-            thumbnail = None
             try:
                 # Get thumbnail URL
                 page_id = slide.get("objectId")
                 thumbnail_url = await self._get_thumbnail_url(
-                        presentation_id=presentation_id,
-                        page_id=page_id,
-                        mime_type="PNG",
-                        thumbnail_size="MEDIUM"
-                    )
-                
+                    presentation_id=presentation_id,
+                    page_id=page_id,
+                    mime_type="PNG",
+                    thumbnail_size="MEDIUM",
+                )
+
                 # Download and encode thumbnail as base64
-                thumbnail_encoded_type = await self._get_thumbnail_data(presentation_id, thumbnail_url)
+                thumbnail_encoded_type = await self._get_thumbnail_data(
+                    presentation_id, thumbnail_url
+                )
 
             except requests.exceptions.HTTPError as e:
-                 self.logger.warning(f"[Presentation ID: {presentation_id}] Error downloading thumbnail for slide {page_id}: {e}")
+                self.logger.warning(
+                    f"[Presentation ID: {presentation_id}] Error downloading thumbnail for slide {page_id}: {e}"
+                )
             except Exception as e:
-                 self.logger.warning(f"[Presentation ID: {presentation_id}] Error fetching or downloading thumbnail for slide {page_id}: {e}")
-            
+                self.logger.warning(
+                    f"[Presentation ID: {presentation_id}] Error fetching or downloading thumbnail for slide {page_id}: {e}"
+                )
+
             if not thumbnail_encoded_type:
-                self.logger.error(f"[Presentation ID: {presentation_id}] Failed to retrieve thumbnail for slide {page_id}.")
+                self.logger.error(
+                    f"[Presentation ID: {presentation_id}] Failed to retrieve thumbnail for slide {page_id}."
+                )
 
             # Process slide content
             content = None
             try:
                 messages = [
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": [{"type": "image_url", "image_url": {"url": thumbnail_encoded_type}}]},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": thumbnail_encoded_type},
+                            }
+                        ],
+                    },
                 ]
                 response = await self.azure_llm_client.chat.completions.create(
                     model="gpt-4o-mini",
@@ -309,11 +364,15 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
                     max_tokens=1500,
                     temperature=1,
                 )
-                content = response.choices[0].message.content if response.choices else ""
+                content = (
+                    response.choices[0].message.content if response.choices else ""
+                )
                 if speaker_notes:
                     content += f"\n\n**Speaker Notes:**\n\n{speaker_notes}"
             except Exception as e:
-                self.logger.error(f"[Presentation ID: {presentation_id}] Error processing content for slide {slide_number}: {e}")
+                self.logger.error(
+                    f"[Presentation ID: {presentation_id}] Error processing content for slide {slide_number}: {e}"
+                )
                 content = f"Error processing slide content: {e}"
 
             # Add slide content to combined output
@@ -322,10 +381,20 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
         # Combine all slide contents into a single string
         return "\n\n---\n\n".join(combined_content)
 
+
 class AzureOpenAIWhisperClient(GoogleServiceAccountClient):
     """Handles transcription using Azure OpenAI Whisper."""
 
-    def __init__(self, json_credentials, azure_openai_whisper_client, logger, rate_limit=3, interval=60, subject=None, max_concurrency=1):
+    def __init__(
+        self,
+        json_credentials,
+        azure_openai_whisper_client,
+        logger,
+        rate_limit=3,
+        interval=60,
+        subject=None,
+        max_concurrency=1,
+    ):
         """
         Initialize the transcription client.
 
@@ -354,7 +423,7 @@ class AzureOpenAIWhisperClient(GoogleServiceAccountClient):
             api_version="v3",
             scopes=[
                 "https://www.googleapis.com/auth/drive.readonly",
-                "https://www.googleapis.com/auth/drive.file"
+                "https://www.googleapis.com/auth/drive.file",
             ],
             api_timeout=DRIVE_API_TIMEOUT,
         )
@@ -373,7 +442,6 @@ class AzureOpenAIWhisperClient(GoogleServiceAccountClient):
         self.BASE_DELAY = RETRY_INTERVAL
         # self.semaphore = asyncio.Semaphore(max_concurrency)
 
-
     async def _check_rate_limit(self):
         """Enforces the transcription rate limit."""
         current_time = time.time()
@@ -389,7 +457,9 @@ class AzureOpenAIWhisperClient(GoogleServiceAccountClient):
             self.last_reset_time = time.time()
 
     @retryable(
-        retries=RETRIES, interval=RETRY_INTERVAL, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
     async def transcribe(self, temp_file, file):
         """
@@ -403,38 +473,42 @@ class AzureOpenAIWhisperClient(GoogleServiceAccountClient):
             dict: Transcribed text or error information.
         """
 
-        
         try:
             self.logger.info(f"Transcription: Starting file: {file['name']}")
 
             # Rename temp file to original file extension because without it Azure OpenAI Whisper will not accept the file
             try:
-                new_temp_file = temp_file + os.path.splitext(file['name'])[1]
+                new_temp_file = temp_file + os.path.splitext(file["name"])[1]
                 os.rename(temp_file, new_temp_file)
-                self.logger.debug(f"Transcription: Renamed temp file to: {new_temp_file}")
+                self.logger.debug(
+                    f"Transcription: Renamed temp file to: {new_temp_file}"
+                )
                 temp_file = new_temp_file
             except Exception as e:
                 self.logger.error(f"Transcription: Error renaming temp file: {e}")
 
             # async with self.semaphore:
             with open(temp_file, "rb") as audio_file:
-
-                response = await self.azure_openai_whisper_client.audio.transcriptions.create(
-                    file=audio_file,
-                    model="whisper",
+                response = (
+                    await self.azure_openai_whisper_client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper",
+                    )
                 )
-                
+
                 self.transcriptions_done += 1
-                
+
                 # Handle response based on Azure OpenAI's format
-                transcribed_text = response.text if hasattr(response, 'text') else str(response)
-                    
+                transcribed_text = (
+                    response.text if hasattr(response, "text") else str(response)
+                )
 
         except Exception as e:
             self.logger.error(f"Transcription failed for file {file['name']}: {e}")
             transcribed_text = f"Error: {e}"
-        
-        return transcribed_text 
+
+        return transcribed_text
+
 
 class SyncCursorEmpty(Exception):
     """Exception class to notify that incremental sync can't run because sync_cursor is empty."""
@@ -631,6 +705,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             pageSize=100,
         ):
             yield permission
+
 
 class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
     """A google admin directory client to handle api calls made to Google Admin API."""
@@ -841,29 +916,35 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 9,
                 "tooltip": "Enable GPT-4o model to extract markdown from Google Slides presentations",
                 "type": "bool",
-                "value": False
+                "value": False,
             },
             "azure_openai_gpt4o_api_key": {
-                "depends_on": [{"field": "enable_slide_content_extraction", "value": True}],
+                "depends_on": [
+                    {"field": "enable_slide_content_extraction", "value": True}
+                ],
                 "display": "text",
                 "label": "Azure OpenAI GPT-4o API Key",
                 "order": 10,
                 "type": "str",
-                "sensitive": True
+                "sensitive": True,
             },
             "azure_openai_gpt4o_version": {
-                "depends_on": [{"field": "enable_slide_content_extraction", "value": True}],
+                "depends_on": [
+                    {"field": "enable_slide_content_extraction", "value": True}
+                ],
                 "display": "text",
                 "label": "Azure OpenAI GPT-4o Version",
                 "order": 11,
-                "type": "str"
+                "type": "str",
             },
             "azure_openai_gpt4o_endpoint": {
-                "depends_on": [{"field": "enable_slide_content_extraction", "value": True}],
-                "display": "text", 
+                "depends_on": [
+                    {"field": "enable_slide_content_extraction", "value": True}
+                ],
+                "display": "text",
                 "label": "Azure OpenAI GPT-4o Endpoint",
                 "order": 12,
-                "type": "str"
+                "type": "str",
             },
             "enable_audio_video_transcription": {
                 "display": "toggle",
@@ -871,10 +952,12 @@ class GoogleDriveDataSource(BaseDataSource):
                 "order": 13,
                 "tooltip": "Enable Azure Whisper API to transcribe audio and video files",
                 "type": "bool",
-                "value": False
+                "value": False,
             },
             "max_size_audio_video_transcription": {
-                "depends_on": [{"field": "enable_audio_video_transcription", "value": True}],
+                "depends_on": [
+                    {"field": "enable_audio_video_transcription", "value": True}
+                ],
                 "display": "numeric",
                 "label": "Max File Size for Audio/Video Transcription (MB)",
                 "order": 14,
@@ -883,26 +966,32 @@ class GoogleDriveDataSource(BaseDataSource):
                 "value": 25,
             },
             "azure_openai_whisper_api_key": {
-                "depends_on": [{"field": "enable_audio_video_transcription", "value": True}],
+                "depends_on": [
+                    {"field": "enable_audio_video_transcription", "value": True}
+                ],
                 "display": "text",
                 "label": "Azure OpenAI Whisper API Key",
                 "order": 15,
                 "type": "str",
-                "sensitive": True
+                "sensitive": True,
             },
             "azure_openai_whisper_version": {
-                "depends_on": [{"field": "enable_audio_video_transcription", "value": True}],
+                "depends_on": [
+                    {"field": "enable_audio_video_transcription", "value": True}
+                ],
                 "display": "text",
                 "label": "Azure OpenAI Whisper Version",
                 "order": 16,
-                "type": "str"
+                "type": "str",
             },
             "azure_openai_whisper_endpoint": {
-                "depends_on": [{"field": "enable_audio_video_transcription", "value": True}],
-                "display": "text", 
+                "depends_on": [
+                    {"field": "enable_audio_video_transcription", "value": True}
+                ],
+                "display": "text",
                 "label": "Azure OpenAI Whisper Endpoint",
                 "order": 17,
-                "type": "str"
+                "type": "str",
             },
         }
 
@@ -937,12 +1026,11 @@ class GoogleDriveDataSource(BaseDataSource):
 
         # Create the LLM client if not created
         if not self.azure_llm_client:
-             self.azure_llm_client = AsyncAzureOpenAI(
-                    api_key=self.configuration["azure_openai_gpt4o_api_key"],
-                    api_version=self.configuration["azure_openai_gpt4o_version"],
-                    azure_endpoint=self.configuration["azure_openai_gpt4o_endpoint"]
+            self.azure_llm_client = AsyncAzureOpenAI(
+                api_key=self.configuration["azure_openai_gpt4o_api_key"],
+                api_version=self.configuration["azure_openai_gpt4o_version"],
+                azure_endpoint=self.configuration["azure_openai_gpt4o_endpoint"],
             )
-
 
         slides_client = GoogleSlidesExtractor(
             json_credentials=json_credentials,
@@ -954,7 +1042,7 @@ class GoogleDriveDataSource(BaseDataSource):
         slides_client.set_logger(self._logger)
 
         return slides_client
-    
+
     def azure_openai_whisper_transcribe(self, impersonate_email=None):
         """
         Initialize and return an instance of the AzureOpenAIWhisperClient.
@@ -986,12 +1074,11 @@ class GoogleDriveDataSource(BaseDataSource):
 
         # Create the Whisper client if not created
         if not self.azure_openai_whisper_client:
-             self.azure_openai_whisper_client = AsyncAzureOpenAI(
-                    api_key=self.configuration["azure_openai_whisper_api_key"],
-                    api_version=self.configuration["azure_openai_whisper_version"],
-                    azure_endpoint=self.configuration["azure_openai_whisper_endpoint"]
+            self.azure_openai_whisper_client = AsyncAzureOpenAI(
+                api_key=self.configuration["azure_openai_whisper_api_key"],
+                api_version=self.configuration["azure_openai_whisper_version"],
+                azure_endpoint=self.configuration["azure_openai_whisper_endpoint"],
             )
-
 
         whisper_client = AzureOpenAIWhisperClient(
             json_credentials=json_credentials,
@@ -1490,31 +1577,40 @@ class GoogleDriveDataSource(BaseDataSource):
         """
 
         if not doit:
-            self._logger.info(f"Skipping content extraction for file {file['name']} due to 'doit' flag being False.")
+            self._logger.info(
+                f"Skipping content extraction for file {file['name']} due to 'doit' flag being False."
+            )
             return
 
-        self._logger.info(f"Starting content extraction for file {file['name']} ({file['mime_type']})")
+        self._logger.info(
+            f"Starting content extraction for file {file['name']} ({file['mime_type']})"
+        )
         file_mime_type = file["mime_type"]
         file_size = int(file["size"])
 
         # Handle Google Slides with GPT-4o-mini model to extract markdown from google slides thumbnails
-        if (file_mime_type == SLIDES_MIME_TYPE and 
-            self.configuration.get("enable_slide_content_extraction")):
+        if file_mime_type == SLIDES_MIME_TYPE and self.configuration.get(
+            "enable_slide_content_extraction"
+        ):
             try:
-                self._logger.info(f"Extracting content from Google Slides: {file['name']} (ID: {file['id']})")
+                self._logger.info(
+                    f"Extracting content from Google Slides: {file['name']} (ID: {file['id']})"
+                )
                 google_slides_extractor = self.google_slides_extractor()
-
 
                 async def process_presentation_task(presentation_id, fields):
                     return await google_slides_extractor.process_presentation(
-                        presentation_id=presentation_id, 
-                        fields=fields
-                        )
-            
-                task = await GOOGLE_PRESENTATION_QUEUE.put(partial(process_presentation_task, file["id"], SLIDES_FIELDS))
+                        presentation_id=presentation_id, fields=fields
+                    )
+
+                task = await GOOGLE_PRESENTATION_QUEUE.put(
+                    partial(process_presentation_task, file["id"], SLIDES_FIELDS)
+                )
                 presentation = await task
 
-                self._logger.info(f"Successfully extracted content for file {file['name']} (ID: {file['id']})")
+                self._logger.info(
+                    f"Successfully extracted content for file {file['name']} (ID: {file['id']})"
+                )
 
                 return {
                     "_id": file["id"],
@@ -1524,31 +1620,38 @@ class GoogleDriveDataSource(BaseDataSource):
                 }
 
             except Exception as e:
-                self._logger.error(f"Error extracting slide content for file {file['name']} (ID: {file['id']}): {str(e)}")
+                self._logger.error(
+                    f"Error extracting slide content for file {file['name']} (ID: {file['id']}): {str(e)}"
+                )
                 # Fallback to standard Google Workspace content extraction
                 return await self.get_google_workspace_content(client, file, timestamp)
-        
+
         # Handle audio/video transcription with Azure OpenAI Whisper
-        if (file_mime_type in AUDIO_VIDEO_MIME_TYPES and
-            self.configuration.get("enable_audio_video_transcription")):
-            
-            
+        if file_mime_type in AUDIO_VIDEO_MIME_TYPES and self.configuration.get(
+            "enable_audio_video_transcription"
+        ):
             # Default to 25MB if not set
-            max_size_bytes = self.configuration.get("max_size_audio_video_transcription", 25) * MB_TO_BYTES 
-            
+            max_size_bytes = (
+                self.configuration.get("max_size_audio_video_transcription", 25)
+                * MB_TO_BYTES
+            )
+
             # Validate file size before proceeding
             if file_size > max_size_bytes:
-                self._logger.warning(f"File {file['name']} exceeds the configured size limit of {max_size_bytes / MB_TO_BYTES:.2f} MB.")
+                self._logger.warning(
+                    f"File {file['name']} exceeds the configured size limit of {max_size_bytes / MB_TO_BYTES:.2f} MB."
+                )
                 return {
                     "_id": file["id"],
                     "_timestamp": file["_timestamp"],
                     "error": f"File size {file_size / MB_TO_BYTES:.2f} MB exceeds the limit of {max_size_bytes / MB_TO_BYTES:.2f} MB.",
                 }
-            
+
             azure_openai_whisper_transcribe = self.azure_openai_whisper_transcribe()
             try:
-
-                async with self.create_temp_file(file.get("file_extension", ".tmp")) as async_buffer:
+                async with self.create_temp_file(
+                    file.get("file_extension", ".tmp")
+                ) as async_buffer:
                     for attempt in range(azure_openai_whisper_transcribe.MAX_RETRIES):
                         try:
                             await client.api_call(
@@ -1561,28 +1664,36 @@ class GoogleDriveDataSource(BaseDataSource):
 
                             break
                         except Exception as e:
-                            self._logger.warning(f"Error downloading file {file['name']}, attempt {attempt+1}: {e}")
-                            wait_time = azure_openai_whisper_transcribe.BASE_DELAY * (2 ** attempt)
+                            self._logger.warning(
+                                f"Error downloading file {file['name']}, attempt {attempt+1}: {e}"
+                            )
+                            wait_time = azure_openai_whisper_transcribe.BASE_DELAY * (
+                                2**attempt
+                            )
                             await sleeps_for_retryable.sleep(wait_time)
                     else:
-                            # if we reach here, all retries have failed
-                            raise Exception(f"Failed to download file {file['name']} after {azure_openai_whisper_transcribe.MAX_RETRIES} attempts.")
+                        # if we reach here, all retries have failed
+                        msg = f"Failed to download file {file['name']} after {azure_openai_whisper_transcribe.MAX_RETRIES} attempts."
+                        raise Exception(
+                            msg
+                        )
 
                     async def process_transcription_task(temp_file, file):
                         return await azure_openai_whisper_transcribe.transcribe(
-                            temp_file, 
-                            file
-                            )
-                
-                    transcribed_text = await azure_whisper_queue.put(partial(process_transcription_task, async_buffer.name, file))
+                            temp_file, file
+                        )
+
+                    transcribed_text = await azure_whisper_queue.put(
+                        partial(process_transcription_task, async_buffer.name, file)
+                    )
                     # transcribed_text = await task
-                
+
                     return {
                         "_id": file["id"],
                         "_timestamp": file["_timestamp"],
-                        "body": transcribed_text
+                        "body": transcribed_text,
                     }
-                
+
             except Exception as e:
                 self._logger.error(f"Error transcribing file {file['name']}: {e}")
                 return {
@@ -1591,18 +1702,19 @@ class GoogleDriveDataSource(BaseDataSource):
                     "error": f"Error transcribing file: {e}",
                 }
 
-
         # Handle other Google Workspace files
         elif file_mime_type in GOOGLE_MIME_TYPES_MAPPING:
-            self._logger.info(f"Extracting Google Workspace document content for file {file['name']} (ID: {file['id']})")
+            self._logger.info(
+                f"Extracting Google Workspace document content for file {file['name']} (ID: {file['id']})"
+            )
             return await self.get_google_workspace_content(client, file, timestamp)
 
         # Handle generic files
         else:
-            self._logger.info(f"Extracting generic file content for file {file['name']} (ID: {file['id']})")
+            self._logger.info(
+                f"Extracting generic file content for file {file['name']} (ID: {file['id']})"
+            )
             return await self.get_generic_file_content(client, file, timestamp)
-
-
 
     async def _get_permissions_on_shared_drive(self, client, file_id):
         """Retrieves the permissions on a shared drive for the given file ID.
