@@ -5,8 +5,10 @@
 #
 import json
 import os
+import urllib.parse
 from enum import Enum
 
+from aiogoogle.models import Request
 from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
@@ -191,6 +193,42 @@ class GoogleServiceAccountClient:
             )
 
         return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
+
+    async def api_call_custom(self, api_service, url_path, params=None, method="GET"):
+            """
+            Make a custom API call to any Google API endpoint by specifying only the service name, 
+            along with the path and parameters.
+
+            Args:
+                api_service (str): The Google service to use (e.g., "slides" or "drive").
+                url_path (str): The specific path for the API call (e.g., "/presentations/.../thumbnail").
+                params (dict): Optional dictionary of query parameters.
+                method (str): HTTP method for the request. Default is "GET".
+
+            Returns:
+                dict: The response from the Google API.
+
+            Raises:
+                HTTPError: If the API request fails.
+            """
+            # Construct the full URL with the specified Google service
+            base_url = f"https://{api_service}.googleapis.com/v1"
+            full_url = f"{base_url}{url_path}"
+            
+            if params:
+                full_url += f"?{urllib.parse.urlencode(params)}"
+            
+            # Define the request
+            request = Request(
+                method=method,
+                url=full_url
+            )
+            
+            # Perform the request
+            async with Aiogoogle(service_account_creds=self.service_account_credentials) as google_client:
+                response = await google_client.as_service_account(request)
+            
+            return response
 
     async def _execute_api_call(self, resource, method, call_api_func, kwargs):
         """Execute the API call with common try/except logic.
