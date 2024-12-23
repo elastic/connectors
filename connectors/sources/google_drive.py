@@ -159,29 +159,24 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
             requests.exceptions.HTTPError: If there's an HTTP error during the API call.
             Exception: If the API response does not contain a contentUrl.
         """
-        try:
-            self.logger.info(f"[Presentation ID: {presentation_id}] Fetching thumbnail URL for slide {page_id}")
-            response = await self.api_call_custom(
-                    api_service="slides",
-                    url_path=f"/presentations/{presentation_id}/pages/{page_id}/thumbnail",
-                    params={
-                        "thumbnailProperties.mimeType": "PNG",
-                        "thumbnailProperties.thumbnailSize": "MEDIUM",
-                    },
-                )
-            self.logger.debug(f"[Presentation ID: {presentation_id}] Google Slides API response: {response}")
-            thumbnail_url = response.get("contentUrl")
-            if not thumbnail_url:
-                self.logger.error(f"[Presentation ID: {presentation_id}] No contentUrl found in thumbnail API response: {response}")
-                raise Exception("No thumbnail URL found.")
-            self.logger.info(f"[Presentation ID: {presentation_id}] Retrieved thumbnail URL: {thumbnail_url}")
-            return thumbnail_url
-        except requests.exceptions.HTTPError as e:
-            self.logger.error(f"[Presentation ID: {presentation_id}] HTTP error fetching thumbnail: {e}, status code: {e.response.status_code}, response body: {e.response.text}")
-            raise
-        except Exception as e:
-            self.logger.exception(f"[Presentation ID: {presentation_id}] Error fetching thumbnail: {e}")
-            raise
+
+        self.logger.info(f"[Presentation ID: {presentation_id}] Fetching thumbnail URL for slide {page_id}")
+        response = await self.api_call_custom(
+                api_service="slides",
+                url_path=f"/presentations/{presentation_id}/pages/{page_id}/thumbnail",
+                params={
+                    "thumbnailProperties.mimeType": "PNG",
+                    "thumbnailProperties.thumbnailSize": "MEDIUM",
+                },
+            )
+        self.logger.debug(f"[Presentation ID: {presentation_id}] Google Slides API response: {response}")
+        thumbnail_url = response.get("contentUrl")
+        if not thumbnail_url:
+            self.logger.error(f"[Presentation ID: {presentation_id}] No contentUrl found in thumbnail API response: {response}")
+            raise Exception("No thumbnail URL found.")
+        self.logger.info(f"[Presentation ID: {presentation_id}] Retrieved thumbnail URL: {thumbnail_url}")
+        return thumbnail_url
+
     
     @retryable(
         retries=RETRIES, interval=RETRY_INTERVAL, strategy=RetryStrategy.EXPONENTIAL_BACKOFF
@@ -200,25 +195,18 @@ class GoogleSlidesExtractor(GoogleServiceAccountClient):
             requests.exceptions.HTTPError: If there's an HTTP error during the download.
             Exception: For any other errors during the download or encoding process.
         """
-        try:
-            self.logger.info(f"[Presentation ID: {presentation_id}] Downloading thumbnail data from: {thumbnail_url}")
-            image_response = requests.get(thumbnail_url, timeout=DRIVE_API_TIMEOUT)
-            image_response.raise_for_status()
+        self.logger.info(f"[Presentation ID: {presentation_id}] Downloading thumbnail data from: {thumbnail_url}")
+        image_response = requests.get(thumbnail_url, timeout=DRIVE_API_TIMEOUT)
+        image_response.raise_for_status()
 
-            self.logger.debug(f"[Presentation ID: {presentation_id}] Thumbnail download successful. Status code: {image_response.status_code}")
+        self.logger.debug(f"[Presentation ID: {presentation_id}] Thumbnail download successful. Status code: {image_response.status_code}")
 
-            image_data = image_response.content
-            content_type = image_response.headers.get("content-type", "image/png")
-            encoded_image = base64.b64encode(image_data).decode("utf-8")
-            thumbnail_encoded_type = f"data:{content_type};base64,{encoded_image}"
-            self.logger.debug(f"[Presentation ID: {presentation_id}] Thumbnail encoded successfully.")
-            return thumbnail_encoded_type
-        except requests.exceptions.HTTPError as e:
-            self.logger.error(f"[Presentation ID: {presentation_id}] HTTP error downloading thumbnail: {e}, status code: {e.response.status_code}, response body: {e.response.text}")
-            return None
-        except Exception as e:
-            self.logger.exception(f"[Presentation ID: {presentation_id}] Error downloading or encoding thumbnail: {e}")
-            return None
+        image_data = image_response.content
+        content_type = image_response.headers.get("content-type", "image/png")
+        encoded_image = base64.b64encode(image_data).decode("utf-8")
+        thumbnail_encoded_type = f"data:{content_type};base64,{encoded_image}"
+        self.logger.debug(f"[Presentation ID: {presentation_id}] Thumbnail encoded successfully.")
+        return thumbnail_encoded_type
 
     async def process_presentation(self, presentation_id, fields):
         """
