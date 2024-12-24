@@ -24,7 +24,7 @@ oracledb==2.3.0
 asyncpg==0.29.0
 python-tds==1.12.0
 sqlalchemy-pytds==0.3.5
-pyOpenSSL==24.2.1
+pyOpenSSL==24.3.0
 dropbox==11.36.2
 beautifulsoup4==4.12.2
 gidgethub==5.2.1
