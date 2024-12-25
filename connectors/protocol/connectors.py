@@ -820,11 +820,7 @@ class Connector(ESDocument):
         await self.index.update(doc_id=self.id, doc=doc)
 
     async def connected(self):
-        doc = {
-            "status": Status.CONNECTED.value,
-            "error": None
-
-        }
+        doc = {"status": Status.CONNECTED.value, "error": None}
         await self.index.update(doc_id=self.id, doc=doc)
 
     async def sync_done(self, job, cursor=None):

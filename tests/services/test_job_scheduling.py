@@ -403,7 +403,9 @@ async def test_run_when_connector_failed_validation_then_succeeded(
     data_source_mock.close = AsyncMock()
 
     connector = mock_connector(next_sync=datetime.now(timezone.utc))
-    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector], reusable=True)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator(
+        [connector], reusable=True
+    )
     await create_and_run_service(JobSchedulingService, stop_after=0.15)
 
     data_source_mock.validate_config_fields.assert_called()
