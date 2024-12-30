@@ -18,6 +18,7 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
+from azure.identity import CertificateCredential
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import (
@@ -193,7 +194,7 @@ class MicrosoftSecurityToken:
         - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app
     """
 
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id):
         """Initializer.
 
         Args:
@@ -207,7 +208,6 @@ class MicrosoftSecurityToken:
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
         self._client_id = client_id
-        self._client_secret = client_secret
 
         self._token_cache = CacheWithTimeout()
 
@@ -260,7 +260,16 @@ class MicrosoftSecurityToken:
         raise NotImplementedError
 
 
-class GraphAPIToken(MicrosoftSecurityToken):
+class SecretAPIToken(MicrosoftSecurityToken):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+        super().__init__(http_session, tenant_id, tenant_name, client_id)
+        self._client_secret = client_secret
+
+    async def _fetch_token(self):
+        return await super()._fetch_token()
+
+
+class GraphAPIToken(SecretAPIToken):
     """Token to connect to Microsoft Graph API endpoints."""
 
     @retryable(retries=3)
@@ -283,7 +292,7 @@ class GraphAPIToken(MicrosoftSecurityToken):
             return access_token, expires_in
 
 
-class SharepointRestAPIToken(MicrosoftSecurityToken):
+class SharepointRestAPIToken(SecretAPIToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
     @retryable(retries=DEFAULT_RETRY_COUNT)
@@ -310,6 +319,34 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
             expires_in = int(json_response["expires_in"])
 
             return access_token, expires_in
+
+
+class EntraAPIToken(MicrosoftSecurityToken):
+    """Token to connect to Microsoft Graph API endpoints."""
+
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, certificate, private_key, scope):
+        super().__init__(http_session, tenant_id, tenant_name, client_id)
+        self._certificate = certificate
+        self._private_key = private_key
+        self._scope = scope
+
+    @retryable(retries=3)
+    async def _fetch_token(self):
+        """Fetch API token for usage with Graph API
+
+        Returns:
+            (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
+        """
+
+        secrets_concat = self._certificate + "\n" + self._private_key
+
+        credentials = CertificateCredential(
+            self._tenant_id, self._client_id, certificate_data=secrets_concat.encode()
+        )
+
+        token = credentials.get_token(self._scope)
+
+        return token.token, token.expires_on
 
 
 def retryable_aiohttp_call(retries):
@@ -522,7 +559,7 @@ class MicrosoftAPISession:
 
 
 class SharepointOnlineClient:
-    def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+    def __init__(self, tenant_id, tenant_name, client_id, client_secret=None, certificate=None, private_key=None):
         # Sharepoint / Graph API has quite strict throttling policies
         # If connector is overzealous, it can be banned for not respecting throttling policies
         # However if connector has a low setting for the tcp_connector limit, then it'll just be slow.
@@ -544,12 +581,14 @@ class SharepointOnlineClient:
             "https://(.*).sharepoint.com"
         )  # Used later for url validation
 
-        self.graph_api_token = GraphAPIToken(
-            self._http_session, tenant_id, tenant_name, client_id, client_secret
-        )
-        self.rest_api_token = SharepointRestAPIToken(
-            self._http_session, tenant_id, tenant_name, client_id, client_secret
-        )
+        if client_secret and not certificate and not private_key:
+            self.graph_api_token = GraphAPIToken(self._http_session, tenant_id, tenant_name, client_id, client_secret)
+            self.rest_api_token = SharepointRestAPIToken(self._http_session, tenant_id, tenant_name, client_id, client_secret)
+        elif certificate and private_key:
+            self.graph_api_token = EntraAPIToken(self._http_session, tenant_id, tenant_name, client_id, certificate, private_key, "https://graph.microsoft.com/.default")
+            self.rest_api_token = EntraAPIToken(self._http_session, tenant_id, tenant_name, client_id, certificate, private_key, f"https://{self._tenant_name}.sharepoint.com/.default")
+        else:
+            raise Exception("Unexpected authentication: either a client_secret or certificate+private_key should be provided")
 
         self._logger = logger
 
@@ -1157,11 +1196,21 @@ class SharepointOnlineDataSource(BaseDataSource):
             tenant_id = self.configuration["tenant_id"]
             tenant_name = self.configuration["tenant_name"]
             client_id = self.configuration["client_id"]
+            auth_method = self.configuration["auth_method"]
             client_secret = self.configuration["secret_value"]
+            certificate = self.configuration["certificate"]
+            private_key = self.configuration["private_key"]
 
-            self._client = SharepointOnlineClient(
-                tenant_id, tenant_name, client_id, client_secret
-            )
+            if auth_method == "secret":
+                self._client = SharepointOnlineClient(
+                    tenant_id, tenant_name, client_id, client_secret=client_secret
+                )
+            elif auth_method == "certificate":
+                self._client = SharepointOnlineClient(
+                    tenant_id, tenant_name, client_id, client_secret, certificate=certificate, private_key=private_key
+                )
+            else:
+                raise Exception(f"Unexpected auth method: {auth_method}")
 
         return self._client
 
@@ -1183,17 +1232,43 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
+            "auth_method": {
+                "label": "Authentication Method",
+                "order": 4,
+                "type": "str",
+                "display": "dropdown",
+                "options": [
+                    {"label": "Client Secret", "value": "secret"},
+                    {"label": "Certificate", "value": "certificate"},
+                ],
+                "value": "certificate"
+            },
             "secret_value": {
                 "label": "Secret value",
-                "order": 4,
+                "order": 5,
                 "sensitive": True,
                 "type": "str",
+                "depends_on": [{"field": "auth_method", "value": "secret"}],
+            },
+            "certificate": {
+                "label": "Content of certificate file (.crt)",
+                "display": "textarea",
+                "order": 5,
+                "type": "str",
+                "depends_on": [{"field": "auth_method", "value": "certificate"}],
+            },
+            "private_key": {
+                "label": "Content of private key file (.key)",
+                "display": "textarea",
+                "order": 6,
+                "type": "str",
+                "depends_on": [{"field": "auth_method", "value": "certificate"}],
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of sites",
                 "tooltip": "A comma-separated list of sites to ingest data from. If enumerating all sites, use * to include all available sites, or specify a list of site names. Otherwise, specify a list of site paths.",
-                "order": 5,
+                "order": 7,
                 "type": "list",
                 "value": "*",
             },
@@ -1201,7 +1276,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enumerate all sites?",
                 "tooltip": "If enabled, sites will be fetched in bulk, then filtered down to the configured list of sites. This is efficient when syncing many sites. If disabled, each configured site will be fetched with an individual request. This is efficient when syncing fewer sites.",
-                "order": 6,
+                "order": 8,
                 "type": "bool",
                 "value": True,
             },
@@ -1209,7 +1284,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Fetch sub-sites of configured sites?",
                 "tooltip": "Whether subsites of the configured site(s) should be automatically fetched.",
-                "order": 7,
+                "order": 9,
                 "type": "bool",
                 "value": True,
                 "depends_on": [{"field": "enumerate_all_sites", "value": False}],
@@ -1217,7 +1292,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 8,
+                "order": 10,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1226,7 +1301,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 9,
+                "order": 11,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1235,7 +1310,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
-                "order": 10,
+                "order": 12,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
                 "value": True,
@@ -1244,7 +1319,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 11,
+                "order": 13,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1253,7 +1328,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list permissions",
-                "order": 12,
+                "order": 14,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1262,7 +1337,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
-                "order": 13,
+                "order": 15,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
