@@ -324,7 +324,16 @@ class SharepointRestAPIToken(SecretAPIToken):
 class EntraAPIToken(MicrosoftSecurityToken):
     """Token to connect to Microsoft Graph API endpoints."""
 
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, certificate, private_key, scope):
+    def __init__(
+        self,
+        http_session,
+        tenant_id,
+        tenant_name,
+        client_id,
+        certificate,
+        private_key,
+        scope,
+    ):
         super().__init__(http_session, tenant_id, tenant_name, client_id)
         self._certificate = certificate
         self._private_key = private_key
@@ -559,7 +568,15 @@ class MicrosoftAPISession:
 
 
 class SharepointOnlineClient:
-    def __init__(self, tenant_id, tenant_name, client_id, client_secret=None, certificate=None, private_key=None):
+    def __init__(
+        self,
+        tenant_id,
+        tenant_name,
+        client_id,
+        client_secret=None,
+        certificate=None,
+        private_key=None,
+    ):
         # Sharepoint / Graph API has quite strict throttling policies
         # If connector is overzealous, it can be banned for not respecting throttling policies
         # However if connector has a low setting for the tcp_connector limit, then it'll just be slow.
@@ -582,13 +599,34 @@ class SharepointOnlineClient:
         )  # Used later for url validation
 
         if client_secret and not certificate and not private_key:
-            self.graph_api_token = GraphAPIToken(self._http_session, tenant_id, tenant_name, client_id, client_secret)
-            self.rest_api_token = SharepointRestAPIToken(self._http_session, tenant_id, tenant_name, client_id, client_secret)
+            self.graph_api_token = GraphAPIToken(
+                self._http_session, tenant_id, tenant_name, client_id, client_secret
+            )
+            self.rest_api_token = SharepointRestAPIToken(
+                self._http_session, tenant_id, tenant_name, client_id, client_secret
+            )
         elif certificate and private_key:
-            self.graph_api_token = EntraAPIToken(self._http_session, tenant_id, tenant_name, client_id, certificate, private_key, "https://graph.microsoft.com/.default")
-            self.rest_api_token = EntraAPIToken(self._http_session, tenant_id, tenant_name, client_id, certificate, private_key, f"https://{self._tenant_name}.sharepoint.com/.default")
+            self.graph_api_token = EntraAPIToken(
+                self._http_session,
+                tenant_id,
+                tenant_name,
+                client_id,
+                certificate,
+                private_key,
+                "https://graph.microsoft.com/.default",
+            )
+            self.rest_api_token = EntraAPIToken(
+                self._http_session,
+                tenant_id,
+                tenant_name,
+                client_id,
+                certificate,
+                private_key,
+                f"https://{self._tenant_name}.sharepoint.com/.default",
+            )
         else:
-            raise Exception("Unexpected authentication: either a client_secret or certificate+private_key should be provided")
+            msg = "Unexpected authentication: either a client_secret or certificate+private_key should be provided"
+            raise Exception(msg)
 
         self._logger = logger
 
@@ -1207,10 +1245,16 @@ class SharepointOnlineDataSource(BaseDataSource):
                 )
             elif auth_method == "certificate":
                 self._client = SharepointOnlineClient(
-                    tenant_id, tenant_name, client_id, client_secret, certificate=certificate, private_key=private_key
+                    tenant_id,
+                    tenant_name,
+                    client_id,
+                    client_secret,
+                    certificate=certificate,
+                    private_key=private_key,
                 )
             else:
-                raise Exception(f"Unexpected auth method: {auth_method}")
+                msg = f"Unexpected auth method: {auth_method}"
+                raise Exception(msg)
 
         return self._client
 
@@ -1241,7 +1285,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     {"label": "Client Secret", "value": "secret"},
                     {"label": "Certificate", "value": "certificate"},
                 ],
-                "value": "certificate"
+                "value": "certificate",
             },
             "secret_value": {
                 "label": "Secret value",
@@ -1251,15 +1295,17 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "auth_method", "value": "secret"}],
             },
             "certificate": {
-                "label": "Content of certificate file (.crt)",
+                "label": "Content of certificate file",
                 "display": "textarea",
+                "sensitive": True,
                 "order": 5,
                 "type": "str",
                 "depends_on": [{"field": "auth_method", "value": "certificate"}],
             },
             "private_key": {
-                "label": "Content of private key file (.key)",
+                "label": "Content of private key file",
                 "display": "textarea",
+                "sensitive": True,
                 "order": 6,
                 "type": "str",
                 "depends_on": [{"field": "auth_method", "value": "certificate"}],

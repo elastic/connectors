@@ -229,7 +229,11 @@ BATCH_THROTTLED_RESPONSE = {
 
 @asynccontextmanager
 async def create_spo_source(
+    tenant_id="1",
     tenant_name="test",
+    client_id="2",
+    secret_value="3",
+    auth_method="secret",
     site_collections=WILDCARD,
     use_document_level_security=False,
     use_text_extraction_service=False,
@@ -239,9 +243,10 @@ async def create_spo_source(
 ):
     async with create_source(
         SharepointOnlineDataSource,
-        tenant_id="1",
-        client_id="2",
-        secret_value="3",
+        auth_method=auth_method,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        secret_value=secret_value,
         tenant_name=tenant_name,
         site_collections=site_collections,
         use_document_level_security=use_document_level_security,
@@ -281,7 +286,7 @@ def access_control_is_equal(actual, expected):
 class TestMicrosoftSecurityToken:
     class StubMicrosoftSecurityToken(MicrosoftSecurityToken):
         def __init__(self, bearer, expires_in):
-            super().__init__(None, None, None, None, None)
+            super().__init__(None, None, None, None)
             self.bearer = bearer
             self.expires_in = expires_in
 
@@ -290,7 +295,7 @@ class TestMicrosoftSecurityToken:
 
     class StubMicrosoftSecurityTokenWrongConfig(MicrosoftSecurityToken):
         def __init__(self, error_code, message=None):
-            super().__init__(None, None, None, None, None)
+            super().__init__(None, None, None, None)
             self.error_code = error_code
             self.message = message
 
@@ -304,7 +309,7 @@ class TestMicrosoftSecurityToken:
     @pytest.mark.asyncio
     async def test_fetch_token_raises_not_implemented_error(self):
         with pytest.raises(NotImplementedError) as e:
-            mst = MicrosoftSecurityToken(None, None, None, None, None)
+            mst = MicrosoftSecurityToken(None, None, None, None)
 
             await mst._fetch_token()
 
@@ -2924,8 +2929,16 @@ class TestSharepointOnlineDataSource:
         assert config is not None
 
     @pytest.mark.asyncio
-    async def test_validate_config_empty_config(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
+    async def test_validate_config_empty_config_with_secret_auth(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(
+            tenant_id="",
+            tenant_name="",
+            client_id="",
+            secret_value="",
+            auth_method="secret",
+        ) as source:
             with pytest.raises(ConfigurableFieldValueError) as e:
                 await source.validate_config()
 
@@ -2933,6 +2946,22 @@ class TestSharepointOnlineDataSource:
             assert e.match("Tenant name")
             assert e.match("Client ID")
             assert e.match("Secret value")
+
+    @pytest.mark.asyncio
+    async def test_validate_config_empty_config_with_cert_auth(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(
+            tenant_id="", tenant_name="", client_id="", auth_method="certificate"
+        ) as source:
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+
+            assert e.match("Tenant ID")
+            assert e.match("Tenant name")
+            assert e.match("Client ID")
+            assert e.match("Content of certificate file")
+            assert e.match("Content of private key file")
 
     @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
