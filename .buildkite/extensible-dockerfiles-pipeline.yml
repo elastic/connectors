@@ -1,0 +1,208 @@
+steps:
+  - group: ":truck: Building, Testing and Scanning extensible Dockerfile and Dockerfile.ftest"
+    key: "build_test_scan_group"
+    if: "(build.branch == \"main\")"
+    steps:
+      # ----
+      # Dockerfile build and tests on amd64
+      # ----
+      - label: "Building amd64 Docker image from extensible Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_extensible_dockerfile_image_amd64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing amd64 image built from extensible Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile"
+        depends_on: "build_extensible_dockerfile_image_amd64"
+        key: "test_extensible_dockerfile_image_amd64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_image_amd64
+          - ".buildkite/publish/test-docker.sh"
+
+      # ----
+      # Dockerfile.ftest build and tests on amd64
+      # ----
+      - label: "Building amd64 Docker image from extensible Dockerfile.ftest"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile.ftest"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile-ftest"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile-ftest"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_extensible_dockerfile_ftest_image_amd64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing amd64 image built from Dockerfile.ftest"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile.ftest"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile-ftest"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile-ftest"
+        depends_on: "build_extensible_dockerfile_ftest_image_amd64"
+        key: "test_extensible_dockerfile_ftest_image_amd64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_ftest_image_amd64
+          - ".buildkite/publish/test-docker.sh"
+
+      # ----
+      # Dockerfile build and tests on arm64
+      # ----
+      - label: "Building arm64 Docker image from extensible Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_extensible_dockerfile_image_arm64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing arm64 image built from extensible Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile"
+        depends_on: "build_extensible_dockerfile_image_arm64"
+        key: "test_extensible_dockerfile_image_arm64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_image_arm64
+          - ".buildkite/publish/test-docker.sh"
+
+      # ----
+      # Dockerfile.ftest build and tests on arm64
+      # ----
+      - label: "Building arm64 Docker image from extensible Dockerfile.ftest"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile.ftest"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile-ftest"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile-ftest"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_extensible_dockerfile_ftest_image_arm64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing arm64 image built from Dockerfile.ftest"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile.ftest"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-extensible-dockerfile-ftest"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-extensible-dockerfile-ftest"
+        depends_on: "build_extensible_dockerfile_ftest_image_arm64"
+        key: "test_extensible_dockerfile_ftest_image_arm64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_ftest_image_arm64
+          - ".buildkite/publish/test-docker.sh"
+
+      # ----
+      # Vulnerability scanning on amd64 extensible Dockerfile and Dockerfile.ftest built images
+      # ----
+      - label: "Trivy Scan amd64 extensible Dockerfile Artifacts"
+        timeout_in_minutes: 10
+        depends_on:
+          - test_extensible_dockerfile_image_amd64
+        key: "trivy-scan-amd64-extensible-dockerfile-image"
+        agents:
+          provider: k8s
+          image: "docker.elastic.co/ci-agent-images/trivy:latest"
+        command: |-
+          mkdir -p .artifacts
+          buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_image_amd64
+          trivy --version
+          env | grep TRIVY
+          find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
+      - label: "Trivy Scan amd64 Dockerfile.ftest Artifacts"
+        timeout_in_minutes: 10
+        depends_on:
+          - test_extensible_dockerfile_ftest_image_amd64
+        key: "trivy-scan-amd64-extensible-dockerfile-ftest-image"
+        agents:
+          provider: k8s
+          image: "docker.elastic.co/ci-agent-images/trivy:latest"
+        command: |-
+          mkdir -p release
+          buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_ftest_image_amd64
+          trivy --version
+          env | grep TRIVY
+          find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
+
+      # ----
+      # Vulnerability scanning on arm64 extensible Dockerfile and Dockerfile.ftest built images
+      # ----
+      - label: "Trivy Scan arm64 extensible Dockerfile Artifacts"
+        timeout_in_minutes: 10
+        depends_on:
+          - test_extensible_dockerfile_image_arm64
+        key: "trivy-scan-arm64-extensible-dockerfile-image"
+        agents:
+          provider: k8s
+          image: "docker.elastic.co/ci-agent-images/trivy:latest"
+        command: |-
+          mkdir -p .artifacts
+          buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_image_arm64
+          trivy --version
+          env | grep TRIVY
+          find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
+      - label: "Trivy Scan arm64 Dockerfile.ftest Artifacts"
+        timeout_in_minutes: 10
+        depends_on:
+          - test_extensible_dockerfile_ftest_image_arm64
+        key: "trivy-scan-arm64-extensible-dockerfile-ftest-image"
+        agents:
+          provider: k8s
+          image: "docker.elastic.co/ci-agent-images/trivy:latest"
+        command: |-
+          mkdir -p release
+          buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_extensible_dockerfile_ftest_image_arm64
+          trivy --version
+          env | grep TRIVY
+          find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;

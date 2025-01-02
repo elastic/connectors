@@ -1,7 +1,12 @@
-FROM python:3.11-slim-bookworm
-# RUN apt update && apt install make
-RUN apt -y update && apt -y upgrade && apt -y install make git
-COPY . /app
+FROM cgr.dev/chainguard/wolfi-base
+ARG python_version=3.11
+
+USER root
+RUN apk add --no-cache python3=~${python_version} make git
+
+COPY --chown=nonroot:nonroot . /app
+
+USER nonroot
 WORKDIR /app
 RUN make clean install
 RUN .venv/bin/pip install -r requirements/ftest.txt

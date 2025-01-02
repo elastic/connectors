@@ -177,6 +177,39 @@ spec:
         search-extract-and-transform: {}
         search-productivity-team: {}
 
+# Nightly build and scan of the connectors extensible Dockerfiles
+---
+apiVersion: "backstage.io/v1alpha1"
+kind: "Resource"
+metadata:
+  name: "connectors-extensible-dockerfiles"
+  description: "Nightly build and scan of the connectors extensible Dockerfiles"
+spec:
+  type: "buildkite-pipeline"
+  owner: "group:search-extract-and-transform"
+  system: "buildkite"
+  implementation:
+    apiVersion: "buildkite.elastic.dev/v1"
+    kind: "Pipeline"
+    metadata:
+      name: "connectors-extensible-dockerfiles"
+      description: "Nightly build and scan of the connectors extensible Dockerfiles"
+    spec:
+      pipeline_file: ".buildkite/extensible-dockerfiles-pipeline.yml"
+      provider_settings:
+        trigger_mode: "none"
+      repository: "elastic/connectors"
+      schedules:
+        Daily main:
+          branch: main
+          cronline: '@daily'
+          message: "Runs daily `main` extensible Dockerfiles image builds"
+      teams:
+        everyone:
+          access_level: "READ_ONLY"
+        search-extract-and-transform: {}
+        search-productivity-team: {}
+
 ########
 # Docker image build and publish - manual release
 ########
