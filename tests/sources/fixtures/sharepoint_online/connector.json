@@ -67,7 +67,7 @@
             "type": "str",
             "ui_restrictions": [],
             "validations": [],
-            "value": "certificate"
+            "value": "secret"
         },
         "secret_value": {
             "depends_on": [],
