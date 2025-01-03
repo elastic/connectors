@@ -15,11 +15,11 @@ async def create_abs_source(
 ):
     async with create_source(
         OneLakeDataSource,
-        tenant_id="",
-        client_id="",
-        client_secret="",
-        workspace_name="",
-        data_path="",
+        tenant_id="fake-tenant",
+        client_id="-fake-client",
+        client_secret="fake-client",
+        workspace_name="FakeWorkspace",
+        data_path="FakeDatalake.Lakehouse/Files/Data",
         use_text_extraction_service=use_text_extraction_service,
     ) as source:
         yield source
