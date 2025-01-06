@@ -9,17 +9,14 @@ pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
 
-
 vault_get() {
   key_path=${1:-}
   field=${2:-}
 
-  fullPath="$VAULT_PATH_PREFIX/$key_path"
-
   if [[ -z "$field" || "$field" =~ ^-.* ]]; then
-    retry 5 5 vault read "$fullPath" "${@:2}"
+    retry 5 5 vault read "$key_path" "${@:2}"
   else
-    retry 5 5 vault read -field="$field" "$fullPath" "${@:3}"
+    retry 5 5 vault read -field="$field" "$key_path" "${@:3}"
   fi
 }
 
