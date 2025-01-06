@@ -819,6 +819,10 @@ class Connector(ESDocument):
         }
         await self.index.update(doc_id=self.id, doc=doc)
 
+    async def connected(self):
+        doc = {"status": Status.CONNECTED.value, "error": None}
+        await self.index.update(doc_id=self.id, doc=doc)
+
     async def sync_done(self, job, cursor=None):
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error

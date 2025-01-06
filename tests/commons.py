@@ -15,18 +15,28 @@ class AsyncIterator:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, items):
+    def __init__(self, items, reusable=False):
+        """
+        AsyncIterator is a test-only abstraction to mock async iterables.
+        By default it's usable only once: once iterated over, he iterator will not
+        iterate again any more.
+        If reusable is True, then iterator can be re-used, but only if it's used by a single coroutine.
+        If AsyncIterator is used in several coroutines, it'll not work correctly at all
+        """
         self.items = items
         self.call_args = []
         self.call_kwargs = []
         self.i = 0
         self.call_count = 0
+        self.reusable = reusable
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
         if self.i >= len(self.items):
+            if self.reusable:
+                self.i = 0
             raise StopAsyncIteration
 
         item = self.items[self.i]
