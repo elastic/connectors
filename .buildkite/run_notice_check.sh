@@ -9,6 +9,20 @@ pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
 
+
+vault_get() {
+  key_path=${1:-}
+  field=${2:-}
+
+  fullPath="$VAULT_PATH_PREFIX/$key_path"
+
+  if [[ -z "$field" || "$field" =~ ^-.* ]]; then
+    retry 5 5 vault read "$fullPath" "${@:2}"
+  else
+    retry 5 5 vault read -field="$field" "$fullPath" "${@:3}"
+  fi
+}
+
 is_pr_with_label() {
   match="$1"
 
@@ -36,6 +50,7 @@ else
   MACHINE_USERNAME="entsearchmachine"
   git config --global user.name "$MACHINE_USERNAME"
   git config --global user.email '90414788+entsearchmachine@users.noreply.github.com'
+  GH_TOKEN=$(vault_get secret/jenkins-ci/swiftype-secrets/entsearchmachine github_token)
 
   if ! is_auto_commit_disabled; then
     gh pr checkout "${BUILDKITE_PULL_REQUEST}"
