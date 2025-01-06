@@ -28,6 +28,9 @@ else
     git commit -m"Update NOTICE.txt"
     git push
     sleep 15
+  fi
 
   exit 1
 fi
+
+exit 0
