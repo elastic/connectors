@@ -1285,7 +1285,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                     {"label": "Client Secret", "value": "secret"},
                     {"label": "Certificate", "value": "certificate"},
                 ],
-                "value": "certificate",
+                "value": "secret",
             },
             "secret_value": {
                 "label": "Secret value",
