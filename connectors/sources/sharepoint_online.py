@@ -18,7 +18,7 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
-from azure.identity import CertificateCredential
+from azure.identity.aio import CertificateCredential
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import (
@@ -226,10 +226,8 @@ class MicrosoftSecurityToken:
         if cached_value:
             return cached_value
 
-        # We measure now before request to be on a pessimistic side
-        now = datetime.utcnow()
         try:
-            access_token, expires_in = await self._fetch_token()
+            access_token, expires_at = await self._fetch_token()
         except ClientResponseError as e:
             # Both Graph API and REST API return error codes that indicate different problems happening when authenticating.
             # Error Code serves as a good starting point classifying these errors, see the messages below:
@@ -244,7 +242,7 @@ class MicrosoftSecurityToken:
                     msg = f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
                     raise TokenFetchFailed(msg) from e
 
-        self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
+        self._token_cache.set_value(access_token, expires_at)
 
         return access_token
 
@@ -284,12 +282,14 @@ class GraphAPIToken(SecretAPIToken):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"client_id={self._client_id}&scope=https://graph.microsoft.com/.default&client_secret={self._client_secret}&grant_type=client_credentials"
 
+        # We measure now before request to be on a pessimistic side
+        now = datetime.utcnow()
         async with self._http_session.post(url, headers=headers, data=data) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
 
-            return access_token, expires_in
+            return access_token, now + timedelta(seconds=expires_in)
 
 
 class SharepointRestAPIToken(SecretAPIToken):
@@ -313,12 +313,14 @@ class SharepointRestAPIToken(SecretAPIToken):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
+        # We measure now before request to be on a pessimistic side
+        now = datetime.utcnow()
         async with self._http_session.post(url, headers=headers, data=data) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
 
-            return access_token, expires_in
+            return access_token, now + timedelta(seconds=expires_in)
 
 
 class EntraAPIToken(MicrosoftSecurityToken):
@@ -353,7 +355,7 @@ class EntraAPIToken(MicrosoftSecurityToken):
             self._tenant_id, self._client_id, certificate_data=secrets_concat.encode()
         )
 
-        token = credentials.get_token(self._scope)
+        token = await credentials.get_token(self._scope)
 
         return token.token, token.expires_on
 
