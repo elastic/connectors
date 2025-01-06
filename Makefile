@@ -21,8 +21,10 @@ config.yml:
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
 
-install: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
+notice:  .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
+
+install: .venv/bin/python .venv/bin/elastic-ingest notice
 
 install-agent: .venv/bin/elastic-ingest
 
