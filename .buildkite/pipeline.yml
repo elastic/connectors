@@ -32,6 +32,14 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
+  - label: ":eyes: Notice check"
+    <<: *retries
+    key: "smoke_test"
+    command: ".buildkite/run_notice_check.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
+    timeout_in_minutes: 5
+
   - label: ":pytest: Test with Python {{ matrix }}"
     <<: *test-agents
     <<: *retries
