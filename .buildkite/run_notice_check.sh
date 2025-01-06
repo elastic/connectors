@@ -30,17 +30,6 @@ retry() {
   done
 }
 
-vault_get() {
-  key_path=${1:-}
-  field=${2:-}
-
-  if [[ -z "$field" || "$field" =~ ^-.* ]]; then
-    retry 5 5 vault read "$key_path" "${@:2}"
-  else
-    retry 5 5 vault read -field="$field" "$key_path" "${@:3}"
-  fi
-}
-
 is_pr_with_label() {
   match="$1"
 
@@ -68,7 +57,7 @@ else
   MACHINE_USERNAME="entsearchmachine"
   git config --global user.name "$MACHINE_USERNAME"
   git config --global user.email '90414788+entsearchmachine@users.noreply.github.com'
-  GH_TOKEN=$(vault_get secret/jenkins-ci/swiftype-secrets/entsearchmachine github_token)
+  GH_TOKEN=$(retry 5 5 vault read -field github_token secret/jenkins-ci/swiftype-secrets/entsearchmachine)
 
   if ! is_auto_commit_disabled; then
     gh pr checkout "${BUILDKITE_PULL_REQUEST}"
