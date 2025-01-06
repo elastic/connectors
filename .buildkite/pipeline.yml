@@ -33,6 +33,7 @@ steps:
     timeout_in_minutes: 5
 
   - label: ":eyes: Notice check"
+    <<: *test-agents
     <<: *retries
     key: "notice_check"
     command: ".buildkite/run_notice_check.sh"
