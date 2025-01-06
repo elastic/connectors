@@ -357,7 +357,7 @@ class EntraAPIToken(MicrosoftSecurityToken):
 
         token = await credentials.get_token(self._scope)
 
-        return token.token, token.expires_on
+        return token.token, datetime.utcfromtimestamp(token.expires_on)
 
 
 def retryable_aiohttp_call(retries):

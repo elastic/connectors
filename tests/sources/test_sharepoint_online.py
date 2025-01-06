@@ -526,7 +526,7 @@ class TestEntraAPIToken:
     @pytest.mark.asyncio
     async def test_fetch_token(self, token, mock_responses):
         bearer = "hello"
-        expires_at = datetime.utcnow() + timedelta(seconds=30)
+        expires_at = datetime.utcnow().timestamp() + 30
 
         entra_token = MagicMock()
         type(entra_token).token = PropertyMock(return_value=bearer)
@@ -542,12 +542,12 @@ class TestEntraAPIToken:
             actual_token, actual_expires_at = await token._fetch_token()
 
         assert actual_token == bearer
-        assert actual_expires_at == expires_at
+        assert actual_expires_at == datetime.utcfromtimestamp(expires_at)
 
     @pytest.mark.asyncio
     async def test_fetch_token_retries(self, token, mock_responses, patch_sleep):
         bearer = "hello"
-        expires_at = datetime.utcnow() + timedelta(seconds=30)
+        expires_at = datetime.utcnow().timestamp() + 30
 
         entra_token = MagicMock()
         type(entra_token).token = PropertyMock(return_value=bearer)
@@ -569,7 +569,7 @@ class TestEntraAPIToken:
             actual_token, actual_expires_at = await token._fetch_token()
 
         assert actual_token == bearer
-        assert actual_expires_at == expires_at
+        assert actual_expires_at == datetime.utcfromtimestamp(expires_at)
 
 
 class TestMicrosoftAPISession:
