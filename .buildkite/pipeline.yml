@@ -34,7 +34,7 @@ steps:
 
   - label: ":eyes: Notice check"
     <<: *retries
-    key: "smoke_test"
+    key: "notice_check"
     command: ".buildkite/run_notice_check.sh"
     env:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
