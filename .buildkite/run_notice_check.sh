@@ -9,6 +9,10 @@ pyenv global $PYTHON_VERSION
 echo "Python version:"
 pyenv global
 
+is_auto_commit_disabled() {
+  is_pr_with_label "ci:no-auto-commit"
+}
+
 make notice
 
 if [ -z "$(git status --porcelain | grep NOTICE.txt)" ]; then
@@ -18,8 +22,12 @@ else
   git config --global user.name "$MACHINE_USERNAME"
   git config --global user.email '90414788+entsearchmachine@users.noreply.github.com'
 
-  git add NOTICE.txt
-  git commit -m"Update NOTICE.txt"
-  git push
-  exit 2
+  if ! is_auto_commit_disabled; then
+    gh pr checkout "${BUILDKITE_PULL_REQUEST}"
+    git add NOTICE.txt
+    git commit -m"Update NOTICE.txt"
+    git push
+    sleep 15
+
+  exit 1
 fi
