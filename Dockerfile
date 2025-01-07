@@ -11,4 +11,8 @@ WORKDIR /app
 RUN make clean install
 RUN ln -s .venv/bin /app/bin
 
+USER root
+RUN apk del make git
+
+USER nonroot
 ENTRYPOINT []
