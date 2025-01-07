@@ -57,7 +57,7 @@ else
   MACHINE_USERNAME="entsearchmachine"
   git config --global user.name "$MACHINE_USERNAME"
   git config --global user.email '90414788+entsearchmachine@users.noreply.github.com'
-  GH_TOKEN=$(retry 5 5 vault read -field github_token secret/jenkins-ci/swiftype-secrets/entsearchmachine)
+  GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
   if ! is_auto_commit_disabled; then
     gh pr checkout "${BUILDKITE_PULL_REQUEST}"
