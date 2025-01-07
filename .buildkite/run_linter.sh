@@ -16,6 +16,7 @@ if is_pr; then
     exit 0
   else
     # We lint and if it succeeds, we can push the change
+    set +e
     if make lint ; then
       export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
