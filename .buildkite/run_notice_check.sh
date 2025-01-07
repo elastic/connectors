@@ -4,6 +4,7 @@
 set -euo pipefail
 
 source .buildkite/shared.sh
+source .buildkite/publish/git-setup.sh
 
 init_python
 
@@ -13,7 +14,6 @@ if [ -z "$(git status --porcelain | grep NOTICE.txt)" ]; then
   exit 0
 else 
   if is_pr && ! is_auto_commit_disabled; then
-    source .buildkite/publish/git-setup.sh
     export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
     gh pr checkout "${BUILDKITE_PULL_REQUEST}"

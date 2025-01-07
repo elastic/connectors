@@ -4,6 +4,7 @@
 set -euo pipefail
 
 source .buildkite/shared.sh
+source .buildkite/publish/git-setup.sh
 
 init_python
 
@@ -16,7 +17,6 @@ if is_pr; then
   else
     # We lint and if it succeeds, we can push the change
     if make lint ; then
-      source .buildkite/publish/git-setup.sh
       export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
       gh pr checkout "${BUILDKITE_PULL_REQUEST}"
