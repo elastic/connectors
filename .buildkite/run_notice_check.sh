@@ -17,7 +17,7 @@ else
   git config --global user.email '90414788+entsearchmachine@users.noreply.github.com'
   export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
-  if ! is_auto_commit_disabled; then
+  if us_pr && ! is_auto_commit_disabled; then
     gh pr checkout "${BUILDKITE_PULL_REQUEST}"
     git add NOTICE.txt
     git commit -m"Update NOTICE.txt"

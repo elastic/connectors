@@ -27,6 +27,11 @@ retry() {
   done
 }
 
+is_pr() {
+  [[ "${GITHUB_PR_NUMBER-}" ]] && return
+  false
+}
+
 is_pr_with_label() {
   match="$1"
 
@@ -65,23 +70,4 @@ retry() {
       sleep "$delay"
     fi
   done
-}
-
-is_pr_with_label() {
-  match="$1"
-
-  IFS=',' read -ra labels <<< "${GITHUB_PR_LABELS:-}"
-
-  for label in "${labels[@]:-}"
-  do
-    if [ "$label" == "$match" ]; then
-      return
-    fi
-  done
-
-  false
-}
-
-is_auto_commit_disabled() {
-  is_pr_with_label "ci:no-auto-commit"
 }
