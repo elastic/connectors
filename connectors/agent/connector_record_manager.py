@@ -50,7 +50,9 @@ class ConnectorRecordManager:
                 random_connector_name_id = generate_random_id(length=4)
                 connector_name = f"[Elastic-managed] {service_type} connector {random_connector_name_id}"
 
-            if not await self.connector_index.connector_exists(connector_id):
+            if not await self.connector_index.connector_exists(
+                connector_id, include_deleted=True
+            ):
                 try:
                     await self.connector_index.connector_put(
                         connector_id=connector_id,

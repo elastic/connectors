@@ -1656,7 +1656,7 @@ async def test_connector_exists_returns_true_when_found():
     }
 
     index = ConnectorIndex(config)
-    index.fetch_by_id = AsyncMock(return_value={"id": "1"})
+    index.get_connector = AsyncMock(return_value={"id": "1"})
 
     exists = await index.connector_exists("1")
     assert exists is True
@@ -1671,7 +1671,7 @@ async def test_connector_exists_returns_false_when_not_found():
     }
 
     index = ConnectorIndex(config)
-    index.fetch_by_id = AsyncMock(side_effect=DocumentNotFoundError)
+    index.get_connector = AsyncMock(side_effect=DocumentNotFoundError)
 
     exists = await index.connector_exists("1")
     assert exists is False
@@ -1686,7 +1686,7 @@ async def test_connector_exists_raises_non_404_exception():
     }
 
     index = ConnectorIndex(config)
-    index.fetch_by_id = AsyncMock(side_effect=Exception("Fetch error"))
+    index.get_connector = AsyncMock(side_effect=Exception("Fetch error"))
 
     with pytest.raises(Exception, match="Fetch error"):
         await index.connector_exists("1")

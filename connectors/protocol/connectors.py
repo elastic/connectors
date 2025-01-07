@@ -179,9 +179,9 @@ class ConnectorIndex(ESIndex):
             is_native=is_native,
         )
 
-    async def connector_exists(self, connector_id):
+    async def connector_exists(self, connector_id, include_deleted=False):
         try:
-            doc = await self.fetch_by_id(connector_id)
+            doc = await self.get_connector(connector_id, include_deleted)
             return doc is not None
         except DocumentNotFoundError:
             return False
@@ -190,6 +190,11 @@ class ConnectorIndex(ESIndex):
                 f"Error while checking existence of connector '{connector_id}': {e}"
             )
             raise e
+
+    async def get_connector(self, connector_id, include_deleted=False):
+        return await self.api.connector_get(
+            connector_id=connector_id, deleted=include_deleted
+        )
 
     async def connector_update_scheduling(
         self, connector_id, full=None, incremental=None, access_control=None
