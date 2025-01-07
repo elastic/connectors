@@ -23,6 +23,17 @@ env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
+  - label: ":eyes: Notice check"
+    <<: *test-agents
+    <<: *retries
+    key: "notice_check"
+    command: ".buildkite/run_notice_check.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
+    timeout_in_minutes: 5
+
+  - wait
+
   - label: ":face_with_peeking_eye: Lint"
     <<: *test-agents
     <<: *retries
@@ -32,14 +43,7 @@ steps:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
 
-  - label: ":eyes: Notice check"
-    <<: *test-agents
-    <<: *retries
-    key: "notice_check"
-    command: ".buildkite/run_notice_check.sh"
-    env:
-      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
-    timeout_in_minutes: 5
+  - wait
 
   - label: ":pytest: Test with Python {{ matrix }}"
     <<: *test-agents
