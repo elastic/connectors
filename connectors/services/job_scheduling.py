@@ -137,6 +137,8 @@ class JobSchedulingService(BaseService):
         ):
             await self._try_schedule_sync(connector, JobType.INCREMENTAL)
 
+
+
         await self._try_schedule_sync(connector, JobType.FULL)
 
     async def _run(self):
