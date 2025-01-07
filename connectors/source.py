@@ -56,6 +56,9 @@ DEFAULT_CONFIGURATION = {
     "value": "",
 }
 
+
+
+
 TYPE_DEFAULTS = {
     str: "",
     int: None,
