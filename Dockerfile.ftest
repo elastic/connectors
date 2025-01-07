@@ -10,3 +10,7 @@ USER nonroot
 WORKDIR /app
 RUN make clean install
 RUN .venv/bin/pip install -r requirements/ftest.txt
+
+USER root
+RUN apk del make git
+USER nonroot
