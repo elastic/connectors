@@ -200,10 +200,14 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
-        Daily main:
+        Weekly main:
           branch: main
-          cronline: '@daily'
-          message: "Runs daily `main` extensible Dockerfiles image builds"
+          cronline: '@weekly'
+          message: "Runs weekly `main` extensible Dockerfiles image builds"
+        Weekly 8_x:
+          branch: '8.x'
+          cronline: '@weekly'
+          message: "Runs weekly `8.x` extensible Dockerfiles image builds"
       teams:
         everyone:
           access_level: "READ_ONLY"
