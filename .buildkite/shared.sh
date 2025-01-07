@@ -28,7 +28,7 @@ retry() {
 }
 
 is_pr() {
-  [[ "${GITHUB_PR_NUMBER-}" ]] && return
+  [[ "${BUILDKITE_PULL_REQUEST-}" ]] && return
   false
 }
 
