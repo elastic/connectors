@@ -16,14 +16,9 @@ if is_pr; then
   else
     # We lint and if it succeeds, we can push the change
     if make lint ; then
-      # Command succeeded, can push
-      # Set up credentials
-      MACHINE_USERNAME="entsearchmachine"
-      git config --global user.name "$MACHINE_USERNAME"
-      git config --global user.email '90414788+entsearchmachine@users.noreply.github.com'
+      source .buildkite/publish/git-setup.sh
       export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
-      # Add everything and push
       gh pr checkout "${BUILDKITE_PULL_REQUEST}"
       git add .
       git commit -m"make autoformat"
