@@ -8,7 +8,7 @@ source .buildkite/publish/git-setup.sh
 
 init_python
 
-if is_pr && ! is_from_machine; then
+if is_pr; then
   echo "We're on PR, running autoformat"
   make autoformat
 
@@ -19,7 +19,6 @@ if is_pr && ! is_from_machine; then
     if make lint ; then
       export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
-      gh pr checkout "${BUILDKITE_PULL_REQUEST}"
       git add .
       git commit -m"make autoformat"
       git push

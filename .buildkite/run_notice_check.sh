@@ -13,10 +13,9 @@ make notice
 if [ -z "$(git status --porcelain | grep NOTICE.txt)" ]; then
   exit 0
 else 
-  if is_pr && ! is_from_machine; then
+  if is_pr; then
     export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
-    gh pr checkout "${BUILDKITE_PULL_REQUEST}"
     git add NOTICE.txt
     git commit -m"Update NOTICE.txt"
     git push

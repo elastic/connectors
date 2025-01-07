@@ -32,11 +32,6 @@ is_pr() {
   false
 }
 
-is_from_machine() {
-  [[ "${BUILDKITE_BUILD_AUTHOR}" == 1 ]] && return
-  false
-}
-
 retry() {
   local retries=$1; shift
   local delay=$1; shift
