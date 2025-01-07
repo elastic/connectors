@@ -8,7 +8,7 @@ source .buildkite/publish/git-setup.sh
 
 init_python
 
-if is_pr; then
+if is_pr && ! is_from_machine; then
   echo "We're on PR, running autoformat"
   make autoformat
 

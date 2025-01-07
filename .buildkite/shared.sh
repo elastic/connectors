@@ -32,23 +32,9 @@ is_pr() {
   false
 }
 
-is_pr_with_label() {
-  match="$1"
-
-  IFS=',' read -ra labels <<< "${GITHUB_PR_LABELS:-}"
-
-  for label in "${labels[@]:-}"
-  do
-    if [ "$label" == "$match" ]; then
-      return
-    fi
-  done
-
+is_from_machine() {
+  [[ "${BUILDKITE_BUILD_AUTHOR}" == 1 ]] && return
   false
-}
-
-is_auto_commit_disabled() {
-  is_pr_with_label "ci:no-auto-commit"
 }
 
 retry() {
