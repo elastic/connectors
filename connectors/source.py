@@ -59,12 +59,9 @@ DEFAULT_CONFIGURATION = {
 TYPE_DEFAULTS = {
     str: "",
     int: None,
-
     float: None,
-
     bool: None,
     list: [],
-     
 }
 
 
