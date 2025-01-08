@@ -13,7 +13,7 @@ DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
 config.yml:
 	- cp -n config.yml.example config.yml
 
-.venv/bin/python: config.yml
+.venv/bin/python: | config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install --upgrade setuptools
