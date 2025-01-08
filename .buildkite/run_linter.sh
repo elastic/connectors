@@ -19,19 +19,14 @@ if is_pr; then
     echo "Nothing to be fixed by autoformat"
     exit 0
   else
-    # We lint and if it succeeds, we can push the change
-    if make lint ; then
-      echo "linting errors are fixed, pushing the diff"
-      export GH_TOKEN="$VAULT_GITHUB_TOKEN"
+    echo "linting errors are fixed, pushing the diff"
+    export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
-      git add .
-      git commit -m"make autoformat"
-      git push
-    else
-      # Needs manual work
-      echo "make autoformat did not fix all linting errors, exiting"
-      exit 1
-    fi
+    git add .
+    git commit -m"make autoformat"
+    git push
+    # exit 1 to re-trigger the build
+    exit 1
   fi
 else
   echo "We're not on PR, running only linter"
