@@ -44,7 +44,6 @@ DEFAULT_CONCURRENT_DOWNLOADS = 10
 # Regular expression pattern to match a basic email format (no whitespace, valid domain)
 EMAIL_REGEX_PATTERN = r"^\S+@\S+\.\S+$"
 
-asdf
 
 TIKA_SUPPORTED_FILETYPES = [
     ".txt",
