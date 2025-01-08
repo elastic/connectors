@@ -1,0 +1,44 @@
+{
+  "configuration": {
+    "tenant_id": {
+      "label": "OneLake tenant id",
+      "order": 1,
+      "type": "str",
+      "value": "tenant-id"
+    },
+    "client_id": {
+      "label": "OneLake client id",
+      "order": 2,
+      "type": "str",
+      "value": "client-id"
+    },
+    "client_secret": {
+      "label": "OneLake client secret",
+      "order": 3,
+      "type": "str",
+      "sensitive": true,
+      "value": "client-secret"
+    },
+    "workspace_name": {
+      "label": "OneLake workspace name",
+      "order": 4,
+      "type": "str",
+      "value": "testWorkspace"
+    },
+    "data_path": {
+      "label": "OneLake data path",
+      "tooltip": "Path in format <DataLake>.Lakehouse/files/<Folder path>",
+      "order": 5,
+      "type": "str",
+      "value": "test_data_path"
+    },
+    "account_name": {
+      "tooltip": "In the most cases is 'onelake'",
+      "default_value": "onelake",
+      "label": "Account name",
+      "order": 6,
+      "type": "str",
+      "value": "onelake"
+    }
+  }
+}
