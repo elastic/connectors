@@ -29,6 +29,9 @@ class OneLakeDataSource(BaseDataSource):
         self.client_secret = self.configuration["client_secret"]
         self.workspace_name = self.configuration["workspace_name"]
         self.data_path = self.configuration["data_path"]
+        self.account_url = (
+            f"https://{self.configuration['account_name']}.dfs.fabric.microsoft.com"
+        )
 
     @classmethod
     def get_default_configuration(cls):
@@ -89,15 +92,6 @@ class OneLakeDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to OneLake.")
             raise
 
-    def _get_account_url(self):
-        """Get the account URL for OneLake
-
-        Returns:
-            str: Account URL
-        """
-
-        return f"https://{self.configuration['account_name']}.dfs.fabric.microsoft.com"
-
     def _get_token_credentials(self):
         """Get the token credentials for OneLake
 
@@ -124,7 +118,7 @@ class OneLakeDataSource(BaseDataSource):
 
         try:
             return DataLakeServiceClient(
-                account_url=self._get_account_url(),
+                account_url=self.account_url,
                 credential=self._get_token_credentials(),
             )
         except Exception as e:
@@ -315,11 +309,13 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         self._logger.info(f"Fetching files from OneLake datalake {self.data_path}")
+
         directory_paths = await self._get_directory_paths(
             self.configuration["data_path"]
         )
 
         self._logger.debug(f"Found {len(directory_paths)} files in {self.data_path}")
+
         async for file in self.prepare_files(directory_paths):
             file_dict = file
 
