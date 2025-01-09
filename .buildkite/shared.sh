@@ -29,8 +29,8 @@ retry() {
 
 is_pr() {
   if [ "${BUILDKITE_PULL_REQUEST-}" ] || [ "${BUILDKITE_PULL_REQUEST}" = "false"]; then
-    return false
+    return 1 # false
   else
-    return true
+    return 0 # true
   fi
 }
