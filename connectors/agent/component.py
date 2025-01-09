@@ -16,7 +16,7 @@ from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHa
 from connectors.agent.service_manager import ConnectorServiceManager
 from connectors.services.base import MultiService
 
-logger = get_logger("component")
+logger = get_logger("component"   )
 
 CONNECTOR_SERVICE = "connector-service"
 
