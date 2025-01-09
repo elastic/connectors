@@ -847,6 +847,8 @@ class ConfluenceDataSource(BaseDataSource):
         ):
             spaces = response.get("results", [])
             space_keys.extend([space.get("key", "") for space in spaces])
+        if self.spaces[-1] == '':
+            self.spaces.pop()
         if unavailable_spaces := set(self.spaces) - set(space_keys):
             msg = f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
             raise ConfigurableFieldValueError(msg)
