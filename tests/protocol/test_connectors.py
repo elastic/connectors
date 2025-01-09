@@ -13,6 +13,7 @@ import pytest
 from elasticsearch import ApiError, ConflictError
 
 from connectors.config import load_config
+from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
@@ -1647,6 +1648,51 @@ async def test_connector_validate_filtering_valid_with_connector_api(set_env):
 
 
 @pytest.mark.asyncio
+async def test_connector_exists_returns_true_when_found():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+
+    index = ConnectorIndex(config)
+    index.fetch_by_id = AsyncMock(return_value={"id": "1"})
+
+    exists = await index.connector_exists("1")
+    assert exists is True
+
+
+@pytest.mark.asyncio
+async def test_connector_exists_returns_false_when_not_found():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+
+    index = ConnectorIndex(config)
+    index.fetch_by_id = AsyncMock(side_effect=DocumentNotFoundError)
+
+    exists = await index.connector_exists("1")
+    assert exists is False
+
+
+@pytest.mark.asyncio
+async def test_connector_exists_raises_non_404_exception():
+    config = {
+        "username": "elastic",
+        "password": "changeme",
+        "host": "http://nowhere.com:9200",
+    }
+
+    index = ConnectorIndex(config)
+    index.fetch_by_id = AsyncMock(side_effect=Exception("Fetch error"))
+
+    with pytest.raises(Exception, match="Fetch error"):
+        await index.connector_exists("1")
+
+
+@pytest.mark.asyncio
 async def test_document_count():
     expected_count = 20
     index = Mock()
@@ -2254,7 +2300,7 @@ def test_has_validation_state(
 @pytest.mark.parametrize(
     "key, value, default_value",
     [
-        ("name", "foobar", "ent-search-generic-ingestion"),
+        ("name", "foobar", "search-default-ingestion"),
         ("extract_binary_content", False, True),
         ("reduce_whitespace", False, True),
         ("run_ml_inference", False, True),

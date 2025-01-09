@@ -6,4 +6,6 @@
 from connectors.es.client import ESClient  # NOQA
 from connectors.es.document import ESDocument, InvalidDocumentSourceError  # NOQA
 from connectors.es.index import ESIndex  # NOQA
-from connectors.es.settings import DEFAULT_LANGUAGE, Mappings  # NOQA
+
+TIMESTAMP_FIELD = "_timestamp"
+DEFAULT_LANGUAGE = "en"

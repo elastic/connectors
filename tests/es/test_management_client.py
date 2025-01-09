@@ -14,7 +14,6 @@ from elasticsearch import (
 )
 
 from connectors.es.management_client import ESManagementClient
-from connectors.es.settings import Settings
 from tests.commons import AsyncIterator
 
 
@@ -54,124 +53,7 @@ class TestESManagementClient:
         lang_code = "en"
         await es_management_client.create_content_index(index_name, lang_code)
 
-        es_management_client.client.indices.create.assert_called_with(
-            index=index_name, mappings=ANY, settings=ANY
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_mappings_when_mappings_exist(
-        self, es_management_client
-    ):
-        index_name = "something"
-        mappings = {}
-        existing_mappings_response = {index_name: {"mappings": ["something"]}}
-
-        await es_management_client.ensure_content_index_mappings(
-            index_name, existing_mappings_response, mappings
-        )
-        es_management_client.client.indices.put_mapping.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_mappings_when_mappings_do_not_exist(
-        self, es_management_client
-    ):
-        index_name = "something"
-        mappings = {
-            "dynamic": True,
-            "dynamic_templates": ["something"],
-            "properties": "something_else",
-        }
-        existing_mappings_response = {index_name: {"mappings": {}}}
-
-        await es_management_client.ensure_content_index_mappings(
-            index_name, existing_mappings_response, mappings
-        )
-        es_management_client.client.indices.put_mapping.assert_awaited_with(
-            index=index_name,
-            dynamic=mappings["dynamic"],
-            dynamic_templates=mappings["dynamic_templates"],
-            properties=mappings["properties"],
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_mappings_when_mappings_do_not_exist_but_no_mappings_provided(
-        self, es_management_client
-    ):
-        index_name = "something"
-        mappings = None
-        existing_mappings_response = {index_name: {"mappings": {}}}
-
-        await es_management_client.ensure_content_index_mappings(
-            index_name, existing_mappings_response, mappings
-        )
-        es_management_client.client.indices.put_mapping.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_exist(
-        self, es_management_client
-    ):
-        index_name = "something"
-        index = {"settings": {"index": {"analysis": "something"}}}
-
-        await es_management_client.ensure_content_index_settings(index_name, index)
-        es_management_client.client.indices.close.assert_not_called()
-        es_management_client.client.indices.put_settings.assert_not_called()
-        es_management_client.client.indices.open.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_do_not_exist(
-        self, es_management_client
-    ):
-        language_code = "en"
-        index_name = "something"
-        index = {}
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        await es_management_client.ensure_content_index_settings(
-            index_name, index, language_code
-        )
-
-        es_management_client.client.indices.close.assert_called()
-        es_management_client.client.indices.put_settings.assert_awaited_with(
-            index=index_name, body=settings
-        )
-        es_management_client.client.indices.open.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_do_not_exist_for_serverless(
-        self, es_management_client
-    ):
-        es_management_client.serverless = True
-        language_code = "en"
-        index_name = "something"
-        index = {}
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        await es_management_client.ensure_content_index_settings(
-            index_name, index, language_code
-        )
-
-        es_management_client.client.perform_request.assert_awaited_with(
-            "PUT",
-            f"/{index_name}/_settings?reopen=true",
-            headers={"accept": "application/json", "content-type": "application/json"},
-            body=settings,
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_exist_for_serverless(
-        self, es_management_client
-    ):
-        es_management_client.serverless = True
-        language_code = "en"
-        index_name = "something"
-        index = {"settings": {"index": {"analysis": "something"}}}
-
-        await es_management_client.ensure_content_index_settings(
-            index_name, index, language_code
-        )
-
-        es_management_client.client.perform_request.assert_not_called()
+        es_management_client.client.indices.create.assert_called_with(index=index_name)
 
     @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_do_not_exist(

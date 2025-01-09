@@ -638,7 +638,7 @@ class MySqlDataSource(BaseDataSource):
             )
             return
 
-        async for row in client.yield_rows_for_query(query):
+        async for row in client.yield_rows_for_query(query, primary_key_columns):
             yield row2doc(
                 row=row,
                 column_names=column_names,

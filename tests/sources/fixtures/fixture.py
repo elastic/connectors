@@ -128,7 +128,7 @@ async def _fetch_connector_metadata(es_client):
     connector = response["hits"]["hits"][0]
 
     connector_id = connector["_id"]
-    last_synced = connector["_source"]["last_synced"]
+    last_synced = connector["_source"].get("last_synced")
 
     return (connector_id, last_synced)
 
@@ -145,7 +145,9 @@ async def _monitor_service(pid):
         while True:
             _, new_last_synced = await _fetch_connector_metadata(es_client)
             lapsed = time.time() - start
-            if last_synced != new_last_synced or lapsed > sync_job_timeout:
+            if new_last_synced is not None and (
+                last_synced != new_last_synced or lapsed > sync_job_timeout
+            ):
                 if lapsed > sync_job_timeout:
                     logger.error(
                         f"Took too long to complete the sync job (over {sync_job_timeout} minutes), give up!"
@@ -181,7 +183,6 @@ async def main(args=None):
     if action in ("start_stack", "stop_stack"):
         os.chdir(os.path.join(os.path.dirname(__file__), args.name))
         if action == "start_stack":
-            await _exec_shell("docker compose pull")
             await _exec_shell("docker compose up -d")
         else:
             await _exec_shell("docker compose down --volumes")

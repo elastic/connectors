@@ -11,8 +11,10 @@ import inspect
 import os
 import platform
 import re
+import secrets
 import shutil
 import ssl
+import string
 import subprocess  # noqa S404
 import time
 import urllib.parse
@@ -457,7 +459,7 @@ class ConcurrentTasks:
             )
         elif task.exception():
             logger.error(
-                f"Exception found for task {task.get_name()}: {task.exception()}",
+                f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
     def _add_task(self, coroutine, name=None):
@@ -754,10 +756,10 @@ def truncate_id(_id):
 
 def has_duplicates(strings_list):
     seen = set()
-    for string in strings_list:
-        if string in seen:
+    for s in strings_list:
+        if s in seen:
             return True
-        seen.add(string)
+        seen.add(s)
     return False
 
 
@@ -976,6 +978,15 @@ def nested_get_from_dict(dictionary, keys, default=None):
     return nested_get(dictionary, keys, default)
 
 
+def sanitize(doc):
+    if doc["_id"]:
+        # guarantee that IDs are strings, and not numeric
+        doc["_id"] = str(doc["_id"])
+        doc["id"] = doc["_id"]
+
+    return doc
+
+
 class Counters:
     """
     A utility to provide code readability to managing a collection of counts
@@ -994,3 +1005,9 @@ class Counters:
 
     def to_dict(self):
         return deepcopy(self._storage)
+
+
+def generate_random_id(length=4):
+    return "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
+    )

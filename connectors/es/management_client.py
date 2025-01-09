@@ -12,8 +12,8 @@ from elasticsearch import (
 )
 from elasticsearch.helpers import async_scan
 
+from connectors.es import TIMESTAMP_FIELD
 from connectors.es.client import ESClient
-from connectors.es.settings import TIMESTAMP_FIELD, Mappings, Settings
 from connectors.logger import logger
 
 
@@ -51,106 +51,12 @@ class ESManagementClient(ESClient):
                 logger.debug(f"Created index {index}")
 
     async def create_content_index(self, search_index_name, language_code):
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
-
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.indices.create,
                 index=search_index_name,
-                mappings=mappings,
-                settings=settings,
             )
         )
-
-    async def ensure_content_index_mappings(self, index_name, index, desired_mappings):
-        # open = Match open, non-hidden indices. Also matches any non-hidden data stream.
-        # Content indices are always non-hidden.
-
-        existing_mappings = index.get("mappings", {})
-        if len(existing_mappings) == 0:
-            if desired_mappings:
-                logger.info(
-                    "Index %s has no mappings or it's empty. Adding mappings...", index
-                )
-                try:
-                    await self._retrier.execute_with_retry(
-                        partial(
-                            self.client.indices.put_mapping,
-                            index=index_name,
-                            dynamic=desired_mappings.get("dynamic", False),
-                            dynamic_templates=desired_mappings.get(
-                                "dynamic_templates", []
-                            ),
-                            properties=desired_mappings.get("properties", {}),
-                        )
-                    )
-                    logger.info("Successfully added mappings for index %s", index_name)
-                except Exception as e:
-                    logger.warning(
-                        f"Could not create mappings for index {index}, encountered error {e}"
-                    )
-            else:
-                logger.info(
-                    "Index %s has no mappings but no mappings are provided, skipping mappings creation"
-                )
-        else:
-            logger.debug(
-                "Index %s already has mappings, skipping mappings creation", index_name
-            )
-
-    async def ensure_content_index_settings(
-        self, index_name, index, language_code=None
-    ):
-        existing_settings = index.get("settings", {})
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        if "analysis" not in existing_settings.get("index", {}):
-            logger.info(
-                f"Index {index_name} has no settings or it's empty. Adding settings..."
-            )
-
-            # Open index, update settings, close index
-            try:
-                if self.serverless:
-                    await self._retrier.execute_with_retry(
-                        partial(
-                            self.client.perform_request,
-                            "PUT",
-                            f"/{index_name}/_settings?reopen=true",
-                            body=settings,
-                            headers={
-                                "accept": "application/json",
-                                "content-type": "application/json",
-                            },
-                        )
-                    )
-                else:
-                    await self._retrier.execute_with_retry(
-                        partial(self.client.indices.close, index=index_name)
-                    )
-
-                    await self._retrier.execute_with_retry(
-                        partial(
-                            self.client.indices.put_settings,
-                            index=index_name,
-                            body=settings,
-                        )
-                    )
-
-                    await self._retrier.execute_with_retry(
-                        partial(self.client.indices.open, index=index_name)
-                    )
-
-                    logger.info(f"Successfully added settings for index {index_name}")
-            except Exception as e:
-                logger.warning(
-                    f"Could not create settings for index {index_name}, encountered error {e}"
-                )
-        else:
-            logger.debug(
-                f"Index {index_name} already has settings, skipping settings creation"
-            )
 
     async def ensure_ingest_pipeline_exists(
         self, pipeline_id, version, description, processors

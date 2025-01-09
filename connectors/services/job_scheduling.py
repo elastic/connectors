@@ -37,9 +37,14 @@ class JobSchedulingService(BaseService):
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
+        self.first_run = True
         self.last_wake_up_time = datetime.now(timezone.utc)
 
     async def _schedule(self, connector):
+        # To do some first-time stuff
+        just_started = self.first_run
+        self.first_run = False
+
         if self.running is False:
             connector.log_debug("Skipping run because service is terminating")
             return
@@ -62,11 +67,11 @@ class JobSchedulingService(BaseService):
             return
         except DataSourceError as e:
             await connector.error(e)
-            connector.log_critical(e, exc_info=True)
+            connector.log_error(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
-        await connector.heartbeat(self.heartbeat_interval)
+        await connector.heartbeat(self.heartbeat_interval, force=just_started)
 
         connector.log_debug(f"Status is {connector.status}")
 
@@ -101,6 +106,11 @@ class JobSchedulingService(BaseService):
 
             if connector.features.sync_rules_enabled():
                 await connector.validate_filtering(validator=data_source)
+
+            self.logger.info(
+                "Connector is configured correctly and can reach the data source"
+            )
+            await connector.connected()
         except Exception as e:
             connector.log_error(e, exc_info=True)
             await connector.error(e)
@@ -160,7 +170,7 @@ class JobSchedulingService(BaseService):
                         await self._schedule(connector)
 
                 except Exception as e:
-                    self.logger.critical(e, exc_info=True)
+                    self.logger.error(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
@@ -214,7 +224,7 @@ class JobSchedulingService(BaseService):
                 next_sync = connector.next_sync(job_type, last_wake_up_time)
                 connector.log_debug(f"Next '{job_type_value}' sync is at {next_sync}")
             except Exception as e:
-                connector.log_critical(e, exc_info=True)
+                connector.log_error(e, exc_info=True)
                 await connector.error(str(e))
                 return False
 

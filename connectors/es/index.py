@@ -98,6 +98,39 @@ class ESApi(ESClient):
             partial(self._api_wrapper.connector_check_in, connector_id)
         )
 
+    async def connector_put(
+        self, connector_id, service_type, connector_name, index_name, is_native
+    ):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.put,
+                connector_id=connector_id,
+                service_type=service_type,
+                name=connector_name,
+                index_name=index_name,
+                is_native=is_native,
+            )
+        )
+
+    async def connector_update_scheduling(self, connector_id, scheduling):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.update_scheduling,
+                connector_id=connector_id,
+                scheduling=scheduling,
+            )
+        )
+
+    async def connector_update_configuration(self, connector_id, configuration, values):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.update_configuration,
+                connector_id=connector_id,
+                configuration=configuration,
+                values=values,
+            )
+        )
+
     async def connector_update_filtering_draft_validation(
         self, connector_id, validation_result
     ):
@@ -185,18 +218,18 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        if not self.serverless:
-            await self._retrier.execute_with_retry(
-                partial(self.client.indices.refresh, index=self.index_name)
-            )
-
         try:
+            if not self.serverless:
+                await self._retrier.execute_with_retry(
+                    partial(self.client.indices.refresh, index=self.index_name)
+                )
+
             resp = await self._retrier.execute_with_retry(
                 partial(self.client.get, index=self.index_name, id=doc_id)
             )
         except ApiError as e:
-            logger.critical(f"The server returned {e.status_code}")
-            logger.critical(e.body, exc_info=True)
+            logger.error(f"The server returned {e.status_code}")
+            logger.error(e.body, exc_info=True)
             if e.status_code == 404:
                 msg = f"Couldn't find document in {self.index_name} by id {doc_id}"
                 raise DocumentNotFoundError(msg) from e

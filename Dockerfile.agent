@@ -1,0 +1,47 @@
+# This file is for internal experimental purposes only.
+# Please do not use this file for any real-world workloads.
+
+FROM docker.elastic.co/elastic-agent/elastic-agent:9.0.0-SNAPSHOT
+
+USER root
+
+# Install apt-get dependencies
+RUN apt-get update && apt-get install -y \
+  software-properties-common \
+  vim \
+  wget \
+  git \
+  make \
+  && add-apt-repository ppa:deadsnakes/ppa \
+  && apt-get update && apt-get install -y python3.11 python3.11-venv \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Go-based yq separately
+RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && \
+  chmod +x /usr/bin/yq
+
+# Copy project files
+COPY ./ /usr/share/connectors
+
+# Set working directory
+WORKDIR /usr/share/connectors
+
+# Install Python agent client
+RUN PYTHON=python3.11 make clean install install-agent
+
+# Copy and move the component files into the dynamic agent directory
+COPY ./resources/agent/python-elastic-agent-client /tmp/python-elastic-agent-client
+COPY ./resources/agent/python-elastic-agent-client.spec.yml /tmp/python-elastic-agent-client.spec.yml
+
+RUN BUILD_DIR=$(cat /usr/share/elastic-agent/.build_hash.txt | cut -c 1-6) && \
+  mv /tmp/python-elastic-agent-client \
+  /usr/share/elastic-agent/data/elastic-agent-${BUILD_DIR}/components/python-elastic-agent-client && \
+  mv /tmp/python-elastic-agent-client.spec.yml \
+  /usr/share/elastic-agent/data/elastic-agent-${BUILD_DIR}/components/python-elastic-agent-client.spec.yml
+
+# Modify the elastic-agent.yml file
+RUN yq eval --inplace '.inputs += { "type": "connectors-py", "id": "connectors-py", "use_output": "default"}' \
+  /usr/share/elastic-agent/elastic-agent.yml
+
+# Set the final working directory
+WORKDIR /usr/share/elastic-agent

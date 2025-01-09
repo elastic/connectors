@@ -7,7 +7,7 @@
 #
 ## ------------------------------- Connectors -------------------------------
 #
-##  The list of connector clients/customized connectors configurations.
+##  The list of self-managed connectors/customized connectors configurations.
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
 ##    connectors:
@@ -18,12 +18,12 @@
 #
 #
 ##  The ID of the connector.
-##    (Deprecated. Configure the connector client in an object in the `connectors` list)
+##    (Deprecated. Configure the self-managed connectors in an object in the `connectors` list)
 #connector_id: null
 #
 #
 ##  The service type of the connector.
-##    (Deprecated. Configure the connector client in an object in the `connectors` list)
+##    (Deprecated. Configure the self-managed connectors in an object in the `connectors` list)
 #service_type: null
 #
 #
@@ -52,6 +52,11 @@
 #
 ##  Whether SSL is used for the Elasticsearch connection.
 #elasticsearch.ssl: true
+#
+#
+##  Whether to perform verification checks for server certificates using CA bundle.
+##    This option should be avoided in production.
+#elasticsearch.verify_certs: true
 #
 #
 ##  Path to a CA bundle, e.g. /path/to/ca.crt
@@ -157,7 +162,8 @@
 #
 #
 ##  Enable usage of Connectors API instead of calling connectors indices directly
-#elasticsearch.feature_use_connectors_api: false
+##  Using direct index access is deprecated, and will be disallowed entirely in a future version
+#elasticsearch.feature_use_connectors_api: true
 ## ------------------------------- Service ----------------------------------
 #
 ##  Connector service/framework related configurations
@@ -213,7 +219,7 @@
 ##    These configurations are optional and are not included by default.
 ##    The presence of these configurations enables local content extraction.
 ##    By default, this whole object is `null`.
-##    See: https://www.elastic.co/guide/en/enterprise-search/current/connectors-content-extraction.html#connectors-content-extraction-local
+##    See: https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-content-extraction.html#connectors-content-extraction-local
 #
 #
 ##  The host of the local extraction service.

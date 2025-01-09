@@ -14,9 +14,7 @@ from unittest.mock import ANY, AsyncMock, Mock, call, patch
 import pytest
 from elasticsearch import ApiError, BadRequestError
 
-from connectors.es import Mappings
 from connectors.es.management_client import ESManagementClient
-from connectors.es.settings import Settings
 from connectors.es.sink import (
     BIN_DOCS_DOWNLOADED,
     BULK_OPERATIONS,
@@ -186,10 +184,6 @@ async def test_prepare_content_index(mock_responses):
     language_code = "en"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
-    settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-    # prepare-index, with mappings
-
-    mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
     index_name = "search-new-index"
 
     response = {
@@ -205,34 +199,18 @@ async def test_prepare_content_index(mock_responses):
         body=json.dumps(response),
     )
 
-    mock_responses.put(
-        f"http://nowhere.com:9200/{index_name}/_mapping",
-        headers=headers,
-        payload=mappings,
-        body='{"acknowledged": True}',
-    )
-
-    mock_responses.put(
-        f"http://nowhere.com:9200/{index_name}/_settings",
-        headers=headers,
-        payload=settings,
-        body='{"acknowledged": True}',
-    )
-
     es = SyncOrchestrator(config)
     es._sink = Mock()
     es._extractor = Mock()
     with mock.patch.object(
         es.es_management_client,
-        "ensure_content_index_mappings",
-    ) as put_mapping_mock:
+        "create_content_index",
+    ) as create_index_mock:
         await es.prepare_content_index(index_name, language_code)
 
         await es.close()
 
-        put_mapping_mock.assert_called_with(
-            index_name=index_name, index=response[index_name], desired_mappings=mappings
-        )
+        create_index_mock.assert_not_called()
 
 
 def set_responses(mock_responses, ts=None):
@@ -284,7 +262,7 @@ def set_responses(mock_responses, ts=None):
     )
 
     mock_responses.put(
-        "http://nowhere.com:9200/_bulk?pipeline=ent-search-generic-ingestion",
+        "http://nowhere.com:9200/_bulk?pipeline=search-default-ingestion",
         payload={
             "took": 7,
             "errors": False,
@@ -383,7 +361,8 @@ async def test_async_bulk(mock_responses):
 def index_operation(doc):
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
-    doc_id = doc_copy["id"] = doc_copy.pop("_id")
+    doc_id = str(doc_copy.pop("_id"))
+    doc_copy["id"] = doc_id
 
     return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
@@ -391,13 +370,14 @@ def index_operation(doc):
 def update_operation(doc):
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
-    doc_id = doc_copy["id"] = doc_copy.pop("_id")
+    doc_id = str(doc_copy.pop("_id"))
+    doc_copy["id"] = doc_id
 
     return {"_op_type": "update", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
 def delete_operation(doc):
-    return {"_op_type": "delete", "_index": INDEX, "_id": doc["_id"]}
+    return {"_op_type": "delete", "_index": INDEX, "_id": str(doc["_id"])}
 
 
 def end_docs_operation():
@@ -750,7 +730,7 @@ async def test_get_docs(
     lazy_downloads = await lazy_downloads_mock()
 
     yield_existing_documents_metadata.return_value = AsyncIterator(
-        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+        [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
 
     with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
@@ -1040,7 +1020,7 @@ async def test_get_access_control_docs(
     expected_total_docs_deleted,
 ):
     yield_existing_documents_metadata.return_value = AsyncIterator(
-        [(doc["_id"], doc["_timestamp"]) for doc in existing_docs]
+        [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
 
     queue = await queue_mock()

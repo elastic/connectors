@@ -28,8 +28,8 @@ from connectors.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
+from connectors.es import TIMESTAMP_FIELD
 from connectors.es.management_client import ESManagementClient
-from connectors.es.settings import TIMESTAMP_FIELD, Mappings
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
@@ -53,6 +53,7 @@ from connectors.utils import (
     get_size,
     iso_utc,
     retryable,
+    sanitize,
 )
 
 __all__ = ["SyncOrchestrator"]
@@ -484,17 +485,22 @@ class Extractor:
         await self.queue.put(doc)
 
     async def run(self, generator, job_type):
+        sanitized_generator = (
+            (sanitize(doc), *other) async for doc, *other in generator
+        )
         try:
             match job_type:
                 case JobType.FULL:
-                    await self.get_docs(generator)
+                    await self.get_docs(sanitized_generator)
                 case JobType.INCREMENTAL:
                     if self.skip_unchanged_documents:
-                        await self.get_docs(generator, skip_unchanged_documents=True)
+                        await self.get_docs(
+                            sanitized_generator, skip_unchanged_documents=True
+                        )
                     else:
-                        await self.get_docs_incrementally(generator)
+                        await self.get_docs_incrementally(sanitized_generator)
                 case JobType.ACCESS_CONTROL:
-                    await self.get_access_control_docs(generator)
+                    await self.get_access_control_docs(sanitized_generator)
                 case _:
                     raise UnsupportedJobType
         except asyncio.CancelledError:
@@ -514,7 +520,7 @@ class Extractor:
                 )
                 return
 
-            self._logger.critical("Document extractor failed", exc_info=True)
+            self._logger.error("Document extractor failed", exc_info=True)
             await self.put_doc(EXTRACTOR_ERROR)
             self.error = e
 
@@ -545,7 +551,8 @@ class Extractor:
                 if count % self.display_every == 0:
                     self._log_progress()
 
-                doc_id = doc["id"] = doc.pop("_id")
+                doc_id = doc.pop("_id")
+                doc["id"] = doc_id
 
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
@@ -660,7 +667,8 @@ class Extractor:
                 if count % self.display_every == 0:
                     self._log_progress()
 
-                doc_id = doc["id"] = doc.pop("_id")
+                doc_id = doc.pop("_id")
+                doc["id"] = doc_id
 
                 if self.basic_rule_engine and not self.basic_rule_engine.should_ingest(
                     doc
@@ -717,13 +725,7 @@ class Extractor:
         self._logger.info("Starting access control doc lookups")
         generator = self._decorate_with_metrics_span(generator)
 
-        existing_ids = {
-            doc_id: last_update_timestamp
-            async for (
-                doc_id,
-                last_update_timestamp,
-            ) in self.client.yield_existing_documents_metadata(self.index)
-        }
+        existing_ids = await self._load_existing_docs()
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(
@@ -737,7 +739,8 @@ class Extractor:
             if count % self.display_every == 0:
                 self._log_progress()
 
-            doc_id = doc["id"] = doc.pop("_id")
+            doc_id = doc.pop("_id")
+            doc["id"] = doc_id
             doc_exists = doc_id in existing_ids
 
             if doc_exists:
@@ -847,21 +850,9 @@ class SyncOrchestrator:
             index_name, ignore_unavailable=True
         )
 
-        mappings = Mappings.default_text_fields_mappings(is_connectors_index=True)
-
         if index:
             # Update the index mappings if needed
             self._logger.debug(f"{index_name} exists")
-
-            # Settings contain analyzers which are being used in the index mappings
-            # Therefore settings must be applied before mappings
-            await self.es_management_client.ensure_content_index_settings(
-                index_name=index_name, index=index, language_code=language_code
-            )
-
-            await self.es_management_client.ensure_content_index_mappings(
-                index_name=index_name, index=index, desired_mappings=mappings
-            )
         else:
             # Create a new index
             self._logger.info(f"Creating content index: {index_name}")
@@ -1052,15 +1043,25 @@ class SyncOrchestrator:
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
     def sink_task_callback(self, task):
-        if task.exception():
+        if task.cancelled():
+            self._logger.warning(
+                f"{type(self._sink).__name__}: {task.get_name()} was cancelled before completion"
+            )
+        elif task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {type(self._sink).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
 
     def extractor_task_callback(self, task):
-        if task.exception():
+        if task.cancelled():
+            self._logger.warning(
+                f"{type(self._extractor).__name__}: {task.get_name()} was cancelled before completion"
+            )
+        elif task.exception():
             self._logger.error(
-                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}: {task.exception()}",
+                f"Encountered an error in the sync's {type(self._extractor).__name__}: {task.get_name()}",
+                exc_info=task.exception(),
             )
             self.error = task.exception()
