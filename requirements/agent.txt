@@ -1,1 +1,1 @@
-elastic-agent-client@git+https://github.com/elastic/python-elastic-agent-client@main
+elastic-agent-client==0.0.1.dev1

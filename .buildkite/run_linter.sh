@@ -19,6 +19,7 @@ if is_pr; then
     echo "Nothing to be fixed by autoformat"
     exit 0
   else
+    git --no-pager diff
     echo "linting errors are fixed, pushing the diff"
     export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
