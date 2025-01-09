@@ -141,7 +141,7 @@ class Field:
         # list requires special type casting
         if cast_type is list:
             if isinstance(value, str):
-                return [item.strip() for item in value.split(",")] if value else []
+                return [item.strip() for item in value.rstrip(",").split(",")] if value else []
             elif isinstance(value, int):
                 return [value]
             elif isinstance(value, set):
