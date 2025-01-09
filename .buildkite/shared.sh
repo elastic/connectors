@@ -28,8 +28,11 @@ retry() {
 }
 
 is_pr() {
-  [[ "${BUILDKITE_PULL_REQUEST-}" ]] || [[ "${BUILDKITE_PULL_REQUEST}" = "false"]] && return
-  false
+  if [ "${BUILDKITE_PULL_REQUEST-}" ] || [ "${BUILDKITE_PULL_REQUEST}" = "false"]; then
+    return true
+  else
+    return false
+  fi
 }
 
 retry() {
