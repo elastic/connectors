@@ -8,7 +8,7 @@ source .buildkite/publish/git-setup.sh
 
 init_python
 
-if is_pr; then
+if is_pr && ! is_fork; then
   echo "We're on PR, running autoformat"
   if ! make autoformat ; then
     echo "make autoformat ran with errors, exiting"
