@@ -14,7 +14,7 @@ if [ -z "$(git status --porcelain | grep NOTICE.txt)" ]; then
   exit 0
 else 
   git --no-pager diff
-  if is_pr; then
+  if is_pr && ! is_fork; then
     export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
     git add NOTICE.txt
