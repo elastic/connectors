@@ -30,21 +30,6 @@
             "order": 2,
             "ui_restrictions": []
         },
-        "secret_value": {
-            "depends_on": [],
-            "display": "text",
-            "tooltip": null,
-            "default_value": null,
-            "label": "Secret Value",
-            "sensitive": true,
-            "type": "str",
-            "required": true,
-            "options": [],
-            "validations": [],
-            "value": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
-            "order": 4,
-            "ui_restrictions": []
-        },
         "client_id": {
             "depends_on": [],
             "display": "text",
@@ -60,6 +45,85 @@
             "order": 3,
             "ui_restrictions": []
         },
+        "auth_method": {
+            "default_value": null,
+            "depends_on": [],
+            "display": "dropdown",
+            "label": "Authentication Method",
+            "options": [
+              {
+                "label": "Client Secret",
+                "value": "secret"
+              },
+              {
+                "label": "Certificate",
+                "value": "certificate"
+              }
+            ],
+            "order": 4,
+            "required": true,
+            "sensitive": false,
+            "tooltip": null,
+            "type": "str",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": "secret"
+        },
+        "secret_value": {
+            "depends_on": [],
+            "display": "text",
+            "tooltip": null,
+            "default_value": null,
+            "label": "Secret Value",
+            "sensitive": true,
+            "type": "str",
+            "required": true,
+            "options": [],
+            "validations": [],
+            "value": "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ",
+            "order": 5,
+            "ui_restrictions": []
+        },
+        "certificate": {
+            "default_value": null,
+            "depends_on": [
+              {
+                "field": "auth_method",
+                "value": "certificate"
+              }
+            ],
+            "display": "textarea",
+            "label": "Content of certificate file",
+            "options": [],
+            "order": 5,
+            "required": true,
+            "sensitive": true,
+            "tooltip": null,
+            "type": "str",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": ""
+        },
+        "private_key": {
+            "default_value": null,
+            "depends_on": [
+              {
+                "field": "auth_method",
+                "value": "certificate"
+              }
+            ],
+            "display": "textarea",
+            "label": "Content of private key file",
+            "options": [],
+            "order": 6,
+            "required": true,
+            "sensitive": true,
+            "tooltip": null,
+            "type": "str",
+            "ui_restrictions": [],
+            "validations": [],
+            "value": ""
+        },
         "site_collections": {
             "depends_on": [],
             "display": "textarea",
@@ -72,7 +136,7 @@
             "options": [],
             "validations": [],
             "value": "*",
-            "order": 5,
+            "order": 7,
             "ui_restrictions": []
         },
         "enumerate_all_sites": {
@@ -87,7 +151,7 @@
             "options": [],
             "validations": [],
             "value": true,
-            "order": 6,
+            "order": 8,
             "ui_restrictions": []
         },
         "use_text_extraction_service": {
@@ -102,7 +166,7 @@
             "options": [],
             "validations": [],
             "value": false,
-            "order": 7,
+            "order": 9,
             "ui_restrictions": []
         },
         "use_document_level_security": {
@@ -117,7 +181,7 @@
             "options": [],
             "validations": [],
             "value": false,
-            "order": 8,
+            "order": 10,
             "ui_restrictions": []
         },
         "fetch_drive_item_permissions": {
@@ -137,7 +201,7 @@
             "options": [],
             "validations": [],
             "value": false,
-            "order": 9,
+            "order": 11,
             "ui_restrictions": []
         },
         "fetch_unique_page_permissions": {
@@ -157,7 +221,7 @@
             "options": [],
             "validations": [],
             "value": false,
-            "order": 10,
+            "order": 12,
             "ui_restrictions": []
         },
         "fetch_unique_list_permissions": {
@@ -177,7 +241,7 @@
             "options": [],
             "validations": [],
             "value": false,
-            "order": 11,
+            "order": 13,
             "ui_restrictions": []
         },
         "fetch_unique_list_item_permissions": {
@@ -197,7 +261,7 @@
             "options": [],
             "validations": [],
             "value": true,
-            "order": 12,
+            "order": 14,
             "ui_restrictions": []
         }
     }

@@ -23,20 +23,22 @@ env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
 
 steps:
-  - label: ":face_with_peeking_eye: Lint"
-    <<: *test-agents
-    <<: *retries
-    key: "lint"
-    command: ".buildkite/run_linter.sh"
-    env:
-      PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
-    timeout_in_minutes: 5
-
   - label: ":eyes: Notice check"
     <<: *test-agents
     <<: *retries
     key: "notice_check"
     command: ".buildkite/run_notice_check.sh"
+    env:
+      PYTHON_VERSION: "3.11" # We don't really care about notice on multiple versions
+    timeout_in_minutes: 5
+
+  - wait # we wait so that there was no race between fixing notice and make autoformat
+
+  - label: ":face_with_peeking_eye: Lint"
+    <<: *test-agents
+    <<: *retries
+    key: "lint"
+    command: ".buildkite/run_linter.sh"
     env:
       PYTHON_VERSION: "3.11" # We don't really care about linter on multiple versions for now
     timeout_in_minutes: 5
