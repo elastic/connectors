@@ -4,7 +4,6 @@
 set -euo pipefail
 
 source .buildkite/shared.sh
-source .buildkite/publish/git-setup.sh
 
 init_python
 
@@ -19,6 +18,7 @@ if is_pr && ! is_fork; then
     echo "Nothing to be fixed by autoformat"
     exit 0
   else
+    source .buildkite/publish/git-setup.sh
     git --no-pager diff
     echo "linting errors are fixed, pushing the diff"
     export GH_TOKEN="$VAULT_GITHUB_TOKEN"
