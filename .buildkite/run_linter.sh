@@ -30,10 +30,9 @@ if is_pr && ! is_fork; then
     exit 1
   fi
 else
-  echo "We're not on PR, running only linter"
+  echo "We're not on PR or running against a fork, running only linter"
   # On non-PR branches the bot has no permissions to open PRs.
   # Theoretically this would never fail because we always ask
   # linter to succeed to merge. It can fail intermittently?
   make lint
-  return
 fi
