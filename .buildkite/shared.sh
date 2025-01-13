@@ -34,3 +34,11 @@ is_pr() {
     return 0 # true
   fi
 }
+
+is_fork() {
+  if [ "BUILDKITE_PULL_REQUEST_REPO" = "https://github.com/elastic/connectors.git"]; then
+    return 1 # false
+  else
+    return 0 # true
+  fi
+}
