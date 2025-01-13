@@ -87,5 +87,4 @@ docker run --rm \
       --commit "${REVISION}" \
       --workflow "${WORKFLOW}" \
       --version "${VERSION}" \
-      --qualifier "${VERSION_QUALIFIER}" \
       --artifact-set main
