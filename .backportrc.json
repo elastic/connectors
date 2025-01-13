@@ -11,7 +11,7 @@
   "branchLabelMapping": {
     "^v9.0.0$": "main",
     "^v8.18.0$": "8.x",
-    "^v(\\d+).(\\d+)(.\\d+)+$": "$1.$2"
+    "^v(\\d+).(\\d+)(.\\d+)*$": "$1.$2"
   },
   "upstream": "elastic/connectors"
 }
