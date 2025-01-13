@@ -29,16 +29,20 @@ retry() {
 
 is_pr() {
   if [ -z "$BUILDKITE_PULL_REQUEST" ] || [ "$BUILDKITE_PULL_REQUEST" = "false" ]; then
+    echo "Running against a non-PR change"
     return 1 # false
   else
+    echo "Running against a PR"
     return 0 # true
   fi
 }
 
 is_fork() {
   if [ "BUILDKITE_PULL_REQUEST_REPO" = "https://github.com/elastic/connectors.git" ]; then
+    echo "Running against real connectors repo"
     return 1 # false
   else
+    echo "Running against a fork"
     return 0 # true
   fi
 }
