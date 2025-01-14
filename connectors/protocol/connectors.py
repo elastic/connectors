@@ -193,7 +193,7 @@ class ConnectorIndex(ESIndex):
 
     async def get_connector(self, connector_id, include_deleted=False):
         return await self.api.connector_get(
-            connector_id=connector_id, deleted=include_deleted
+            connector_id=connector_id, include_deleted=include_deleted
         )
 
     async def connector_update_scheduling(
@@ -1057,9 +1057,9 @@ class Connector(ESDocument):
             filtering = self.filtering.to_list()
             for filter_ in filtering:
                 if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                    filter_.get("draft", {"validation": {}})["validation"] = (
-                        validation_result.to_dict()
-                    )
+                    filter_.get("draft", {"validation": {}})[
+                        "validation"
+                    ] = validation_result.to_dict()
                     if validation_result.state == FilteringValidationState.VALID:
                         filter_["active"] = filter_.get("draft")
 

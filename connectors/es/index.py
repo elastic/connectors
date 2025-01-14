@@ -27,10 +27,10 @@ class TemporaryConnectorApiWrapper(ESClient):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
 
-    async def connector_get(self, connector_id, deleted):
+    async def connector_get(self, connector_id, include_deleted):
         return await self.client.perform_request(
             "GET",
-            f"/_connector/{connector_id}&deleted={deleted}",
+            f"/_connector/{connector_id}&include_deleted={include_deleted}",
             headers={"accept": "application/json"},
         )
 
@@ -105,9 +105,9 @@ class ESApi(ESClient):
             partial(self._api_wrapper.connector_check_in, connector_id)
         )
 
-    async def connector_get(self, connector_id, deleted=False):
+    async def connector_get(self, connector_id, include_deleted=False):
         return await self._retrier.execute_with_retry(
-            partial(self._api_wrapper.connector_get, connector_id, deleted)
+            partial(self._api_wrapper.connector_get, connector_id, include_deleted)
         )
 
     async def connector_put(
