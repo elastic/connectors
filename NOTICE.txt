@@ -8970,7 +8970,7 @@ SOFTWARE.
 
 
 wrapt
-1.17.1
+1.17.2
 BSD License
 Copyright (c) 2013-2023, Graham Dumpleton
 All rights reserved.
