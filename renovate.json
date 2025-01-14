@@ -4,6 +4,13 @@
     "local>elastic/renovate-config",
     "github>elastic/renovate-config:only-chainguard"
   ],
+  "labels": [
+    "renovate",
+    "auto-backport",
+    "v8.16",
+    "v8.17",
+    "v9.0.0"
+  ],
   "packageRules": [
     {
       "matchPackageNames": [
