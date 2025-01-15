@@ -102,6 +102,8 @@ def test_field_convert():
     assert Field("name", field_type="list").value == []
     assert Field("name", value="1", field_type="list").value == ["1"]
     assert Field("name", value="1,2,3,", field_type="list").value == ["1", "2", "3"]
+    assert Field("name", value="1,2,3,    ", field_type="list").value == ["1", "2", "3"]
+    assert Field("name", value=",,,1,2,3", field_type="list").value == ["1", "2", "3"]
     assert Field("name", value="1,2,3", field_type="list").value == ["1", "2", "3"]
     assert Field("name", value=[1, 2], field_type="list").value == [1, 2]
     assert Field("name", value=0, field_type="list").value == [0]
