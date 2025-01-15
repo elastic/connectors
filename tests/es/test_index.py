@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ApiError, ConflictError
 
-from connectors.es.index import DocumentNotFoundError, ESIndex
+from connectors.es.index import DocumentNotFoundError, ESIndex, ESApi
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 config = {
@@ -255,3 +255,66 @@ async def test_get_all_docs(mock_responses):
     assert doc_count == total
 
     await index.close()
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_check_in():
+    connector_id = "id"
+
+    client = Mock()
+    client.connector.check_in = AsyncMock()
+
+    es_api = ESApi(elastic_config=config["elasticsearch"])
+    await es_api.connector_check_in("id")
+
+    client.assert_called_once_with(
+        connector_id=connector_id
+    )
+
+@pytest.mark.asyncio
+async def test_es_api_connector_put():
+    connector_id = "id"
+    service_type = "service_type"
+    connector_name = "connector_name"
+    index_name = "index_name"
+    is_native = True
+
+    client = Mock()
+    client.connector.connector_check_in = AsyncMock()
+
+    es_api = ESApi(elastic_config=config["elasticsearch"])
+    await es_api.connector_put(
+        connector_id, service_type, connector_name, index_name, is_native
+    )
+
+    client.assert_called_once_with(
+        connector_id=connector_id,
+        service_type=service_type,
+        connector_name=connector_name,
+        index_name=index_name,
+        is_native=is_native,
+    )
+
+@pytest.mark.asyncio
+async def test_es_api_connector_update_configuration():
+    pass
+
+@pytest.mark.asyncio
+async def test_es_api_connector_filtering_draft_validation():
+    pass
+
+@pytest.mark.asyncio
+async def test_es_api_connector_activate_filtering_draft():
+    pass
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_claim():
+    pass
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_create():
+    pass
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_update_stats():
+    pass
