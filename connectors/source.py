@@ -142,7 +142,11 @@ class Field:
         if cast_type is list:
             if isinstance(value, str):
                 return (
-                    [item.strip() for item in value.rstrip(",").split(",")]
+                    [
+                        item.strip()
+                        for item in value.rstrip(",").split(",")
+                        if item.strip()
+                    ]
                     if value
                     else []
                 )
