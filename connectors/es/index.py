@@ -99,17 +99,17 @@ class ESApi(ESClient):
         self, connector_id, validation_result
     ):
         return await self._retrier.execute_with_retry(
-            partial(self.client.connector.update_filtering_validation,
-                    connector_id=connector_id,
-                    validation=validation_result
+            partial(
+                self.client.connector.update_filtering_validation,
+                connector_id=connector_id,
+                validation=validation_result,
             )
         )
 
     async def connector_activate_filtering_draft(self, connector_id):
         return await self._retrier.execute_with_retry(
             partial(
-                self.client.connector.update_active_filtering,
-                connector_id=connector_id
+                self.client.connector.update_active_filtering, connector_id=connector_id
             )
         )
 
@@ -129,7 +129,7 @@ class ESApi(ESClient):
                 self.client.connector.sync_job_post,
                 id=connector_id,
                 job_type=job_type,
-                trigger_method=trigger_method
+                trigger_method=trigger_method,
             )
         )
 
