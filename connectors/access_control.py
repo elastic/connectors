@@ -27,7 +27,7 @@ DLS_QUERY = """{
                 }"""
 
 
-def prefix_identity(prefix, identity):
+def prefix_identity(prefix, identity   ):
     if prefix is None or identity is None:
         return None
 
