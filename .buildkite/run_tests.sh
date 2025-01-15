@@ -3,10 +3,8 @@
 # !!! WARNING DO NOT add -x to avoid leaking vault passwords
 set -euo pipefail
 
-source ~/.bash_profile
+source .buildkite/shared.sh
 
-pyenv global $PYTHON_VERSION
-echo "Python version:"
-pyenv global
+init_python
 
 make test
