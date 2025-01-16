@@ -32,7 +32,7 @@ The Unified Release build will take care of producing git tags and official arti
 If `#mission-control` asks for a pre-release artifact to be built, trigger the build pipeline from the relevant branch
 and add an Environment Variable for `VERSION_QUALIFIER` with the value of the pre-release.
 
-For example, to release 9.0.0-BC1, you would set `VERSION_QUALIFIER` to be `BC1` for this build.
+For example, to release 9.0.0-BC1, you would set `VERSION_QUALIFIER=BC1` for this build.
 
 ### In-Between releases
 

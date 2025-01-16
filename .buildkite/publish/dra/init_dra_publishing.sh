@@ -155,17 +155,19 @@ fi
 if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
   if [ -n "${VERSION_QUALIFIER:-}" ]; then
     dependencyReportName="dependencies-${VERSION}-${VERSION_QUALIFIER}.csv";
-    artifact_name="connectors-${VERSION}-${VERSION_QUALIFIER}.zip"
+    zip_artifact_name="connectors-${VERSION}-${VERSION_QUALIFIER}.zip"
+    cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-amd64.tar.gz
+    cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-arm64.tar.gz
   else
     dependencyReportName="dependencies-${VERSION}.csv";
-    artifact_name="connectors-${VERSION}.zip"
+    zip_artifact_name="connectors-${VERSION}.zip"
   fi
 
   echo "-------- Generating STAGING dependency report: ${dependencyReportName}"
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing STAGING DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/${artifact_name}
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/${zip_artifact_name}
   setDraVaultCredentials
   export WORKFLOW="staging"
 
