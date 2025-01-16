@@ -266,8 +266,7 @@ async def test_es_api_connector_check_in():
 
     await es_api.connector_check_in(connector_id)
 
-    es_api.client.connector.check_in.assert_called_once_with(
-        connector_id=connector_id)
+    es_api.client.connector.check_in.assert_called_once_with(connector_id=connector_id)
 
 
 @pytest.mark.asyncio
@@ -297,21 +296,15 @@ async def test_es_api_connector_put():
 @pytest.mark.asyncio
 async def test_es_api_connector_update_scheduling():
     connector_id = "id"
-    scheduling = {
-        "enabled": "true",
-        "interval": "0 4 5 1 *"
-    }
+    scheduling = {"enabled": "true", "interval": "0 4 5 1 *"}
 
     es_api = ESApi(elastic_config=config)
     es_api.client = AsyncMock()
 
-    await es_api.connector_update_scheduling(
-        connector_id, scheduling
-    )
+    await es_api.connector_update_scheduling(connector_id, scheduling)
 
     es_api.client.connector.update_scheduling.assert_called_once_with(
-        connector_id=connector_id,
-        scheduling=scheduling
+        connector_id=connector_id, scheduling=scheduling
     )
 
 
@@ -324,16 +317,10 @@ async def test_es_api_connector_update_configuration():
     es_api = ESApi(elastic_config=config)
     es_api.client = AsyncMock()
 
-    await es_api.connector_update_configuration(
-        connector_id,
-        configuration,
-        values
-    )
+    await es_api.connector_update_configuration(connector_id, configuration, values)
 
     es_api.client.connector.update_configuration.assert_called_once_with(
-        connector_id=connector_id,
-        configuration=configuration,
-        values=values
+        connector_id=connector_id, configuration=configuration, values=values
     )
 
 
@@ -346,13 +333,11 @@ async def test_es_api_connector_filtering_draft_validation():
     es_api.client = AsyncMock()
 
     await es_api.connector_update_filtering_draft_validation(
-        connector_id,
-        validation_result
+        connector_id, validation_result
     )
 
     es_api.client.connector.update_filtering_validation.assert_called_once_with(
-        connector_id=connector_id,
-        validation=validation_result
+        connector_id=connector_id, validation=validation_result
     )
 
 
@@ -363,9 +348,7 @@ async def test_es_api_connector_activate_filtering_draft():
     es_api = ESApi(elastic_config=config)
     es_api.client = AsyncMock()
 
-    await es_api.connector_activate_filtering_draft(
-        connector_id
-    )
+    await es_api.connector_activate_filtering_draft(connector_id)
 
     es_api.client.connector.update_active_filtering.assert_called_once_with(
         connector_id=connector_id
@@ -376,6 +359,7 @@ async def test_es_api_connector_activate_filtering_draft():
 async def test_es_api_connector_sync_job_create():
     pass
 
+
 @pytest.mark.asyncio
 async def test_es_api_connector_sync_job_claim():
     sync_job_id = "sync_job_id_test"
@@ -385,17 +369,12 @@ async def test_es_api_connector_sync_job_claim():
     es_api = ESApi(elastic_config=config)
     es_api._api_wrapper = AsyncMock()
 
-    await es_api.connector_sync_job_claim(
-        sync_job_id,
-        worker_hostname,
-        sync_cursor
-    )
+    await es_api.connector_sync_job_claim(sync_job_id, worker_hostname, sync_cursor)
 
     es_api._api_wrapper.connector_sync_job_claim.assert_called_once_with(
-        sync_job_id,
-        worker_hostname,
-        sync_cursor
+        sync_job_id, worker_hostname, sync_cursor
     )
+
 
 @pytest.mark.asyncio
 async def test_es_api_connector_sync_job_update_stats():
@@ -406,14 +385,8 @@ async def test_es_api_connector_sync_job_update_stats():
     es_api = ESApi(elastic_config=config)
     es_api._api_wrapper = AsyncMock()
 
-    await es_api.connector_sync_job_update_stats(
-        sync_job_id,
-        ingestion_stats,
-        metadata
-    )
+    await es_api.connector_sync_job_update_stats(sync_job_id, ingestion_stats, metadata)
 
     es_api._api_wrapper.connector_sync_job_update_stats.assert_called_once_with(
-        sync_job_id,
-        ingestion_stats,
-        metadata
+        sync_job_id, ingestion_stats, metadata
     )
