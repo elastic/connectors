@@ -9,6 +9,10 @@ init_python
 
 if is_pr && ! is_fork; then
   echo "We're on PR, running autoformat"
+
+  export GH_TOKEN="$VAULT_GITHUB_TOKEN"
+  source .buildkite/publish/git-setup.sh
+
   if ! make autoformat ; then
     echo "make autoformat ran with errors, exiting"
     exit 1
@@ -18,10 +22,9 @@ if is_pr && ! is_fork; then
     echo "Nothing to be fixed by autoformat"
     exit 0
   else
-    source .buildkite/publish/git-setup.sh
+
     git --no-pager diff
     echo "linting errors are fixed, pushing the diff"
-    export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
     git add .
     git commit -m"make autoformat"
