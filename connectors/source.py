@@ -143,7 +143,7 @@ class Field:
             if isinstance(value, str):
                 items = []
                 if value:
-                    for item in value.rstrip(",").split(","):
+                    for item in value.split(","):
                         item = item.strip()
                         if not item:
                             logger.warning(
