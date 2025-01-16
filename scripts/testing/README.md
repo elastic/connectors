@@ -19,18 +19,18 @@ Run `make clean install` to generate executable files in `./bin` folder
 
 ### Usage
 
-Run `./bin/test-connectors --help` or `./bin/test-connectors {command name} --help` to get more information about the cli. 
+Run `.venv/bin/test-connectors --help` or `.venv/bin/test-connectors {command name} --help` to get more information about the cli. 
 
 #### Running test with Elastic cloud deployment
 If you want to run your test suite using a cloud Elasticsearch deployment follow the next steps: 
 1. Create a cloud deployment
 2. Download a credentials file (or create a new user)
-3. Run `./bin/test-connectors run-test my-testing-environment-name --es-host {host} --es-username {user name} --es-password {password} --test-case {path to the test case file}`
+3. Run `.venv/bin/test-connectors run-test my-testing-environment-name --es-host {host} --es-username {user name} --es-password {password} --test-case {path to the test case file}`
 
 #### Running test with local Elasticsearch
 If you want to run your tests with local Elasticsearch you need to specify `--es-version` option. Like
 
-`./bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --test-case {path to the test case file}`
+`.venv/bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --test-case {path to the test case file}`
 
 In this case, the cli will deploy an Elasticsearch instance in the same VM where the connector service will be running. 
 
@@ -38,7 +38,7 @@ In this case, the cli will deploy an Elasticsearch instance in the same VM where
 
 You can use any git reference such as commit sha, a tag, or a branch name. The cli will pull the defined git reference and run `make clean install`. 
 
-Example: `./bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --connectors-ref 8.12 --test-case {path to the test case file}`
+Example: `.venv/bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --connectors-ref 8.12 --test-case {path to the test case file}`
 
 #### Keeping your VM running when the tests passed
 Sometimes it's useful to get access to the logs or make some changes in the code and run tests again. The CLI will print a list of useful commands you can use to access the VM resources like: 
@@ -47,7 +47,7 @@ Sometimes it's useful to get access to the logs or make some changes in the code
 
 To automatically delete the VM you need to use `--delete` option. 
 
-`./bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --connectors-ref 8.12 --test-case {path to the test case file} --delete`
+`.venv/bin/test-connectors run-test my-testing-environment-name --es-version 8.12-SNAPSHOT --connectors-ref 8.12 --test-case {path to the test case file} --delete`
 
 #### Using different machine type
 All new VMs are based on a predefined image which is in turn based on `ubuntu-2204-lts` with python3 and docker installed. Custome images are not supported. You can change a machine type by providing `--vm-type`. Visit [the official GCP documentation](https://cloud.google.com/compute/docs/general-purpose-machines) to get more information. 
