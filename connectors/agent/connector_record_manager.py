@@ -66,6 +66,10 @@ class ConnectorRecordManager:
                         f"Failed to create connector record for {connector_id}: {e}"
                     )
                     raise e
+            else:
+                logger.debug(
+                    f"Skipping connector creation. Connector record for {connector_id} already exists."
+                )
 
     def _check_agent_config_ready(self, agent_config):
         """

@@ -19,11 +19,15 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from elasticsearch import ApiError
+from elasticsearch import (
+    ApiError,
+)
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
-from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
@@ -183,7 +187,7 @@ class ConnectorIndex(ESIndex):
         try:
             doc = await self.get_connector(connector_id, include_deleted)
             return doc is not None
-        except DocumentNotFoundError:
+        except ElasticNotFoundError:
             return False
         except Exception as e:
             logger.error(
@@ -1057,9 +1061,9 @@ class Connector(ESDocument):
             filtering = self.filtering.to_list()
             for filter_ in filtering:
                 if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                    filter_.get("draft", {"validation": {}})[
-                        "validation"
-                    ] = validation_result.to_dict()
+                    filter_.get("draft", {"validation": {}})["validation"] = (
+                        validation_result.to_dict()
+                    )
                     if validation_result.state == FilteringValidationState.VALID:
                         filter_["active"] = filter_.get("draft")
 
