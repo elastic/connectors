@@ -11,7 +11,8 @@ Take care of the branching (minor releases only):
 
 - Increment the VERSION on main to match the next minor release
 - Create a new maintenance branch
-- Make sure the `.backportrc.json` is updated. The previous minor is added to `targetBranchChoices` and the new minor is used in `branchLabelMapping`
+- Make sure `.backportrc.json` is updated: the previous minor is added to `targetBranchChoices` and the new minor is used in `branchLabelMapping`
+- Make sure `renovate.json` is updated: the previous minor is added to `labels` (for example, `v8.18`). [Create that label](https://github.com/elastic/connectors/labels) if it doesn't exist yet
 
 
 ## Unified release, (>= 8.16)
