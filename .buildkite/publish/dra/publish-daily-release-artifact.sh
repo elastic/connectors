@@ -74,22 +74,18 @@ ls -lah ${RELEASE_DIR}/dist
 echo "Contents of 'dra-artifacts' subdir"
 ls -lah $DRA_ARTIFACTS_DIR
 
-# TODO: put this back
-echo "We would now execute:
-
 docker run --rm \
   --name release-manager \
   -e VAULT_ADDR \
   -e VAULT_ROLE_ID \
   -e VAULT_SECRET_ID \
-  --mount type=bind,readonly=false,src=\"${RELEASE_DIR}/dist\",target=\"/artifacts\" \
+  --mount type=bind,readonly=false,src="${RELEASE_DIR}/dist",target="/artifacts" \
   docker.elastic.co/infra/release-manager:latest \
   cli collect \
-      --project \"${GIT_REPO}\" \
-      --branch \"${BRANCH_NAME}\" \
-      --commit \"${REVISION}\" \
-      --workflow \"${WORKFLOW}\" \
-      --version \"${VERSION}\" \
-      --qualifier \"${VERSION_QUALIFIER:-}\" \
+      --project "${GIT_REPO}" \
+      --branch "${BRANCH_NAME}" \
+      --commit "${REVISION}" \
+      --workflow "${WORKFLOW}" \
+      --version "${VERSION}" \
+      --qualifier "${VERSION_QUALIFIER:-}" \
       --artifact-set main
-"
