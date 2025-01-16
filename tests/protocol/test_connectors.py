@@ -10,10 +10,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from elasticsearch import ApiError, ConflictError
+from elasticsearch import ApiError, ConflictError, NotFoundError
 
 from connectors.config import load_config
-from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
@@ -1671,7 +1670,14 @@ async def test_connector_exists_returns_false_when_not_found():
     }
 
     index = ConnectorIndex(config)
-    index.get_connector = AsyncMock(side_effect=DocumentNotFoundError)
+    api_meta = Mock()
+    api_meta.status = 404
+    error_body = {"error": {"reason": "mocked test failure"}}
+    index.get_connector = AsyncMock(
+        side_effect=NotFoundError(
+            message="this is an error message", body=error_body, meta=api_meta
+        )
+    )
 
     exists = await index.connector_exists("1")
     assert exists is False
