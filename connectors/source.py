@@ -141,12 +141,14 @@ class Field:
         # list requires special type casting
         if cast_type is list:
             if isinstance(value, str):
-                items=[]
+                items = []
                 if value:
                     for item in value.rstrip(",").split(","):
                         item = item.strip()
                         if not item:
-                            logger.warning("Empty string detected in the comma-separated list. It will be skipped.")
+                            logger.warning(
+                                "Empty string detected in the comma-separated list. It will be skipped."
+                            )
                         else:
                             items.append(item)
                 return items
