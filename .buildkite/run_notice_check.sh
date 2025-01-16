@@ -7,28 +7,28 @@ source .buildkite/shared.sh
 
 init_python
 
-make notice
+if is_pr && ! is_fork; then
+  echo 'Running on a PR that is not a fork, will commit changes'
 
-if [ -z "$(git status --porcelain | grep NOTICE.txt)" ]; then
-  echo 'Nothing changed'
-  exit 0
-else 
-  echo 'New changes to NOTICE.txt:'
-  git --no-pager diff
-  if is_pr && ! is_fork; then
-    echo 'Running on a PR that is not a fork, will commit changes'
-    source .buildkite/publish/git-setup.sh
-    export GH_TOKEN="$VAULT_GITHUB_TOKEN"
+  export GH_TOKEN="$VAULT_GITHUB_TOKEN"
+  source .buildkite/publish/git-setup.sh
+  make notice
+
+  if [ -z "$(git status --porcelain | grep NOTICE.txt)" ]; then
+    echo 'Nothing changed'
+    exit 0
+  else
+    echo 'New changes to NOTICE.txt:'
+    git --no-pager diff
 
     git add NOTICE.txt
     git commit -m"Update NOTICE.txt"
     git push
-    sleep 15
-  else
-    echo 'Running against a fork or a non-PR change, skipping pushing changes and just failing instead'
+
+    exit 1
   fi
-
-  exit 1
+else
+  echo 'Skipping autofix'
+  make notice
+  exit 0
 fi
-
-exit 0
