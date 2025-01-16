@@ -27,6 +27,13 @@ On the day of the release, `#mission-control` will notify the release manager th
 
 The Unified Release build will take care of producing git tags and official artifacts from our most recent DRA artifacts.
 
+### Pre-release artifacts
+
+If `#mission-control` asks for a pre-release artifact to be built, trigger the build pipeline from the relevant branch
+and add an Environment Variable for `VERSION_QUALIFIER` with the value of the pre-release.
+
+For example, to release 9.0.0-BC1, you would set `VERSION_QUALIFIER` to be `BC1` for this build.
+
 ### In-Between releases
 
 Sometimes, we need to release Connectors independently of the Elastic unified-release.

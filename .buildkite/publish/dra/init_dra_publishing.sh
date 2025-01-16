@@ -57,6 +57,10 @@ fi
 if [[ "${BUILDKITE_BRANCH:-}" =~ ([0-9]\.[0-9x]*$) ]]; then
   export PUBLISH_STAGING="true"
 fi
+if [ -n "${VERSION_QUALIFIER:-}" ]; then
+  # this is a special case where we will release a pre-release artifact, regardless of branch
+  export PUBLISH_STAGING="true"
+fi
 
 # Sanity check in the logs to list the downloaded artifacts
 chmod -R a+rw "${RELEASE_DIR}/dist"
@@ -149,12 +153,19 @@ fi
 
 # generate the dependency report and publish STAGING artifacts
 if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
-  dependencyReportName="dependencies-${VERSION}.csv";
+  if [ -n "${VERSION_QUALIFIER:-}" ]; then
+    dependencyReportName="dependencies-${VERSION}-${VERSION_QUALIFIER}.csv";
+    artifact_name="connectors-${VERSION}-${VERSION_QUALIFIER}.zip"
+  else
+    dependencyReportName="dependencies-${VERSION}.csv";
+    artifact_name="connectors-${VERSION}.zip"
+  fi
+
   echo "-------- Generating STAGING dependency report: ${dependencyReportName}"
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
 
   echo "-------- Publishing STAGING DRA Artifacts"
-  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/connectors-${VERSION}.zip
+  cp $RELEASE_DIR/dist/elasticsearch_connectors-${VERSION}.zip $DRA_ARTIFACTS_DIR/${artifact_name}
   setDraVaultCredentials
   export WORKFLOW="staging"
 
