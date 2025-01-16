@@ -146,7 +146,7 @@ class Field:
                     for item in value.split(","):
                         item = item.strip()
                         if not item:
-                            logger.warning(
+                            logger.debug(
                                 "Empty string detected in the comma-separated list. It will be skipped."
                             )
                         else:
