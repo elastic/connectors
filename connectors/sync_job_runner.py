@@ -35,8 +35,8 @@ from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
 
-JOB_REPORTING_INTERVAL = 10
-JOB_CHECK_INTERVAL = 1
+JOB_REPORTING_INTERVAL = 15
+JOB_CHECK_INTERVAL = 5
 ES_ID_SIZE_LIMIT = 512
 
 
@@ -324,11 +324,6 @@ class SyncJobRunner:
         }
 
         if await self.reload_sync_job():
-            if await self.reload_connector():
-                persisted_stats[
-                    "total_document_count"
-                ] = await self.connector.document_count()
-
             if sync_status == JobStatus.ERROR:
                 await self.sync_job.fail(sync_error, ingestion_stats=persisted_stats)
             elif sync_status == JobStatus.SUSPENDED:
@@ -339,6 +334,9 @@ class SyncJobRunner:
                 await self.sync_job.done(ingestion_stats=persisted_stats)
 
         if await self.reload_connector():
+            persisted_stats[
+                "total_document_count"
+            ] = await self.connector.document_count()
             sync_cursor = (
                 None
                 if not self.data_provider  # If we failed before initializing the data provider, we don't need to change the cursor
