@@ -34,6 +34,8 @@ and add an Environment Variable for `VERSION_QUALIFIER` with the value of the pr
 
 For example, to release 9.0.0-BC1, you would set `VERSION_QUALIFIER=BC1` for this build.
 
+Note that the qualified artifacts will only show up in DRA "staging" but not "snapshot" reports.
+
 ### In-Between releases
 
 Sometimes, we need to release Connectors independently of the Elastic unified-release.
