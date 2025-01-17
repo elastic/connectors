@@ -325,7 +325,7 @@ async def test_es_api_connector_update_configuration():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_filtering_draft_validation():
+async def test_es_api_connector_update_filtering_draft_validation():
     connector_id = "id"
     validation_result = {"validation": "result"}
 
@@ -357,8 +357,40 @@ async def test_es_api_connector_activate_filtering_draft():
 
 @pytest.mark.asyncio
 async def test_es_api_connector_sync_job_create():
-    pass
+    connector_id = "id"
+    job_type = "full"
+    trigger_method = "on_demand"
 
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_sync_job_create(
+        connector_id,
+        job_type,
+        trigger_method
+    )
+
+    es_api.client.connector.sync_job_post.assert_called_once_with(
+        id=connector_id,
+        job_type=job_type,
+        trigger_method=trigger_method
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_get():
+    connector_id = "id"
+    include_deleted=False
+
+    es_api = ESApi(elastic_config=config)
+    es_api._api_wrapper = AsyncMock()
+
+    await es_api.connector_get(connector_id, include_deleted)
+
+    es_api._api_wrapper.connector_get.assert_called_once_with(
+        connector_id,
+        include_deleted
+    )
 
 @pytest.mark.asyncio
 async def test_es_api_connector_sync_job_claim():
