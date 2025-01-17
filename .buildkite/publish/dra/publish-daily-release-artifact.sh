@@ -58,7 +58,9 @@ fi
 # snapshot workflows do not use qualifiers
 if [[ "${WORKFLOW:-}" == "snapshot" ]]; then
   echo "overriding any local VERSION_QUALIFIER for SNAPSHOT workflow"
-  VERSION_QUALIFIER=""
+  version_qualifier=""
+else
+  version_qualifier="${VERSION_QUALIFIER:-}"
 fi
 
 # Version. This is pulled from config/product_version.
@@ -93,5 +95,5 @@ docker run --rm \
       --commit "${REVISION}" \
       --workflow "${WORKFLOW}" \
       --version "${VERSION}" \
-      --qualifier "${VERSION_QUALIFIER:-}" \
+      --qualifier "${version_qualifier:-}" \
       --artifact-set main
