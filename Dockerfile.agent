@@ -11,7 +11,6 @@ RUN microdnf update && microdnf install -y \
   wget \
   git \
   make \
-  gcc \
   python3.11 \
   python3.11-pip \
   && microdnf clean all
