@@ -55,6 +55,12 @@ if [[ "${WORKFLOW:-}" != "staging" && "${WORKFLOW:-}" != "snapshot" ]]; then
   exit 2
 fi
 
+# snapshot workflows do not use qualifiers
+if [[ "${WORKFLOW:-}" == "snapshot" ]]; then
+  echo "overriding any local VERSION_QUALIFIER for SNAPSHOT workflow"
+  VERSION_QUALIFIER=""
+fi
+
 # Version. This is pulled from config/product_version.
 if [[ "${VERSION:-}" == "" ]]; then
   echo "ERROR: VERSION required!"
