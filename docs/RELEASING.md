@@ -11,7 +11,8 @@ Take care of the branching (minor releases only):
 
 - Increment the VERSION on main to match the next minor release
 - Create a new maintenance branch
-- Make sure the `.backportrc.json` is updated. The previous minor is added to `targetBranchChoices` and the new minor is used in `branchLabelMapping`
+- Make sure `.backportrc.json` is updated: the previous minor is added to `targetBranchChoices` and the new minor is used in `branchLabelMapping`
+- Make sure `renovate.json` is updated: the previous minor is added to `labels` (for example, `v8.18`). [Create that label](https://github.com/elastic/connectors/labels) if it doesn't exist yet
 
 
 ## Unified release, (>= 8.16)
@@ -25,6 +26,15 @@ Make sure that the `catalog-info.yml` on the `main` branch is running nightly bu
 On the day of the release, `#mission-control` will notify the release manager that it's time to bump the VERSION to the next PATCH.
 
 The Unified Release build will take care of producing git tags and official artifacts from our most recent DRA artifacts.
+
+### Pre-release artifacts
+
+If `#mission-control` asks for a pre-release artifact to be built, trigger the build pipeline from the relevant branch
+and add an Environment Variable for `VERSION_QUALIFIER` with the value of the pre-release.
+
+For example, to release 9.0.0-BC1, you would set `VERSION_QUALIFIER=BC1` for this build.
+
+Note that the qualified artifacts will only show up in DRA "staging" but not "snapshot" reports.
 
 ### In-Between releases
 
