@@ -28,13 +28,11 @@ class TemporaryConnectorApiWrapper(ESClient):
         super().__init__(elastic_config)
 
     async def connector_get(self, connector_id, include_deleted):
-        include_deleted_param = (
-            f"?include_deleted={'true' if include_deleted else 'false'}"
-        )
         return await self.client.perform_request(
             "GET",
-            f"/_connector/{connector_id}{include_deleted_param}",
+            f"/_connector/{connector_id}",
             headers={"accept": "application/json"},
+            params={"include_deleted": include_deleted},
         )
 
     async def connector_check_in(self, connector_id):

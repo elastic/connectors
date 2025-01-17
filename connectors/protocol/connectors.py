@@ -185,7 +185,9 @@ class ConnectorIndex(ESIndex):
 
     async def connector_exists(self, connector_id, include_deleted=False):
         try:
-            doc = await self.get_connector(connector_id, include_deleted)
+            doc = await self.api.connector_get(
+                connector_id=connector_id, include_deleted=include_deleted
+            )
             return doc is not None
         except ElasticNotFoundError:
             return False
@@ -194,11 +196,6 @@ class ConnectorIndex(ESIndex):
                 f"Error while checking existence of connector '{connector_id}': {e}"
             )
             raise e
-
-    async def get_connector(self, connector_id, include_deleted=False):
-        return await self.api.connector_get(
-            connector_id=connector_id, include_deleted=include_deleted
-        )
 
     async def connector_update_scheduling(
         self, connector_id, full=None, incremental=None, access_control=None
