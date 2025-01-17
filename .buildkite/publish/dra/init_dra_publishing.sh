@@ -49,6 +49,7 @@ export REVISION="${BUILDKITE_COMMIT}"
 export BRANCH_NAME="${BUILDKITE_BRANCH}"
 export PRODUCT_NAME="connectors"
 export GIT_REPO="connectors"
+export VERSION_QUALIFIER="${VERSION_QUALIFIER:-}"
 
 # set PUBLISH_SNAPSHOT and PUBLISH_STAGING based on the branch
 if [[ "${BUILDKITE_BRANCH:-}" =~ (main|8\.x|[0-9]\.[0-9x]*$) ]]; then
