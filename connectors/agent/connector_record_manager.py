@@ -50,7 +50,9 @@ class ConnectorRecordManager:
                 random_connector_name_id = generate_random_id(length=4)
                 connector_name = f"[Elastic-managed] {service_type} connector {random_connector_name_id}"
 
-            if not await self.connector_index.connector_exists(connector_id):
+            if not await self.connector_index.connector_exists(
+                connector_id, include_deleted=True
+            ):
                 try:
                     await self.connector_index.connector_put(
                         connector_id=connector_id,
@@ -64,6 +66,10 @@ class ConnectorRecordManager:
                         f"Failed to create connector record for {connector_id}: {e}"
                     )
                     raise e
+            else:
+                logger.debug(
+                    f"Skipping connector creation. Connector record for {connector_id} already exists."
+                )
 
     def _check_agent_config_ready(self, agent_config):
         """
