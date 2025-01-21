@@ -38,7 +38,7 @@ $ make clean install
 The `elastic-ingest` CLI will be installed on your system:
 
 ```shell
-$ bin/elastic-ingest --help
+$ .venv/bin/elastic-ingest --help
 usage: elastic-ingest [-h] [--action {poll,list}] [-c CONFIG_FILE] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL} | --debug] [--filebeat] [--version] [--uvloop]
 
 options:
