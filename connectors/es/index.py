@@ -130,7 +130,7 @@ class ESApi(ESClient):
                 self.client.connector.sync_job_update_stats,
                 connector_sync_job_id=sync_job_id,
                 body=ingestion_stats,
-                metadata=metadata
+                metadata=metadata,
             )
         )
 

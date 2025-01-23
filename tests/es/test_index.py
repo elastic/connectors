@@ -400,7 +400,7 @@ async def test_es_api_connector_sync_job_claim():
     es_api.client.connector.sync_job_claim.assert_called_once_with(
         connector_sync_job_id=sync_job_id,
         worker_hostname=worker_hostname,
-        sync_cursor=sync_cursor
+        sync_cursor=sync_cursor,
     )
 
 
@@ -416,7 +416,5 @@ async def test_es_api_connector_sync_job_update_stats():
     await es_api.connector_sync_job_update_stats(sync_job_id, ingestion_stats, metadata)
 
     es_api.client.connector.sync_job_update_stats.assert_called_once_with(
-        connector_sync_job_id=sync_job_id,
-        body=ingestion_stats,
-        metadata=metadata
+        connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata=metadata
     )
