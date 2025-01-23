@@ -35,54 +35,6 @@ class TemporaryConnectorApiWrapper(ESClient):
             params={"include_deleted": include_deleted},
         )
 
-    async def connector_check_in(self, connector_id):
-        return await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_check_in",
-            headers={"accept": "application/json"},
-        )
-
-    async def connector_update_filtering_draft_validation(
-        self, connector_id, validation_result
-    ):
-        return await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_filtering/_validation",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={"validation": validation_result},
-        )
-
-    async def connector_activate_filtering_draft(self, connector_id):
-        return await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_filtering/_activate",
-            headers={"accept": "application/json"},
-        )
-
-    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
-        await self.client.perform_request(
-            "PUT",
-            f"/_connector/_sync_job/{sync_job_id}/_claim",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={
-                "worker_hostname": worker_hostname,
-                **({"sync_cursor": sync_cursor} if sync_cursor else {}),
-            },
-        )
-
-    async def connector_sync_job_update_stats(
-        self, sync_job_id, ingestion_stats, metadata
-    ):
-        await self.client.perform_request(
-            "PUT",
-            f"/_connector/_sync_job/{sync_job_id}/_stats",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={
-                **ingestion_stats,
-                **({"metadata": metadata} if metadata else {}),
-            },
-        )
-
 
 class ESApi(ESClient):
     def __init__(self, elastic_config):
@@ -153,10 +105,10 @@ class ESApi(ESClient):
     async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
         return await self._retrier.execute_with_retry(
             partial(
-                self._api_wrapper.connector_sync_job_claim,
-                sync_job_id,
-                worker_hostname,
-                sync_cursor,
+                self.client.connector.sync_job_claim,
+                connector_sync_job_id=sync_job_id,
+                worker_hostname=worker_hostname,
+                sync_cursor=sync_cursor,
             )
         )
 
@@ -175,10 +127,10 @@ class ESApi(ESClient):
     ):
         return await self._retrier.execute_with_retry(
             partial(
-                self._api_wrapper.connector_sync_job_update_stats,
-                sync_job_id,
-                ingestion_stats,
-                metadata,
+                self.client.connector.sync_job_update_stats,
+                connector_sync_job_id=sync_job_id,
+                body=ingestion_stats,
+                metadata=metadata
             )
         )
 
