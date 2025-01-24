@@ -4511,7 +4511,7 @@ THE SOFTWARE.
 
 
 grpcio
-1.69.0
+1.70.0
 Apache Software License
 
                                  Apache License
@@ -5126,7 +5126,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 
 grpcio-tools
-1.69.0
+1.70.0
 Apache Software License
 UNKNOWN
 
