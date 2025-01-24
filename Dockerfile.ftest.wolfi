@@ -1,4 +1,4 @@
-FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:28e5013f9dff5f531571989f2a973ee9d78444e001e9a6353a3761e380e53d41
+FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:2482ae4d073347f13997ad74f1ea0274a39a1fff02d5150ffdf21ca985202def
 USER root
 COPY . /connectors
 WORKDIR /connectors
