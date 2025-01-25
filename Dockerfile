@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:d7d42af987333417272165a51dd7aed9cfd47067ac701ea927263364b12d64ad
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:da76d41652574266729c891334f257e00c2f35c00785c99025df148ef5015dab
 ARG python_version=3.11
 
 USER root
