@@ -21,12 +21,10 @@ export VERSION=$(cat $VERSION_PATH)
 if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
   echo "Adding √SNAPSHOT labeling"
   export VERSION="${VERSION}-SNAPSHOT"
-  version_qualifier=""
 elif [[ -n "${VERSION_QUALIFIER:-}" ]]; then
   echo "Adding version qualifier labeling"
   # SNAPSHOT workflows ignore version qualifier
   export VERSION="${VERSION}-${VERSION_QUALIFIER}"
-  version_qualifier="${VERSION_QUALIFIER}"
 fi
 
 REVISION="$(git rev-parse HEAD)"
@@ -35,7 +33,7 @@ REPOSITORY="$(git config --get remote.origin.url)"
 # Create a build.properties file for reference during build process
 cat <<EOL > build.properties
 version=$VERSION
-qualifier=$version_qualifier
+qualifier=$VERSION_QUALIFIER
 revision=$REVISION
 repository=$REPOSITORY
 EOL
