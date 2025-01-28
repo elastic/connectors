@@ -20,7 +20,7 @@ export VERSION=$(cat $VERSION_PATH)
 version_qualifier=""
 
 if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
-  echo "Adding √SNAPSHOT labeling"
+  echo "Adding SNAPSHOT labeling"
   export VERSION="${VERSION}-SNAPSHOT"
 elif [[ -n "${VERSION_QUALIFIER:-}" ]]; then
   echo "Adding version qualifier labeling"
