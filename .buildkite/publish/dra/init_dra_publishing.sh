@@ -153,8 +153,15 @@ fi
 
 # generate the dependency report and publish STAGING artifacts
 if [[ "${PUBLISH_STAGING:-}" == "true" ]]; then
-  dependencyReportName="dependencies-${VERSION}.csv";
-  zip_artifact_name="connectors-${VERSION}.zip"
+  if [ -n "${VERSION_QUALIFIER:-}" ]; then
+    dependencyReportName="dependencies-${VERSION}-${VERSION_QUALIFIER}.csv";
+    zip_artifact_name="connectors-${VERSION}-${VERSION_QUALIFIER}.zip"
+    cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-amd64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-amd64.tar.gz
+    cp $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-docker-image-linux-arm64.tar.gz $DRA_ARTIFACTS_DIR/$PROJECT_NAME-$VERSION-$VERSION_QUALIFIER-docker-image-linux-arm64.tar.gz
+  else
+    dependencyReportName="dependencies-${VERSION}.csv";
+    zip_artifact_name="connectors-${VERSION}.zip"
+  fi
 
   echo "-------- Generating STAGING dependency report: ${dependencyReportName}"
   generateDependencyReport $DEPENDENCIES_REPORTS_DIR/$dependencyReportName
