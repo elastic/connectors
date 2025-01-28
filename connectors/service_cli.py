@@ -21,7 +21,7 @@ import signal
 import click
 from click import ClickException, UsageError
 
-from connectors import __version__
+from connectors import __version__, __build_info__
 from connectors.config import load_config
 from connectors.content_extraction import ContentExtraction
 from connectors.logger import logger, set_logger
@@ -177,7 +177,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 
 
 @click.command()
-@click.version_option(__version__, "-v", "--version", message="%(version)s")
+@click.version_option(__build_info__, "-v", "--version", message="%(version)s")
 @click.option(
     "--action",
     type=click.Choice(

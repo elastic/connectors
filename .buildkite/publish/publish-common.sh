@@ -17,31 +17,33 @@ source $SCRIPT_DIR/git-setup.sh
 
 VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
 export VERSION=$(cat $VERSION_PATH)
-version_qualifier=""
+
+# Variables for build.yaml
+version="${VERSION}"
+revision="$(git rev-parse HEAD)"
+repository="$(git config --get remote.origin.url)"
 
 if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
+  # SNAPSHOT workflows ignore version qualifier
   echo "Adding SNAPSHOT labeling"
   export VERSION="${VERSION}-SNAPSHOT"
+  version="${VERSION}"
 elif [[ -n "${VERSION_QUALIFIER:-}" ]]; then
+  # version qualifier should not append version in build.yaml
   echo "Adding version qualifier labeling"
-  # SNAPSHOT workflows ignore version qualifier
-  export VERSION="${VERSION}-${VERSION_QUALIFIER}"
-  version_qualifier="${VERSION_QUALIFIER}"
+  version="${VERSION}-${VERSION_QUALIFIER}"
 fi
 
-REVISION="$(git rev-parse HEAD)"
-REPOSITORY="$(git config --get remote.origin.url)"
-
-# Create a build.properties file for reference during build process
-cat <<EOL > build.properties
-version=$VERSION
-qualifier=$version_qualifier
-revision=$REVISION
-repository=$REPOSITORY
+# Create a build.yaml file for reference after build process
+cat <<EOL > connectors/build.yaml
+version: "$version"
+qualifier: "$VERSION_QUALIFIER"
+revision: "$revision"
+repository: "$repository"
 EOL
 
-echo "Created build.properties file:"
-cat build.properties
+echo "Created build.yaml file:"
+cat build.yaml
 
 if [[ "${MANUAL_RELEASE:-}" == "true" ]]; then
   # This block is for out-of-band releases, triggered by the release-pipeline
