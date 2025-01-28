@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import os
+
 import yaml
 
 with open(os.path.join(os.path.dirname(__file__), "VERSION")) as f:
