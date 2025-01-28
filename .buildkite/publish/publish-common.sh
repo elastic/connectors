@@ -20,6 +20,7 @@ export VERSION=$(cat $VERSION_PATH)
 
 # Variables for build.yaml
 version="${VERSION}"
+version_qualifier="${VERSION_QUALIFIER:-}"
 revision="$(git rev-parse HEAD)"
 repository="$(git config --get remote.origin.url)"
 
@@ -37,7 +38,7 @@ fi
 # Create a build.yaml file for reference after build process
 cat <<EOL > connectors/build.yaml
 version: "$version"
-qualifier: "$VERSION_QUALIFIER"
+qualifier: "$version_qualifier"
 revision: "$revision"
 repository: "$repository"
 EOL
