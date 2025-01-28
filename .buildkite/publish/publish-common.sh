@@ -43,8 +43,8 @@ revision: "$revision"
 repository: "$repository"
 EOL
 
-echo "Created build.yaml file:"
-cat build.yaml
+echo "Created connectors/build.yaml file:"
+cat connectors/build.yaml
 
 if [[ "${MANUAL_RELEASE:-}" == "true" ]]; then
   # This block is for out-of-band releases, triggered by the release-pipeline
