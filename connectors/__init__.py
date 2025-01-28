@@ -10,7 +10,7 @@ import yaml
 with open(os.path.join(os.path.dirname(__file__), "VERSION")) as f:
     __version__ = f.read().strip()
 
-# This references a file that's built during from .buildkite/publish/publish-common.sh
+# This references a file that's built in .buildkite/publish/publish-common.sh
 # See https://github.com/elastic/connectors/pull/3154 for more info
 yaml_path = os.path.join(os.path.dirname(__file__), "build.yaml")
 if os.path.exists(yaml_path):
