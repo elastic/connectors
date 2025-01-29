@@ -61,7 +61,7 @@ class ESApi(ESClient):
                 service_type=service_type,
                 name=connector_name,
                 index_name=index_name,
-                is_native=is_native
+                is_native=is_native,
             )
         )
 
