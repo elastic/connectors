@@ -14,6 +14,12 @@
   ],
   "packageRules": [
     {
+      "matchPackagePatterns": [
+        "^cgr.dev/"
+      ],
+      "enabled": false
+    },
+    {
       "matchPackageNames": [
         "docker.elastic.co/wolfi/python"
       ],
