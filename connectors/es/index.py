@@ -46,8 +46,13 @@ class ESApi(ESClient):
             partial(self.client.connector.check_in, connector_id=connector_id)
         )
 
+    async def connector_get(self, connector_id, include_deleted=False):
+        return await self._retrier.execute_with_retry(
+            partial(self._api_wrapper.connector_get, connector_id, include_deleted)
+        )
+
     async def connector_put(
-        self, connector_id, service_type, connector_name, index_name
+        self, connector_id, service_type, connector_name, index_name, is_native
     ):
         return await self._retrier.execute_with_retry(
             partial(
@@ -56,6 +61,7 @@ class ESApi(ESClient):
                 service_type=service_type,
                 name=connector_name,
                 index_name=index_name,
+                is_native=is_native
             )
         )
 
