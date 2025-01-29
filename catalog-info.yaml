@@ -14,6 +14,7 @@ metadata:
     github.com/project-slug: "elastic/connectors"
     github.com/team-slug: "elastic/search-extract-and-transform"
     buildkite.com/project-slug: "elastic/connectors"
+    pagerduty.com/service-id: "PN2MP2P"
   tags:
     - "python"
     - "buildkite"
