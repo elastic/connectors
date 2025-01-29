@@ -18,10 +18,33 @@ source $SCRIPT_DIR/git-setup.sh
 VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
 export VERSION=$(cat $VERSION_PATH)
 
+# Variables for build.yaml
+version="${VERSION}"
+version_qualifier="${VERSION_QUALIFIER:-}"
+revision="$(git rev-parse HEAD)"
+repository="$(git config --get remote.origin.url)"
+
 if [[ "${USE_SNAPSHOT:-}" == "true" ]]; then
+  # SNAPSHOT workflows ignore version qualifier
   echo "Adding SNAPSHOT labeling"
   export VERSION="${VERSION}-SNAPSHOT"
+  version="${VERSION}"
+elif [[ -n "${VERSION_QUALIFIER:-}" ]]; then
+  # version qualifier should not append version in build.yaml
+  echo "Adding version qualifier labeling"
+  version="${VERSION}-${VERSION_QUALIFIER}"
 fi
+
+# Create a build.yaml file for reference after build process
+cat <<EOL > connectors/build.yaml
+version: "$version"
+qualifier: "$version_qualifier"
+revision: "$revision"
+repository: "$repository"
+EOL
+
+echo "Created connectors/build.yaml file:"
+cat connectors/build.yaml
 
 if [[ "${MANUAL_RELEASE:-}" == "true" ]]; then
   # This block is for out-of-band releases, triggered by the release-pipeline
