@@ -1788,7 +1788,7 @@ Copyright (C) 2016-present the asyncpg authors and contributors.
 
 
 attrs
-24.3.0
+25.1.0
 UNKNOWN
 The MIT License (MIT)
 
@@ -3467,7 +3467,7 @@ SOFTWARE
   to the Commercial Software.
 
 elasticsearch
-8.17.0
+8.17.1
 Apache Software License
 
                                  Apache License
