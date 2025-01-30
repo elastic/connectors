@@ -3466,7 +3466,7 @@ SOFTWARE
   to the Commercial Software.
 
 elasticsearch
-8.17.0
+8.17.1
 Apache Software License
 
                                  Apache License

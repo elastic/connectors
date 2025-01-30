@@ -163,13 +163,19 @@ class ConnectorIndex(ESIndex):
             await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
     async def connector_put(
-        self, connector_id, service_type, connector_name=None, index_name=None
+        self,
+        connector_id,
+        service_type,
+        connector_name=None,
+        index_name=None,
+        is_native=False,
     ):
         await self.api.connector_put(
             connector_id=connector_id,
             service_type=service_type,
             connector_name=connector_name,
             index_name=index_name,
+            is_native=is_native,
         )
 
     async def connector_update_scheduling(
