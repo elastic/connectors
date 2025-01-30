@@ -97,6 +97,14 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
+        Daily 8_18:
+          branch: '8.18'
+          cronline: '@daily'
+          message: "Runs daily `8.18` e2e test"
+        Daily 8_17:
+          branch: '8.17'
+          cronline: '@daily'
+          message: "Runs daily `8.17` e2e test"
         Daily 8_16:
           branch: '8.16'
           cronline: '@daily'
@@ -147,6 +155,14 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
+        Daily 8_18:
+          branch: '8.18'
+          cronline: '@daily'
+          message: "Runs daily `8.18` e2e aarch64 test"
+        Daily 8_17:
+          branch: '8.17'
+          cronline: '@daily'
+          message: "Runs daily `8.17` e2e aarch64 test"
         Daily 8_16:
           branch: '8.16'
           cronline: '@daily'
@@ -202,6 +218,10 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
+        Daily 8_18:
+          branch: '8.18'
+          cronline: '@daily'
+          message: "Builds and pushes daily `8.18` docker images"
         Daily 8_15:
           branch: '8.15'
           cronline: '@daily'
