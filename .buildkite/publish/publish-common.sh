@@ -13,6 +13,9 @@ export SCRIPT_DIR="$CURDIR"
 export BUILDKITE_DIR=$(realpath "$(dirname "$SCRIPT_DIR")")
 export PROJECT_ROOT=$(realpath "$(dirname "$BUILDKITE_DIR")")
 
+# temporary hard-coded build qualifier, this should be removed once we've released 9.0
+export VERSION_QUALIFIER="${VERSION_QUALIFIER:-beta1}"
+
 source $SCRIPT_DIR/git-setup.sh
 
 VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
