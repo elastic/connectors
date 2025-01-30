@@ -1,6 +1,7 @@
 {
   "targetBranchChoices": [
     { "name": "main", "checked": true },
+    "9.0",
     "8.x",
     "8.17",
     "8.16"
@@ -8,7 +9,7 @@
   "fork": false,
   "targetPRLabels": ["backport"],
   "branchLabelMapping": {
-    "^v9.0.0$": "main",
+    "^v9.1.0$": "main",
     "^v8.18.0$": "8.x",
     "^v(\\d+).(\\d+)(.\\d+)*$": "$1.$2"
   },
