@@ -419,6 +419,7 @@ async def test_es_api_connector_sync_job_update_stats_with_metadata():
         connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata=metadata
     )
 
+
 @pytest.mark.asyncio
 async def test_es_api_connector_sync_job_update_stats_metadata_as_none():
     sync_job_id = "sync_job_id_test"
