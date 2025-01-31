@@ -408,7 +408,7 @@ async def test_es_api_connector_sync_job_claim():
 async def test_es_api_connector_sync_job_update_stats():
     sync_job_id = "sync_job_id_test"
     ingestion_stats = {"ingestion": "stat"}
-    metadata = {"meta": "data"}
+    metadata = None # make sure metadata gets passed as '{}' if undefined
 
     es_api = ESApi(elastic_config=config)
     es_api.client = AsyncMock()
@@ -416,5 +416,5 @@ async def test_es_api_connector_sync_job_update_stats():
     await es_api.connector_sync_job_update_stats(sync_job_id, ingestion_stats, metadata)
 
     es_api.client.connector.sync_job_update_stats.assert_called_once_with(
-        connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata=metadata
+        connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata={}
     )
