@@ -420,7 +420,7 @@ async def test_es_api_connector_sync_job_update_stats_with_metadata():
     )
 
 @pytest.mark.asyncio
-async def test_es_api_connector_sync_job_update_stats():
+async def test_es_api_connector_sync_job_update_stats_metadata_as_none():
     sync_job_id = "sync_job_id_test"
     ingestion_stats = {"ingestion": "stat"}
     metadata = None  # make sure metadata gets passed as '{}' if undefined
