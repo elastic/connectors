@@ -408,7 +408,7 @@ async def test_es_api_connector_sync_job_claim():
 async def test_es_api_connector_sync_job_update_stats():
     sync_job_id = "sync_job_id_test"
     ingestion_stats = {"ingestion": "stat"}
-    metadata = None # make sure metadata gets passed as '{}' if undefined
+    metadata = None  # make sure metadata gets passed as '{}' if undefined
 
     es_api = ESApi(elastic_config=config)
     es_api.client = AsyncMock()
