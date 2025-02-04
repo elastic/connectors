@@ -534,12 +534,15 @@ class TestEntraAPIToken:
 
         certificate_credential_mock = AsyncMock()
         certificate_credential_mock.get_token = AsyncMock(return_value=entra_token)
+        certificate_credential_mock.close = AsyncMock()
 
         with patch(
             "connectors.sources.sharepoint_online.CertificateCredential",
             return_value=certificate_credential_mock,
         ):
             actual_token, actual_expires_at = await token._fetch_token()
+
+        certificate_credential_mock.close.assert_called_once()
 
         assert actual_token == bearer
         assert actual_expires_at == datetime.utcfromtimestamp(expires_at)
