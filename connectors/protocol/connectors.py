@@ -233,18 +233,20 @@ class ConnectorIndex(ESIndex):
 
         native_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"term": {"is_native": True}},
                     {"terms": {"service_type": native_service_types}},
-                ]
+                ],
             }
         }
 
         custom_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"terms": {"_id": connector_ids}},
-                ]
+                ],
             }
         }
         if len(native_service_types) > 0 and len(connector_ids) > 0:
@@ -1185,7 +1187,9 @@ class SyncJobIndex(ESIndex):
     async def orphaned_idle_jobs(self, connector_ids):
         query = {
             "bool": {
-                "must_not": {"terms": {"connector.id": connector_ids}},
+                "must_not": {
+                    "terms": {"connector.id": connector_ids},
+                },
                 "filter": [
                     {
                         "terms": {
@@ -1194,7 +1198,7 @@ class SyncJobIndex(ESIndex):
                                 JobStatus.CANCELING.value,
                             ]
                         }
-                    }
+                    },
                 ],
             }
         }
@@ -1215,7 +1219,7 @@ class SyncJobIndex(ESIndex):
                         }
                     },
                     {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
-                ]
+                ],
             }
         }
 
