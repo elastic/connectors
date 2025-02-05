@@ -1187,9 +1187,7 @@ class SyncJobIndex(ESIndex):
     async def orphaned_idle_jobs(self, connector_ids):
         query = {
             "bool": {
-                "must_not": {
-                    "terms": {"connector.id": connector_ids},
-                },
+                "must_not": {"terms": {"connector.id": connector_ids}},
                 "filter": [
                     {
                         "terms": {
@@ -1198,7 +1196,7 @@ class SyncJobIndex(ESIndex):
                                 JobStatus.CANCELING.value,
                             ]
                         }
-                    },
+                    }
                 ],
             }
         }
@@ -1219,7 +1217,7 @@ class SyncJobIndex(ESIndex):
                         }
                     },
                     {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
-                ],
+                ]
             }
         }
 
