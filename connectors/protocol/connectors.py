@@ -233,18 +233,20 @@ class ConnectorIndex(ESIndex):
 
         native_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"term": {"is_native": True}},
                     {"terms": {"service_type": native_service_types}},
-                ]
+                ],
             }
         }
 
         custom_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"terms": {"_id": connector_ids}},
-                ]
+                ],
             }
         }
         if len(native_service_types) > 0 and len(connector_ids) > 0:
