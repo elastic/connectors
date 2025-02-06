@@ -241,19 +241,21 @@ async def test_supported_connectors(
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     native_connectors_query = {
         "bool": {
+            "must_not": [{"term": {"deleted": True}}],
             "filter": [
                 {"term": {"is_native": True}},
                 {"terms": {"service_type": native_service_types}},
-            ]
+            ],
         }
     }
 
     custom_connectors_query = {
         "bool": {
+            "must_not": [{"term": {"deleted": True}}],
             "filter": [
                 {"term": {"is_native": False}},
                 {"terms": {"_id": connector_ids}},
-            ]
+            ],
         }
     }
 
