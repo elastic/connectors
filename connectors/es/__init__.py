@@ -5,11 +5,11 @@
 #
 import warnings
 
+from elasticsearch.exceptions import GeneralAvailabilityWarning
+
 from connectors.es.client import ESClient  # NOQA
 from connectors.es.document import ESDocument, InvalidDocumentSourceError  # NOQA
 from connectors.es.index import ESIndex  # NOQA
-
-from elasticsearch.exceptions import GeneralAvailabilityWarning
 
 warnings.filterwarnings("ignore", category=GeneralAvailabilityWarning)
 
