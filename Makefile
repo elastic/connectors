@@ -1,6 +1,22 @@
 .PHONY: install clean lint autoformat test release ftest ftrace install run default-config release docker-build docker-run docker-push
 
-PYTHON?=python3
+# Default to python3, but if its version is >3.11, try using python3.11 or python3.10.
+PYTHON ?= python3
+PYTHON_VERSION := $(shell $(PYTHON) -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2>/dev/null)
+CHECK_UNSUPPORTED_PYTHON_VERSION := $(shell $(PYTHON) -c "import sys; print(1 if sys.version_info[:2] > (3,11) else 0)" 2>/dev/null)
+ifeq ($(CHECK_UNSUPPORTED_PYTHON_VERSION),1)
+  ifneq ($(shell command -v python3.11 2>/dev/null),)
+    PYTHON = python3.11
+  else ifneq ($(shell command -v python3.10 2>/dev/null),)
+    PYTHON = python3.10
+  else
+    $(error "Unsupported python version: $(PYTHON) (version $(PYTHON_VERSION)) is greater than 3.11 and neither python3.11 nor python3.10 are available.")
+  endif
+endif
+
+$(info Using $(PYTHON) (version $(shell $(PYTHON) -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')")))
+
+
 ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
@@ -21,22 +37,22 @@ config.yml:
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
 
-notice:  .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
+notice: .venv/bin/python .venv/bin/pip-licenses .venv/bin/elastic-ingest
 	.venv/bin/pip-licenses --format=plain-vertical --with-license-file --no-license-path > NOTICE.txt
 
 install: .venv/bin/python .venv/bin/elastic-ingest notice
 
 install-agent: .venv/bin/elastic-ingest
 
-.venv/bin/elastic-ingest: .venv/bin/python
+
+.venv/bin/elastic-ingest: .venv/bin/python requirements/framework.txt requirements/$(ARCH).txt requirements/agent.txt
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/python setup.py develop
+	.venv/bin/python setup.py developg
 
 .venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/tests.txt
-
 
 .venv/bin/pytest: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
