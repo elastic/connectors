@@ -13,6 +13,3 @@ from connectors.es.index import ESIndex  # NOQA
 from connectors.es.settings import DEFAULT_LANGUAGE, Mappings  # NOQA
 
 warnings.filterwarnings("ignore", category=GeneralAvailabilityWarning)
-
-TIMESTAMP_FIELD = "_timestamp"
-DEFAULT_LANGUAGE = "en"
