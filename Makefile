@@ -48,7 +48,7 @@ install-agent: .venv/bin/elastic-ingest
 .venv/bin/elastic-ingest: .venv/bin/python requirements/framework.txt requirements/$(ARCH).txt requirements/agent.txt
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/python setup.py developg
+	.venv/bin/python setup.py develop
 
 .venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
