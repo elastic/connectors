@@ -978,8 +978,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 aiohappyeyeballs
-2.4.4
-Other/Proprietary License; Python Software Foundation License
+2.4.6
+Python Software Foundation License
 A. HISTORY OF THE SOFTWARE
 ==========================
 
