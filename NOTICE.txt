@@ -8915,7 +8915,7 @@ limitations under the License.
 
 
 tzlocal
-5.2
+5.3
 MIT License
 Copyright 2011-2017 Lennart Regebro
 
