@@ -10,6 +10,9 @@ Use connectors to sync data from popular data sources to Elasticsearch.
 
 These connectors are available to be self-managed on your own infrastructure.
 
+> [!NOTE]  
+> Managed connectors on Elastic Cloud Hosted are no longer available as of version 9.0.
+
 ℹ️ For an overview of the steps involved in deploying connectors refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
 
 To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
