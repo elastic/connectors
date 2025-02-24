@@ -2733,11 +2733,11 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 
 cachetools
-5.5.1
+5.5.2
 MIT License
 The MIT License (MIT)
 
-Copyright (c) 2014-2024 Thomas Kemmer
+Copyright (c) 2014-2025 Thomas Kemmer
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -6495,7 +6495,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 
 propcache
-0.2.1
+0.3.0
 Apache Software License
 
                                  Apache License
