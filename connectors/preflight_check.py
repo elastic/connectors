@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+import re
+
 import aiohttp
 
 from connectors.es.management_client import ESManagementClient
@@ -87,10 +89,11 @@ class PreflightCheck:
         Checks if the Connector and ES versions are compatible
         """
 
+        # Remove any version qualifier (e.g., -SNAPSHOT, -beta1, -rc1)
+        major_minor_patch_es_version = re.split(r"-", es_version)[0]
+
         # array legend: 0 - major, 1 - minor, 2 - patch
-        es_version_parts = list(
-            map(int, es_version.replace("-SNAPSHOT", "").split("."))
-        )
+        es_version_parts = list(map(int, major_minor_patch_es_version.split(".")))
         connector_version_parts = list(map(int, self.version.split("+")[0].split(".")))
 
         # major
