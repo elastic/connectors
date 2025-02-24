@@ -4,8 +4,9 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-import aiohttp
 import re
+
+import aiohttp
 
 from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
