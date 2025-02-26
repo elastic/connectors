@@ -264,7 +264,7 @@ class PostgreSQLClient:
     async def get_table_primary_key(self, table):
         primary_keys = [
             key
-            async for [key, _] in fetch(
+            async for [key] in fetch(
                 cursor_func=partial(
                     self.get_cursor,
                     self.queries.table_primary_key(
