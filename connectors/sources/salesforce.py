@@ -63,7 +63,7 @@ RELEVANT_SOBJECTS = [
     "Case",
     "CaseComment",
     "CaseFeed",
-    "Contact",
+    # "Contact",
     "ContentDocument",
     "ContentDocumentLink",
     "ContentVersion",
@@ -763,8 +763,8 @@ class SalesforceClient:
             .with_default_metafields()
             .with_fields(queryable_fields)
             .with_fields(["Owner.Id", "Owner.Name", "Owner.Email"])
-            .with_fields(["Parent.Id", "Parent.Name"])
-            .with_join(opportunities_join)
+            # .with_fields(["Parent.Id", "Parent.Name"])
+            # .with_join(opportunities_join)
             .with_join(doc_links_join)
             .build()
         )
@@ -1535,15 +1535,15 @@ class SalesforceDataSource(BaseDataSource):
                     None,
                 )
 
-            async for contact in self.salesforce_client.get_contacts():
-                content_docs.extend(self._parse_content_documents(contact))
-                access_control = self.permissions.get("Contact", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(contact, access_control)
-                    ),
-                    None,
-                )
+            # async for contact in self.salesforce_client.get_contacts():
+            #     content_docs.extend(self._parse_content_documents(contact))
+            #     access_control = self.permissions.get("Contact", [])
+            #     yield (
+            #         self.doc_mapper.map_salesforce_objects(
+            #             self._decorate_with_access_control(contact, access_control)
+            #         ),
+            #         None,
+            #     )
 
             async for lead in self.salesforce_client.get_leads():
                 content_docs.extend(self._parse_content_documents(lead))
