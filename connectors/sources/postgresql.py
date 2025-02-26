@@ -56,7 +56,7 @@ class PostgreSQLQueries(Queries):
     def table_primary_key(self, **kwargs):
         """Query to get the primary key"""
         return (
-            f"SELECT a.attname AS c"
+            f"SELECT a.attname AS c "
             f"FROM pg_index i "
             f"JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
             f"JOIN pg_class t ON t.oid = i.indrelid "
