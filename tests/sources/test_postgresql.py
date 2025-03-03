@@ -575,47 +575,49 @@ def test_table_primary_key_query():
     queries = PostgreSQLQueries()
     schema = "test_schema"
     table = "test_table"
-    
+
     # Execute
     query = queries.table_primary_key(schema=schema, table=table)
-    
+
     # Assert
     expected_query = (
-        f"SELECT a.attname AS c "
-        f"FROM pg_index i "
-        f"JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
-        f"JOIN pg_class t ON t.oid = i.indrelid "
-        f"JOIN pg_constraint c ON c.conindid = i.indexrelid "
-        f"WHERE i.indrelid = '\"test_schema\".\"test_table\"'::regclass "
-        f"AND t.relkind = 'r' "
-        f"AND c.contype = 'p' "
-        f"ORDER BY array_position(i.indkey, a.attnum)"
+        "SELECT a.attname AS c "
+        "FROM pg_index i "
+        "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+        "JOIN pg_class t ON t.oid = i.indrelid "
+        "JOIN pg_constraint c ON c.conindid = i.indexrelid "
+        'WHERE i.indrelid = \'"test_schema"."test_table"\'::regclass '
+        "AND t.relkind = 'r' "
+        "AND c.contype = 'p' "
+        "ORDER BY array_position(i.indkey, a.attnum)"
     )
     assert query == expected_query
+
 
 def test_table_primary_key_query_with_special_characters():
     """Test that the table_primary_key method handles special characters in schema and table names"""
     # Setup
     queries = PostgreSQLQueries()
     schema = "test-schema"
-    table = "test_table-with.special\"chars"
-    
+    table = 'test_table-with.special"chars'
+
     # Execute
     query = queries.table_primary_key(schema=schema, table=table)
-    
+
     # Assert
     expected_query = (
-        f"SELECT a.attname AS c "
-        f"FROM pg_index i "
-        f"JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
-        f"JOIN pg_class t ON t.oid = i.indrelid "
-        f"JOIN pg_constraint c ON c.conindid = i.indexrelid "
-        f"WHERE i.indrelid = '\"test-schema\".\"test_table-with.special\"chars\"'::regclass "
-        f"AND t.relkind = 'r' "
-        f"AND c.contype = 'p' "
-        f"ORDER BY array_position(i.indkey, a.attnum)"
+        "SELECT a.attname AS c "
+        "FROM pg_index i "
+        "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+        "JOIN pg_class t ON t.oid = i.indrelid "
+        "JOIN pg_constraint c ON c.conindid = i.indexrelid "
+        'WHERE i.indrelid = \'"test-schema"."test_table-with.special"chars"\'::regclass '
+        "AND t.relkind = 'r' "
+        "AND c.contype = 'p' "
+        "ORDER BY array_position(i.indkey, a.attnum)"
     )
     assert query == expected_query
+
 
 @pytest.mark.asyncio
 async def test_get_table_primary_key():
@@ -625,6 +627,6 @@ async def test_get_table_primary_key():
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             # Execute
             primary_keys = await source.postgresql_client.get_table_primary_key(TABLE)
-            
+
             # Assert
             assert primary_keys == ["ids"]
