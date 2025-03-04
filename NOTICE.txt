@@ -978,7 +978,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 aiohappyeyeballs
-2.4.6
+2.4.8
 Python Software Foundation License
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -2928,7 +2928,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 cryptography
-44.0.1
+44.0.2
 Apache Software License; BSD License
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to cryptography are made
