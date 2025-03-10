@@ -978,7 +978,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 aiohappyeyeballs
-2.4.8
+2.5.0
 Python Software Foundation License
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -8884,7 +8884,7 @@ limitations under the License.
 
 
 tzlocal
-5.3
+5.3.1
 MIT License
 Copyright 2011-2017 Lennart Regebro
 
