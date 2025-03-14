@@ -112,10 +112,12 @@ class ContentExtraction:
         )
 
         try:
+            logger.debug(f"5. Extracting {filepath} via Tika...")
             if self.use_file_pointers:
                 content = await self.send_filepointer(filepath, original_filename)
             else:
                 content = await self.send_file(filepath, original_filename)
+            logger.debug(f"6. Extracted {filepath}!")
         except (ClientConnectionError, ServerTimeoutError) as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"

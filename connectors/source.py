@@ -753,8 +753,10 @@ class BaseDataSource:
         will return the original doc upon failure
         """
         try:
+            logger.debug(f"1. Beginning download and extraction for {source_filename}")
             async with self.create_temp_file(file_extension) as async_buffer:
                 temp_filename = async_buffer.name
+                logger.debug(f"2. Created tempfile for {source_filename}: tempfile name is {temp_filename}, beginning download...")
 
                 await self.download_to_temp_file(
                     temp_filename,
@@ -762,10 +764,12 @@ class BaseDataSource:
                     async_buffer,
                     download_func,
                 )
+                logger.debug(f"4. Tempfile content downloaded for {temp_filename}, beginning extraction...")
 
                 doc = await self.handle_file_content_extraction(
                     doc, source_filename, temp_filename
                 )
+                logger.debug(f"7. All processes completed for {temp_filename}, file deletion should occur after this...")
             return doc
         except Exception as e:
             self._logger.warning(
@@ -784,10 +788,12 @@ class BaseDataSource:
             async with NamedTemporaryFile(
                 mode="wb", delete=False, suffix=file_extension, dir=self.download_dir
             ) as async_buffer:
+                logger.debug(f"3. Created tempfile {temp_filename}")
                 temp_filename = async_buffer.name
                 yield async_buffer
         finally:
             await async_buffer.close()
+            logger.debug(f"FINAL: Removing tempfile {temp_filename}")
             await self.remove_temp_file(temp_filename)
 
     async def download_to_temp_file(
