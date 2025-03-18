@@ -230,7 +230,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 blob=blob_name,
                 offset=offset,
                 length=length,
-                max_concurrency=MAX_CONCURRENT_DOWNLOADS,
+                max_concurrency=self.concurrent_downloads,
             )
             content = await data.read()
             length = data.size
