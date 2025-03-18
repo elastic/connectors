@@ -397,7 +397,6 @@ class BaseDataSource:
     native_connector_api_keys_enabled = False
 
     def __init__(self, configuration):
-        # Initialize to the global logger
         self._logger = logger
         if not isinstance(configuration, DataSourceConfiguration):
             msg = f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
@@ -765,12 +764,18 @@ class BaseDataSource:
         try:
             async with self.create_temp_file(file_extension) as async_buffer:
                 temp_filename = async_buffer.name
+                self._logger.debug(
+                    f"Created temp file for {source_filename}: {temp_filename}"
+                )
 
                 await self.download_to_temp_file(
                     temp_filename,
                     source_filename,
                     async_buffer,
                     download_func,
+                )
+                self._logger.debug(
+                    f"Downloaded {source_filename} content into {temp_filename}"
                 )
 
                 doc = await self.handle_file_content_extraction(
