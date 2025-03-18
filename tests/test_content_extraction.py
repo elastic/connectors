@@ -6,7 +6,7 @@
 from unittest.mock import mock_open, patch
 
 import pytest
-from aiohttp.client_exceptions import ClientConnectionError
+from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
 from connectors.content_extraction import ContentExtraction
 
@@ -190,6 +190,33 @@ async def test_extract_text_when_response_is_error(mock_responses, patch_logger)
 
         patch_logger.assert_present(
             "Connection to http://localhost:8090 failed while extracting data from notreal.txt. Error: oops!"
+        )
+
+
+@pytest.mark.asyncio
+async def test_extract_text_when_response_is_timeout(mock_responses, patch_logger):
+    filepath = "tmp/notreal.txt"
+
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.send_file",
+            side_effect=ServerTimeoutError("nada"),
+        ),
+    ):
+        extraction_service = ContentExtraction()
+        extraction_service._begin_session()
+
+        response = await extraction_service.extract_text(filepath, "notreal.txt")
+        await extraction_service._end_session()
+        assert response == ""
+
+        patch_logger.assert_present(
+            "Text extraction request to http://localhost:8090 timed out for notreal.txt: nada"
         )
 
 
