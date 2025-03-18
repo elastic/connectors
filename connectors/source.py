@@ -397,6 +397,7 @@ class BaseDataSource:
     native_connector_api_keys_enabled = False
 
     def __init__(self, configuration):
+        # Initialize to the global logger
         self._logger = logger
         if not isinstance(configuration, DataSourceConfiguration):
             msg = f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
