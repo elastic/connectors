@@ -1,4 +1,4 @@
-.PHONY: install clean lint autoformat test release ftest ftrace install run default-config release docker-build docker-run docker-push
+.PHONY: install clean lint autoformat test ftest ftrace install run default-config docker-build docker-run docker-push
 
 # Default to python3, but if its version is >3.11, try using python3.11 or python3.10.
 PYTHON ?= python3
@@ -87,9 +87,6 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
-
-release: install
-	.venv/bin/python setup.py sdist
 
 ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	tests/ftest.sh $(NAME) $(PERF8)
