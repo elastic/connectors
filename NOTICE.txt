@@ -8879,7 +8879,7 @@ Apache Software License
 UNKNOWN
 
 tzdata
-2025.1
+2025.2
 Apache Software License
 Apache Software License 2.0
 
