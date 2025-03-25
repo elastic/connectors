@@ -46,7 +46,7 @@ fi
 # Need to export the revision, name and version and others
 # for the dependency report and publishing scripts
 export REVISION="${BUILDKITE_COMMIT}"
-export BRANCH_NAME="${BUILDKITE_BRANCH}"
+export BRANCH_NAME="9.0"
 export PRODUCT_NAME="connectors"
 export GIT_REPO="connectors"
 
@@ -55,6 +55,9 @@ if [[ "${BUILDKITE_BRANCH:-}" =~ (main|8\.x|[0-9]\.[0-9x]*$) ]]; then
   export PUBLISH_SNAPSHOT="true"
 fi
 if [[ "${BUILDKITE_BRANCH:-}" =~ ([0-9]\.[0-9x]*$) ]]; then
+  export PUBLISH_STAGING="true"
+fi
+if [[ "${BUILDKITE_BRANCH:-}" == "seanstory/make-9.0.0-DRA" ]]; then
   export PUBLISH_STAGING="true"
 fi
 if [ -n "${VERSION_QUALIFIER:-}" ]; then
