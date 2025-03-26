@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from elasticsearch import ApiError, ConflictError
 
-from connectors.es.index import DocumentNotFoundError, ESIndex
+from connectors.es.index import DocumentNotFoundError, ESApi, ESIndex
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 config = {
@@ -255,3 +255,182 @@ async def test_get_all_docs(mock_responses):
     assert doc_count == total
 
     await index.close()
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_check_in():
+    connector_id = "id"
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_check_in(connector_id)
+
+    es_api.client.connector.check_in.assert_called_once_with(connector_id=connector_id)
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_put():
+    connector_id = "id"
+    service_type = "service_type"
+    connector_name = "connector_name"
+    index_name = "index_name"
+    is_native = True
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_put(
+        connector_id, service_type, connector_name, index_name, is_native
+    )
+
+    es_api.client.connector.put.assert_called_once_with(
+        connector_id=connector_id,
+        service_type=service_type,
+        name=connector_name,
+        index_name=index_name,
+        is_native=is_native,
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_update_scheduling():
+    connector_id = "id"
+    scheduling = {"enabled": "true", "interval": "0 4 5 1 *"}
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_update_scheduling(connector_id, scheduling)
+
+    es_api.client.connector.update_scheduling.assert_called_once_with(
+        connector_id=connector_id, scheduling=scheduling
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_update_configuration():
+    connector_id = "id"
+    configuration = {"config_key": "config_value"}
+    values = {}
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_update_configuration(connector_id, configuration, values)
+
+    es_api.client.connector.update_configuration.assert_called_once_with(
+        connector_id=connector_id, configuration=configuration, values=values
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_update_filtering_draft_validation():
+    connector_id = "id"
+    validation_result = {"validation": "result"}
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_update_filtering_draft_validation(
+        connector_id, validation_result
+    )
+
+    es_api.client.connector.update_filtering_validation.assert_called_once_with(
+        connector_id=connector_id, validation=validation_result
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_activate_filtering_draft():
+    connector_id = "id"
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_activate_filtering_draft(connector_id)
+
+    es_api.client.connector.update_active_filtering.assert_called_once_with(
+        connector_id=connector_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_create():
+    connector_id = "id"
+    job_type = "full"
+    trigger_method = "on_demand"
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_sync_job_create(connector_id, job_type, trigger_method)
+
+    es_api.client.connector.sync_job_post.assert_called_once_with(
+        id=connector_id, job_type=job_type, trigger_method=trigger_method
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_get():
+    connector_id = "id"
+    include_deleted = False
+
+    es_api = ESApi(elastic_config=config)
+    es_api._api_wrapper = AsyncMock()
+
+    await es_api.connector_get(connector_id, include_deleted)
+
+    es_api._api_wrapper.connector_get.assert_called_once_with(
+        connector_id, include_deleted
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_claim():
+    sync_job_id = "sync_job_id_test"
+    worker_hostname = "workerhostname"
+    sync_cursor = {"foo": "bar"}
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_sync_job_claim(sync_job_id, worker_hostname, sync_cursor)
+
+    es_api.client.connector.sync_job_claim.assert_called_once_with(
+        connector_sync_job_id=sync_job_id,
+        worker_hostname=worker_hostname,
+        sync_cursor=sync_cursor,
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_update_stats_with_metadata():
+    sync_job_id = "sync_job_id_test"
+    ingestion_stats = {"ingestion": "stat"}
+    metadata = {"meta": "data"}
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_sync_job_update_stats(sync_job_id, ingestion_stats, metadata)
+
+    es_api.client.connector.sync_job_update_stats.assert_called_once_with(
+        connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata=metadata
+    )
+
+
+@pytest.mark.asyncio
+async def test_es_api_connector_sync_job_update_stats_metadata_as_none():
+    sync_job_id = "sync_job_id_test"
+    ingestion_stats = {"ingestion": "stat"}
+    metadata = None  # make sure metadata gets passed as '{}' if undefined
+
+    es_api = ESApi(elastic_config=config)
+    es_api.client = AsyncMock()
+
+    await es_api.connector_sync_job_update_stats(sync_job_id, ingestion_stats, metadata)
+
+    es_api.client.connector.sync_job_update_stats.assert_called_once_with(
+        connector_sync_job_id=sync_job_id, body=ingestion_stats, metadata={}
+    )

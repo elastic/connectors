@@ -141,7 +141,17 @@ class Field:
         # list requires special type casting
         if cast_type is list:
             if isinstance(value, str):
-                return [item.strip() for item in value.split(",")] if value else []
+                items = []
+                if value:
+                    for item in value.split(","):
+                        item = item.strip()
+                        if not item:
+                            logger.debug(
+                                "Empty string detected in the comma-separated list. It will be skipped."
+                            )
+                        else:
+                            items.append(item)
+                return items
             elif isinstance(value, int):
                 return [value]
             elif isinstance(value, set):
@@ -755,12 +765,18 @@ class BaseDataSource:
         try:
             async with self.create_temp_file(file_extension) as async_buffer:
                 temp_filename = async_buffer.name
+                self._logger.debug(
+                    f"Created temp file for {source_filename}: {temp_filename}"
+                )
 
                 await self.download_to_temp_file(
                     temp_filename,
                     source_filename,
                     async_buffer,
                     download_func,
+                )
+                self._logger.debug(
+                    f"Downloaded {source_filename} content into {temp_filename}"
                 )
 
                 doc = await self.handle_file_content_extraction(

@@ -14,6 +14,7 @@ metadata:
     github.com/project-slug: "elastic/connectors"
     github.com/team-slug: "elastic/search-extract-and-transform"
     buildkite.com/project-slug: "elastic/connectors"
+    pagerduty.com/service-id: "PN2MP2P"
   tags:
     - "python"
     - "buildkite"
@@ -53,10 +54,18 @@ spec:
           branch: main
           cronline: '@daily'
           message: "Builds, tests, and pushes daily `main` DRA artifacts"
+        Daily 9.0:
+          branch: "9.0"
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `9.0` DRA artifacts"
         Daily 8.x:
           branch: 8.x
           cronline: '@daily'
           message: "Builds, tests, and pushes daily `8.x` DRA artifacts"
+        Daily 8.18:
+          branch: "8.18"
+          cronline: '@daily'
+          message: "Builds, tests, and pushes daily `8.18` DRA artifacts"
         Daily 8.17:
           branch: "8.17"
           cronline: '@daily'
@@ -105,6 +114,10 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
+        Daily 8_18:
+          branch: '8.18'
+          cronline: '@daily'
+          message: "Runs daily `8.18` e2e test"
         Daily 8_17:
           branch: '8.17'
           cronline: '@daily'
@@ -117,6 +130,10 @@ spec:
           branch: '8.x'
           cronline: '@daily'
           message: "Runs daily `8.x` e2e test"
+        Daily 9_0:
+          branch: '9.0'
+          cronline: '@daily'
+          message: "Runs daily `9.0` e2e test"
         Daily main:
           branch: main
           cronline: '@daily'
@@ -155,6 +172,10 @@ spec:
         trigger_mode: "none"
       repository: "elastic/connectors"
       schedules:
+        Daily 8_18:
+          branch: '8.18'
+          cronline: '@daily'
+          message: "Runs daily `8.18` e2e aarch64 test"
         Daily 8_17:
           branch: '8.17'
           cronline: '@daily'
@@ -167,6 +188,10 @@ spec:
           branch: '8.x'
           cronline: '@daily'
           message: "Runs daily `8.x` e2e aarch64 test"
+        Daily 9_0:
+          branch: '9.0'
+          cronline: '@daily'
+          message: "Runs daily `9.0` e2e aarch64 test"
         Daily main:
           branch: main
           cronline: '@daily'

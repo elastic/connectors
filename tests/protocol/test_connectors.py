@@ -10,10 +10,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from elasticsearch import ApiError, ConflictError
+from elasticsearch import ApiError, ConflictError, NotFoundError
 
 from connectors.config import load_config
-from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
@@ -242,19 +241,21 @@ async def test_supported_connectors(
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     native_connectors_query = {
         "bool": {
+            "must_not": [{"term": {"deleted": True}}],
             "filter": [
                 {"term": {"is_native": True}},
                 {"terms": {"service_type": native_service_types}},
-            ]
+            ],
         }
     }
 
     custom_connectors_query = {
         "bool": {
+            "must_not": [{"term": {"deleted": True}}],
             "filter": [
                 {"term": {"is_native": False}},
                 {"terms": {"_id": connector_ids}},
-            ]
+            ],
         }
     }
 
@@ -1656,7 +1657,7 @@ async def test_connector_exists_returns_true_when_found():
     }
 
     index = ConnectorIndex(config)
-    index.fetch_by_id = AsyncMock(return_value={"id": "1"})
+    index.api.connector_get = AsyncMock(return_value={"id": "1"})
 
     exists = await index.connector_exists("1")
     assert exists is True
@@ -1671,7 +1672,14 @@ async def test_connector_exists_returns_false_when_not_found():
     }
 
     index = ConnectorIndex(config)
-    index.fetch_by_id = AsyncMock(side_effect=DocumentNotFoundError)
+    api_meta = Mock()
+    api_meta.status = 404
+    error_body = {"error": {"reason": "mocked test failure"}}
+    index.api.connector_get = AsyncMock(
+        side_effect=NotFoundError(
+            message="this is an error message", body=error_body, meta=api_meta
+        )
+    )
 
     exists = await index.connector_exists("1")
     assert exists is False
@@ -1686,7 +1694,7 @@ async def test_connector_exists_raises_non_404_exception():
     }
 
     index = ConnectorIndex(config)
-    index.fetch_by_id = AsyncMock(side_effect=Exception("Fetch error"))
+    index.api.connector_get = AsyncMock(side_effect=Exception("Fetch error"))
 
     with pytest.raises(Exception, match="Fetch error"):
         await index.connector_exists("1")

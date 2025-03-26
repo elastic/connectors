@@ -534,7 +534,7 @@ steps:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
-          
+
           - path:
             - "connectors/sources/redis.py"
             - "tests/sources/fixtures/redis/**"
@@ -553,7 +553,7 @@ steps:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
-            
+
           - path:
             - "connectors/sources/graphql.py"
             - "tests/sources/fixtures/graphql/**"
@@ -578,7 +578,7 @@ steps:
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"8.x\" || build.branch == \"8.16\" || build.branch == \"8.17\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: "(build.branch == \"main\" || build.branch == \"9.0\" || build.branch == \"8.x\" || build.branch == \"8.16\" || build.branch == \"8.17\" || build.branch == \"8.18\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
@@ -647,6 +647,104 @@ steps:
           - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_docker_image_arm64
           - ".buildkite/publish/test-docker.sh"
 
+      # ----
+      # OSS Dockerfile build, tests and vunlerability scan on amd64
+      # ----
+      - label: "Building amd64 Docker image from OSS Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_oss_dockerfile_image_amd64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing amd64 image built from OSS Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6i.xlarge
+          imagePrefix: ci-amazonlinux-2
+        env:
+          ARCHITECTURE: "amd64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+        depends_on: "build_oss_dockerfile_image_amd64"
+        key: "test_oss_dockerfile_image_amd64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_oss_dockerfile_image_amd64
+          - ".buildkite/publish/test-docker.sh"
+      - label: "Trivy Scan amd64 OSS Dockerfile image"
+        timeout_in_minutes: 10
+        depends_on:
+          - test_oss_dockerfile_image_amd64
+        key: "trivy-scan-amd64-oss-dockerfile-image"
+        agents:
+          provider: k8s
+          image: "docker.elastic.co/ci-agent-images/trivy:latest"
+        command: |-
+          mkdir -p .artifacts
+          buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_oss_dockerfile_image_amd64
+          trivy --version
+          env | grep TRIVY
+          find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
+
+      # ----
+      # OSS Dockerfile build, tests and vunlerability scan on arm64
+      # ----
+      - label: "Building arm64 Docker image from OSS Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+        command: ".buildkite/publish/build-docker.sh"
+        key: "build_oss_dockerfile_image_arm64"
+        artifact_paths: ".artifacts/*.tar.gz"
+      - label: "Testing arm64 image built from OSS Dockerfile"
+        agents:
+          provider: aws
+          instanceType: m6g.xlarge
+          imagePrefix: ci-amazonlinux-2-aarch64
+          diskSizeGb: 40
+          diskName: '/dev/xvda'
+        env:
+          ARCHITECTURE: "arm64"
+          DOCKERFILE_PATH: "Dockerfile"
+          DOCKER_IMAGE_NAME: "docker.elastic.co/ci-agent-images/elastic-connectors-oss-dockerfile"
+          DOCKER_ARTIFACT_KEY: "elastic-connectors-oss-dockerfile"
+        depends_on: "build_oss_dockerfile_image_arm64"
+        key: "test_oss_dockerfile_image_arm64"
+        commands:
+          - "mkdir -p .artifacts"
+          - buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_oss_dockerfile_image_arm64
+          - ".buildkite/publish/test-docker.sh"
+      - label: "Trivy Scan arm64 OSS Dockerfile image"
+        timeout_in_minutes: 10
+        depends_on:
+          - test_oss_dockerfile_image_arm64
+        key: "trivy-scan-arm64-oss-dockerfile-image"
+        agents:
+          provider: k8s
+          image: "docker.elastic.co/ci-agent-images/trivy:latest"
+        command: |-
+          mkdir -p .artifacts
+          buildkite-agent artifact download '.artifacts/*.tar.gz*' .artifacts/ --step build_oss_dockerfile_image_arm64
+          trivy --version
+          env | grep TRIVY
+          find .artifacts -type f -name '*.tar.gz*' -exec trivy image --quiet --input {} \;
+
       - label: ":truck: Publish DRA Items"
         <<: *test-agents
         key: "publish-dra-artifacts"
@@ -654,4 +752,6 @@ steps:
         depends_on:
           - test_docker_image_amd64
           - test_docker_image_arm64
+          - test_oss_dockerfile_image_amd64
+          - test_oss_dockerfile_image_arm64
         command: ".buildkite/publish/dra/init_dra_publishing.sh"

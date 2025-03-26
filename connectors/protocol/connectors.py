@@ -19,11 +19,15 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from elasticsearch import ApiError
+from elasticsearch import (
+    ApiError,
+)
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
-from connectors.es.index import DocumentNotFoundError
 from connectors.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
@@ -179,11 +183,13 @@ class ConnectorIndex(ESIndex):
             is_native=is_native,
         )
 
-    async def connector_exists(self, connector_id):
+    async def connector_exists(self, connector_id, include_deleted=False):
         try:
-            doc = await self.fetch_by_id(connector_id)
+            doc = await self.api.connector_get(
+                connector_id=connector_id, include_deleted=include_deleted
+            )
             return doc is not None
-        except DocumentNotFoundError:
+        except ElasticNotFoundError:
             return False
         except Exception as e:
             logger.error(
@@ -227,18 +233,20 @@ class ConnectorIndex(ESIndex):
 
         native_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"term": {"is_native": True}},
                     {"terms": {"service_type": native_service_types}},
-                ]
+                ],
             }
         }
 
         custom_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"terms": {"_id": connector_ids}},
-                ]
+                ],
             }
         }
         if len(native_service_types) > 0 and len(connector_ids) > 0:
