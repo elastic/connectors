@@ -6479,7 +6479,7 @@ BSD
 UNKNOWN
 
 propcache
-0.3.0
+0.3.1
 Apache Software License
 
                                  Apache License
@@ -8590,8 +8590,8 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 typing_extensions
-4.12.2
-Python Software Foundation License
+4.13.0
+UNKNOWN
 A. HISTORY OF THE SOFTWARE
 ==========================
 
