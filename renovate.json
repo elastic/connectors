@@ -4,6 +4,9 @@
     "local>elastic/renovate-config",
     "github>elastic/renovate-config:only-chainguard"
   ],
+  "schedule": [
+    "* * * * 0,6"
+  ],
   "labels": [
     "renovate",
     "auto-backport",
