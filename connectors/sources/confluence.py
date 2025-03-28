@@ -259,23 +259,31 @@ class ConfluenceClient:
         Yields:
             response: JSON response.
         """
-        url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
+        base_url = os.path.join(self.host_url, URLS[url_name].format(**url_kwargs))
+        start = 0
+
         while True:
             try:
+                url = f"{base_url}&start={start}"
                 self._logger.debug(f"Starting pagination for API endpoint {url}")
                 response = await self.api_call(url=url)
                 json_response = await response.json()
+
                 links = json_response.get("_links")
                 yield json_response
-                if links.get("next") is None:
+                if links.get("next"):
+                    url = os.path.join(
+                        self.host_url,
+                        links.get("next")[1:],
+                    )
+                elif json_response.get("start") + json_response.get("size") < json_response.get("totalSize"):
+                    start = json_response.get("start") + json_response.get("size")
+                    url = f"{base_url}&start={start}"
+                else:
                     return
-                url = os.path.join(
-                    self.host_url,
-                    links.get("next")[1:],
-                )
             except Exception as exception:
                 self._logger.warning(
-                    f"Skipping data for type {url_name} from {url}. Exception: {exception}."
+                    f"Skipping data for type {url_name} from {base_url}. Exception: {exception}."
                 )
                 break
 
@@ -984,8 +992,9 @@ class ConfluenceDataSource(BaseDataSource):
             # entity can be space or content
             entity_details = entity.get(SPACE) or entity.get(CONTENT)
 
-            if (
-                entity_details.get("type", "") == "attachment"
+            if not entity_details:
+                continue
+            if (entity_details.get("type", "") == "attachment"
                 and entity_details.get("container", {}).get("title") is None
             ):
                 continue
