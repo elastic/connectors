@@ -992,9 +992,7 @@ class ConfluenceDataSource(BaseDataSource):
             # entity can be space or content
             entity_details = entity.get(SPACE) or entity.get(CONTENT)
 
-            if not entity_details:
-                continue
-            if (entity_details.get("type", "") == "attachment"
+            if not entity_details or (entity_details.get("type", "") == "attachment"
                 and entity_details.get("container", {}).get("title") is None
             ):
                 continue
