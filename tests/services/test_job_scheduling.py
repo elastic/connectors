@@ -508,9 +508,6 @@ async def test_initial_loop_run_heartbeat_only_once(
 async def test_run_when_validation_is_very_slow(
     get_source_klass_mock, connector_index_mock, set_env
 ):
-    error_message = "Something invalid is in config!"
-    actual_error = Exception(error_message)
-
     data_source_mock = Mock()
 
     def _source_klass(config):

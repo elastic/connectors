@@ -11,8 +11,8 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 
-from datetime import datetime, timezone
 import functools
+from datetime import datetime, timezone
 
 from connectors.es.client import License, with_concurrency_control
 from connectors.es.index import DocumentNotFoundError
@@ -41,7 +41,9 @@ class JobSchedulingService(BaseService):
         self.source_list = config["sources"]
         self.first_run = True
         self.last_wake_up_time = datetime.now(timezone.utc)
-        self.max_concurrency = self.service_config.get("max_concurrent_scheduling_tasks")
+        self.max_concurrency = self.service_config.get(
+            "max_concurrent_scheduling_tasks"
+        )
         self.schedule_tasks_pool = ConcurrentTasks(max_concurrency=self.max_concurrency)
 
     def stop(self):
@@ -175,7 +177,9 @@ class JobSchedulingService(BaseService):
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        if not self.schedule_tasks_pool.try_put(functools.partial(self._schedule, connector)):
+                        if not self.schedule_tasks_pool.try_put(
+                            functools.partial(self._schedule, connector)
+                        ):
                             connector.log_debug(
                                 f"{self.display_name.capitalize()} service is already running {self.max_concurrency} sync jobs and can't run more at this poinit. Increase '{self.max_concurrency_config}' in config if you want the service to run more sync jobs."  # pyright: ignore
                             )
