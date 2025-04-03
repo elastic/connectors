@@ -6189,7 +6189,7 @@ MIT License
 
 
 multidict
-6.3.0
+6.2.0
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
