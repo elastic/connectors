@@ -347,12 +347,8 @@ RESPONSE_PERMISSION3 = {
     }
 }
 RESPONSE_PERMISSION_INVALID = {
-    "grantedToV2": {
-        "foo": "bar"
-    },
-    "grantedToIdentitiesV2": [{
-        "bar": "foo"
-    }],
+    "grantedToV2": {"foo": "bar"},
+    "grantedToIdentitiesV2": [{"bar": "foo"}],
 }
 
 EXPECTED_USER1_FILES_PERMISSION = [
@@ -832,25 +828,42 @@ async def test_list_permissions():
             ):
                 assert permission == RESPONSE_PERMISSION1
 
+
 @patch.object(
     OneDriveClient,
     "list_file_permission",
     side_effect=[
-        (AsyncIterator([
-            RESPONSE_PERMISSION1,
-            RESPONSE_PERMISSION3,
-            RESPONSE_PERMISSION_INVALID,
-        ])),
+        (
+            AsyncIterator(
+                [
+                    RESPONSE_PERMISSION1,
+                    RESPONSE_PERMISSION3,
+                    RESPONSE_PERMISSION_INVALID,
+                ]
+            )
+        ),
     ],
 )
 @pytest.mark.asyncio
-async def test_get_entity_permission_when_response_missing_content(permissions, patch_logger):
+async def test_get_entity_permission_when_response_missing_content(
+    permissions, patch_logger
+):
     async with create_onedrive_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
-        response = await source.get_entity_permission('user-1', 'file-1')
-        assert response == ['user_id:user_id_1', 'user_id:user_id_2', 'group:group_id_1', 'user_id:user_id_3']
-        patch_logger.assert_present("No user id found for user user-1 for file file-1 in `grantedToV2`")
-        patch_logger.assert_present("No group or user id found for user-1 for file file-1 in `grantedToIdentitiesV2`")
+        response = await source.get_entity_permission("user-1", "file-1")
+        assert response == [
+            "user_id:user_id_1",
+            "user_id:user_id_2",
+            "group:group_id_1",
+            "user_id:user_id_3",
+        ]
+        patch_logger.assert_present(
+            "No user id found for user user-1 for file file-1 in `grantedToV2`"
+        )
+        patch_logger.assert_present(
+            "No group or user id found for user-1 for file file-1 in `grantedToIdentitiesV2`"
+        )
+
 
 @pytest.mark.asyncio
 async def test_get_owned_files():
