@@ -656,7 +656,12 @@ class OneDriveDataSource(BaseDataSource):
             user_id=user_id, file_id=file_id
         ):
             if identity := permission.get("grantedToV2"):
-                permissions.append(_prefix_user_id(identity.get("user").get("id")))
+                identity_id = identity.get("user", {}).get("id")
+                if identity_id:
+                    permissions.append(_prefix_user_id(identity_id))
+                else:
+                    log = f"No user id found for user {user_id} for file {file_id} in `grantedToV2`"
+                    logger.warning(log)
 
             if identities := permission.get("grantedToIdentitiesV2"):
                 for identity in identities:
@@ -668,6 +673,10 @@ class OneDriveDataSource(BaseDataSource):
 
                     if group_permission:
                         permissions.append(_prefix_group(group_permission))
+
+                    if not user_permission and group_permission:
+                        log = f"No group or user id found for {user_id} for file {file_id} in `grantedToIdentitiesV2`"
+                        logger.warning(log)
 
         return permissions
 

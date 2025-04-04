@@ -339,6 +339,19 @@ RESPONSE_PERMISSION2 = {
         }
     ],
 }
+RESPONSE_PERMISSION3 = {
+    "grantedToV2": {
+        "user": {
+            "id": "user_id_3",
+        }
+    }
+}
+RESPONSE_PERMISSION_INVALID = {
+    "grantedToV2": {
+        "user": None
+    }
+}
+
 EXPECTED_USER1_FILES_PERMISSION = [
     {
         "type": "folder",
@@ -815,6 +828,32 @@ async def test_list_permissions():
                 "user-1", "file-1"
             ):
                 assert permission == RESPONSE_PERMISSION1
+
+@pytest.mark.asyncio
+async def test_list_permissions_when_no_identities_field():
+    async with create_onedrive_source() as source:
+        with patch.object(
+            OneDriveClient,
+            "paginated_api_call",
+            return_value=AsyncIterator([[RESPONSE_PERMISSION3]]),
+        ):
+            async for permission in source.client.list_file_permission(
+                "user-1", "file-1"
+            ):
+                assert permission == RESPONSE_PERMISSION3
+
+@pytest.mark.asyncio
+async def test_list_permissions_when_id_missing():
+    async with create_onedrive_source() as source:
+        with patch.object(
+            OneDriveClient,
+            "paginated_api_call",
+            return_value=AsyncIterator([[RESPONSE_PERMISSION_INVALID]]),
+        ):
+            async for permission in source.client.list_file_permission(
+                "user-1", "file-1"
+            ):
+                assert permission == RESPONSE_PERMISSION_INVALID
 
 
 @pytest.mark.asyncio
