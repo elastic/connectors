@@ -347,9 +347,7 @@ RESPONSE_PERMISSION3 = {
     }
 }
 RESPONSE_PERMISSION_INVALID = {
-    "grantedToV2": {
-        "user": None
-    }
+    "grantedToV2": {}
 }
 
 EXPECTED_USER1_FILES_PERMISSION = [
