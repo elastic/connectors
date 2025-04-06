@@ -2051,7 +2051,7 @@ Library.
 
 
 azure-core
-1.32.0
+1.33.0
 MIT License
 Copyright (c) Microsoft Corporation.
 
@@ -6189,7 +6189,7 @@ MIT License
 
 
 multidict
-6.2.0
+6.3.2
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
@@ -8656,7 +8656,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 typing_extensions
-4.13.0
+4.13.1
 UNKNOWN
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -9298,7 +9298,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 yarl
-1.18.3
+1.19.0
 Apache Software License
 
                                  Apache License
