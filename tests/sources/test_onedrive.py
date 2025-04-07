@@ -347,8 +347,8 @@ RESPONSE_PERMISSION3 = {
     }
 }
 RESPONSE_PERMISSION_INVALID = {
-    "grantedToV2": {"foo": "bar"},
-    "grantedToIdentitiesV2": [{"bar": "foo"}],
+    "grantedToV2": {"user": {"foo": "bar"}},
+    "grantedToIdentitiesV2": [{"group": {"bar": "foo"}}],
 }
 
 EXPECTED_USER1_FILES_PERMISSION = [
@@ -858,10 +858,10 @@ async def test_get_entity_permission_when_response_missing_content(
             "user_id:user_id_3",
         ]
         patch_logger.assert_present(
-            "No user id found for user user-1 for file file-1 in `grantedToV2`"
+            "Unexpected response structure for user user-1 for file file-1 in `grantedToV2` response"
         )
         patch_logger.assert_present(
-            "No group or user id found for user-1 for file file-1 in `grantedToIdentitiesV2`"
+            "Unexpected response structure for user user-1 for file file-1 in `grantedToIdentitiesV2` response"
         )
 
 
