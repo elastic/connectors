@@ -669,10 +669,10 @@ class OneDriveDataSource(BaseDataSource):
 
             if identities := permission.get("grantedToIdentitiesV2"):
                 for identity in identities:
-                    identity_user = identity.get("user", {}).get("id")
+                    identity_user = identity.get("user", {})
                     identity_user_id = identity_user.get("id")
 
-                    identity_group = identity.get("group", {}).get("id")
+                    identity_group = identity.get("group", {})
                     identity_group_id = identity_group.get("id")
 
                     if identity_user_id:
