@@ -656,18 +656,38 @@ class OneDriveDataSource(BaseDataSource):
             user_id=user_id, file_id=file_id
         ):
             if identity := permission.get("grantedToV2"):
-                permissions.append(_prefix_user_id(identity.get("user").get("id")))
+                identity_user = identity.get("user", {})
+                identity_user_id = identity_user.get("id")
+
+                if identity_user_id:
+                    permissions.append(_prefix_user_id(identity_user_id))
+
+                if identity_user and not identity_user_id:
+                    self._logger.warning(
+                        f"Unexpected response structure for user {user_id} for file {file_id} in `grantedToV2` response"
+                    )
 
             if identities := permission.get("grantedToIdentitiesV2"):
                 for identity in identities:
-                    user_permission = identity.get("user", {}).get("id")
-                    group_permission = identity.get("group", {}).get("id")
+                    identity_user = identity.get("user", {})
+                    identity_user_id = identity_user.get("id")
 
-                    if user_permission:
-                        permissions.append(_prefix_user_id(user_permission))
+                    identity_group = identity.get("group", {})
+                    identity_group_id = identity_group.get("id")
 
-                    if group_permission:
-                        permissions.append(_prefix_group(group_permission))
+                    if identity_user_id:
+                        permissions.append(_prefix_user_id(identity_user_id))
+
+                    if identity_group_id:
+                        permissions.append(_prefix_group(identity_group_id))
+
+                    if (identity_user and not identity_user_id) or (
+                        identity_group and not identity_group_id
+                    ):
+                        self._logger.warning(
+                            f"Unexpected response structure for user {user_id} for file {file_id} in "
+                            f"`grantedToIdentitiesV2` response"
+                        )
 
         return permissions
 
