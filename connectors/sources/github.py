@@ -687,8 +687,20 @@ class GitHubClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    def get_rate_limit_encountered(self, status_code, rate_limit_remaining):
-        return status_code == FORBIDDEN and not int(rate_limit_remaining)
+    def get_rate_limit_encountered(self, exception):
+        if exception.status == UNAUTHORIZED and exception.message.startswith(
+            "API Rate Limit Exceeded"
+        ):
+            msg = "Secondary rate limit exceeded"
+            self._logger.debug(msg)
+            return True
+        if exception.status == FORBIDDEN and not int(
+            exception.headers.get("X-RateLimit-Remaining")
+        ):
+            msg = "Primary rate limit exceeded"
+            self._logger.debug(msg)
+            return True
+        return False
 
     async def _get_retry_after(self, resource_type):
         current_time = time.time()
@@ -845,7 +857,9 @@ class GitHubClient:
                 url=resource, oauth_token=self._access_token()
             )
         except ClientResponseError as exception:
-            if exception.status == UNAUTHORIZED:
+            if self.get_rate_limit_encountered(exception):
+                await self._put_to_sleep(resource_type="core")
+            elif exception.status == UNAUTHORIZED:
                 if self.auth_method == GITHUB_APP:
                     self._logger.debug(
                         f"The access token for installation #{self._installation_id} expired, Regenerating a new token."
@@ -854,10 +868,6 @@ class GitHubClient:
                     raise
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
-            elif self.get_rate_limit_encountered(
-                exception.status, exception.headers.get("X-RateLimit-Remaining")
-            ):
-                await self._put_to_sleep(resource_type="core")
             elif exception.status == FORBIDDEN:
                 msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {resource}."
                 raise ForbiddenException(msg) from exception
@@ -919,14 +929,11 @@ class GitHubClient:
                 return set()
             return {scope.strip() for scope in scopes.split(",")}
         except ClientResponseError as exception:
-            if exception.status == FORBIDDEN:
-                if self.get_rate_limit_encountered(
-                    exception.status, exception.headers.get("X-RateLimit-Remaining")
-                ):
-                    await self._put_to_sleep("graphql")
-                else:
-                    msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {self.base_url}."
-                    raise ForbiddenException(msg) from exception
+            if self.get_rate_limit_encountered(exception):
+                await self._put_to_sleep(resource_type="core")
+            elif exception.status == FORBIDDEN:
+                msg = f"Provided GitHub token does not have the necessary permissions to perform the request for the URL: {self.base_url}."
+                raise ForbiddenException(msg) from exception
             elif exception.status == UNAUTHORIZED:
                 msg = "Your Github token is either expired or revoked. Please check again."
                 raise UnauthorizedException(msg) from exception
