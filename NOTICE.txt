@@ -5224,7 +5224,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 httpcore
-1.0.7
+1.0.8
 BSD License
 Copyright © 2020, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.
@@ -6189,7 +6189,7 @@ MIT License
 
 
 multidict
-6.2.0
+6.4.3
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
@@ -8419,7 +8419,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 typing_extensions
-4.13.1
+4.13.2
 UNKNOWN
 A. HISTORY OF THE SOFTWARE
 ==========================
@@ -8760,8 +8760,8 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.3.0
-MIT License
+2.4.0
+UNKNOWN
 MIT License
 
 Copyright (c) 2008-2020 Andrey Petrov and contributors.
