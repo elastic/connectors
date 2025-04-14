@@ -181,7 +181,7 @@ class JobSchedulingService(BaseService):
                             functools.partial(self._schedule, connector)
                         ):
                             connector.log_debug(
-                                f"{self.display_name.capitalize()} service is already running {self.max_concurrency} concurrent scheduling jobs and can't run more at this point. Increase 'max_concurrent_scheduling_tasks' in config if you want the service to run more concurrent scheduling jobs."  # pyright: ignore
+                                f"Job Scheduling service is already running {self.max_concurrency} concurrent scheduling jobs and can't run more at this point. Increase 'max_concurrent_scheduling_tasks' in config if you want the service to run more concurrent scheduling jobs."  # pyright: ignore
                             )
 
                 except Exception as e:
