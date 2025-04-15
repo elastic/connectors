@@ -4542,8 +4542,8 @@ SOFTWARE.
 
 
 greenlet
-3.1.1
-MIT License
+3.2.0
+MIT AND Python-2.0
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
 
