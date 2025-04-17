@@ -46,6 +46,11 @@ if [[ "${connectors_only}" != true ]]; then
   docker-compose -f $compose_file up --detach elasticsearch
   source $CURDIR/wait-for-elasticsearch.sh
 
+  kibana_mount_volume=$CURDIR/data/volumes/kibana
+  echo "Creating Kibana mount volume at: $kibana_mount_volume"
+  mkdir -p "$kibana_mount_volume"
+  export KIBANA_MOUNT_VOLUME=$kibana_mount_volume
+
   # Start Kibana
   source $CURDIR/update-kibana-user-password.sh
   echo "Starting Kibana..."

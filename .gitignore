@@ -22,3 +22,4 @@ config.yml
 scripts/stack/connectors-config
 
 scripts/stack/data/volumes/es/**
+scripts/stack/data/volumes/kibana/**
