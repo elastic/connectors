@@ -38,6 +38,7 @@ if [[ "$is_example_config" == true ]]; then
     $sed_cmd '/elasticsearch.password/s/^#//g' "$script_config"
 
     if [[ "${ELASTIC_PASSWORD:-}" != "" ]]; then
-        $sed_cmd "s/elasticsearch.password:\ changeme/elasticsearch.password:\ \"$ELASTIC_PASSWORD\"/g" "$script_config"
+        esc_pass=$(printf '%s' "$ELASTIC_PASSWORD" | sed 's/[&|\\]/\\&/g')
+        $sed_cmd "/^elasticsearch\.password:/s|:.*|: ${esc_pass}|" "$script_config";
     fi
 fi
