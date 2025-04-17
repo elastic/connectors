@@ -11,6 +11,12 @@ fi
 pushd "$CURDIR"
 
 compose_file=$CURDIR/docker/docker-compose.yml
+
+es_mount_volume=$CURDIR/data/volumes/es
+echo "Creating es mount volume at: $es_mount_volume"
+mkdir -p "$es_mount_volume"
+export ES_MOUNT_VOLUME=$es_mount_volume
+
 echo "Using compose file at: $compose_file"
 
 . $CURDIR/parse-params.sh

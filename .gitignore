@@ -20,3 +20,5 @@ config.yml
 .venv
 **/venv
 scripts/stack/connectors-config
+
+scripts/stack/data/volumes/es/**
