@@ -4,8 +4,7 @@
     "9.0",
     "8.x",
     "8.18",
-    "8.17",
-    "8.16"
+    "8.17"
   ],
   "fork": false,
   "targetPRLabels": ["backport"],
