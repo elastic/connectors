@@ -11,6 +11,7 @@ Event loop
 - mirrors an Elasticsearch index with a collection of documents
 """
 
+import functools
 from datetime import datetime, timezone
 
 from connectors.es.client import License, with_concurrency_control
@@ -27,6 +28,7 @@ from connectors.protocol import (
 )
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
+from connectors.utils import ConcurrentTasks
 
 
 class JobSchedulingService(BaseService):
@@ -39,6 +41,14 @@ class JobSchedulingService(BaseService):
         self.source_list = config["sources"]
         self.first_run = True
         self.last_wake_up_time = datetime.now(timezone.utc)
+        self.max_concurrency = self.service_config.get(
+            "max_concurrent_scheduling_tasks"
+        )
+        self.schedule_tasks_pool = ConcurrentTasks(max_concurrency=self.max_concurrency)
+
+    def stop(self):
+        super().stop()
+        self.schedule_tasks_pool.cancel()
 
     async def _schedule(self, connector):
         # To do some first-time stuff
@@ -167,13 +177,19 @@ class JobSchedulingService(BaseService):
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        await self._schedule(connector)
+                        if not self.schedule_tasks_pool.try_put(
+                            functools.partial(self._schedule, connector)
+                        ):
+                            connector.log_debug(
+                                f"Job Scheduling service is already running {self.max_concurrency} concurrent scheduling jobs and can't run more at this point. Increase 'max_concurrent_scheduling_tasks' in config if you want the service to run more concurrent scheduling jobs."  # pyright: ignore
+                            )
 
                 except Exception as e:
                     self.logger.error(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
+                await self.schedule_tasks_pool.join()
                 if not self.running:
                     break
                 self.last_wake_up_time = datetime.now(timezone.utc)
