@@ -102,7 +102,7 @@ class JobSchedulingService(BaseService):
             if connector.features.sync_rules_enabled():
                 await connector.validate_filtering(validator=data_source)
 
-            self.logger.info(
+            connector.log_debug(
                 "Connector is configured correctly and can reach the data source"
             )
             await connector.connected()
