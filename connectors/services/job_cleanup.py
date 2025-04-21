@@ -21,7 +21,7 @@ class JobCleanUpService(BaseService):
     def __init__(self, config):
         super().__init__(config, "job_cleanup_service")
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
-        self.idle_jobs_threshold = self.service_config.get("idle_jobs_threshold", 60 * 5)
+        self.idle_jobs_threshold = int(self.service_config.get("idle_jobs_threshold", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", []) or []
         self.connector_ids = list(self.connectors.keys())
 
