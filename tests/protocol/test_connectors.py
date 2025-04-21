@@ -2265,7 +2265,12 @@ async def test_idle_jobs(get_all_docs, set_env):
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    jobs = [job async for job in sync_job_index.idle_jobs(idle_jobs_threshold, connector_ids=connector_ids)]
+    jobs = [
+        job
+        async for job in sync_job_index.idle_jobs(
+            idle_jobs_threshold, connector_ids=connector_ids
+        )
+    ]
 
     get_all_docs.assert_called_with(query=expected_query)
     assert len(jobs) == 1

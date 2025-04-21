@@ -1094,8 +1094,6 @@ class Connector(ESDocument):
         }
 
 
-
-
 class SyncJobIndex(ESIndex):
     """
     Represents Elasticsearch index for sync jobs
