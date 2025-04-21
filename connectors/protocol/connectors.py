@@ -65,7 +65,6 @@ __all__ = [
     "ServiceTypeNotConfiguredError",
     "ServiceTypeNotSupportedError",
     "Status",
-    "IDLE_JOBS_THRESHOLD",
     "JOB_NOT_FOUND_ERROR",
     "Connector",
     "Features",
@@ -1095,7 +1094,6 @@ class Connector(ESDocument):
         }
 
 
-IDLE_JOBS_THRESHOLD = 60 * 5  # 5 minutes
 
 
 class SyncJobIndex(ESIndex):
@@ -1203,7 +1201,7 @@ class SyncJobIndex(ESIndex):
         async for job in self.get_all_docs(query=query):
             yield job
 
-    async def idle_jobs(self, connector_ids):
+    async def idle_jobs(self, idle_jobs_threshold, connector_ids):
         query = {
             "bool": {
                 "filter": [
@@ -1216,7 +1214,7 @@ class SyncJobIndex(ESIndex):
                             ]
                         }
                     },
-                    {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
+                    {"range": {"last_seen": {"lte": f"now-{idle_jobs_threshold}s"}}},
                 ]
             }
         }

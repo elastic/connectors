@@ -22,6 +22,7 @@ CONFIG = {
         "max_errors": 20,
         "max_errors_span": 600,
         "job_cleanup_interval": 1,
+        "idle_jobs_threshold": 300
     },
     "native_service_types": ["mongodb"],
 }
