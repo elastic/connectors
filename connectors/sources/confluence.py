@@ -263,6 +263,7 @@ class ConfluenceClient:
         while True:
             try:
                 self._logger.debug(f"Starting pagination for API endpoint {url}")
+                # can raise ServerDisconnectedError, InternalServerError, NotFound error, ThrottledError, regular Exception
                 response = await self.api_call(url=url)
                 json_response = await response.json()
                 links = json_response.get("_links")
