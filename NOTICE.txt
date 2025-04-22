@@ -7934,11 +7934,11 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.6
+2.7
 MIT License
 MIT License
 
-Copyright (c) 2018 - 2024 Isaac Muse <isaacmuse@gmail.com>
+Copyright (c) 2018 - 2025 Isaac Muse <isaacmuse@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
