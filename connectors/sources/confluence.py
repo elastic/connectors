@@ -107,6 +107,12 @@ class InternalServerError(Exception):
 class NotFound(Exception):
     pass
 
+class Unauthorized(Exception):
+    pass
+
+class Forbidden(Exception):
+    pass
+
 
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
@@ -206,6 +212,12 @@ class ConfluenceClient:
 
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
+        elif exception.status == 401:
+            self._logger.error(f"Received Unauthorized error for URL: {url}")
+            raise Unauthorized
+        elif exception.status == 403:
+            self._logger.error(f"Received Forbidden error for URL: {url}")
+            raise Forbidden
         elif exception.status == 404:
             self._logger.error(f"Received Not Found error for URL: {url}")
             raise NotFound
@@ -263,7 +275,8 @@ class ConfluenceClient:
         while True:
             try:
                 self._logger.debug(f"Starting pagination for API endpoint {url}")
-                # can raise ServerDisconnectedError, InternalServerError, NotFound error, ThrottledError, regular Exception
+                # Should re-raise ServerDisconnectedError, InternalServerError
+                # Maybe handle NotFound, ThrottledError, regular Exception by not crashing out entirely?
                 response = await self.api_call(url=url)
                 json_response = await response.json()
                 links = json_response.get("_links")
@@ -274,8 +287,18 @@ class ConfluenceClient:
                     self.host_url,
                     links.get("next")[1:],
                 )
+            except ServerDisconnectedError:
+                self._logger.error(
+                    f"Server was disconnected during paginated GET request to API endpoint {url}."
+                )
+                raise
+            except InternalServerError:
+                self._logger.error(
+                    f"Internal Server Error occurred during paginated GET request to API endpoint {url}"
+                )
+                raise
+
             except Exception as exception:
-                # update this to catch specific errors/exceptions and re-raise exceptions for things we cannot handle
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."
                 )
@@ -331,7 +354,7 @@ class ConfluenceClient:
                 yield entity
 
     async def fetch_spaces(self):
-        async for response in self.paginated_api_call( # can return a 200, 400 or 401m, This is Space > Get Spaces endpoint (not Get Space singular)
+        async for response in self.paginated_api_call( # can return a 200, 400 or 401, This is Space > Get Spaces endpoint (not Get Space singular)
             url_name=SPACE,
             api_query=SPACE_QUERY,
         ):
