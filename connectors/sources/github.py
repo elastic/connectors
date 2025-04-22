@@ -855,8 +855,6 @@ class GitHubClient:
                 raise ForbiddenException(msg) from exception
             else:
                 raise
-        except RateLimitExceeded:
-            await self._put_to_sleep("core")
         except Exception as e:
             self._logger.debug(
                 f"An unexpected error occurred while getting GitHub item: {resource}. Error: {e}"
