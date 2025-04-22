@@ -10,9 +10,8 @@ from copy import deepcopy
 from http import HTTPStatus
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
-import aiohttp
+import gidgethub
 import pytest
-from aiohttp.client_exceptions import ClientResponseError
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
 
 from connectors.access_control import DLS_QUERY
@@ -960,13 +959,7 @@ async def test_get_response_with_rate_limit_exceeded():
         with patch.object(
             source.github_client._get_client,
             "getitem",
-            side_effect=ClientResponseError(
-                status=403,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                history=None,
-            ),
+            side_effect=gidgethub.HTTPException(status_code=HTTPStatus.FORBIDDEN),
         ):
             with pytest.raises(Exception):
                 source.github_client._get_retry_after = AsyncMock(return_value=0)
@@ -2094,37 +2087,20 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes):
     "exception, raises",
     [
         (
-            ClientResponseError(
-                status=401,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                history=None,
-                headers={"X-RateLimit-Remaining": 5000},
-            ),
+            gidgethub.HTTPException(status_code=HTTPStatus.UNAUTHORIZED),
             UnauthorizedException,
         ),
         (
-            ClientResponseError(
-                status=403,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                history=None,
-                headers={"X-RateLimit-Remaining": 2500},
+            gidgethub.HTTPException(
+                status_code=HTTPStatus.FORBIDDEN,
             ),
             ForbiddenException,
         ),
         (
-            ClientResponseError(
-                status=404,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                history=None,
-                headers={"X-RateLimit-Remaining": 2500},
+            gidgethub.HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
             ),
-            ClientResponseError,
+            gidgethub.HTTPException,
         ),
     ],
 )
@@ -2310,37 +2286,20 @@ async def test_update_installation_access_token_when_error_occurs():
     "exceptions, raises",
     [
         (
-            ClientResponseError(
-                status=403,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                headers={"X-RateLimit-Remaining": 4000},
-                history=None,
+            gidgethub.HTTPException(
+                status_code=HTTPStatus.FORBIDDEN,
             ),
             ForbiddenException,
         ),
         (
-            ClientResponseError(
-                status=401,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                headers={"X-RateLimit-Remaining": 4000},
-                history=None,
-            ),
+            gidgethub.HTTPException(status_code=HTTPStatus.UNAUTHORIZED),
             UnauthorizedException,
         ),
         (
-            ClientResponseError(
-                status=404,
-                request_info=aiohttp.RequestInfo(
-                    real_url="", method=None, headers=None, url=""
-                ),
-                headers={"X-RateLimit-Remaining": 4000},
-                history=None,
+            gidgethub.HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
             ),
-            ClientResponseError,
+            gidgethub.HTTPException,
         ),
         (Exception(), Exception),
     ],
