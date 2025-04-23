@@ -275,8 +275,6 @@ class ConfluenceClient:
         while True:
             try:
                 self._logger.debug(f"Starting pagination for API endpoint {url}")
-                # Should re-raise ServerDisconnectedError, InternalServerError
-                # Maybe handle NotFound, ThrottledError, regular Exception by not crashing out entirely?
                 response = await self.api_call(url=url)
                 json_response = await response.json()
                 links = json_response.get("_links")
@@ -287,6 +285,7 @@ class ConfluenceClient:
                     self.host_url,
                     links.get("next")[1:],
                 )
+            # re-raise on specific exceptions
             except ServerDisconnectedError:
                 self._logger.error(
                     f"Server was disconnected during paginated GET request to API endpoint {url}."
@@ -297,7 +296,6 @@ class ConfluenceClient:
                     f"Internal Server Error occurred during paginated GET request to API endpoint {url}"
                 )
                 raise
-
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."

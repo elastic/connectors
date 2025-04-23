@@ -29,6 +29,8 @@ from connectors.sources.confluence import (
     InternalServerError,
     InvalidConfluenceDataSourceTypeError,
     NotFound,
+    Forbidden,
+    Unauthorized
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -849,6 +851,37 @@ async def test_get_with_429_status_without_retry_after_header():
 
     assert result == payload
 
+@pytest.mark.asyncio
+async def test_get_with_401_status():
+    error = ClientResponseError(None, None)
+    error.status = 401
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(Unauthorized):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
+
+@pytest.mark.asyncio
+async def test_get_with_403_status():
+    error = ClientResponseError(None, None)
+    error.status = 403
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(Forbidden):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
 
 @pytest.mark.asyncio
 async def test_get_with_404_status():
