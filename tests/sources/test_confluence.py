@@ -26,11 +26,11 @@ from connectors.sources.confluence import (
     CONFLUENCE_SERVER,
     ConfluenceClient,
     ConfluenceDataSource,
+    Forbidden,
     InternalServerError,
     InvalidConfluenceDataSourceTypeError,
     NotFound,
-    Forbidden,
-    Unauthorized
+    Unauthorized,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -851,6 +851,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
     assert result == payload
 
+
 @pytest.mark.asyncio
 async def test_get_with_401_status():
     error = ClientResponseError(None, None)
@@ -867,6 +868,7 @@ async def test_get_with_401_status():
                 )
                 await response.json()
 
+
 @pytest.mark.asyncio
 async def test_get_with_403_status():
     error = ClientResponseError(None, None)
@@ -882,6 +884,7 @@ async def test_get_with_403_status():
                     url="http://localhost:1000/err"
                 )
                 await response.json()
+
 
 @pytest.mark.asyncio
 async def test_get_with_404_status():
