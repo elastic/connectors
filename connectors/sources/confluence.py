@@ -343,7 +343,7 @@ class ConfluenceClient:
                 start=0,
             )
         else:
-            search_documents = self.paginated_api_call( # can return a 200, 400 or 403. This is Search content, not Search user
+            search_documents = self.paginated_api_call(
                 url_name=SEARCH,
                 query=f"{query}&{SEARCH_QUERY}",
             )
@@ -352,7 +352,7 @@ class ConfluenceClient:
                 yield entity
 
     async def fetch_spaces(self):
-        async for response in self.paginated_api_call( # can return a 200, 400 or 401, This is Space > Get Spaces endpoint (not Get Space singular)
+        async for response in self.paginated_api_call(
             url_name=SPACE,
             api_query=SPACE_QUERY,
         ):
@@ -373,7 +373,7 @@ class ConfluenceClient:
             return {}
 
     async def fetch_page_blog_documents(self, api_query):
-        async for response in self.paginated_api_call( # can return 200, 400 or 401. This is Content > Search content by CQL endpoint
+        async for response in self.paginated_api_call(
             url_name=CONTENT,
             api_query=api_query,
         ):
@@ -391,7 +391,7 @@ class ConfluenceClient:
                 yield document, attachment_count
 
     async def fetch_attachments(self, content_id):
-        async for response in self.paginated_api_call( # can return 200 or 404. This is Content - attachments > Get attachments
+        async for response in self.paginated_api_call(
             url_name=ATTACHMENT,
             api_query=ATTACHMENT_QUERY,
             id=content_id,
