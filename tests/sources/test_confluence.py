@@ -853,6 +853,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_401_status():
     error = ClientResponseError(None, None)
     error.status = 401
@@ -870,6 +871,7 @@ async def test_get_with_401_status():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_get_with_403_status():
     error = ClientResponseError(None, None)
     error.status = 403
