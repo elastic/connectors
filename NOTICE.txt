@@ -5369,7 +5369,7 @@ Apache Software License
 UNKNOWN
 
 h11
-0.14.0
+0.16.0
 MIT License
 The MIT License (MIT)
 
@@ -5396,7 +5396,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 httpcore
-1.0.8
+1.0.9
 BSD License
 Copyright © 2020, [Encode OSS Ltd](https://www.encode.io/).
 All rights reserved.

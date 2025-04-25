@@ -9,13 +9,13 @@ definitions:
   retries: &retries
     retry:
       automatic:
-        - exit_status: -1  # Connection to the Agent was lost
+        - exit_status: -1 # Connection to the Agent was lost
           signal_reason: none
           limit: 2
-        - exit_status: 255  # Timeout
+        - exit_status: 255 # Timeout
           signal_reason: none
           limit: 2
-        - exit_status: 2  # Flaky test
+        - exit_status: 2 # Flaky test
           signal_reason: none
           limit: 2
 
@@ -67,11 +67,11 @@ steps:
         wait: false
         watch:
           - path:
-            - "connectors/sources/mysql.py"
-            - "tests/sources/fixtures/mysql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/mysql.py"
+              - "tests/sources/fixtures/mysql/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 MySQL"
               <<: *test-agents
@@ -86,11 +86,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/network_drive.py"
-            - "tests/sources/fixtures/network_drive/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/network_drive.py"
+              - "tests/sources/fixtures/network_drive/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Network Drive"
               <<: *test-agents
@@ -105,11 +105,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/s3.py"
-            - "tests/sources/fixtures/s3/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/s3.py"
+              - "tests/sources/fixtures/s3/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Amazon S3"
               <<: *test-agents
@@ -124,11 +124,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_cloud_storage.py"
-            - "tests/sources/fixtures/google_cloud_storage/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/google_cloud_storage.py"
+              - "tests/sources/fixtures/google_cloud_storage/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Google Cloud Storage"
               <<: *test-agents
@@ -143,11 +143,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/azure_blob_storage.py"
-            - "tests/sources/fixtures/azure_blob_storage/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/azure_blob_storage.py"
+              - "tests/sources/fixtures/azure_blob_storage/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Azure Blob Storage"
               <<: *test-agents
@@ -162,11 +162,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/postgresql.py"
-            - "tests/sources/fixtures/postgresql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/postgresql.py"
+              - "tests/sources/fixtures/postgresql/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Postgresql"
               <<: *test-agents
@@ -181,11 +181,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/directory.py"
-            - "tests/sources/fixtures/dir/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/directory.py"
+              - "tests/sources/fixtures/dir/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 System Directory"
               <<: *test-agents
@@ -200,11 +200,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/oracle.py"
-            - "tests/sources/fixtures/oracle/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/oracle.py"
+              - "tests/sources/fixtures/oracle/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Oracle Database"
               <<: *test-agents
@@ -219,11 +219,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_server.py"
-            - "tests/sources/fixtures/sharepoint_server/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/sharepoint_server.py"
+              - "tests/sources/fixtures/sharepoint_server/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Sharepoint Server"
               <<: *test-agents
@@ -238,11 +238,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/sharepoint_online.py"
-            - "tests/sources/fixtures/sharepoint_online/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/sharepoint_online.py"
+              - "tests/sources/fixtures/sharepoint_online/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Sharepoint Online"
               <<: *test-agents
@@ -257,11 +257,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mssql.py"
-            - "tests/sources/fixtures/mssql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/mssql.py"
+              - "tests/sources/fixtures/mssql/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Microsoft SQL"
               <<: *test-agents
@@ -276,12 +276,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/jira.py"
-            - "connectors/sources/atlassian.py"
-            - "tests/sources/fixtures/jira/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/jira.py"
+              - "connectors/sources/atlassian.py"
+              - "tests/sources/fixtures/jira/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Jira"
               <<: *test-agents
@@ -296,12 +296,12 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/confluence.py"
-            - "connectors/sources/atlassian.py"
-            - "tests/sources/fixtures/confluence/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/confluence.py"
+              - "connectors/sources/atlassian.py"
+              - "tests/sources/fixtures/confluence/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Confluence"
               <<: *test-agents
@@ -316,11 +316,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/servicenow.py"
-            - "tests/sources/fixtures/servicenow/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/servicenow.py"
+              - "tests/sources/fixtures/servicenow/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 ServiceNow"
               <<: *test-agents
@@ -335,11 +335,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/mongo.py"
-            - "tests/sources/fixtures/mongodb/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/mongo.py"
+              - "tests/sources/fixtures/mongodb/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 MongoDB"
               <<: *test-agents
@@ -354,11 +354,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/github.py"
-            - "tests/sources/fixtures/github/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/github.py"
+              - "tests/sources/fixtures/github/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 GitHub"
               <<: *test-agents
@@ -373,11 +373,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/google_drive.py"
-            - "tests/sources/fixtures/google_drive/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/google_drive.py"
+              - "tests/sources/fixtures/google_drive/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Google Drive"
               <<: *test-agents
@@ -392,11 +392,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/dropbox.py"
-            - "tests/sources/fixtures/dropbox/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/dropbox.py"
+              - "tests/sources/fixtures/dropbox/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Dropbox"
               <<: *test-agents
@@ -411,11 +411,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/onedrive.py"
-            - "tests/sources/fixtures/onedrive/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/onedrive.py"
+              - "tests/sources/fixtures/onedrive/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 OneDrive"
               <<: *test-agents
@@ -430,11 +430,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/salesforce.py"
-            - "tests/sources/fixtures/salesforce/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/salesforce.py"
+              - "tests/sources/fixtures/salesforce/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Salesforce"
               <<: *test-agents
@@ -449,11 +449,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/zoom.py"
-            - "tests/sources/fixtures/zoom/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/zoom.py"
+              - "tests/sources/fixtures/zoom/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Zoom"
               <<: *test-agents
@@ -468,11 +468,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/box.py"
-            - "tests/sources/fixtures/box/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/box.py"
+              - "tests/sources/fixtures/box/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Box"
               <<: *test-agents
@@ -487,11 +487,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/microsoft_teams.py"
-            - "tests/sources/fixtures/microsoft_teams/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/microsoft_teams.py"
+              - "tests/sources/fixtures/microsoft_teams/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Microsoft Teams"
               <<: *test-agents
@@ -506,11 +506,11 @@ steps:
                 - "perf8-report-*/**/*"
 
           - path:
-            - "connectors/sources/notion.py"
-            - "tests/sources/fixtures/notion/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/notion.py"
+              - "tests/sources/fixtures/notion/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Notion"
               <<: *test-agents
@@ -523,13 +523,13 @@ steps:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
-          
+
           - path:
-            - "connectors/sources/redis.py"
-            - "tests/sources/fixtures/redis/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/redis.py"
+              - "tests/sources/fixtures/redis/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 Redis"
               <<: *test-agents
@@ -542,13 +542,13 @@ steps:
                 - ".buildkite/run_functional_test.sh"
               artifact_paths:
                 - "perf8-report-*/**/*"
-            
+
           - path:
-            - "connectors/sources/graphql.py"
-            - "tests/sources/fixtures/graphql/**"
-            - "tests/sources/fixtures/fixture.py"
-            - "${DOCKERFILE_FTEST_PATH}"
-            - "requirements/**"
+              - "connectors/sources/graphql.py"
+              - "tests/sources/fixtures/graphql/**"
+              - "tests/sources/fixtures/fixture.py"
+              - "${DOCKERFILE_FTEST_PATH}"
+              - "requirements/**"
             config:
               label: "🔨 GraphQL"
               <<: *test-agents
@@ -567,7 +567,7 @@ steps:
   # ----
   - group: ":truck: Packaging and DRA"
     key: "mbp_dra_group"
-    if: "(build.branch == \"main\" || build.branch == \"8.x\" || build.branch == \"8.16\" || build.branch == \"8.17\" || build.branch == \"8.18\" || build.pull_request.labels includes \"ci:packaging\")" # Add new maintenance branches here
+    if: '(build.branch == "main" || build.branch == "9.0" || build.branch == "8.19" || build.branch == "8.18" || build.branch == "8.17" || build.pull_request.labels includes "ci:packaging")' # Add new maintenance branches here
     depends_on:
       - "lint"
       - "unit_tests"
@@ -612,7 +612,7 @@ steps:
           instanceType: m6g.xlarge
           imagePrefix: ci-amazonlinux-2-aarch64
           diskSizeGb: 40
-          diskName: '/dev/xvda'
+          diskName: "/dev/xvda"
         env:
           ARCHITECTURE: "arm64"
           DOCKERFILE_PATH: "Dockerfile.wolfi"
@@ -625,7 +625,7 @@ steps:
           instanceType: m6g.xlarge
           imagePrefix: ci-amazonlinux-2-aarch64
           diskSizeGb: 40
-          diskName: '/dev/xvda'
+          diskName: "/dev/xvda"
         env:
           ARCHITECTURE: "arm64"
           DOCKERFILE_PATH: "Dockerfile.wolfi"
