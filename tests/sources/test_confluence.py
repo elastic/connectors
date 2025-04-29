@@ -24,6 +24,7 @@ from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    BadRequest,
     ConfluenceClient,
     ConfluenceDataSource,
     Forbidden,
@@ -31,7 +32,6 @@ from connectors.sources.confluence import (
     InvalidConfluenceDataSourceTypeError,
     NotFound,
     Unauthorized,
-    BadRequest
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -869,6 +869,7 @@ async def test_get_with_400_status():
                     url="http://localhost:1000/err"
                 )
                 await response.json()
+
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))

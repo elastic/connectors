@@ -111,6 +111,7 @@ class NotFound(Exception):
 class BadRequest(Exception):
     pass
 
+
 class Unauthorized(Exception):
     pass
 
