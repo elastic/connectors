@@ -108,6 +108,9 @@ class NotFound(Exception):
     pass
 
 
+class BadRequest(Exception):
+    pass
+
 class Unauthorized(Exception):
     pass
 
@@ -214,18 +217,21 @@ class ConfluenceClient:
 
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
+        elif exception.status == 400:
+            self._logger.error(f"Received Bad Request error for URL: {url}")
+            raise BadRequest from exception
         elif exception.status == 401:
             self._logger.error(f"Received Unauthorized error for URL: {url}")
-            raise Unauthorized
+            raise Unauthorized from exception
         elif exception.status == 403:
             self._logger.error(f"Received Forbidden error for URL: {url}")
-            raise Forbidden
+            raise Forbidden from exception
         elif exception.status == 404:
             self._logger.error(f"Received Not Found error for URL: {url}")
-            raise NotFound
+            raise NotFound from exception
         elif exception.status == 500:
             self._logger.error(f"Internal Server Error occurred for URL: {url}")
-            raise InternalServerError
+            raise InternalServerError from exception
         else:
             self._logger.error(
                 f"Error while making a GET call for URL: {url}. Error details: {exception}"
