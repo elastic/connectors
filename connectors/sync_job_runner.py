@@ -185,6 +185,9 @@ class SyncJobRunner:
                 self.es_config, self.sync_job.logger
             )
 
+            self.sync_job.log_debug("Checking enterprise search availability")
+            await self.sync_orchestrator.ping()
+
             if job_type in [JobType.INCREMENTAL, JobType.FULL]:
                 self.sync_job.log_info(f"Executing {job_type.value} sync")
                 await self._execute_content_sync_job(job_type, bulk_options)
