@@ -174,7 +174,7 @@ class SyncJobRunner:
             self.sync_orchestrator = SyncOrchestrator(
                 self.es_config, self.sync_job.logger
             )
-            
+
             self.sync_job.log_debug("Checking Sync Orchestrator")
             await self.sync_orchestrator.ping()
 
