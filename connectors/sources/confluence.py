@@ -108,6 +108,18 @@ class NotFound(Exception):
     pass
 
 
+class BadRequest(Exception):
+    pass
+
+
+class Unauthorized(Exception):
+    pass
+
+
+class Forbidden(Exception):
+    pass
+
+
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
@@ -206,12 +218,21 @@ class ConfluenceClient:
 
             await self._sleeps.sleep(retry_seconds)
             raise ThrottledError
+        elif exception.status == 400:
+            self._logger.error(f"Received Bad Request error for URL: {url}")
+            raise BadRequest from exception
+        elif exception.status == 401:
+            self._logger.error(f"Received Unauthorized error for URL: {url}")
+            raise Unauthorized from exception
+        elif exception.status == 403:
+            self._logger.error(f"Received Forbidden error for URL: {url}")
+            raise Forbidden from exception
         elif exception.status == 404:
             self._logger.error(f"Received Not Found error for URL: {url}")
-            raise NotFound
+            raise NotFound from exception
         elif exception.status == 500:
             self._logger.error(f"Internal Server Error occurred for URL: {url}")
-            raise InternalServerError
+            raise InternalServerError from exception
         else:
             self._logger.error(
                 f"Error while making a GET call for URL: {url}. Error details: {exception}"
@@ -273,6 +294,17 @@ class ConfluenceClient:
                     self.host_url,
                     links.get("next")[1:],
                 )
+            # re-raise on specific exceptions
+            except ServerDisconnectedError:
+                self._logger.error(
+                    f"Server was disconnected during paginated GET request to API endpoint {url}."
+                )
+                raise
+            except InternalServerError:
+                self._logger.error(
+                    f"Internal Server Error occurred during paginated GET request to API endpoint {url}"
+                )
+                raise
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type {url_name} from {url}. Exception: {exception}."

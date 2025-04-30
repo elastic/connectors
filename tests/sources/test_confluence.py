@@ -24,11 +24,14 @@ from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    BadRequest,
     ConfluenceClient,
     ConfluenceDataSource,
+    Forbidden,
     InternalServerError,
     InvalidConfluenceDataSourceTypeError,
     NotFound,
+    Unauthorized,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -848,6 +851,60 @@ async def test_get_with_429_status_without_retry_after_header():
         result = await response.json()
 
     assert result == payload
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_400_status():
+    error = ClientResponseError(None, None)
+    error.status = 400
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(BadRequest):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_401_status():
+    error = ClientResponseError(None, None)
+    error.status = 401
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(Unauthorized):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_403_status():
+    error = ClientResponseError(None, None)
+    error.status = 403
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(Forbidden):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
 
 
 @pytest.mark.asyncio
