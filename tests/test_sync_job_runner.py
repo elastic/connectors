@@ -124,7 +124,7 @@ def sync_orchestrator_mock():
     with patch(
         "connectors.sync_job_runner.SyncOrchestrator"
     ) as sync_orchestrator_klass_mock:
-        sync_orchestrator_mock = Mock()
+        sync_orchestrator_mock = AsyncMock()
         sync_orchestrator_mock.prepare_content_index = AsyncMock()
         sync_orchestrator_mock.async_bulk = AsyncMock()
         sync_orchestrator_mock.done = Mock(return_value=True)
