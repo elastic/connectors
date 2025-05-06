@@ -217,6 +217,10 @@
 #service.log_level: INFO
 #
 #
+##  The threshold (in seconds) before a sync job is considered idle.
+#service.idle_jobs_threshold: 300
+#
+#
 ## ------------------------------- Extraction Service ----------------------------------
 #
 ##  Local extraction service-related configurations.
