@@ -1880,7 +1880,7 @@ SOFTWARE.
 
 
 azure-core
-1.33.0
+1.34.0
 MIT License
 Copyright (c) Microsoft Corporation.
 
@@ -2687,7 +2687,7 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.1
+3.4.2
 MIT License
 MIT License
 
@@ -2801,7 +2801,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 cryptography
-44.0.2
+44.0.3
 Apache Software License; BSD License
 This software is made available under the terms of *either* of the licenses
 found in LICENSE.APACHE or LICENSE.BSD. Contributions to cryptography are made
