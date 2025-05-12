@@ -20,7 +20,6 @@ from connectors.filtering.validation import (
     InvalidFilteringError,
 )
 from connectors.protocol import (
-    IDLE_JOBS_THRESHOLD,
     JOB_NOT_FOUND_ERROR,
     Connector,
     ConnectorIndex,
@@ -2246,6 +2245,7 @@ async def test_idle_jobs(get_all_docs, set_env):
     job = Mock()
     get_all_docs.return_value = AsyncIterator([job])
     config = load_config(CONFIG)
+    idle_jobs_threshold = config["service"]["idle_jobs_threshold"]
     connector_ids = [1, 2]
     expected_query = {
         "bool": {
@@ -2259,13 +2259,18 @@ async def test_idle_jobs(get_all_docs, set_env):
                         ]
                     }
                 },
-                {"range": {"last_seen": {"lte": f"now-{IDLE_JOBS_THRESHOLD}s"}}},
+                {"range": {"last_seen": {"lte": f"now-{idle_jobs_threshold}s"}}},
             ]
         }
     }
 
     sync_job_index = SyncJobIndex(elastic_config=config["elasticsearch"])
-    jobs = [job async for job in sync_job_index.idle_jobs(connector_ids=connector_ids)]
+    jobs = [
+        job
+        async for job in sync_job_index.idle_jobs(
+            idle_jobs_threshold, connector_ids=connector_ids
+        )
+    ]
 
     get_all_docs.assert_called_with(query=expected_query)
     assert len(jobs) == 1
