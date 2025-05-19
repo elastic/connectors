@@ -1352,7 +1352,7 @@ class SalesforceDataSource(BaseDataSource):
                 "tooltip": "The client secret for your OAuth2-enabled connected app. Also called 'consumer secret'",
                 "type": "str",
             },
-             "standard_objects_to_sync": {
+            "standard_objects_to_sync": {
                 "display": "textarea",
                 "label": "Standard Objects to Sync",
                 "order": 4,
@@ -1507,10 +1507,10 @@ class SalesforceDataSource(BaseDataSource):
 
         objects_to_sync = (
             STANDARD_SOBJECTS
-            if [WILDCARD] == self.standard_objects_to_sync 
+            if [WILDCARD] == self.standard_objects_to_sync
             else self.standard_objects_to_sync
         )
-        
+
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
@@ -1542,7 +1542,9 @@ class SalesforceDataSource(BaseDataSource):
                         access_control = self.permissions.get("Account", [])
                         yield (
                             self.doc_mapper.map_salesforce_objects(
-                                self._decorate_with_access_control(account, access_control)
+                                self._decorate_with_access_control(
+                                    account, access_control
+                                )
                             ),
                             None,
                         )
@@ -1554,7 +1556,9 @@ class SalesforceDataSource(BaseDataSource):
                         access_control = self.permissions.get("Opportunity", [])
                         yield (
                             self.doc_mapper.map_salesforce_objects(
-                                self._decorate_with_access_control(opportunity, access_control)
+                                self._decorate_with_access_control(
+                                    opportunity, access_control
+                                )
                             ),
                             None,
                         )
@@ -1566,7 +1570,9 @@ class SalesforceDataSource(BaseDataSource):
                         access_control = self.permissions.get("Contact", [])
                         yield (
                             self.doc_mapper.map_salesforce_objects(
-                                self._decorate_with_access_control(contact, access_control)
+                                self._decorate_with_access_control(
+                                    contact, access_control
+                                )
                             ),
                             None,
                         )
@@ -1590,7 +1596,9 @@ class SalesforceDataSource(BaseDataSource):
                         access_control = self.permissions.get("Campaign", [])
                         yield (
                             self.doc_mapper.map_salesforce_objects(
-                                self._decorate_with_access_control(campaign, access_control)
+                                self._decorate_with_access_control(
+                                    campaign, access_control
+                                )
                             ),
                             None,
                         )
