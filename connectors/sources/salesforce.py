@@ -56,6 +56,16 @@ OFFSET = 200
 OBJECT_READ_PERMISSION_USERS = "SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId IN (SELECT ParentId FROM ObjectPermissions WHERE PermissionsRead = true AND SObjectType = '{sobject}')"
 USERNAME_FROM_IDS = "SELECT Name, Email FROM User WHERE Id IN {user_list}"
 FILE_ACCESS = "SELECT ContentDocumentId, LinkedEntityId, LinkedEntity.Name FROM ContentDocumentLink WHERE ContentDocumentId = '{document_id}'"
+WILDCARD = "*"
+
+STANDARD_SOBJECTS = [
+    "Account",
+    "Opportunity",
+    "Contact",
+    "Lead",
+    "Campaign",
+    "Case",
+]
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -186,6 +196,7 @@ class SalesforceClient:
         self._queryable_sobject_fields = {}
         self._sobjects_cache_by_type = None
         self._content_document_links_join = None
+        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
 
         self.base_url = base_url
         self.api_token = SalesforceAPIToken(
@@ -1313,6 +1324,7 @@ class SalesforceDataSource(BaseDataSource):
         )
         self.doc_mapper = SalesforceDocMapper(base_url)
         self.permissions = {}
+        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
 
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
@@ -1340,10 +1352,17 @@ class SalesforceDataSource(BaseDataSource):
                 "tooltip": "The client secret for your OAuth2-enabled connected app. Also called 'consumer secret'",
                 "type": "str",
             },
+             "standard_objects_to_sync": {
+                "display": "textarea",
+                "label": "Standard Objects to Sync",
+                "order": 4,
+                "tooltip": "The list of Salesforce Standard Objects to sync",
+                "type": "list",
+            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 4,
+                "order": 5,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1352,7 +1371,7 @@ class SalesforceDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 5,
+                "order": 6,
                 "tooltip": "Document level security ensures identities and permissions set in Salesforce are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1484,7 +1503,14 @@ class SalesforceDataSource(BaseDataSource):
     async def get_docs(self, filtering=None):
         # We collect all content documents and de-duplicate them before downloading and yielding
         content_docs = []
+        logger.info(f"Fetching Standard Objects: {self.standard_objects_to_sync}")
 
+        objects_to_sync = (
+            STANDARD_SOBJECTS
+            if [WILDCARD] == self.standard_objects_to_sync 
+            else self.standard_objects_to_sync
+        )
+        
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
@@ -1502,92 +1528,97 @@ class SalesforceDataSource(BaseDataSource):
                     )
 
         else:
-            for sobject in [
-                "Account",
-                "Opportunity",
-                "Contact",
-                "Lead",
-                "Campaign",
-                "Case",
-            ]:
+            for sobject in objects_to_sync:
                 await self._fetch_users_with_read_access(sobject=sobject)
 
             for custom_object in await self.salesforce_client._custom_objects():
                 await self._fetch_users_with_read_access(sobject=custom_object)
 
-            async for account in self.salesforce_client.get_accounts():
-                content_docs.extend(self._parse_content_documents(account))
-                access_control = self.permissions.get("Account", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(account, access_control)
-                    ),
-                    None,
-                )
-
-            async for opportunity in self.salesforce_client.get_opportunities():
-                content_docs.extend(self._parse_content_documents(opportunity))
-                access_control = self.permissions.get("Opportunity", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(opportunity, access_control)
-                    ),
-                    None,
-                )
-
-            async for contact in self.salesforce_client.get_contacts():
-                content_docs.extend(self._parse_content_documents(contact))
-                access_control = self.permissions.get("Contact", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(contact, access_control)
-                    ),
-                    None,
-                )
-
-            async for lead in self.salesforce_client.get_leads():
-                content_docs.extend(self._parse_content_documents(lead))
-                access_control = self.permissions.get("Lead", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(lead, access_control)
-                    ),
-                    None,
-                )
-
-            async for campaign in self.salesforce_client.get_campaigns():
-                content_docs.extend(self._parse_content_documents(campaign))
-                access_control = self.permissions.get("Campaign", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(campaign, access_control)
-                    ),
-                    None,
-                )
-
-            async for case in self.salesforce_client.get_cases():
-                content_docs.extend(self._parse_content_documents(case))
-                access_control = self.permissions.get("Case", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(case, access_control)
-                    ),
-                    None,
-                )
-
-            async for custom_object in self.salesforce_client.get_custom_objects():
-                content_docs.extend(self._parse_content_documents(custom_object))
-                access_control = self.permissions.get(
-                    custom_object.get("attributes", {}).get("type"), []
-                )
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(
-                            custom_object, access_control
+            for sobject in objects_to_sync:
+                if "Account" == sobject:
+                    logger.info("Fetching Accounts")
+                    async for account in self.salesforce_client.get_accounts():
+                        content_docs.extend(self._parse_content_documents(account))
+                        access_control = self.permissions.get("Account", [])
+                        yield (
+                            self.doc_mapper.map_salesforce_objects(
+                                self._decorate_with_access_control(account, access_control)
+                            ),
+                            None,
                         )
-                    ),
-                    None,
-                )
+
+                elif "Opportunity" == sobject:
+                    logger.info("Fetching Opportunities")
+                    async for opportunity in self.salesforce_client.get_opportunities():
+                        content_docs.extend(self._parse_content_documents(opportunity))
+                        access_control = self.permissions.get("Opportunity", [])
+                        yield (
+                            self.doc_mapper.map_salesforce_objects(
+                                self._decorate_with_access_control(opportunity, access_control)
+                            ),
+                            None,
+                        )
+
+                elif "Contact" == sobject:
+                    logger.info("Fetching Contacts")
+                    async for contact in self.salesforce_client.get_contacts():
+                        content_docs.extend(self._parse_content_documents(contact))
+                        access_control = self.permissions.get("Contact", [])
+                        yield (
+                            self.doc_mapper.map_salesforce_objects(
+                                self._decorate_with_access_control(contact, access_control)
+                            ),
+                            None,
+                        )
+
+                elif "Lead" == sobject:
+                    logger.info("Fetching Leads")
+                    async for lead in self.salesforce_client.get_leads():
+                        content_docs.extend(self._parse_content_documents(lead))
+                        access_control = self.permissions.get("Lead", [])
+                        yield (
+                            self.doc_mapper.map_salesforce_objects(
+                                self._decorate_with_access_control(lead, access_control)
+                            ),
+                            None,
+                        )
+
+                elif "Campaign" == sobject:
+                    logger.info("Fetching Campaigns")
+                    async for campaign in self.salesforce_client.get_campaigns():
+                        content_docs.extend(self._parse_content_documents(campaign))
+                        access_control = self.permissions.get("Campaign", [])
+                        yield (
+                            self.doc_mapper.map_salesforce_objects(
+                                self._decorate_with_access_control(campaign, access_control)
+                            ),
+                            None,
+                        )
+
+                elif "Case" == sobject:
+                    logger.info("Fetching Cases")
+                    async for case in self.salesforce_client.get_cases():
+                        content_docs.extend(self._parse_content_documents(case))
+                        access_control = self.permissions.get("Case", [])
+                        yield (
+                            self.doc_mapper.map_salesforce_objects(
+                                self._decorate_with_access_control(case, access_control)
+                            ),
+                            None,
+                        )
+
+            # Handle custom objects
+            for custom_object in await self.salesforce_client._custom_objects():
+                logger.info(f"Fetching Custom Object: {custom_object}")
+                async for record in self.salesforce_client.get_custom_objects():
+                    content_docs.extend(self._parse_content_documents(record))
+                    access_control = self.permissions.get(custom_object, [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(record, access_control)
+                        ),
+                        None,
+                    )
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
