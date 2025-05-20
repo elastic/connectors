@@ -1605,14 +1605,19 @@ class SalesforceDataSource(BaseDataSource):
 
             for custom_object in await self.salesforce_client._custom_objects():
                 await self._fetch_users_with_read_access(sobject=custom_object)
-            
-            if [WILDCARD] == self.standard_objects_to_sync  or custom_object in self.standard_objects_to_sync:
+
+            if (
+                [WILDCARD] == self.standard_objects_to_sync
+                or custom_object in self.standard_objects_to_sync
+            ):
                 async for custom_record in self.salesforce_client.get_custom_objects():
                     content_docs.extend(self._parse_content_documents(custom_record))
                     access_control = self.permissions.get(custom_object, [])
                     yield (
                         self.doc_mapper.map_salesforce_objects(
-                            self._decorate_with_access_control(custom_record, access_control)
+                            self._decorate_with_access_control(
+                                custom_record, access_control
+                            )
                         ),
                         None,
                     )
