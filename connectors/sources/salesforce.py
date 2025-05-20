@@ -1610,8 +1610,12 @@ class SalesforceDataSource(BaseDataSource):
                     [WILDCARD] == self.standard_objects_to_sync
                     or custom_object in self.standard_objects_to_sync
                 ):
-                    async for custom_record in self.salesforce_client.get_custom_objects():
-                        content_docs.extend(self._parse_content_documents(custom_record))
+                    async for (
+                        custom_record
+                    ) in self.salesforce_client.get_custom_objects():
+                        content_docs.extend(
+                            self._parse_content_documents(custom_record)
+                        )
                         access_control = self.permissions.get(custom_object, [])
                         yield (
                             self.doc_mapper.map_salesforce_objects(
