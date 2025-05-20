@@ -20,7 +20,7 @@ definitions:
           limit: 2
 
 notify:
-  - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))$/ && (build.state == "failed" || pipeline.started_passing)'
+  - if: 'build.branch =~ /^((main)|([0-9]+\.[0-9]+))\$/ && (build.state == "failed" || pipeline.started_passing)'
     slack:
       channels:
         - "#search-et-alerts"
