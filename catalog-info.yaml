@@ -49,6 +49,10 @@ spec:
       branch_configuration: "main"
       pipeline_file: ".buildkite/pipeline.yml"
       repository: "elastic/connectors"
+      env:
+        ELASTIC_SLACK_NOTIFICATIONS_ENABLED: 'true' # Must be in quotes to make it a string
+        SLACK_NOTIFICATIONS_CHANNEL: '#search-et-alerts'
+        SLACK_NOTIFICATIONS_ON_SUCCESS: 'true'
       schedules:
         Daily main:
           branch: main
@@ -109,6 +113,10 @@ spec:
       provider_settings:
         trigger_mode: "none"
       repository: "elastic/connectors"
+      env:
+        ELASTIC_SLACK_NOTIFICATIONS_ENABLED: 'true' # Must be in quotes to make it a string
+        SLACK_NOTIFICATIONS_CHANNEL: '#search-et-alerts'
+        SLACK_NOTIFICATIONS_ON_SUCCESS: 'true'
       schedules:
         Daily 8_18:
           branch: '8.18'
@@ -163,6 +171,10 @@ spec:
       provider_settings:
         trigger_mode: "none"
       repository: "elastic/connectors"
+      env:
+        ELASTIC_SLACK_NOTIFICATIONS_ENABLED: 'true' # Must be in quotes to make it a string
+        SLACK_NOTIFICATIONS_CHANNEL: '#search-et-alerts'
+        SLACK_NOTIFICATIONS_ON_SUCCESS: 'true'
       schedules:
         Daily 8_18:
           branch: '8.18'
@@ -216,6 +228,10 @@ spec:
       pipeline_file: ".buildkite/release-pipeline.yml"
       provider_settings:
         trigger_mode: "none"
+      env:
+        ELASTIC_SLACK_NOTIFICATIONS_ENABLED: 'true' # Must be in quotes to make it a string
+        SLACK_NOTIFICATIONS_CHANNEL: '#search-et-alerts'
+        SLACK_NOTIFICATIONS_ON_SUCCESS: 'true'
       teams:
         search-extract-and-transform: {}
         search-productivity-team: {}
