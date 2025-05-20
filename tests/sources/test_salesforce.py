@@ -46,6 +46,8 @@ TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
 TEST_DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 
+TEST_WILDCARD_OBJECTS_TO_SYNC = ["*"]
+
 ADVANCED_SNIPPET = "advanced_snippet"
 
 ACCOUNT_RESPONSE_PAYLOAD = {
@@ -656,6 +658,7 @@ async def create_salesforce_source(
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
+        standard_objects_to_sync=["*"],
         use_text_extraction_service=use_text_extraction_service,
     ) as source:
         if mock_token is True:
@@ -746,7 +749,12 @@ def generate_account_doc(identifier):
 
 def test_get_default_configuration():
     config = DataSourceConfiguration(SalesforceDataSource.get_default_configuration())
-    expected_fields = ["client_id", "client_secret", "domain"]
+    expected_fields = [
+        "client_id",
+        "client_secret",
+        "domain",
+        "standard_objects_to_sync",
+    ]
 
     assert all(field in config.to_dict() for field in expected_fields)
 
@@ -2078,3 +2086,27 @@ async def test_get_docs_with_dls_enabled(mock_responses):
 
         async for record, _ in source.get_docs():
             assert len(record["_allow_access_control"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
+    async with create_salesforce_source() as source:
+        source.standard_objects_to_sync = ["Account", "Contact"]
+
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject"]
+        )
+
+        source._parse_content_documents = MagicMock(return_value=[])
+
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+
+        async for record, _ in source.get_docs():
+            assert record["attributes"]["type"] in ["Account", "Contact"]
