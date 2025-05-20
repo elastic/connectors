@@ -196,7 +196,6 @@ class SalesforceClient:
         self._queryable_sobject_fields = {}
         self._sobjects_cache_by_type = None
         self._content_document_links_join = None
-        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
 
         self.base_url = base_url
         self.api_token = SalesforceAPIToken(
@@ -1530,13 +1529,7 @@ class SalesforceDataSource(BaseDataSource):
         else:
             for sobject in objects_to_sync:
                 await self._fetch_users_with_read_access(sobject=sobject)
-
-            for custom_object in await self.salesforce_client._custom_objects():
-                await self._fetch_users_with_read_access(sobject=custom_object)
-
-            for sobject in objects_to_sync:
                 if "Account" == sobject:
-                    logger.info("Fetching Accounts")
                     async for account in self.salesforce_client.get_accounts():
                         content_docs.extend(self._parse_content_documents(account))
                         access_control = self.permissions.get("Account", [])
@@ -1550,7 +1543,6 @@ class SalesforceDataSource(BaseDataSource):
                         )
 
                 elif "Opportunity" == sobject:
-                    logger.info("Fetching Opportunities")
                     async for opportunity in self.salesforce_client.get_opportunities():
                         content_docs.extend(self._parse_content_documents(opportunity))
                         access_control = self.permissions.get("Opportunity", [])
@@ -1564,7 +1556,6 @@ class SalesforceDataSource(BaseDataSource):
                         )
 
                 elif "Contact" == sobject:
-                    logger.info("Fetching Contacts")
                     async for contact in self.salesforce_client.get_contacts():
                         content_docs.extend(self._parse_content_documents(contact))
                         access_control = self.permissions.get("Contact", [])
@@ -1578,7 +1569,6 @@ class SalesforceDataSource(BaseDataSource):
                         )
 
                 elif "Lead" == sobject:
-                    logger.info("Fetching Leads")
                     async for lead in self.salesforce_client.get_leads():
                         content_docs.extend(self._parse_content_documents(lead))
                         access_control = self.permissions.get("Lead", [])
@@ -1590,7 +1580,6 @@ class SalesforceDataSource(BaseDataSource):
                         )
 
                 elif "Campaign" == sobject:
-                    logger.info("Fetching Campaigns")
                     async for campaign in self.salesforce_client.get_campaigns():
                         content_docs.extend(self._parse_content_documents(campaign))
                         access_control = self.permissions.get("Campaign", [])
@@ -1604,7 +1593,6 @@ class SalesforceDataSource(BaseDataSource):
                         )
 
                 elif "Case" == sobject:
-                    logger.info("Fetching Cases")
                     async for case in self.salesforce_client.get_cases():
                         content_docs.extend(self._parse_content_documents(case))
                         access_control = self.permissions.get("Case", [])
@@ -1615,15 +1603,16 @@ class SalesforceDataSource(BaseDataSource):
                             None,
                         )
 
-            # Handle custom objects
             for custom_object in await self.salesforce_client._custom_objects():
-                logger.info(f"Fetching Custom Object: {custom_object}")
-                async for record in self.salesforce_client.get_custom_objects():
-                    content_docs.extend(self._parse_content_documents(record))
+                await self._fetch_users_with_read_access(sobject=custom_object)
+            
+            if [WILDCARD] == self.standard_objects_to_sync  or custom_object in self.standard_objects_to_sync:
+                async for custom_record in self.salesforce_client.get_custom_objects():
+                    content_docs.extend(self._parse_content_documents(custom_record))
                     access_control = self.permissions.get(custom_object, [])
                     yield (
                         self.doc_mapper.map_salesforce_objects(
-                            self._decorate_with_access_control(record, access_control)
+                            self._decorate_with_access_control(custom_record, access_control)
                         ),
                         None,
                     )
