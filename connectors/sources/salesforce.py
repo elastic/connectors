@@ -1603,28 +1603,23 @@ class SalesforceDataSource(BaseDataSource):
                             None,
                         )
 
-            for custom_object in await self.salesforce_client._custom_objects():
-                await self._fetch_users_with_read_access(sobject=custom_object)
+            custom_objects = await self.salesforce_client._custom_objects()
 
-                if (
-                    [WILDCARD] == self.standard_objects_to_sync
-                    or custom_object in self.standard_objects_to_sync
-                ):
-                    async for (
-                        custom_record
-                    ) in self.salesforce_client.get_custom_objects():
-                        content_docs.extend(
-                            self._parse_content_documents(custom_record)
-                        )
-                        access_control = self.permissions.get(custom_object, [])
-                        yield (
-                            self.doc_mapper.map_salesforce_objects(
-                                self._decorate_with_access_control(
-                                    custom_record, access_control
-                                )
-                            ),
-                            None,
-                        )
+            if [WILDCARD] == self.standard_objects_to_sync or any(object in self.standard_objects_to_sync for object in custom_objects):
+                for custom_object in custom_objects:
+                    await self._fetch_users_with_read_access(sobject=custom_object)
+
+                async for custom_record in self.salesforce_client.get_custom_objects():
+                    content_docs.extend(self._parse_content_documents(custom_record))
+                    access_control = self.permissions.get(custom_object, [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(
+                                custom_record, access_control
+                            )
+                        ),
+                        None,
+                    )
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
