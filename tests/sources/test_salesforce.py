@@ -2109,6 +2109,7 @@ async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
         async for record, _ in source.get_docs():
             assert record["attributes"]["type"] in ["Account", "Contact"]
 
+
 @pytest.mark.asyncio
 async def test_get_docs_sync_custom_objects(mock_responses):
     async with create_salesforce_source() as source:
@@ -2116,7 +2117,7 @@ async def test_get_docs_sync_custom_objects(mock_responses):
             return_value=["CustomObject"]
         )
         source.standard_objects_to_sync = []
-        
+
         source.sync_custom_objects = True
         source._parse_content_documents = MagicMock(return_value=[])
 
@@ -2131,4 +2132,3 @@ async def test_get_docs_sync_custom_objects(mock_responses):
 
         async for record, _ in source.get_docs():
             assert record["attributes"]["type"] == "CustomObject"
-

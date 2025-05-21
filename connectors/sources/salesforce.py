@@ -1325,6 +1325,7 @@ class SalesforceDataSource(BaseDataSource):
         self.permissions = {}
         self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
         self.sync_custom_objects = configuration["sync_custom_objects"]
+
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
 
