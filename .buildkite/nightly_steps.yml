@@ -17,6 +17,7 @@ notify:
     slack:
       channels:
         - "#search-et-alerts"
+      message: "${BUILDKITE_MESSAGE}"
 
 env:
   DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
