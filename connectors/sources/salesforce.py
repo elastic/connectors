@@ -1386,7 +1386,6 @@ class SalesforceDataSource(BaseDataSource):
             },
         }
 
-
     def _dls_enabled(self):
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
@@ -1539,16 +1538,14 @@ class SalesforceDataSource(BaseDataSource):
             logger.info(f"Fetching Standard Objects: {self.standard_objects_to_sync}")
             for sobject in objects_to_sync:
                 await self._fetch_users_with_read_access(sobject=sobject)
-            
+
             if "Account" in objects_to_sync:
                 async for account in self.salesforce_client.get_accounts():
                     content_docs.extend(self._parse_content_documents(account))
                     access_control = self.permissions.get("Account", [])
                     yield (
                         self.doc_mapper.map_salesforce_objects(
-                            self._decorate_with_access_control(
-                                account, access_control
-                            )
+                            self._decorate_with_access_control(account, access_control)
                         ),
                         None,
                     )
@@ -1572,9 +1569,7 @@ class SalesforceDataSource(BaseDataSource):
                     access_control = self.permissions.get("Contact", [])
                     yield (
                         self.doc_mapper.map_salesforce_objects(
-                            self._decorate_with_access_control(
-                                contact, access_control
-                            )
+                            self._decorate_with_access_control(contact, access_control)
                         ),
                         None,
                     )
@@ -1596,9 +1591,7 @@ class SalesforceDataSource(BaseDataSource):
                     access_control = self.permissions.get("Campaign", [])
                     yield (
                         self.doc_mapper.map_salesforce_objects(
-                            self._decorate_with_access_control(
-                                campaign, access_control
-                            )
+                            self._decorate_with_access_control(campaign, access_control)
                         ),
                         None,
                     )
