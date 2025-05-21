@@ -45,7 +45,6 @@ TEST_QUERY_MATCH_URL = re.compile(
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
 TEST_DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
-
 TEST_WILDCARD_OBJECTS_TO_SYNC = ["*"]
 
 ADVANCED_SNIPPET = "advanced_snippet"
@@ -658,7 +657,7 @@ async def create_salesforce_source(
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
-        standard_objects_to_sync=["*"],
+        standard_objects_to_sync=TEST_WILDCARD_OBJECTS_TO_SYNC,
         use_text_extraction_service=use_text_extraction_service,
     ) as source:
         if mock_token is True:
