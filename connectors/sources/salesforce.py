@@ -1357,6 +1357,7 @@ class SalesforceDataSource(BaseDataSource):
                 "order": 4,
                 "tooltip": "The list of Salesforce Standard Objects to sync",
                 "type": "list",
+                "value": [WILDCARD],
             },
             "use_text_extraction_service": {
                 "display": "toggle",
