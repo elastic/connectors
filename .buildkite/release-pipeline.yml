@@ -5,6 +5,7 @@ notify:
     slack:
       channels:
         - "#search-et-alerts"
+      message: "${BUILDKITE_MESSAGE}"
 
 env:
   MANUAL_RELEASE: true # unlike DRA, this pipeline should suffix its artifacts with a timestamp
