@@ -47,6 +47,7 @@ TEST_CLIENT_SECRET = "9876"
 TEST_DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 TEST_WILDCARD_OBJECTS_TO_SYNC = ["*"]
 
+
 ADVANCED_SNIPPET = "advanced_snippet"
 
 ACCOUNT_RESPONSE_PAYLOAD = {
@@ -658,6 +659,7 @@ async def create_salesforce_source(
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
         standard_objects_to_sync=TEST_WILDCARD_OBJECTS_TO_SYNC,
+        sync_custom_objects=True,
         use_text_extraction_service=use_text_extraction_service,
     ) as source:
         if mock_token is True:
@@ -2091,10 +2093,7 @@ async def test_get_docs_with_dls_enabled(mock_responses):
 async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
     async with create_salesforce_source() as source:
         source.standard_objects_to_sync = ["Account", "Contact"]
-
-        source.salesforce_client._custom_objects = AsyncMock(
-            return_value=["CustomObject"]
-        )
+        source.sync_custom_objects = False
 
         source._parse_content_documents = MagicMock(return_value=[])
 
@@ -2109,3 +2108,27 @@ async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
 
         async for record, _ in source.get_docs():
             assert record["attributes"]["type"] in ["Account", "Contact"]
+
+@pytest.mark.asyncio
+async def test_get_docs_sync_custom_objects(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject"]
+        )
+        source.standard_objects_to_sync = []
+        
+        source.sync_custom_objects = True
+        source._parse_content_documents = MagicMock(return_value=[])
+
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+
+        async for record, _ in source.get_docs():
+            assert record["attributes"]["type"] == "CustomObject"
+

@@ -1324,7 +1324,7 @@ class SalesforceDataSource(BaseDataSource):
         self.doc_mapper = SalesforceDocMapper(base_url)
         self.permissions = {}
         self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
-
+        self.sync_custom_objects = configuration["sync_custom_objects"]
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
 
@@ -1607,7 +1607,7 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if self.configuration["sync_custom_objects"]:
+            if self.sync_custom_objects:
                 logger.info("Fetching Custom Objects")
                 for custom_object in await self.salesforce_client._custom_objects():
                     await self._fetch_users_with_read_access(sobject=custom_object)
