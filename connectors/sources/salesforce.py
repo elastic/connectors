@@ -25,7 +25,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -204,6 +204,12 @@ class SalesforceClient:
             configuration["client_id"],
             configuration["client_secret"],
         )
+        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
+        self.sync_custom_objects = configuration["sync_custom_objects"]
+        self.custom_objects_to_sync = [
+            obj if obj.endswith('__c') else f"{obj}__c"
+            for obj in configuration["custom_objects_to_sync"]
+        ]
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -292,7 +298,7 @@ class SalesforceClient:
         return custom_objects
 
     async def get_custom_objects(self):
-        for custom_object in await self._custom_objects():
+        for custom_object in self.custom_objects_to_sync:
             query = await self._custom_object_query(custom_object=custom_object)
             async for records in self._yield_non_bulk_query_pages(query):
                 for record in records:
@@ -1323,9 +1329,6 @@ class SalesforceDataSource(BaseDataSource):
         )
         self.doc_mapper = SalesforceDocMapper(base_url)
         self.permissions = {}
-        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
-        self.sync_custom_objects = configuration["sync_custom_objects"]
-
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
 
@@ -1356,17 +1359,27 @@ class SalesforceDataSource(BaseDataSource):
                 "display": "textarea",
                 "label": "Standard Objects to Sync",
                 "order": 4,
-                "tooltip": "The list of Salesforce Standard Objects to sync",
+                "tooltip": "The list of Salesforce Standard Objects to sync. Remove any from list to exclude from sync.",
                 "type": "list",
-                "value": WILDCARD,
+                "value": ", ".join(STANDARD_SOBJECTS),
+                "required": False,
             },
             "sync_custom_objects": {
                 "display": "toggle",
                 "label": "Sync Custom Objects",
                 "order": 5,
-                "tooltip": "The list of Salesforce Custom Objects to sync",
+                "tooltip": "Whether or not to sync custom objects",
                 "type": "bool",
                 "value": False,
+            },
+            "custom_objects_to_sync": {
+                "display": "textarea",
+                "label": "Sync Custom Objects",
+                "order": 6,
+                "tooltip": "List of custom objects to sync. Use '*' to sync all custom objects. ",
+                "type": "list",
+                "depends_on": [{"field": "sync_custom_objects", "value": True}],
+                "value": [],
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -1453,6 +1466,20 @@ class SalesforceDataSource(BaseDataSource):
 
     async def validate_config(self):
         await super().validate_config()
+        await self._remote_validation()
+    
+    async def _remote_validation(self):
+        await self.salesforce_client.ping()
+    
+        if self.salesforce_client.sync_custom_objects:
+            if self.salesforce_client.custom_objects_to_sync == [WILDCARD]:
+                return
+            custom_object_response = await self.salesforce_client._custom_objects()
+
+            if any(obj not in custom_object_response for obj in self.salesforce_client.custom_objects_to_sync):
+                msg = f"Custom objects {[obj[:-3] for obj in self.salesforce_client.custom_objects_to_sync if obj not in custom_object_response]} are not available."
+                raise ConfigurableFieldValueError(msg)
+                
 
     async def close(self):
         await self.salesforce_client.close()
@@ -1513,12 +1540,6 @@ class SalesforceDataSource(BaseDataSource):
         # We collect all content documents and de-duplicate them before downloading and yielding
         content_docs = []
 
-        objects_to_sync = (
-            STANDARD_SOBJECTS
-            if [WILDCARD] == self.standard_objects_to_sync
-            else self.standard_objects_to_sync
-        )
-
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()
 
@@ -1536,11 +1557,16 @@ class SalesforceDataSource(BaseDataSource):
                     )
 
         else:
-            logger.info(f"Fetching Standard Objects: {self.standard_objects_to_sync}")
-            for sobject in objects_to_sync:
+            standard_objects_to_sync = (
+                STANDARD_SOBJECTS
+                if [WILDCARD] == self.salesforce_client.standard_objects_to_sync
+                else self.salesforce_client.standard_objects_to_sync
+            )
+            logger.info(f"Fetching Standard Objects: {standard_objects_to_sync}")
+            for sobject in standard_objects_to_sync:
                 await self._fetch_users_with_read_access(sobject=sobject)
 
-            if "Account" in objects_to_sync:
+            if "Account" in standard_objects_to_sync:
                 async for account in self.salesforce_client.get_accounts():
                     content_docs.extend(self._parse_content_documents(account))
                     access_control = self.permissions.get("Account", [])
@@ -1551,7 +1577,7 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if "Opportunity" in objects_to_sync:
+            if "Opportunity" in standard_objects_to_sync:
                 async for opportunity in self.salesforce_client.get_opportunities():
                     content_docs.extend(self._parse_content_documents(opportunity))
                     access_control = self.permissions.get("Opportunity", [])
@@ -1564,7 +1590,7 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if "Contact" in objects_to_sync:
+            if "Contact" in standard_objects_to_sync:
                 async for contact in self.salesforce_client.get_contacts():
                     content_docs.extend(self._parse_content_documents(contact))
                     access_control = self.permissions.get("Contact", [])
@@ -1575,7 +1601,7 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if "Lead" in objects_to_sync:
+            if "Lead" in standard_objects_to_sync:
                 async for lead in self.salesforce_client.get_leads():
                     content_docs.extend(self._parse_content_documents(lead))
                     access_control = self.permissions.get("Lead", [])
@@ -1586,7 +1612,7 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if "Campaign" in objects_to_sync:
+            if "Campaign" in standard_objects_to_sync:
                 async for campaign in self.salesforce_client.get_campaigns():
                     content_docs.extend(self._parse_content_documents(campaign))
                     access_control = self.permissions.get("Campaign", [])
@@ -1597,7 +1623,7 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if "Case" in objects_to_sync:
+            if "Case" in standard_objects_to_sync:
                 async for case in self.salesforce_client.get_cases():
                     content_docs.extend(self._parse_content_documents(case))
                     access_control = self.permissions.get("Case", [])
@@ -1608,9 +1634,14 @@ class SalesforceDataSource(BaseDataSource):
                         None,
                     )
 
-            if self.sync_custom_objects:
-                logger.info("Fetching Custom Objects")
-                for custom_object in await self.salesforce_client._custom_objects():
+            if self.salesforce_client.sync_custom_objects:
+                custom_objects_to_sync = (
+                    self.salesforce_client._custom_objects
+                    if [WILDCARD] == self.salesforce_client.custom_objects_to_sync
+                    else self.salesforce_client.custom_objects_to_sync
+                )
+                logger.info(f"Fetching Custom Objects: {custom_objects_to_sync}")
+                for custom_object in custom_objects_to_sync:
                     await self._fetch_users_with_read_access(sobject=custom_object)
 
                 async for custom_record in self.salesforce_client.get_custom_objects():
