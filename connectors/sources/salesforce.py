@@ -49,7 +49,7 @@ QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 SOSL_SEARCH_ENDPOINT = f"/services/data/{API_VERSION}/search"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
-# https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
+# https://developer.salesforce.com/docs/atlas.en-us.api_rest/meta/resources_sobject_blob_retrieve.htm
 CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
 OFFSET = 200
 
@@ -207,7 +207,9 @@ class SalesforceClient:
         self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
         self.sync_custom_objects = configuration["sync_custom_objects"]
         self.custom_objects_to_sync = [
-            obj if obj == WILDCARD or obj.endswith('__c') else f"{obj}__c"
+            obj if obj == WILDCARD 
+            else f"{obj}__c" if not obj.endswith("__c") 
+            else obj
             for obj in configuration["custom_objects_to_sync"]
         ]
 
@@ -1329,6 +1331,7 @@ class SalesforceDataSource(BaseDataSource):
         )
         self.doc_mapper = SalesforceDocMapper(base_url)
         self.permissions = {}
+
     def _set_internal_logger(self):
         self.salesforce_client.set_logger(self._logger)
 
@@ -1467,20 +1470,24 @@ class SalesforceDataSource(BaseDataSource):
     async def validate_config(self):
         await super().validate_config()
         await self._remote_validation()
-    
+
     async def _remote_validation(self):
         await self.salesforce_client.ping()
-    
+
         if self.salesforce_client.sync_custom_objects:
             if self.salesforce_client.custom_objects_to_sync == [WILDCARD]:
-                self.salesforce_client.custom_objects_to_sync = await self.salesforce_client._custom_objects()
+                self.salesforce_client.custom_objects_to_sync = (
+                    await self.salesforce_client._custom_objects()
+                )
                 return
             custom_object_response = await self.salesforce_client._custom_objects()
 
-            if any(obj not in custom_object_response for obj in self.salesforce_client.custom_objects_to_sync):
+            if any(
+                obj not in custom_object_response
+                for obj in self.salesforce_client.custom_objects_to_sync
+            ):
                 msg = f"Custom objects {[obj[:-3] for obj in self.salesforce_client.custom_objects_to_sync if obj not in custom_object_response]} are not available."
                 raise ConfigurableFieldValueError(msg)
-                
 
     async def close(self):
         await self.salesforce_client.close()
@@ -1642,9 +1649,9 @@ class SalesforceDataSource(BaseDataSource):
                     else self.salesforce_client.custom_objects_to_sync
                 )
                 logger.info(f"Fetching Custom Objects: {custom_objects_to_sync}")
-                
-            for custom_object in custom_objects_to_sync:
-                await self._fetch_users_with_read_access(sobject=custom_object)
+
+                for custom_object in custom_objects_to_sync:
+                    await self._fetch_users_with_read_access(sobject=custom_object)
                 async for custom_record in self.salesforce_client.get_custom_objects():
                     content_docs.extend(self._parse_content_documents(custom_record))
                     access_control = self.permissions.get(custom_object, [])

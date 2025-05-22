@@ -2154,7 +2154,7 @@ async def test_get_docs_sync_custom_objects(mock_responses):
         source.salesforce_client._custom_objects = AsyncMock(
             return_value=["CustomObject", "Connector__c"]
         )
-        source.salesforce_client.custom_objects_to_sync = []
+        source.salesforce_client.custom_objects_to_sync = ["CustomObject"]
         source.salesforce_client.standard_objects_to_sync = []
 
         source.salesforce_client.sync_custom_objects = True
