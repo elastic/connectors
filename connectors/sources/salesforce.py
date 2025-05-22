@@ -49,7 +49,7 @@ QUERY_ENDPOINT = f"/services/data/{API_VERSION}/query"
 SOSL_SEARCH_ENDPOINT = f"/services/data/{API_VERSION}/search"
 DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
 DESCRIBE_SOBJECT_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/<sobject>/describe"
-# https://developer.salesforce.com/docs/atlas.en-us.api_rest/meta/resources_sobject_blob_retrieve.htm
+# https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_sobject_blob_retrieve.htm
 CONTENT_VERSION_DOWNLOAD_ENDPOINT = f"/services/data/{API_VERSION}/sobjects/ContentVersion/<content_version_id>/VersionData"
 OFFSET = 200
 
