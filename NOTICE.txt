@@ -3521,7 +3521,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.0.2
+9.0.3
 Apache Software License
 Elastic License 2.0
 
@@ -4115,7 +4115,7 @@ Apache Software License
 
 
 google-auth
-2.40.1
+2.40.2
 Apache Software License
                                  Apache License
                            Version 2.0, January 2004
@@ -5655,7 +5655,7 @@ MIT License
 
 
 multidict
-6.4.3
+6.4.4
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
