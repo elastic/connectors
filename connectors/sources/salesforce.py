@@ -207,9 +207,7 @@ class SalesforceClient:
         self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
         self.sync_custom_objects = configuration["sync_custom_objects"]
         self.custom_objects_to_sync = [
-            obj if obj == WILDCARD 
-            else f"{obj}__c" if not obj.endswith("__c") 
-            else obj
+            obj if obj == WILDCARD else f"{obj}__c" if not obj.endswith("__c") else obj
             for obj in configuration["custom_objects_to_sync"]
         ]
 
