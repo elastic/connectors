@@ -755,6 +755,8 @@ def test_get_default_configuration():
         "client_secret",
         "domain",
         "standard_objects_to_sync",
+        "sync_custom_objects",
+        "custom_objects_to_sync"
     ]
 
     assert all(field in config.to_dict() for field in expected_fields)
@@ -2092,8 +2094,8 @@ async def test_get_docs_with_dls_enabled(mock_responses):
 @pytest.mark.asyncio
 async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
     async with create_salesforce_source() as source:
-        source.standard_objects_to_sync = ["Account", "Contact"]
-        source.sync_custom_objects = False
+        source.salesforce_client.standard_objects_to_sync = ["Account", "Contact"]
+        source.salesforce_client.sync_custom_objects = False
 
         source._parse_content_documents = MagicMock(return_value=[])
 
@@ -2116,9 +2118,9 @@ async def test_get_docs_sync_custom_objects(mock_responses):
         source.salesforce_client._custom_objects = AsyncMock(
             return_value=["CustomObject"]
         )
-        source.standard_objects_to_sync = []
+        source.salesforce_client.standard_objects_to_sync = []
 
-        source.sync_custom_objects = True
+        source.salesforce_client.sync_custom_objects = True
         source._parse_content_documents = MagicMock(return_value=[])
 
         mock_responses.get(

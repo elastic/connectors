@@ -207,7 +207,7 @@ class SalesforceClient:
         self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
         self.sync_custom_objects = configuration["sync_custom_objects"]
         self.custom_objects_to_sync = [
-            obj if obj.endswith('__c') else f"{obj}__c"
+            obj if obj == WILDCARD or obj.endswith('__c') else f"{obj}__c"
             for obj in configuration["custom_objects_to_sync"]
         ]
 
@@ -1374,7 +1374,7 @@ class SalesforceDataSource(BaseDataSource):
             },
             "custom_objects_to_sync": {
                 "display": "textarea",
-                "label": "Sync Custom Objects",
+                "label": "Custom Objects to Sync",
                 "order": 6,
                 "tooltip": "List of custom objects to sync. Use '*' to sync all custom objects. ",
                 "type": "list",
@@ -1473,6 +1473,7 @@ class SalesforceDataSource(BaseDataSource):
     
         if self.salesforce_client.sync_custom_objects:
             if self.salesforce_client.custom_objects_to_sync == [WILDCARD]:
+                self.salesforce_client.custom_objects_to_sync = await self.salesforce_client._custom_objects()
                 return
             custom_object_response = await self.salesforce_client._custom_objects()
 
@@ -1636,14 +1637,14 @@ class SalesforceDataSource(BaseDataSource):
 
             if self.salesforce_client.sync_custom_objects:
                 custom_objects_to_sync = (
-                    self.salesforce_client._custom_objects
+                    await self.salesforce_client._custom_objects()
                     if [WILDCARD] == self.salesforce_client.custom_objects_to_sync
                     else self.salesforce_client.custom_objects_to_sync
                 )
                 logger.info(f"Fetching Custom Objects: {custom_objects_to_sync}")
-                for custom_object in custom_objects_to_sync:
-                    await self._fetch_users_with_read_access(sobject=custom_object)
-
+                
+            for custom_object in custom_objects_to_sync:
+                await self._fetch_users_with_read_access(sobject=custom_object)
                 async for custom_record in self.salesforce_client.get_custom_objects():
                     content_docs.extend(self._parse_content_documents(custom_record))
                     access_control = self.permissions.get(custom_object, [])
