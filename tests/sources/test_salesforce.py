@@ -44,7 +44,10 @@ TEST_QUERY_MATCH_URL = re.compile(
 )
 TEST_CLIENT_ID = "1234"
 TEST_CLIENT_SECRET = "9876"
+TEST_STANDARD_OBJECTS_TO_SYNC = ["*"]
+TEST_SYNC_CUSTOM_OBJECTS = True
 TEST_DESCRIBE_ENDPOINT = f"/services/data/{API_VERSION}/sobjects"
+
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -656,6 +659,8 @@ async def create_salesforce_source(
         domain=TEST_DOMAIN,
         client_id=TEST_CLIENT_ID,
         client_secret=TEST_CLIENT_SECRET,
+        standard_objects_to_sync=TEST_STANDARD_OBJECTS_TO_SYNC,
+        sync_custom_objects=TEST_SYNC_CUSTOM_OBJECTS,
         use_text_extraction_service=use_text_extraction_service,
     ) as source:
         if mock_token is True:
@@ -746,28 +751,62 @@ def generate_account_doc(identifier):
 
 def test_get_default_configuration():
     config = DataSourceConfiguration(SalesforceDataSource.get_default_configuration())
-    expected_fields = ["client_id", "client_secret", "domain"]
+    expected_fields = [
+        "client_id",
+        "client_secret",
+        "domain",
+        "standard_objects_to_sync",
+        "sync_custom_objects",
+    ]
 
     assert all(field in config.to_dict() for field in expected_fields)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "domain, client_id, client_secret",
+    "domain, client_id, client_secret, standard_objects_to_sync, sync_custom_objects",
     [
-        ("", TEST_CLIENT_ID, TEST_CLIENT_SECRET),
-        (TEST_DOMAIN, "", TEST_CLIENT_SECRET),
-        (TEST_DOMAIN, TEST_CLIENT_ID, ""),
+        (
+            "",
+            TEST_CLIENT_ID,
+            TEST_CLIENT_SECRET,
+            TEST_STANDARD_OBJECTS_TO_SYNC,
+            TEST_SYNC_CUSTOM_OBJECTS,
+        ),
+        (
+            TEST_DOMAIN,
+            "",
+            TEST_CLIENT_SECRET,
+            TEST_STANDARD_OBJECTS_TO_SYNC,
+            TEST_SYNC_CUSTOM_OBJECTS,
+        ),
+        (
+            TEST_DOMAIN,
+            TEST_CLIENT_ID,
+            "",
+            TEST_STANDARD_OBJECTS_TO_SYNC,
+            TEST_SYNC_CUSTOM_OBJECTS,
+        ),
+        (TEST_DOMAIN, TEST_CLIENT_ID, TEST_CLIENT_SECRET, "", TEST_SYNC_CUSTOM_OBJECTS),
+        (
+            TEST_DOMAIN,
+            TEST_CLIENT_ID,
+            TEST_CLIENT_SECRET,
+            TEST_STANDARD_OBJECTS_TO_SYNC,
+            "",
+        ),
     ],
 )
 async def test_validate_config_missing_fields_then_raise(
-    domain, client_id, client_secret
+    domain, client_id, client_secret, standard_objects_to_sync, sync_custom_objects
 ):
     async with create_source(
         SalesforceDataSource,
         domain=domain,
         client_id=client_id,
         client_secret=client_secret,
+        standard_objects_to_sync=standard_objects_to_sync,
+        sync_custom_objects=sync_custom_objects,
     ) as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -1526,6 +1565,9 @@ async def test_get_all_with_content_docs_when_success(
         mock_responses.get(
             TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
         )
+        # In your test setup, ensure sync_custom_objects is enabled
+        source.salesforce_client.sync_custom_objects = True
+        source.salesforce_client.custom_objects_to_sync = ["CustomObject"]
         source.salesforce_client._custom_objects = AsyncMock(
             return_value=["CustomObject"]
         )
@@ -1586,6 +1628,8 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
             mock_responses.get(
                 TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
             )
+            source.salesforce_client.sync_custom_objects = True
+            source.salesforce_client.custom_objects_to_sync = ["CustomObject"]
             source.salesforce_client._custom_objects = AsyncMock(
                 return_value=["CustomObject"]
             )
@@ -2078,3 +2122,52 @@ async def test_get_docs_with_dls_enabled(mock_responses):
 
         async for record, _ in source.get_docs():
             assert len(record["_allow_access_control"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client.standard_objects_to_sync = ["Account", "Contact"]
+        source.salesforce_client.sync_custom_objects = False
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject"]
+        )
+
+        source._parse_content_documents = MagicMock(return_value=[])
+
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+
+        async for record, _ in source.get_docs():
+            assert record["attributes"]["type"] in ["Account", "Contact"]
+
+
+@pytest.mark.asyncio
+async def test_get_docs_sync_custom_objects(mock_responses):
+    async with create_salesforce_source() as source:
+        source.salesforce_client._custom_objects = AsyncMock(
+            return_value=["CustomObject", "Connector__c"]
+        )
+        source.salesforce_client.custom_objects_to_sync = ["CustomObject"]
+        source.salesforce_client.standard_objects_to_sync = []
+
+        source.salesforce_client.sync_custom_objects = True
+        source._parse_content_documents = MagicMock(return_value=[])
+
+        mock_responses.get(
+            TEST_FILE_DOWNLOAD_URL,
+            status=200,
+            body=b"chunk1",
+        )
+        mock_responses.get(
+            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
+        )
+
+        async for record, _ in source.get_docs():
+            assert record["attributes"]["type"] == "CustomObject"

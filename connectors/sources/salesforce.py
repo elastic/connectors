@@ -25,7 +25,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -56,6 +56,16 @@ OFFSET = 200
 OBJECT_READ_PERMISSION_USERS = "SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId IN (SELECT ParentId FROM ObjectPermissions WHERE PermissionsRead = true AND SObjectType = '{sobject}')"
 USERNAME_FROM_IDS = "SELECT Name, Email FROM User WHERE Id IN {user_list}"
 FILE_ACCESS = "SELECT ContentDocumentId, LinkedEntityId, LinkedEntity.Name FROM ContentDocumentLink WHERE ContentDocumentId = '{document_id}'"
+WILDCARD = "*"
+
+STANDARD_SOBJECTS = [
+    "Account",
+    "Opportunity",
+    "Contact",
+    "Lead",
+    "Campaign",
+    "Case",
+]
 
 RELEVANT_SOBJECTS = [
     "Account",
@@ -194,6 +204,12 @@ class SalesforceClient:
             configuration["client_id"],
             configuration["client_secret"],
         )
+        self.standard_objects_to_sync = configuration["standard_objects_to_sync"]
+        self.sync_custom_objects = configuration["sync_custom_objects"]
+        self.custom_objects_to_sync = [
+            obj if obj == WILDCARD else f"{obj}__c" if not obj.endswith("__c") else obj
+            for obj in configuration["custom_objects_to_sync"]
+        ]
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -282,7 +298,7 @@ class SalesforceClient:
         return custom_objects
 
     async def get_custom_objects(self):
-        for custom_object in await self._custom_objects():
+        for custom_object in self.custom_objects_to_sync:
             query = await self._custom_object_query(custom_object=custom_object)
             async for records in self._yield_non_bulk_query_pages(query):
                 for record in records:
@@ -1340,10 +1356,35 @@ class SalesforceDataSource(BaseDataSource):
                 "tooltip": "The client secret for your OAuth2-enabled connected app. Also called 'consumer secret'",
                 "type": "str",
             },
+            "standard_objects_to_sync": {
+                "display": "textarea",
+                "label": "Standard Objects to Sync",
+                "order": 4,
+                "tooltip": "The list of Salesforce Standard Objects to sync. Remove any from list to exclude from sync.",
+                "type": "list",
+                "value": ", ".join(STANDARD_SOBJECTS),
+                "required": False,
+            },
+            "sync_custom_objects": {
+                "display": "toggle",
+                "label": "Sync Custom Objects",
+                "order": 5,
+                "tooltip": "Whether or not to sync custom objects",
+                "type": "bool",
+                "value": False,
+            },
+            "custom_objects_to_sync": {
+                "display": "textarea",
+                "label": "Custom Objects to Sync",
+                "order": 6,
+                "tooltip": "List of custom objects to sync. Use '*' to sync all custom objects. ",
+                "type": "list",
+                "depends_on": [{"field": "sync_custom_objects", "value": True}],
+            },
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 4,
+                "order": 7,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1352,7 +1393,7 @@ class SalesforceDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 5,
+                "order": 8,
                 "tooltip": "Document level security ensures identities and permissions set in Salesforce are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1425,6 +1466,25 @@ class SalesforceDataSource(BaseDataSource):
 
     async def validate_config(self):
         await super().validate_config()
+        await self._remote_validation()
+
+    async def _remote_validation(self):
+        await self.salesforce_client.ping()
+
+        if self.salesforce_client.sync_custom_objects:
+            if self.salesforce_client.custom_objects_to_sync == [WILDCARD]:
+                self.salesforce_client.custom_objects_to_sync = (
+                    await self.salesforce_client._custom_objects()
+                )
+                return
+            custom_object_response = await self.salesforce_client._custom_objects()
+
+            if any(
+                obj not in custom_object_response
+                for obj in self.salesforce_client.custom_objects_to_sync
+            ):
+                msg = f"Custom objects {[obj[:-3] for obj in self.salesforce_client.custom_objects_to_sync if obj not in custom_object_response]} are not available."
+                raise ConfigurableFieldValueError(msg)
 
     async def close(self):
         await self.salesforce_client.close()
@@ -1502,92 +1562,104 @@ class SalesforceDataSource(BaseDataSource):
                     )
 
         else:
-            for sobject in [
-                "Account",
-                "Opportunity",
-                "Contact",
-                "Lead",
-                "Campaign",
-                "Case",
-            ]:
+            standard_objects_to_sync = (
+                STANDARD_SOBJECTS
+                if [WILDCARD] == self.salesforce_client.standard_objects_to_sync
+                else self.salesforce_client.standard_objects_to_sync
+            )
+            logger.info(f"Fetching Standard Objects: {standard_objects_to_sync}")
+            for sobject in standard_objects_to_sync:
                 await self._fetch_users_with_read_access(sobject=sobject)
 
-            for custom_object in await self.salesforce_client._custom_objects():
-                await self._fetch_users_with_read_access(sobject=custom_object)
+            if "Account" in standard_objects_to_sync:
+                async for account in self.salesforce_client.get_accounts():
+                    content_docs.extend(self._parse_content_documents(account))
+                    access_control = self.permissions.get("Account", [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(account, access_control)
+                        ),
+                        None,
+                    )
 
-            async for account in self.salesforce_client.get_accounts():
-                content_docs.extend(self._parse_content_documents(account))
-                access_control = self.permissions.get("Account", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(account, access_control)
-                    ),
-                    None,
-                )
+            if "Opportunity" in standard_objects_to_sync:
+                async for opportunity in self.salesforce_client.get_opportunities():
+                    content_docs.extend(self._parse_content_documents(opportunity))
+                    access_control = self.permissions.get("Opportunity", [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(
+                                opportunity, access_control
+                            )
+                        ),
+                        None,
+                    )
 
-            async for opportunity in self.salesforce_client.get_opportunities():
-                content_docs.extend(self._parse_content_documents(opportunity))
-                access_control = self.permissions.get("Opportunity", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(opportunity, access_control)
-                    ),
-                    None,
-                )
+            if "Contact" in standard_objects_to_sync:
+                async for contact in self.salesforce_client.get_contacts():
+                    content_docs.extend(self._parse_content_documents(contact))
+                    access_control = self.permissions.get("Contact", [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(contact, access_control)
+                        ),
+                        None,
+                    )
 
-            async for contact in self.salesforce_client.get_contacts():
-                content_docs.extend(self._parse_content_documents(contact))
-                access_control = self.permissions.get("Contact", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(contact, access_control)
-                    ),
-                    None,
-                )
+            if "Lead" in standard_objects_to_sync:
+                async for lead in self.salesforce_client.get_leads():
+                    content_docs.extend(self._parse_content_documents(lead))
+                    access_control = self.permissions.get("Lead", [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(lead, access_control)
+                        ),
+                        None,
+                    )
 
-            async for lead in self.salesforce_client.get_leads():
-                content_docs.extend(self._parse_content_documents(lead))
-                access_control = self.permissions.get("Lead", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(lead, access_control)
-                    ),
-                    None,
-                )
+            if "Campaign" in standard_objects_to_sync:
+                async for campaign in self.salesforce_client.get_campaigns():
+                    content_docs.extend(self._parse_content_documents(campaign))
+                    access_control = self.permissions.get("Campaign", [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(campaign, access_control)
+                        ),
+                        None,
+                    )
 
-            async for campaign in self.salesforce_client.get_campaigns():
-                content_docs.extend(self._parse_content_documents(campaign))
-                access_control = self.permissions.get("Campaign", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(campaign, access_control)
-                    ),
-                    None,
-                )
+            if "Case" in standard_objects_to_sync:
+                async for case in self.salesforce_client.get_cases():
+                    content_docs.extend(self._parse_content_documents(case))
+                    access_control = self.permissions.get("Case", [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(case, access_control)
+                        ),
+                        None,
+                    )
 
-            async for case in self.salesforce_client.get_cases():
-                content_docs.extend(self._parse_content_documents(case))
-                access_control = self.permissions.get("Case", [])
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(case, access_control)
-                    ),
-                    None,
+            if self.salesforce_client.sync_custom_objects:
+                custom_objects_to_sync = (
+                    await self.salesforce_client._custom_objects()
+                    if [WILDCARD] == self.salesforce_client.custom_objects_to_sync
+                    else self.salesforce_client.custom_objects_to_sync
                 )
+                logger.info(f"Fetching Custom Objects: {custom_objects_to_sync}")
 
-            async for custom_object in self.salesforce_client.get_custom_objects():
-                content_docs.extend(self._parse_content_documents(custom_object))
-                access_control = self.permissions.get(
-                    custom_object.get("attributes", {}).get("type"), []
-                )
-                yield (
-                    self.doc_mapper.map_salesforce_objects(
-                        self._decorate_with_access_control(
-                            custom_object, access_control
-                        )
-                    ),
-                    None,
-                )
+                for custom_object in custom_objects_to_sync:
+                    await self._fetch_users_with_read_access(sobject=custom_object)
+                async for custom_record in self.salesforce_client.get_custom_objects():
+                    content_docs.extend(self._parse_content_documents(custom_record))
+                    access_control = self.permissions.get(custom_object, [])
+                    yield (
+                        self.doc_mapper.map_salesforce_objects(
+                            self._decorate_with_access_control(
+                                custom_record, access_control
+                            )
+                        ),
+                        None,
+                    )
 
         # Note: this could possibly be done on the fly if memory becomes an issue
         content_docs = self._combine_duplicate_content_docs(content_docs)
