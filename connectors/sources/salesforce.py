@@ -1380,7 +1380,6 @@ class SalesforceDataSource(BaseDataSource):
                 "tooltip": "List of custom objects to sync. Use '*' to sync all custom objects. ",
                 "type": "list",
                 "depends_on": [{"field": "sync_custom_objects", "value": True}],
-                
             },
             "use_text_extraction_service": {
                 "display": "toggle",
