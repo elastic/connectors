@@ -16,6 +16,9 @@ class OneLakeDataSource(BaseDataSource):
     name = "OneLake"
     service_type = "onelake"
     incremental_sync_enabled = True
+    service_client = None
+    file_system_client = None
+    directory_client = None
 
     def __init__(self, configuration):
         """Set up the connection to the azure base client
@@ -32,6 +35,9 @@ class OneLakeDataSource(BaseDataSource):
         self.account_url = (
             f"https://{self.configuration['account_name']}.dfs.fabric.microsoft.com"
         )
+        self.service_client = self._get_service_client()
+        self.file_system_client = self._get_file_system_client()
+        self.directory_client = self._get_directory_client()
 
     @classmethod
     def get_default_configuration(cls):
@@ -110,7 +116,7 @@ class OneLakeDataSource(BaseDataSource):
             raise
 
     async def _get_service_client(self):
-        """Get the service client for OneLake
+        """Get the service client for OneLake. The service client is the client that allows to interact with the OneLake service.
 
         Returns:
             obj: Service client
@@ -126,15 +132,14 @@ class OneLakeDataSource(BaseDataSource):
             raise
 
     async def _get_file_system_client(self):
-        """Get the file system client for OneLake
+        """Get the file system client for OneLake. This client is used to interact with the file system of the OneLake service.
 
         Returns:
             obj: File system client
         """
-        try:
-            service_client = await self._get_service_client()
 
-            return service_client.get_file_system_client(
+        try:
+            return self.service_client.get_file_system_client(
                 self.configuration["workspace_name"]
             )
         except Exception as e:
@@ -149,9 +154,7 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            file_system_client = await self._get_file_system_client()
-
-            return file_system_client.get_directory_client(
+            return self.file_system_client.get_directory_client(
                 self.configuration["data_path"]
             )
         except Exception as e:
@@ -169,9 +172,7 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            directory_client = await self._get_directory_client()
-
-            return directory_client.get_file_client(file_name)
+            return self.directory_client.get_file_client(file_name)
         except Exception as e:
             self._logger.error(f"Error while getting file client: {e}")
             raise
@@ -187,9 +188,7 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            file_system_client = await self._get_file_system_client()
-
-            return file_system_client.get_paths(path=directory_path)
+            return self.file_system_client.get_paths(path=directory_path)
         except Exception as e:
             self._logger.error(f"Error while getting directory paths: {e}")
             raise
