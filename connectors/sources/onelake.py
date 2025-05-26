@@ -19,6 +19,7 @@ class OneLakeDataSource(BaseDataSource):
     service_client = None
     file_system_client = None
     directory_client = None
+    account_url = None
 
     def __init__(self, configuration):
         """Set up the connection to the azure base client
