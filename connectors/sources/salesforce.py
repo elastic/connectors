@@ -1380,7 +1380,6 @@ class SalesforceDataSource(BaseDataSource):
                 "tooltip": "List of custom objects to sync. Use '*' to sync all custom objects. ",
                 "type": "list",
                 "depends_on": [{"field": "sync_custom_objects", "value": True}],
-                
             },
             "use_text_extraction_service": {
                 "display": "toggle",
@@ -1652,7 +1651,9 @@ class SalesforceDataSource(BaseDataSource):
                     await self._fetch_users_with_read_access(sobject=custom_object)
                 async for custom_record in self.salesforce_client.get_custom_objects():
                     content_docs.extend(self._parse_content_documents(custom_record))
-                    access_control = self.permissions.get(custom_object, [])
+                    access_control = self.permissions.get(
+                        custom_record.get("attributes", {}).get("type"), []
+                    )
                     yield (
                         self.doc_mapper.map_salesforce_objects(
                             self._decorate_with_access_control(
