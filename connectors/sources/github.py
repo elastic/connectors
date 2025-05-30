@@ -901,6 +901,7 @@ class GitHubClient:
                 oauth_token=self._access_token(),
             )
             url = f"{self.base_url}/graphql"
+            self._logger.info(f'Validating personal access token via GraphQL endpoint: {url}')
             _, headers, _ = await self._get_client._request(
                 "HEAD", url, request_headers
             )
@@ -1125,7 +1126,7 @@ class GitHubDataSource(BaseDataSource):
             auth_method=self.configuration["auth_method"],
             base_url="https://api.github.com"
             if self.configuration["data_source"] == GITHUB_CLOUD
-            else f"{self.configuration['host'].rstrip('/')}/api",
+            else self.configuration.get("host", "").rstrip("/"),
             app_id=self.configuration["app_id"],
             private_key=self.configuration["private_key"],
             token=self.configuration["token"],
