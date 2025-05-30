@@ -480,6 +480,7 @@ async def test_run_when_connector_validate_config_fails(
 
     connector.error.assert_awaited_with(error)
 
+
 @pytest.mark.asyncio
 @patch("connectors.services.job_scheduling.get_source_klass")
 async def test_run_when_validation_is_very_slow(
