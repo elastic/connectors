@@ -201,6 +201,10 @@
 #service.max_concurrent_access_control_syncs: 1
 #
 #
+##  The maximum number of concurrent job scheduling tasks.
+#service.max_concurrent_scheduling_tasks: 4
+#
+#
 ##  The maximum size (in bytes) of files that the framework should be willing
 ##    to download and/or process.
 #service.max_file_download_size: 10485760
