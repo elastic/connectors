@@ -98,6 +98,7 @@ def _default_config():
             "max_errors_span": 600,
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
+            "max_concurrent_scheduling_tasks": 4,
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
