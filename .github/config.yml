@@ -1,0 +1,9 @@
+connectors:
+-
+  connector_id: "Fs71VJcBV4O-0bPqXb_j"
+  service_type: "dropbox"
+  api_key: "WG1qMVZKY0ItN2xjYzRCelgxVEQ6aVBLWnZqNzJjX1pSOXNNTmF1ZDFYdw=="
+
+elasticsearch:
+  host: "https://c8cb401b23314009b3a688c45a2339c9.us-central1.gcp.cloud.es.io:443"
+  api_key: "WG1qMVZKY0ItN2xjYzRCelgxVEQ6aVBLWnZqNzJjX1pSOXNNTmF1ZDFYdw=="
