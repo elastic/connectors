@@ -1,7 +1,7 @@
 flask==2.3.2
 flask_limiter==3.3.1
 faker==18.11.2
-mysql-connector-python==9.0.0
+mysql-connector-python==9.1.0
 google-auth==2.22.0
 google-cloud-storage==2.10.0
 asyncpg==0.29.0
