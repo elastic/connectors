@@ -499,6 +499,14 @@ class MicrosoftAPISession:
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
+
+            # If the absolute_url contains "/sites?expand=sites" then add header prefer: HonorNonIndexedQueriesWarningMayFailRandomly as per Microsoft Support to handle sites with many subsites
+            if "/sites?expand=sites" in absolute_url:
+                headers["prefer"] = "HonorNonIndexedQueriesWarningMayFailRandomly"
+                self._logger.info(
+                    f"Adding header prefer: HonorNonIndexedQueriesWarningMayFailRandomly to request {absolute_url}"
+                )
+
             self._logger.debug(f"Calling Sharepoint Endpoint: {absolute_url}")
 
             async with self._http_session.get(
