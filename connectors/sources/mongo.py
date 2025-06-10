@@ -11,7 +11,8 @@ from datetime import datetime
 from tempfile import NamedTemporaryFile
 
 import fastjsonschema
-from bson import DBRef, Decimal128, ObjectId
+from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
+from bson.binary import UUID_SUBTYPE
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import OperationFailure
@@ -174,7 +175,8 @@ class MongoDataSource(BaseDataSource):
     def get_client(self):
         certfile = ""
         try:
-            client_params = {}
+            client_params = {"uuidRepresentation": "standard"}
+
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
 
@@ -238,6 +240,15 @@ class MongoDataSource(BaseDataSource):
                 value = value.to_decimal()
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
+            elif isinstance(value, Binary):
+                print(value.subtype)
+                if value.subtype == UUID_SUBTYPE:
+                    value = value.as_uuid()
+                elif value.subtype == OLD_UUID_SUBTYPE:
+                    self._logger.warning(
+                        f"Unexpected uuid subtype, skipping serialization of a field {value}"
+                    )
+                    return None
             return value
 
         for key, value in doc.items():

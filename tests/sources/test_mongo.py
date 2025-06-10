@@ -8,9 +8,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest import mock
 from unittest.mock import AsyncMock, Mock
+from uuid import UUID
 
 import pytest
-from bson import DBRef, ObjectId
+from bson import Binary, DBRef, ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import OperationFailure
 
@@ -427,6 +428,24 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
         (
             {"id": ObjectId("507f1f77bcf86cd799439011")},
             {"id": "507f1f77bcf86cd799439011"},
+        ),
+        (
+            {
+                "some_uuid": Binary(
+                    b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 4
+                )
+            },
+            {"some_uuid":  UUID('abddda2e-96f9-4f51-a512-f1225b0717c0')},
+        ),
+        (
+            {
+                "some_uuid": Binary(
+                    b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 3
+                )
+            },
+            {
+                "some_uuid": None
+            },
         ),
     ],
 )
