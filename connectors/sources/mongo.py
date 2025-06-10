@@ -241,7 +241,6 @@ class MongoDataSource(BaseDataSource):
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
             elif isinstance(value, Binary):
-                print(value.subtype)
                 if value.subtype == UUID_SUBTYPE:
                     value = value.as_uuid()
                 elif value.subtype == OLD_UUID_SUBTYPE:
