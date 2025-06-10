@@ -435,7 +435,7 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
                     b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 4
                 )
             },
-            {"some_uuid":  UUID('abddda2e-96f9-4f51-a512-f1225b0717c0')},
+            {"some_uuid": UUID("abddda2e-96f9-4f51-a512-f1225b0717c0")},
         ),
         (
             {
@@ -443,9 +443,7 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
                     b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 3
                 )
             },
-            {
-                "some_uuid": None
-            },
+            {"some_uuid": None},
         ),
     ],
 )
