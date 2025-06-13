@@ -217,7 +217,7 @@ class MongoDataSource(BaseDataSource):
             await client.admin.command("ping")
 
     # TODO: That's a lot of work. Find a better way
-    def do_serialize(self, doc):
+    def serialize(self, doc):
         def _serialize(value):
             if isinstance(value, ObjectId):
                 value = str(value)
@@ -261,7 +261,7 @@ class MongoDataSource(BaseDataSource):
                     find_kwargs = advanced_rules.get("find", {})
 
                     async for doc in collection.find(**find_kwargs):
-                        yield self.do_serialize(doc), None
+                        yield self.serialize(doc), None
 
                 elif "aggregate" in advanced_rules:
                     aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
@@ -270,10 +270,10 @@ class MongoDataSource(BaseDataSource):
                     async for doc in collection.aggregate(
                         pipeline=pipeline, **aggregate_kwargs
                     ):
-                        yield self.do_serialize(doc), None
+                        yield self.serialize(doc), None
             else:
                 async for doc in collection.find():
-                    yield self.do_serialize(doc), None
+                    yield self.serialize(doc), None
 
     def check_conflicting_values(self, value):
         if value == "true":
