@@ -177,8 +177,6 @@ class MongoDataSource(BaseDataSource):
         try:
             client_params = {}
 
-            client_params["uuidRepresentation"] = "standard"
-
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
 
