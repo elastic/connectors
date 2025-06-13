@@ -252,7 +252,7 @@ class MongoDataSource(BaseDataSource):
     async def get_docs(self, filtering=None):
         with self.get_client() as client:
             db = client[self.configuration["database"]]
-            self.collection = db[self.configuration["collection"]]
+            collection = db[self.configuration["collection"]]
 
             if filtering is not None and filtering.has_advanced_rules():
                 advanced_rules = filtering.get_advanced_rules()
@@ -260,19 +260,19 @@ class MongoDataSource(BaseDataSource):
                 if "find" in advanced_rules:
                     find_kwargs = advanced_rules.get("find", {})
 
-                    async for doc in self.collection.find(**find_kwargs):
+                    async for doc in collection.find(**find_kwargs):
                         yield self.do_serialize(doc), None
 
                 elif "aggregate" in advanced_rules:
                     aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
                     pipeline = aggregate_kwargs.pop("pipeline", [])
 
-                    async for doc in self.collection.aggregate(
+                    async for doc in collection.aggregate(
                         pipeline=pipeline, **aggregate_kwargs
                     ):
                         yield self.do_serialize(doc), None
             else:
-                async for doc in self.collection.find():
+                async for doc in collection.find():
                     yield self.do_serialize(doc), None
 
     def check_conflicting_values(self, value):
