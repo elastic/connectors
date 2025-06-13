@@ -5,6 +5,7 @@
 #
 # ruff: noqa: T201
 import os
+from uuid import uuid4
 
 import bson
 from faker import Faker
@@ -15,7 +16,9 @@ _SIZES = {"small": 750, "medium": 1500, "large": 3000}
 NUMBER_OF_RECORDS_TO_DELETE = 50
 
 fake = Faker()
-client = MongoClient("mongodb://admin:justtesting@127.0.0.1:27021")
+client = MongoClient(
+    "mongodb://admin:justtesting@127.0.0.1:27021?uuidRepresentation=standard"
+)
 
 
 async def load():
@@ -27,6 +30,7 @@ async def load():
             "birthdate": fake.date(),
             "time": fake.time(),
             "comment": fake.sentence(),
+            "unique_id": uuid4(),
         }
 
     record_number = _SIZES[DATA_SIZE] + NUMBER_OF_RECORDS_TO_DELETE
