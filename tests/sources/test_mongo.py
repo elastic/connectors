@@ -229,16 +229,13 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
         )
 
         with mock.patch.object(source, "get_client") as mock_client:
-            client_mock = MagicMock()
+            with mock_client() as client_mock:
+                database_mock = MagicMock()
+                client_mock.__getitem__.return_value = database_mock
 
-            mock_client.return_value.__enter__.return_value = client_mock
-
-            database_mock = MagicMock()
-            client_mock.__getitem__.return_value = database_mock
-
-            collection_mock = MagicMock()
-            collection_mock.find = AsyncIterator(items=[{"_id": 1}])
-            database_mock.__getitem__.return_value = collection_mock
+                collection_mock = MagicMock()
+                collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+                database_mock.__getitem__.return_value = collection_mock
 
             async for _ in source.get_docs(filtering):
                 pass
@@ -270,16 +267,13 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present(
         )
 
         with mock.patch.object(source, "get_client") as mock_client:
-            client_mock = MagicMock()
+            with mock_client() as client_mock:
+                database_mock = MagicMock()
+                client_mock.__getitem__.return_value = database_mock
 
-            mock_client.return_value.__enter__.return_value = client_mock
-
-            database_mock = MagicMock()
-            client_mock.__getitem__.return_value = database_mock
-
-            collection_mock = MagicMock()
-            collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
-            database_mock.__getitem__.return_value = collection_mock
+                collection_mock = MagicMock()
+                collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+                database_mock.__getitem__.return_value = collection_mock
 
             async for _ in source.get_docs(filtering):
                 pass
