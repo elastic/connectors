@@ -459,9 +459,9 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
         ),
     ],
 )
-async def test_do_serialize(raw, output):
+async def test_serialize(raw, output):
     async with create_mongo_source() as source:
-        assert source.do_serialize(raw) == output
+        assert source.serialize(raw) == output
 
 
 @pytest.mark.asyncio
