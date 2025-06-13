@@ -272,7 +272,7 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present(
                 client_mock.__getitem__.return_value = database_mock
 
                 collection_mock = MagicMock()
-                collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+                collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
                 database_mock.__getitem__.return_value = collection_mock
 
             async for _ in source.get_docs(filtering):
