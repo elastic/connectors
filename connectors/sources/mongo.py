@@ -175,7 +175,9 @@ class MongoDataSource(BaseDataSource):
     def get_client(self):
         certfile = ""
         try:
-            client_params = {"uuidRepresentation": "standard"}
+            client_params = {}
+
+            client_params["uuidRepresentation"] = "standard"
 
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
