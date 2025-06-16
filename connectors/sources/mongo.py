@@ -11,7 +11,8 @@ from datetime import datetime
 from tempfile import NamedTemporaryFile
 
 import fastjsonschema
-from bson import DBRef, Decimal128, ObjectId
+from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
+from bson.binary import UUID_SUBTYPE
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import OperationFailure
@@ -175,6 +176,7 @@ class MongoDataSource(BaseDataSource):
         certfile = ""
         try:
             client_params = {}
+
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
 
@@ -238,6 +240,16 @@ class MongoDataSource(BaseDataSource):
                 value = value.to_decimal()
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
+            elif isinstance(value, Binary):
+                # UUID_SUBTYPE is guaranteed to properly be serialized cross-platform and cross-driver
+                if value.subtype == UUID_SUBTYPE:
+                    value = value.as_uuid()
+                # OLD_UUID_SUBTYPE is platform-specific. If Java writes old UUID and Python reads it they won't match
+                elif value.subtype == OLD_UUID_SUBTYPE:
+                    self._logger.warning(
+                        f"Unexpected uuid subtype, skipping serialization of a field {value}. Please provide uuidRepresentation=VALUE with correct value in connection string"
+                    )
+                    return None
             return value
 
         for key, value in doc.items():
