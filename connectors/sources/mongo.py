@@ -253,7 +253,7 @@ class MongoDataSource(BaseDataSource):
             db = client[self.configuration["database"]]
             collection = db[self.configuration["collection"]]
 
-            if filtering is not None and filtering.has_advanced_rules():
+            if filtering and filtering.has_advanced_rules():
                 advanced_rules = filtering.get_advanced_rules()
 
                 if "find" in advanced_rules:
