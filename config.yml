@@ -1,0 +1,5 @@
+service.log_level: DEBUG
+connectors:
+elasticsearch:
+  host: "https://somekooldeploymentwithabsolutelyrandomname.us-west2.gcp.elastic-cloud.com:443"
+  api_key: "HEYTHATSMYPRODUCTIONAPIKEY=="
