@@ -198,16 +198,14 @@ class MongoDataSource(BaseDataSource):
             else:
                 client_params["tls"] = False
 
-            yield AsyncIOMotorClient(self.host, **client_params)
+            client = AsyncIOMotorClient(self.host, **client_params)
+
+            db = client[self.configuration["database"]]
+            self.collection = db[self.configuration["collection"]]
+
+            yield client
         finally:
-            if os.path.exists(certfile):
-                try:
-                    os.remove(certfile)
-                except Exception as exception:
-                    self._logger.warning(
-                        f"Something went wrong while removing temporary certificate file. Exception: {exception}",
-                        exc_info=True,
-                    )
+            self.remove_temp_file(certfile)
 
     def advanced_rules_validators(self):
         return [MongoAdvancedRulesValidator()]
@@ -215,6 +213,16 @@ class MongoDataSource(BaseDataSource):
     async def ping(self):
         with self.get_client() as client:
             await client.admin.command("ping")
+
+    def remove_temp_file(self, temp_file):
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception as exception:
+                self._logger.warning(
+                    f"Something went wrong while removing temporary certificate file. Exception: {exception}",
+                    exc_info=True,
+                )
 
     # TODO: That's a lot of work. Find a better way
     def serialize(self, doc):
@@ -250,29 +258,28 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        with self.get_client() as client:
-            db = client[self.configuration["database"]]
-            collection = db[self.configuration["collection"]]
+        if filtering is not None and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
 
-            if filtering is not None and filtering.has_advanced_rules():
-                advanced_rules = filtering.get_advanced_rules()
+            if "find" in advanced_rules:
+                find_kwargs = advanced_rules.get("find", {})
 
-                if "find" in advanced_rules:
-                    find_kwargs = advanced_rules.get("find", {})
-
-                    async for doc in collection.find(**find_kwargs):
+                with self.get_client():
+                    async for doc in self.collection.find(**find_kwargs):
                         yield self.serialize(doc), None
 
-                elif "aggregate" in advanced_rules:
-                    aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
-                    pipeline = aggregate_kwargs.pop("pipeline", [])
+            elif "aggregate" in advanced_rules:
+                aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
+                pipeline = aggregate_kwargs.pop("pipeline", [])
 
-                    async for doc in collection.aggregate(
+                with self.get_client():
+                    async for doc in self.collection.aggregate(
                         pipeline=pipeline, **aggregate_kwargs
                     ):
                         yield self.serialize(doc), None
-            else:
-                async for doc in collection.find():
+        else:
+            with self.get_client():
+                async for doc in self.collection.find():
                     yield self.serialize(doc), None
 
     def check_conflicting_values(self, value):
