@@ -175,6 +175,7 @@ class MongoDataSource(BaseDataSource):
         certfile = ""
         try:
             client_params = {}
+
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
 
@@ -196,14 +197,16 @@ class MongoDataSource(BaseDataSource):
             else:
                 client_params["tls"] = False
 
-            client = AsyncIOMotorClient(self.host, **client_params)
-
-            db = client[self.configuration["database"]]
-            self.collection = db[self.configuration["collection"]]
-
-            yield client
+            yield AsyncIOMotorClient(self.host, **client_params)
         finally:
-            self.remove_temp_file(certfile)
+            if os.path.exists(certfile):
+                try:
+                    os.remove(certfile)
+                except Exception as exception:
+                    self._logger.warning(
+                        f"Something went wrong while removing temporary certificate file. Exception: {exception}",
+                        exc_info=True,
+                    )
 
     def advanced_rules_validators(self):
         return [MongoAdvancedRulesValidator()]
@@ -246,28 +249,29 @@ class MongoDataSource(BaseDataSource):
         return doc
 
     async def get_docs(self, filtering=None):
-        if filtering is not None and filtering.has_advanced_rules():
-            advanced_rules = filtering.get_advanced_rules()
+        with self.get_client() as client:
+            db = client[self.configuration["database"]]
+            collection = db[self.configuration["collection"]]
 
-            if "find" in advanced_rules:
-                find_kwargs = advanced_rules.get("find", {})
+            if filtering is not None and filtering.has_advanced_rules():
+                advanced_rules = filtering.get_advanced_rules()
 
-                with self.get_client():
-                    async for doc in self.collection.find(**find_kwargs):
+                if "find" in advanced_rules:
+                    find_kwargs = advanced_rules.get("find", {})
+
+                    async for doc in collection.find(**find_kwargs):
                         yield self.serialize(doc), None
 
-            elif "aggregate" in advanced_rules:
-                aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
-                pipeline = aggregate_kwargs.pop("pipeline", [])
+                elif "aggregate" in advanced_rules:
+                    aggregate_kwargs = deepcopy(advanced_rules.get("aggregate", {}))
+                    pipeline = aggregate_kwargs.pop("pipeline", [])
 
-                with self.get_client():
-                    async for doc in self.collection.aggregate(
+                    async for doc in collection.aggregate(
                         pipeline=pipeline, **aggregate_kwargs
                     ):
                         yield self.serialize(doc), None
-        else:
-            with self.get_client():
-                async for doc in self.collection.find():
+            else:
+                async for doc in collection.find():
                     yield self.serialize(doc), None
 
     def check_conflicting_values(self, value):
