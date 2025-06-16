@@ -8,10 +8,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, Mock
-from uuid import UUID
 
 import pytest
-from bson import Binary, DBRef, ObjectId
+from bson import DBRef, ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import OperationFailure
 
