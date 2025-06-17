@@ -11,7 +11,15 @@ from datetime import datetime
 from tempfile import NamedTemporaryFile
 
 import fastjsonschema
-from bson import OLD_UUID_SUBTYPE, Binary, CodecOptions, DBRef, DatetimeConversion, DatetimeMS, Decimal128, ObjectId
+from bson import (
+    OLD_UUID_SUBTYPE,
+    Binary,
+    DatetimeConversion,
+    DatetimeMS,
+    DBRef,
+    Decimal128,
+    ObjectId,
+)
 from bson.binary import UUID_SUBTYPE
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient

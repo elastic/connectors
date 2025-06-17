@@ -17,7 +17,8 @@ NUMBER_OF_RECORDS_TO_DELETE = 50
 
 fake = Faker()
 client = MongoClient(
-    "mongodb://admin:justtesting@127.0.0.1:27021?uuidRepresentation=standard", datetime_conversion=bson.DatetimeConversion.DATETIME_AUTO
+    "mongodb://admin:justtesting@127.0.0.1:27021?uuidRepresentation=standard",
+    datetime_conversion=bson.DatetimeConversion.DATETIME_AUTO,
 )
 
 
