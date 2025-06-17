@@ -11,7 +11,7 @@ from datetime import datetime
 from tempfile import NamedTemporaryFile
 
 import fastjsonschema
-from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
+from bson import OLD_UUID_SUBTYPE, Binary, CodecOptions, DBRef, DatetimeConversion, DatetimeMS, Decimal128, ObjectId
 from bson.binary import UUID_SUBTYPE
 from fastjsonschema import JsonSchemaValueException
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -177,6 +177,8 @@ class MongoDataSource(BaseDataSource):
         try:
             client_params = {}
 
+            client_params["datetime_conversion"] = DatetimeConversion.DATETIME_AUTO
+
             if self.configuration["direct_connection"]:
                 client_params["directConnection"] = True
 
@@ -242,6 +244,8 @@ class MongoDataSource(BaseDataSource):
                 value = value.to_decimal()
             elif isinstance(value, DBRef):
                 value = _serialize(value.as_doc().to_dict())
+            elif isinstance(value, DatetimeMS):
+                value = value._value
             elif isinstance(value, Binary):
                 # UUID_SUBTYPE is guaranteed to properly be serialized cross-platform and cross-driver
                 if value.subtype == UUID_SUBTYPE:

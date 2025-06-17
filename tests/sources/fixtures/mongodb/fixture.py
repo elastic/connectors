@@ -17,7 +17,7 @@ NUMBER_OF_RECORDS_TO_DELETE = 50
 
 fake = Faker()
 client = MongoClient(
-    "mongodb://admin:justtesting@127.0.0.1:27021?uuidRepresentation=standard"
+    "mongodb://admin:justtesting@127.0.0.1:27021?uuidRepresentation=standard", datetime_conversion=bson.DatetimeConversion.DATETIME_AUTO
 )
 
 
@@ -31,6 +31,9 @@ async def load():
             "time": fake.time(),
             "comment": fake.sentence(),
             "unique_id": uuid4(),
+            "some_large_datetime": bson.DatetimeMS(2**62),
+            "some_small_datetime": bson.DatetimeMS(-(2**62)),
+            "some_zero_datetime": bson.DatetimeMS(0),
         }
 
     record_number = _SIZES[DATA_SIZE] + NUMBER_OF_RECORDS_TO_DELETE
