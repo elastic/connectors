@@ -1,5 +1,6 @@
 """OneLake connector to retrieve data from datalakes"""
 
+import asyncio
 from functools import partial
 
 from azure.identity import ClientSecretCredential
@@ -99,6 +100,31 @@ class OneLakeDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to OneLake.")
             raise
 
+    async def _process_items_concurrently(
+        self, items, process_item_func, max_concurrency=10
+    ):
+        """Process a list of items concurrently using a semaphore for concurrency control.
+
+        This function applies the `process_item_func` to each item in the `items` list
+        using a semaphore to control the level of concurrency.
+
+        Args:
+            items (list): List of items to process.
+            process_item_func (function): The function to be called for each item.
+            max_concurrency (int): Maximum number of concurrent items to process.
+
+        Returns:
+            list: A list containing the results of processing each item.
+        """
+
+        async def process_item(item, semaphore):
+            async with semaphore:
+                return await process_item_func(item)
+
+        semaphore = asyncio.Semaphore(max_concurrency)
+        tasks = [process_item(item, semaphore) for item in items]
+        return await asyncio.gather(*tasks)
+
     def _get_token_credentials(self):
         """Get the token credentials for OneLake
 
@@ -178,6 +204,23 @@ class OneLakeDataSource(BaseDataSource):
             self._logger.error(f"Error while getting file client: {e}")
             raise
 
+    async def get_files_properties(self, file_clients):
+        """Get the properties of a list of file clients
+
+        Args:
+            file_clients (list): List of file clients
+
+        Returns:
+            list: List of file properties
+        """
+
+        async def get_properties(file_client):
+            return file_client.get_file_properties()
+
+        return await self._process_items_concurrently(
+            file_clients, get_properties, max_concurrency=10
+        )
+
     async def _get_directory_paths(self, directory_path):
         """List directory paths from data lake
 
@@ -189,12 +232,15 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            return self.file_system_client.get_paths(path=directory_path)
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None, lambda: self.file_system_client.get_paths(path=directory_path)
+            )
         except Exception as e:
             self._logger.error(f"Error while getting directory paths: {e}")
             raise
 
-    def format_file(self, file_client):
+    async def format_file(self, file_client):
         """Format file_client to be processed
 
         Args:
@@ -205,7 +251,10 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            file_properties = file_client.get_file_properties()
+            loop = asyncio.get_running_loop()
+            file_properties = await loop.run_in_executor(
+                None, file_client.get_file_properties
+            )
 
             return {
                 "_id": f"{file_client.file_system_name}_{file_properties.name.split('/')[-1]}",
@@ -231,9 +280,10 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
-            download = file_client.download_file()
-            stream = download.chunks()
+            loop = asyncio.get_running_loop()
+            download = await loop.run_in_executor(None, file_client.download_file)
 
+            stream = download.chunks()
             for chunk in stream:
                 yield chunk
         except Exception as e:
@@ -291,15 +341,19 @@ class OneLakeDataSource(BaseDataSource):
         Args:
             doc_paths (list): List of paths extracted from OneLake
 
-        Yields:
-            tuple: File document and partial function to get content
+        Returns:
+            list: List of files
         """
 
-        for path in doc_paths:
+        async def prepare_single_file(path):
             file_name = path.name.split("/")[-1]
             field_client = await self._get_file_client(file_name)
+            return self.format_file(field_client)
 
-            yield self.format_file(field_client)
+        files = await self._process_items_concurrently(doc_paths, prepare_single_file)
+
+        for file in files:
+            yield file
 
     async def get_docs(self, filtering=None):
         """Get documents from OneLake and index them
