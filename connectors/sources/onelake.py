@@ -17,10 +17,6 @@ class OneLakeDataSource(BaseDataSource):
     name = "OneLake"
     service_type = "onelake"
     incremental_sync_enabled = True
-    service_client = None
-    file_system_client = None
-    directory_client = None
-    account_url = None
 
     def __init__(self, configuration):
         """Set up the connection to the azure base client
@@ -37,9 +33,9 @@ class OneLakeDataSource(BaseDataSource):
         self.account_url = (
             f"https://{self.configuration['account_name']}.dfs.fabric.microsoft.com"
         )
-        self.service_client = self._get_service_client()
-        self.file_system_client = self._get_file_system_client()
-        self.directory_client = self._get_directory_client()
+        self.service_client = None
+        self.file_system_client = None
+        self.directory_client = None
 
     @classmethod
     def get_default_configuration(cls):
@@ -72,7 +68,7 @@ class OneLakeDataSource(BaseDataSource):
             },
             "data_path": {
                 "label": "OneLake data path",
-                "tooltip": "Path in format <DataLake>.Lakehouse/files/<Folder path>",
+                "tooltip": "Path in format <DataLake>.Lakehouse/files/<Folder path> this is uppercase sensitive, make sure to insert the correct path",
                 "order": 5,
                 "type": "str",
             },
@@ -80,10 +76,19 @@ class OneLakeDataSource(BaseDataSource):
                 "tooltip": "In the most cases is 'onelake'",
                 "default_value": ACCOUNT_NAME,
                 "label": "Account name",
+                "required": False,
                 "order": 6,
                 "type": "str",
             },
         }
+
+    async def initialize(self):
+        """Initialize the Azure clients asynchronously"""
+
+        if not self.service_client:
+            self.service_client = await self._get_service_client()
+            self.file_system_client = await self._get_file_system_client()
+            self.directory_client = await self._get_directory_client()
 
     async def ping(self):
         """Verify the connection with OneLake"""
@@ -91,17 +96,20 @@ class OneLakeDataSource(BaseDataSource):
         self._logger.info("Generating file system client...")
 
         try:
-            await self._get_directory_paths(self.configuration["data_path"])
+            await self.initialize()  # Initialize the clients
+
+            await self._get_directory_paths(
+                self.configuration["data_path"]
+            )  # Condition to check if the connection is successful
             self._logger.info(
                 f"Connection to OneLake successful to {self.configuration['data_path']}"
             )
-
         except Exception:
             self._logger.exception("Error while connecting to OneLake.")
             raise
 
     async def _process_items_concurrently(
-        self, items, process_item_func, max_concurrency=10
+        self, items, process_item_func, max_concurrency=50
     ):
         """Process a list of items concurrently using a semaphore for concurrency control.
 
@@ -217,9 +225,7 @@ class OneLakeDataSource(BaseDataSource):
         async def get_properties(file_client):
             return file_client.get_file_properties()
 
-        return await self._process_items_concurrently(
-            file_clients, get_properties, max_concurrency=10
-        )
+        return await self._process_items_concurrently(file_clients, get_properties)
 
     async def _get_directory_paths(self, directory_path):
         """List directory paths from data lake
@@ -232,10 +238,15 @@ class OneLakeDataSource(BaseDataSource):
         """
 
         try:
+            if not self.file_system_client:
+                await self.initialize()
+
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(
-                None, lambda: self.file_system_client.get_paths(path=directory_path)
+            paths = await loop.run_in_executor(
+                None, self.file_system_client.get_paths, directory_path
             )
+
+            return paths
         except Exception as e:
             self._logger.error(f"Error while getting directory paths: {e}")
             raise
@@ -348,7 +359,7 @@ class OneLakeDataSource(BaseDataSource):
         async def prepare_single_file(path):
             file_name = path.name.split("/")[-1]
             field_client = await self._get_file_client(file_name)
-            return self.format_file(field_client)
+            return await self.format_file(field_client)
 
         files = await self._process_items_concurrently(doc_paths, prepare_single_file)
 
@@ -367,6 +378,7 @@ class OneLakeDataSource(BaseDataSource):
         directory_paths = await self._get_directory_paths(
             self.configuration["data_path"]
         )
+        directory_paths = list(directory_paths)
 
         self._logger.debug(f"Found {len(directory_paths)} files in {self.data_path}")
 
