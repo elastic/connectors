@@ -2350,45 +2350,28 @@ class SharepointOnlineDataSource(BaseDataSource):
                 site_page["_id"] = f"{site_id}-site_page-{site_page['Id']}"
                 site_page["object_type"] = "site_page"
 
-                has_unique_role_assignments = False
-
                 # ignore parent site permissions and use unique per page permissions ("unique permissions" means breaking the inheritance to the parent site)
                 if (
                     self._dls_enabled()
                     and self.configuration["fetch_unique_page_permissions"]
                 ):
-                    has_unique_role_assignments = (
-                        await self.client.site_page_has_unique_role_assignments(
-                            url, site_page["Id"]
-                        )
+                    self._logger.debug(
+                        f"Fetching unique page permissions for page with id '{site_page['_id']}'."
                     )
 
-                    if has_unique_role_assignments:
-                        self._logger.debug(
-                            f"Fetching unique page permissions for page with id '{site_page['_id']}'. Ignoring parent site permissions."
-                        )
+                    page_access_control = []
 
-                        page_access_control = []
-
-                        async for (
-                            role_assignment
-                        ) in self.client.site_page_role_assignments(
-                            url, site_page["Id"]
-                        ):
-                            page_access_control.extend(
-                                await self._get_access_control_from_role_assignment(
-                                    role_assignment
-                                )
+                    async for role_assignment in self.client.site_page_role_assignments(
+                        url, site_page["Id"]
+                    ):
+                        page_access_control.extend(
+                            await self._get_access_control_from_role_assignment(
+                                role_assignment
                             )
-
-                        site_page = self._decorate_with_access_control(
-                            site_page, page_access_control
                         )
 
-                # set parent site access control
-                if not has_unique_role_assignments:
                     site_page = self._decorate_with_access_control(
-                        site_page, site_access_control
+                        site_page, page_access_control
                     )
 
                 for html_field in [
