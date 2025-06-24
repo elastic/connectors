@@ -140,7 +140,7 @@ SOFTWARE.
 
 
 Pygments
-2.19.1
+2.19.2
 BSD License
 Copyright (c) 2006-2022 by the respective authors (see AUTHORS file).
 All rights reserved.
@@ -2563,11 +2563,11 @@ Apache Software License
 
 
 bracex
-2.5.post1
+2.6
 MIT License
 MIT License
 
-Copyright (c) 2018 - 2024 Isaac Muse
+Copyright (c) 2018 - 2025 Isaac Muse
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3521,7 +3521,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-8.18.2
+8.18.3
 Apache Software License
 Elastic License 2.0
 
@@ -4384,7 +4384,7 @@ THE SOFTWARE.
 
 
 grpcio
-1.71.0
+1.73.0
 Apache Software License
 
                                  Apache License
@@ -5655,7 +5655,7 @@ MIT License
 
 
 multidict
-6.4.3
+6.5.0
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
@@ -5698,9 +5698,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 oauthlib
-3.2.2
-BSD License
-Copyright (c) 2019 The OAuthlib Community
+3.3.1
+BSD-3-Clause
+Copyright (c) The OAuthlib Community
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -5713,14 +5713,14 @@ modification, are permitted provided that the following conditions are met:
        notice, this list of conditions and the following disclaimer in the
        documentation and/or other materials provided with the distribution.
 
-    3. Neither the name of this project nor the names of its contributors may
-       be used to endorse or promote products derived from this software without
-       specific prior written permission.
+    3. Neither the name of the copyright holder nor the names of its
+       contributors may be used to endorse or promote products derived from this
+       software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
 FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
 SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
@@ -7884,7 +7884,7 @@ made under the terms of *both* these licenses.
 
 
 urllib3
-2.4.0
+2.5.0
 UNKNOWN
 MIT License
 
