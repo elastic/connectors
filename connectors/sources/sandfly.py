@@ -1,0 +1,849 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
+"""
+Sandfly Security source module to fetch documents from a Sandfly Security Server.
+"""
+
+import json
+import socket
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from functools import cached_property
+
+# import aiofiles
+import aiohttp
+from aiohttp.client_exceptions import (
+    ClientResponseError,
+)
+
+from connectors.es.sink import OP_INDEX
+from connectors.logger import logger
+from connectors.source import CURSOR_SYNC_TIMESTAMP, BaseDataSource
+from connectors.utils import (
+    CacheWithTimeout,
+    CancellableSleeps,
+    RetryStrategy,
+    hash_id,
+    iso_utc,
+    retryable,
+)
+
+RETRIES = 3
+RETRY_INTERVAL = 2
+
+RESULTS_SIZE = 999
+CURSOR_SEQUENCE_ID_KEY = "sequence_id"
+
+
+def extract_sandfly_date(datestr):
+    return datetime.strptime(datestr, "%Y-%m-%dT%H:%M:%SZ")
+
+
+def format_sandfly_date(date, flag):
+    if flag:
+        return date.strftime("%Y-%m-%dT00:00:00Z")  # date with time as midnight
+    return date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class FetchTokenError(Exception):
+    pass
+
+
+class ResourceNotFound(Exception):
+    pass
+
+
+class SyncCursorEmpty(Exception):
+    """Exception class to notify that incremental sync can't run because sync_cursor is empty.
+    See: https://learn.microsoft.com/en-us/graph/delta-query-overview
+    """
+
+    pass
+
+
+class SandflyLicenseExpired(Exception):
+    pass
+
+
+class SandflyNotLicensed(Exception):
+    pass
+
+
+class SandflyAccessToken:
+    def __init__(self, http_session, configuration, logger_):
+        self._token_cache = CacheWithTimeout()
+        self._http_session = http_session
+        self._logger = logger_
+
+        self.server_url = configuration["server_url"]
+        self.username = configuration["username"]
+        self.password = configuration["password"]
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    async def get(self, is_cache=True):
+        cached_value = self._token_cache.get_value() if is_cache else None
+
+        if cached_value:
+            return cached_value
+
+        now = datetime.utcnow()
+        access_token, expires_in = await self._fetch_token()
+        self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
+
+        return access_token
+
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+    )
+    async def _fetch_token(self):
+        url = f"{self.server_url}/auth/login"
+        request_headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "username": self.username,
+            "password": self.password,
+        }
+
+        try:
+            async with self._http_session.post(
+                url=url, headers=request_headers, data=json.dumps(data)
+            ) as response:
+                json_response = await response.json()
+                return json_response.get("access_token"), 3599
+        except Exception as exception:
+            msg = f"Error while generating access token. Exception {exception}."
+            raise FetchTokenError(msg) from exception
+
+
+class SandflySession:
+    def __init__(self, http_session, token, logger_):
+        self._sleeps = CancellableSleeps()
+        self._logger = logger_
+
+        self._http_session = http_session
+        self._my_token = token
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+
+    def close(self):
+        self._sleeps.cancel()
+
+    @asynccontextmanager
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=ResourceNotFound,
+    )
+    async def _get(self, absolute_url):
+        try:
+            access_token = await self._my_token.get()
+            headers = {
+                "Accept": "application/json",
+                "Content-type": "application/json",
+                "Authorization": f"Bearer {access_token}",
+            }
+
+            async with self._http_session.get(
+                url=absolute_url, headers=headers
+            ) as response:
+                yield response
+        except ClientResponseError as exception:
+            if exception.status == 401:
+                await self._my_token.get(is_cache=False)
+                raise
+            elif exception.status == 404:
+                msg = "Resource Not Found"
+                raise ResourceNotFound(msg) from exception
+            else:
+                raise
+        except Exception:
+            raise
+
+    @asynccontextmanager
+    @retryable(
+        retries=RETRIES,
+        interval=RETRY_INTERVAL,
+        strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+        skipped_exceptions=ResourceNotFound,
+    )
+    async def _post(self, absolute_url, payload):
+        try:
+            access_token = await self._my_token.get()
+            headers = {
+                "Accept": "application/json",
+                "Content-type": "application/json",
+                "Authorization": f"Bearer {access_token}",
+            }
+
+            async with self._http_session.post(
+                url=absolute_url, headers=headers, data=json.dumps(payload)
+            ) as response:
+                yield response
+        except ClientResponseError as exception:
+            if exception.status == 401:
+                await self._my_token.get(is_cache=False)
+                raise
+            elif exception.status == 404:
+                msg = "Resource Not Found"
+                raise ResourceNotFound(msg) from exception
+            else:
+                raise
+        except Exception:
+            raise
+
+    async def content_get(self, url):
+        try:
+            async with self._get(absolute_url=url) as response:
+                return await response.text()
+        except Exception as exception:
+            self._logger.warning(
+                f"Content for {url} is being skipped. Error: {exception}."
+            )
+
+    async def content_post(self, url, payload):
+        try:
+            async with self._post(absolute_url=url, payload=payload) as response:
+                return await response.text()
+        except Exception as exception:
+            self._logger.warning(
+                f"Content for {url} is being skipped. Error: {exception}."
+            )
+
+
+class SandflyClient:
+    def __init__(self, configuration):
+        self._sleeps = CancellableSleeps()
+        self._logger = logger
+
+        self.configuration = configuration
+
+        self.server_url = self.configuration["server_url"]
+        self.verify_ssl = self.configuration["verify_ssl"]
+
+        t_connector = aiohttp.TCPConnector(
+            family=socket.AF_INET, verify_ssl=self.verify_ssl
+        )
+        self.http_session = aiohttp.ClientSession(
+            connector=t_connector, raise_for_status=True
+        )
+
+        self.my_token = SandflyAccessToken(
+            http_session=self.http_session,
+            configuration=configuration,
+            logger_=self._logger,
+        )
+        self.my_client = SandflySession(
+            http_session=self.http_session,
+            token=self.my_token,
+            logger_=self._logger,
+        )
+
+    def set_logger(self, logger_):
+        self._logger = logger_
+        self.my_token.set_logger(self._logger)
+        self.my_client.set_logger(self._logger)
+
+    async def close(self):
+        await self.http_session.close()
+        self.my_client.close()
+
+    # async def ping(self):
+    #     return True
+
+    async def ping(self):
+        try:
+            await self.my_token.get()
+            self._logger.info(
+                "SandflyClient PING : Successfully connected to Sandfly Security."
+            )
+            return True
+        except Exception:
+            self._logger.error(
+                "SandflyClient PING : Error while connecting to Sandfly Security."
+            )
+            raise
+
+    async def get_results_by_id(self, sequence_id, enable_pass):
+        results_url = f"{self.server_url}/results"
+
+        payload = None
+
+        if enable_pass:
+            payload = {
+                "size": RESULTS_SIZE,
+                "filter": {
+                    "items": [
+                        {
+                            "columnField": "sequence_id",
+                            "operatorValue": ">",
+                            "value": sequence_id,
+                        }
+                    ]
+                },
+                "sort": [
+                    {
+                        "Field": "sequence_id",
+                        "sort": "asc",
+                    }
+                ],
+            }
+        else:
+            payload = {
+                "size": RESULTS_SIZE,
+                "filter": {
+                    "items": [
+                        {
+                            "columnField": "data.status",
+                            "operatorValue": "notEquals",
+                            "value": "pass",
+                        },
+                        {
+                            "columnField": "sequence_id",
+                            "operatorValue": ">",
+                            "value": sequence_id,
+                        },
+                    ],
+                    "linkoperator": "and",
+                },
+                "sort": [
+                    {
+                        "Field": "sequence_id",
+                        "sort": "asc",
+                    }
+                ],
+            }
+
+        t_content = await self.my_client.content_post(url=results_url, payload=payload)
+
+        if t_content is not None:
+            t_content_json = json.loads(t_content)
+            t_total = t_content_json["total"]
+            t_more_results = t_content_json["more_results"]
+            self._logger.debug(f"GET_RESULTS_BY_ID : [{t_total}] : [{t_more_results}]")
+
+            t_data_list = t_content_json["data"]
+            for t_result_item in t_data_list:
+                yield t_result_item, t_more_results
+
+    async def get_results_by_time(self, time_since, enable_pass):
+        results_url = f"{self.server_url}/results"
+
+        if enable_pass:
+            payload = {
+                "size": RESULTS_SIZE,
+                "time_since": time_since,
+                "sort": [
+                    {
+                        "Field": "sequence_id",
+                        "sort": "asc",
+                    }
+                ],
+            }
+        else:
+            payload = {
+                "size": RESULTS_SIZE,
+                "time_since": time_since,
+                "filter": {
+                    "items": [
+                        {
+                            "columnField": "data.status",
+                            "operatorValue": "notEquals",
+                            "value": "pass",
+                        }
+                    ]
+                },
+                "sort": [
+                    {
+                        "Field": "sequence_id",
+                        "sort": "asc",
+                    }
+                ],
+            }
+
+        t_content = await self.my_client.content_post(url=results_url, payload=payload)
+
+        if t_content is not None:
+            t_content_json = json.loads(t_content)
+
+            t_total = t_content_json["total"]
+            t_more_results = t_content_json["more_results"]
+            self._logger.debug(
+                f"GET_RESULTS_BY_TIME : [{t_total}] : [{t_more_results}]"
+            )
+
+            t_data_list = t_content_json["data"]
+            for t_result_item in t_data_list:
+                yield t_result_item, t_more_results
+
+    async def get_ssh_keys(self):
+        ssh_url = f"{self.server_url}/sshhunter/summary"
+        t_content = await self.my_client.content_get(url=ssh_url)
+
+        if t_content is not None:
+            t_content_json = json.loads(t_content)
+
+            t_more_results = t_content_json["more_results"]
+            t_data_list = t_content_json["data"]
+
+            for t_key in t_data_list:
+                t_key_id = t_key["id"]
+                key_url = f"{self.server_url}/sshhunter/key/{t_key_id}"
+
+                t_key_details = await self.my_client.content_get(url=key_url)
+                if t_key_details is not None:
+                    yield json.loads(t_key_details), t_more_results
+
+    async def get_hosts(self):
+        hosts_url = f"{self.server_url}/hosts"
+        t_content = await self.my_client.content_get(url=hosts_url)
+
+        if t_content is not None:
+            t_content_json = json.loads(t_content)
+
+            t_data_list = t_content_json["data"]
+            for t_host in t_data_list:
+                yield t_host
+
+    async def get_license(self):
+        license_url = f"{self.server_url}/license"
+        t_content = await self.my_client.content_get(url=license_url)
+
+        if t_content is not None:
+            t_content_json = json.loads(t_content)
+            yield t_content_json
+
+
+class SandflyDataSource(BaseDataSource):
+    """Sandfly Security"""
+
+    name = "Sandfly Security"
+    service_type = "sandfly"
+    incremental_sync_enabled = True
+
+    def __init__(self, configuration):
+        super().__init__(configuration=configuration)
+        self._logger = logger
+
+        self.server_url = self.configuration["server_url"]
+        self.username = self.configuration["username"]
+        self.password = self.configuration["password"]
+        self.enable_pass = self.configuration["enable_pass"]
+        self.verify_ssl = self.configuration["verify_ssl"]
+        self.fetch_days = self.configuration["fetch_days"]
+
+    @cached_property
+    def client(self):
+        return SandflyClient(configuration=self.configuration)
+
+    @classmethod
+    def get_default_configuration(cls):
+        return {
+            "server_url": {
+                "label": "Sandfly Server URL",
+                "order": 1,
+                "tooltip": "Sandfly Server URL including the API version (v4).",
+                "type": "str",
+                "validations": [],
+                "value": "https://server-name/v4",
+            },
+            "username": {
+                "label": "Sandfly Server Username",
+                "order": 2,
+                "type": "str",
+                "validations": [],
+                "value": "<username>",
+            },
+            "password": {
+                "label": "Sandfly Server Password",
+                "order": 3,
+                "sensitive": True,
+                "type": "str",
+                "validations": [],
+                "value": "<password>",
+            },
+            "enable_pass": {
+                "display": "toggle",
+                "label": "Enable Pass Results",
+                "order": 4,
+                "tooltip": "Enable Pass Results, default is to include only Alert and Error Results.",
+                "type": "bool",
+                "value": False,
+            },
+            "verify_ssl": {
+                "display": "toggle",
+                "label": "Verify SSL Certificate",
+                "order": 5,
+                "tooltip": "Verify Sandfly Server SSL Certificate, disable to allow self-signed certificates.",
+                "type": "bool",
+                "value": True,
+            },
+            "fetch_days": {
+                "display": "numeric",
+                "label": "Days of results history to fetch",
+                "order": 6,
+                "tooltip": "Number of days of results history to fetch on a Full Content Sync.",
+                "value": 30,
+                "type": "int",
+            },
+        }
+
+    # async def ping(self):
+    #     return True
+
+    async def ping(self):
+        try:
+            await self.client.ping()
+            self._logger.info(
+                "SandflyDataSource PING : Successfully connected to Sandfly Security."
+            )
+            return True
+        except Exception:
+            self._logger.error(
+                "SandflyDataSource PING : Error while connecting to Sandfly Security."
+            )
+            raise
+
+    # async def changed(self):
+    #     return True
+
+    async def close(self):
+        await self.client.close()
+
+    def init_sync_cursor(self):
+        if not self._sync_cursor:
+            self._sync_cursor = {
+                CURSOR_SEQUENCE_ID_KEY: 0,
+                CURSOR_SYNC_TIMESTAMP: iso_utc(),
+            }
+
+        return self._sync_cursor
+
+    def _format_doc(self, doc_id, doc_time, doc_tag, doc_text, doc_field, doc_data):
+        document = {
+            "_id": doc_id,
+            "_timestamp": doc_time,
+            "sandfly_source": doc_tag,
+            "sandfly_key_data": doc_text,
+            doc_field: doc_data,
+        }
+        return document
+
+    async def get_docs(self, filtering=None):
+        self.init_sync_cursor()
+
+        async for t_license in self.client.get_license():
+            t_customer = t_license["customer"]["name"]
+            t_expiry = t_license["date"]["expiry"]
+
+            self._logger.info(f"SNAPP: GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+
+            now = datetime.utcnow()
+            expiry_date = extract_sandfly_date(t_expiry)
+            if expiry_date < now:
+                msg = f"Sandfly Server [{self.server_url}] license has expired [{t_expiry}]"
+                raise SandflyLicenseExpired(msg)
+
+            is_licensed = False
+            if "limits" in t_license:
+                if "features" in t_license["limits"]:
+                    t_features_list = t_license["limits"]["features"]
+                    for f in t_features_list:
+                        if f == "elasticsearch_replication":
+                            is_licensed = True
+
+            if not is_licensed:
+                msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
+                raise SandflyNotLicensed(msg)
+
+        async for t_host_item in self.client.get_hosts():
+            t_hostid = t_host_item["host_id"]
+            t_hostname = t_host_item["hostname"]
+
+            # filename = f"x_host_item_{t_hostid}_{t_hostname}.json"
+            # async with aiofiles.open(filename, "w") as file:
+            #   await file.write(json.dumps(t_host_item, indent=4, default=str, sort_keys=False))
+
+            t_nodename = "<unknown>"
+            if "data" in t_host_item:
+                if t_host_item["data"] is not None:
+                    if "os" in t_host_item["data"]:
+                        if "info" in t_host_item["data"]["os"]:
+                            if "node" in t_host_item["data"]["os"]["info"]:
+                                t_nodename = t_host_item["data"]["os"]["info"]["node"]
+
+            doc_id = hash_id(t_hostid)
+            self._logger.info(
+                f"SNAPP: HOSTS : [{doc_id}] - [{t_hostname}] [{t_nodename}]"
+            )
+
+            t_key_data = f"{t_nodename} ({t_hostname})"
+
+            yield (
+                self._format_doc(
+                    doc_id=doc_id,
+                    doc_time=iso_utc(),
+                    doc_tag="hosts_tag",
+                    doc_text=t_key_data,
+                    doc_field="sandfly_hosts",
+                    doc_data=t_host_item,
+                ),
+                None,
+            )
+
+        get_more_results = False
+
+        async for t_key_item, get_more_results in self.client.get_ssh_keys():
+            t_friendly = t_key_item["friendly_name"]
+            t_key_value = t_key_item["key_value"]
+
+            doc_id = hash_id(t_key_value)
+            self._logger.info(
+                f"SNAPP: SSH_KEYS : [{doc_id}] - [{t_friendly}] : [{get_more_results}]"
+            )
+
+            yield (
+                self._format_doc(
+                    doc_id=doc_id,
+                    doc_time=iso_utc(),
+                    doc_tag="ssh_keys_tag",
+                    doc_text=t_friendly,
+                    doc_field="sandfly_ssh_keys",
+                    doc_data=t_key_item,
+                ),
+                None,
+            )
+
+        now = datetime.utcnow()
+        then = now + timedelta(days=-self.fetch_days)
+        t_time_since = format_sandfly_date(date=then, flag=True)
+
+        last_sequence_id = None
+        get_more_results = False
+
+        async for t_result_item, get_more_results in self.client.get_results_by_time(
+            t_time_since, self.enable_pass
+        ):
+            last_sequence_id = t_result_item["sequence_id"]
+            t_external_id = t_result_item["external_id"]
+            t_timestamp = t_result_item["header"]["end_time"]
+            t_key_data = t_result_item["data"]["key_data"]
+            t_status = t_result_item["data"]["status"]
+
+            if len(t_key_data) == 0:
+                t_key_data = "- no data -"
+
+            doc_id = hash_id(t_external_id)
+            self._logger.error(
+                f"SNAPP: GET_RESULTS-time : [{doc_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] : [{get_more_results}]"
+            )
+
+            # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
+            # async with aiofiles.open(filename, "w") as file:
+            #   await file.write(json.dumps(t_result_item, indent=4, default=str, sort_keys=False))
+
+            yield (
+                self._format_doc(
+                    doc_id=doc_id,
+                    doc_time=t_timestamp,
+                    doc_tag="results_tag",
+                    doc_text=t_key_data,
+                    doc_field="sandfly_results",
+                    doc_data=t_result_item,
+                ),
+                None,
+            )
+
+        self._logger.info(
+            f"SNAPP: GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+        )
+        if last_sequence_id is not None:
+            self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
+
+        while get_more_results:
+            get_more_results = False
+
+            async for t_result_item, get_more_results in self.client.get_results_by_id(
+                last_sequence_id, self.enable_pass
+            ):
+                last_sequence_id = t_result_item["sequence_id"]
+                t_external_id = t_result_item["external_id"]
+                t_timestamp = t_result_item["header"]["end_time"]
+                t_key_data = t_result_item["data"]["key_data"]
+                t_status = t_result_item["data"]["status"]
+
+                if len(t_key_data) == 0:
+                    t_key_data = "- no data -"
+
+                doc_id = hash_id(t_external_id)
+                self._logger.error(
+                    f"SNAPP: GET_RESULTS-id : [{doc_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] : [{get_more_results}]"
+                )
+
+                # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
+                # async with aiofiles.open(filename, "w") as file:
+                #   await file.write(json.dumps(t_result_item, indent=4, default=str, sort_keys=False))
+
+                yield (
+                    self._format_doc(
+                        doc_id=doc_id,
+                        doc_time=t_timestamp,
+                        doc_tag="results_tag",
+                        doc_text=t_key_data,
+                        doc_field="sandfly_results",
+                        doc_data=t_result_item,
+                    ),
+                    None,
+                )
+
+            self._logger.info(
+                f"SNAPP: GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+            )
+            if last_sequence_id is not None:
+                self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
+
+    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+        self._sync_cursor = sync_cursor
+        timestamp = iso_utc()
+
+        if not self._sync_cursor:
+            msg = "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
+            raise SyncCursorEmpty(msg)
+
+        async for t_license in self.client.get_license():
+            t_customer = t_license["customer"]["name"]
+            t_expiry = t_license["date"]["expiry"]
+
+            self._logger.info(f"SNAPP: GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+
+            now = datetime.utcnow()
+            expiry_date = extract_sandfly_date(t_expiry)
+            if expiry_date < now:
+                msg = f"Sandfly Server [{self.server_url}] license has expired [{t_expiry}]"
+                raise SandflyLicenseExpired(msg)
+
+            is_licensed = False
+            if "limits" in t_license:
+                if "features" in t_license["limits"]:
+                    t_features_list = t_license["limits"]["features"]
+                    for f in t_features_list:
+                        if f == "elasticsearch_replication":
+                            is_licensed = True
+
+            if not is_licensed:
+                msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
+                raise SandflyNotLicensed(msg)
+
+        async for t_host_item in self.client.get_hosts():
+            t_hostid = t_host_item["host_id"]
+            t_hostname = t_host_item["hostname"]
+
+            t_nodename = "<unknown>"
+            if "data" in t_host_item:
+                if t_host_item["data"] is not None:
+                    if "os" in t_host_item["data"]:
+                        if "info" in t_host_item["data"]["os"]:
+                            if "node" in t_host_item["data"]["os"]["info"]:
+                                t_nodename = t_host_item["data"]["os"]["info"]["node"]
+
+            doc_id = hash_id(t_hostid)
+            self._logger.info(
+                f"SNAPP: HOSTS : [{doc_id}] - [{t_hostname}] [{t_nodename}]"
+            )
+
+            t_key_data = f"{t_nodename} ({t_hostname})"
+
+            yield (
+                self._format_doc(
+                    doc_id=doc_id,
+                    doc_time=iso_utc(),
+                    doc_tag="hosts_tag",
+                    doc_text=t_key_data,
+                    doc_field="sandfly_hosts",
+                    doc_data=t_host_item,
+                ),
+                None,
+                OP_INDEX,
+            )
+
+        get_more_results = False
+
+        async for t_key_item, get_more_results in self.client.get_ssh_keys():
+            t_friendly = t_key_item["friendly_name"]
+            t_key_value = t_key_item["key_value"]
+
+            doc_id = hash_id(t_key_value)
+            self._logger.info(
+                f"SNAPP: SSH_KEYS : [{doc_id}] - [{t_friendly}] : [{get_more_results}]"
+            )
+
+            yield (
+                self._format_doc(
+                    doc_id=doc_id,
+                    doc_time=iso_utc(),
+                    doc_tag="ssh_keys_tag",
+                    doc_text=t_friendly,
+                    doc_field="sandfly_ssh_keys",
+                    doc_data=t_key_item,
+                ),
+                None,
+                OP_INDEX,
+            )
+
+        last_sequence_id = self._sync_cursor[CURSOR_SEQUENCE_ID_KEY]
+        self._logger.info(f"SNAPP: INCREMENTAL last_sequence_id : [{last_sequence_id}]")
+        get_more_results = True
+
+        while get_more_results:
+            get_more_results = False
+
+            async for t_result_item, get_more_results in self.client.get_results_by_id(
+                last_sequence_id, self.enable_pass
+            ):
+                last_sequence_id = t_result_item["sequence_id"]
+                t_external_id = t_result_item["external_id"]
+                t_timestamp = t_result_item["header"]["end_time"]
+                t_key_data = t_result_item["data"]["key_data"]
+                t_status = t_result_item["data"]["status"]
+
+                if len(t_key_data) == 0:
+                    t_key_data = "- no data -"
+
+                doc_id = hash_id(t_external_id)
+                self._logger.error(
+                    f"SNAPP: GET_RESULTS-id : [{doc_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] : [{get_more_results}]"
+                )
+
+                # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
+                # async with aiofiles.open(filename, "w") as file:
+                #   await file.write(json.dumps(t_result_item, indent=4, default=str, sort_keys=False))
+
+                yield (
+                    self._format_doc(
+                        doc_id=doc_id,
+                        doc_time=t_timestamp,
+                        doc_tag="results_tag",
+                        doc_text=t_key_data,
+                        doc_field="sandfly_results",
+                        doc_data=t_result_item,
+                    ),
+                    None,
+                    OP_INDEX,
+                )
+
+            self._logger.info(
+                f"SNAPP: INCREMENTAL GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+            )
+            self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
+
+        self.update_sync_timestamp_cursor(timestamp)
