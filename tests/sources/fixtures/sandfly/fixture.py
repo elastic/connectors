@@ -53,9 +53,14 @@ class SandflyAPI:
         }
 
     def get_license(self):
+        def _format_date(date):
+            return date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        current_date = datetime.utcnow()
+
         return {
             "version": 3,
-            "date": {"expiry": "2026-12-30T19:30:45Z"},
+            "date": {"expiry": _format_date(current_date + timedelta(days=90))},
             "customer": {"name": "Sandfly"},
             "limits": {"features": ["demo", "elasticsearch_replication"]},
         }
