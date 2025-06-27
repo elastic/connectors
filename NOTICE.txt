@@ -3521,7 +3521,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.1.0
+9.2.0
 Apache Software License
 Elastic License 2.0
 
@@ -5655,7 +5655,7 @@ MIT License
 
 
 multidict
-6.5.0
+6.5.1
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
