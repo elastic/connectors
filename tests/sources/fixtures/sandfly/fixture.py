@@ -21,13 +21,13 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
-        HOSTS_COUNT = 5
+        HOSTS_COUNT = 3
         RESULTS_COUNT = 10
     case "medium":
         HOSTS_COUNT = 5
         RESULTS_COUNT = 150
     case "large":
-        HOSTS_COUNT = 5
+        HOSTS_COUNT = 15
         RESULTS_COUNT = 995
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
@@ -69,20 +69,11 @@ class SandflyAPI:
         return {
             "data": [
                 {
-                    "host_id": "1001",
-                    "hostname": "192.168.11.201",
-                    "data": {"os": {"info": {"node": "sandfly-target"}}},
-                },
-                {
-                    "host_id": "1002",
-                    "hostname": "192.168.11.199",
-                    "data": {"os": {"info": {"node": "sandfly-server"}}},
-                },
-                {
-                    "host_id": "1003",
-                    "hostname": "192.168.11.197",
-                    "data": None,
-                },
+                    "host_id": f"100{host_id}",
+                    "hostname": f"192.168.11.{host_id}",
+                    "data": {"os": {"info": {"node": f"sandfly-target-{host_id}"}}},
+                }
+                for host_id in range(10, HOSTS_COUNT + 10)
             ],
         }
 
