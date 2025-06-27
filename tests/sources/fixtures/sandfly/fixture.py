@@ -40,6 +40,11 @@ match DATA_SIZE:
         raise Exception(msg)
 
 
+def get_num_docs():
+    total_docs = HOSTS_COUNT + KEYS_COUNT + (RESULTS_LOOP * RESULTS_COUNT)
+    print(total_docs)
+
+
 class SandflyAPI:
     def __init__(self):
         self.app = Flask(__name__)
@@ -77,7 +82,7 @@ class SandflyAPI:
         return {
             "data": [
                 {
-                    "host_id": f"100{host_id}",
+                    "host_id": fake_provider.fake.sha1(),
                     "hostname": f"192.168.11.{host_id}",
                     "data": {"os": {"info": {"node": f"sandfly-target-{host_id}"}}},
                 }
@@ -97,8 +102,8 @@ class SandflyAPI:
     def get_ssh_key(self, key_id):
         return {
             "id": key_id,
-            "friendly_name": f"friendly name {key_id}",
-            "key_value": f"KeyValue#123@{key_id}",
+            "friendly_name": f"X{key_id} " + fake_provider.fake.name(),
+            "key_value": f"KeyValue#123#{key_id}",
         }
 
     def get_results(self):
@@ -126,8 +131,8 @@ class SandflyAPI:
             "total": RESULTS_COUNT,
             "data": [
                 {
-                    "sequence_id": f"100{result_id}",
-                    "external_id": f"100{result_id}",
+                    "sequence_id": f"1000{result_id}",
+                    "external_id": f"1000{result_id}",
                     "header": {"end_time": _format_date(current_date)},
                     "data": {"key_data": f"my key data {result_id}", "status": "alert"},
                 }
