@@ -108,20 +108,15 @@ class SandflyAPI:
 
         return {
             "more_results": False,
-            "total": 2,
+            "total": RESULTS_COUNT,
             "data": [
                 {
-                    "sequence_id": "1003",
-                    "external_id": "1003",
+                    "sequence_id": f"100{result_id}",
+                    "external_id": f"100{result_id}",
                     "header": {"end_time": _format_date(current_date)},
-                    "data": {"key_data": "my key data", "status": "alert"},
-                },
-                {
-                    "sequence_id": "1004",
-                    "external_id": "1004",
-                    "header": {"end_time": _format_date(current_date)},
-                    "data": {"key_data": "", "status": "alert"},
-                },
+                    "data": {"key_data": f"my key data {result_id}", "status": "alert"},
+                }
+                for result_id in range(RESULTS_COUNT)
             ],
         }
 
