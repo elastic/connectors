@@ -23,14 +23,17 @@ match DATA_SIZE:
     case "small":
         HOSTS_COUNT = 3
         KEYS_COUNT = 7
+        RESULTS_LOOP = 3
         RESULTS_COUNT = 10
     case "medium":
         HOSTS_COUNT = 5
         KEYS_COUNT = 11
+        RESULTS_LOOP = 5
         RESULTS_COUNT = 150
     case "large":
         HOSTS_COUNT = 15
         KEYS_COUNT = 51
+        RESULTS_LOOP = 11
         RESULTS_COUNT = 995
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
@@ -40,6 +43,9 @@ match DATA_SIZE:
 class SandflyAPI:
     def __init__(self):
         self.app = Flask(__name__)
+        self.results_start = 0
+        self.results_stop = 0
+        self.results_loop = 0
 
         self.app.route("/v4/auth/login", methods=["POST"])(self.get_access_token)
         self.app.route("/v4/license", methods=["GET"])(self.get_license)
@@ -101,8 +107,22 @@ class SandflyAPI:
 
         current_date = datetime.utcnow()
 
+        more_results = True
+
+        if self.results_loop == 0:
+            self.results_start = 1
+            self.results_stop = RESULTS_COUNT + 1
+        else:
+            self.results_start += RESULTS_COUNT
+            self.results_stop += RESULTS_COUNT
+
+        self.results_loop += 1
+        if self.results_loop >= RESULTS_LOOP:
+            self.results_loop = 0
+            more_results = False
+
         return {
-            "more_results": False,
+            "more_results": more_results,
             "total": RESULTS_COUNT,
             "data": [
                 {
@@ -111,7 +131,7 @@ class SandflyAPI:
                     "header": {"end_time": _format_date(current_date)},
                     "data": {"key_data": f"my key data {result_id}", "status": "alert"},
                 }
-                for result_id in range(RESULTS_COUNT)
+                for result_id in range(self.results_start, self.results_stop)
             ],
         }
 
