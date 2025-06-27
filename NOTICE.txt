@@ -5655,7 +5655,7 @@ MIT License
 
 
 multidict
-6.5.1
+6.6.0
 Apache Software License
    Copyright 2016 Andrew Svetlov and aio-libs contributors
 
