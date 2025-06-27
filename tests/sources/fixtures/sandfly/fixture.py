@@ -22,12 +22,15 @@ DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 match DATA_SIZE:
     case "small":
         HOSTS_COUNT = 3
+        KEYS_COUNT = 7
         RESULTS_COUNT = 10
     case "medium":
         HOSTS_COUNT = 5
+        KEYS_COUNT = 11
         RESULTS_COUNT = 150
     case "large":
         HOSTS_COUNT = 15
+        KEYS_COUNT = 51
         RESULTS_COUNT = 995
     case _:
         msg = f"Unknown DATA_SIZE: {DATA_SIZE}. Expecting 'small', 'medium' or 'large'"
@@ -42,8 +45,7 @@ class SandflyAPI:
         self.app.route("/v4/license", methods=["GET"])(self.get_license)
         self.app.route("/v4/hosts", methods=["GET"])(self.get_hosts)
         self.app.route("/v4/sshhunter/summary", methods=["GET"])(self.get_ssh_summary)
-        self.app.route("/v4/sshhunter/key/1", methods=["GET"])(self.get_ssh_key1)
-        self.app.route("/v4/sshhunter/key/2", methods=["GET"])(self.get_ssh_key2)
+        self.app.route("/v4/sshhunter/key/<string:key_id>", methods=["GET"])(self.get_ssh_key)
         self.app.route("/v4/results", methods=["POST"])(self.get_results)
 
     def get_access_token(self):
@@ -81,23 +83,16 @@ class SandflyAPI:
         return {
             "more_results": False,
             "data": [
-                {"id": "1"},
-                {"id": "2"},
+                {"id": f"{key_id}"}
+                for key_id in range(1, KEYS_COUNT + 1)
             ],
         }
 
-    def get_ssh_key1(self):
+    def get_ssh_key(self, key_id):
         return {
-            "id": "1",
-            "friendly_name": "a b c",
-            "key_value": "KeyValue#123",
-        }
-
-    def get_ssh_key2(self):
-        return {
-            "id": "2",
-            "friendly_name": "d e f",
-            "key_value": "KeyValue#456",
+            "id": key_id,
+            "friendly_name": f"friendly name {key_id}",
+            "key_value": f"KeyValue#123@{key_id}",
         }
 
     def get_results(self):
