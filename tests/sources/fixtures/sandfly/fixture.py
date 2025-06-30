@@ -74,7 +74,7 @@ class SandflyAPI:
         return {
             "version": 3,
             "date": {"expiry": _format_date(current_date + timedelta(days=90))},
-            "customer": {"name": "Sandfly"},
+            "customer": {"name": fake.company()},
             "limits": {"features": ["demo", "elasticsearch_replication"]},
         }
 
@@ -82,7 +82,7 @@ class SandflyAPI:
         return {
             "data": [
                 {
-                    "host_id": fake_provider.fake.sha1(),
+                    "host_id": fake.sha1(),
                     "hostname": f"192.168.11.{host_id}",
                     "data": {"os": {"info": {"node": f"sandfly-target-{host_id}"}}},
                 }
@@ -102,13 +102,16 @@ class SandflyAPI:
     def get_ssh_key(self, key_id):
         return {
             "id": key_id,
-            "friendly_name": f"X{key_id} " + fake_provider.fake.name(),
+            "friendly_name": f"key{key_id} " + fake.word() + " " + fake.word(),
             "key_value": f"KeyValue#123#{key_id}",
         }
 
     def get_results(self):
         def _format_date(date):
             return date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        def _external_date(date):
+            return date.strftime("%Y%m%d%H%M%SZ")
 
         current_date = datetime.utcnow()
 
@@ -132,9 +135,9 @@ class SandflyAPI:
             "data": [
                 {
                     "sequence_id": f"1000{result_id}",
-                    "external_id": f"1000{result_id}",
+                    "external_id": _external_date(current_date) + "." + fake.sha1(),
                     "header": {"end_time": _format_date(current_date)},
-                    "data": {"key_data": f"my key data {result_id}", "status": "alert"},
+                    "data": {"key_data": fake.file_name(extension="sh"), "status": "alert"},
                 }
                 for result_id in range(self.results_start, self.results_stop)
             ],
