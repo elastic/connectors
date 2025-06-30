@@ -9,7 +9,7 @@
 import os
 from datetime import datetime, timedelta
 
-from flask import Flask, request
+from flask import Flask
 
 from tests.commons import WeightedFakeProvider
 
