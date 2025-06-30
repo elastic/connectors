@@ -265,12 +265,12 @@ class SandflyClient:
         try:
             await self.my_token.get()
             self._logger.info(
-                "SandflyClient PING : Successfully connected to Sandfly Security."
+                f"SandflyClient PING : Successfully connected to Sandfly Security [{self.server_url}]"
             )
             return True
         except Exception:
             self._logger.error(
-                "SandflyClient PING : Error while connecting to Sandfly Security."
+                f"SandflyClient PING : Error while connecting to Sandfly Security [{self.server_url}]"
             )
             raise
 
@@ -504,14 +504,8 @@ class SandflyDataSource(BaseDataSource):
     async def ping(self):
         try:
             await self.client.ping()
-            self._logger.info(
-                "SandflyDataSource PING : Successfully connected to Sandfly Security."
-            )
             return True
         except Exception:
-            self._logger.error(
-                "SandflyDataSource PING : Error while connecting to Sandfly Security."
-            )
             raise
 
     # async def changed(self):
@@ -584,7 +578,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_hostid)
             self._logger.info(
-                f"SNAPP: HOSTS : [{doc_id}] - [{t_hostname}] [{t_nodename}]"
+                f"SNAPP: HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
             )
 
             t_key_data = f"{t_nodename} ({t_hostname})"
@@ -609,7 +603,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_key_value)
             self._logger.info(
-                f"SNAPP: SSH_KEYS : [{doc_id}] - [{t_friendly}] : [{get_more_results}]"
+                f"SNAPP: SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
             )
 
             yield (
@@ -645,7 +639,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_external_id)
             self._logger.error(
-                f"SNAPP: GET_RESULTS-time : [{doc_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] : [{get_more_results}]"
+                f"SNAPP: GET_RESULTS-time : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
             )
 
             # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
@@ -687,7 +681,7 @@ class SandflyDataSource(BaseDataSource):
 
                 doc_id = hash_id(t_external_id)
                 self._logger.error(
-                    f"SNAPP: GET_RESULTS-id : [{doc_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] : [{get_more_results}]"
+                    f"SNAPP: GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
 
                 # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
@@ -758,7 +752,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_hostid)
             self._logger.info(
-                f"SNAPP: HOSTS : [{doc_id}] - [{t_hostname}] [{t_nodename}]"
+                f"SNAPP: HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
             )
 
             t_key_data = f"{t_nodename} ({t_hostname})"
@@ -784,7 +778,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_key_value)
             self._logger.info(
-                f"SNAPP: SSH_KEYS : [{doc_id}] - [{t_friendly}] : [{get_more_results}]"
+                f"SNAPP: SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
             )
 
             yield (
@@ -821,7 +815,7 @@ class SandflyDataSource(BaseDataSource):
 
                 doc_id = hash_id(t_external_id)
                 self._logger.error(
-                    f"SNAPP: GET_RESULTS-id : [{doc_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] : [{get_more_results}]"
+                    f"SNAPP: GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
 
                 # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
