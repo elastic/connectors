@@ -264,7 +264,7 @@ class SandflyClient:
     async def ping(self):
         try:
             await self.my_token.get()
-            self._logger.info(
+            self._logger.debug(
                 f"SandflyClient PING : Successfully connected to Sandfly Security [{self.server_url}]"
             )
             return True
@@ -540,7 +540,7 @@ class SandflyDataSource(BaseDataSource):
             t_customer = t_license["customer"]["name"]
             t_expiry = t_license["date"]["expiry"]
 
-            self._logger.info(f"SANDFLY GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+            self._logger.warning(f"SANDFLY GET_LICENSE : [{t_customer}] : [{t_expiry}]")
 
             now = datetime.utcnow()
             expiry_date = extract_sandfly_date(t_expiry)
@@ -578,7 +578,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_hostid)
             self._logger.info(
-                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
+                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostname}] [{t_nodename}]"
             )
 
             t_key_data = f"{t_nodename} ({t_hostname})"
@@ -603,7 +603,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_key_value)
             self._logger.info(
-                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
+                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_friendly}] : [{get_more_results}]"
             )
 
             yield (
@@ -658,7 +658,7 @@ class SandflyDataSource(BaseDataSource):
                 None,
             )
 
-        self._logger.info(
+        self._logger.warning(
             f"SANDFLY GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
         )
         if last_sequence_id is not None:
@@ -700,7 +700,7 @@ class SandflyDataSource(BaseDataSource):
                     None,
                 )
 
-            self._logger.info(
+            self._logger.warning(
                 f"SANDFLY GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
             )
             if last_sequence_id is not None:
@@ -752,7 +752,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_hostid)
             self._logger.info(
-                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
+                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostname}] [{t_nodename}]"
             )
 
             t_key_data = f"{t_nodename} ({t_hostname})"
@@ -778,7 +778,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_key_value)
             self._logger.info(
-                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
+                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_friendly}] : [{get_more_results}]"
             )
 
             yield (
@@ -835,7 +835,7 @@ class SandflyDataSource(BaseDataSource):
                     OP_INDEX,
                 )
 
-            self._logger.info(
+            self._logger.warning(
                 f"SANDFLY INCREMENTAL GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
             )
             self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
