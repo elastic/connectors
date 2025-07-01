@@ -540,7 +540,7 @@ class SandflyDataSource(BaseDataSource):
             t_customer = t_license["customer"]["name"]
             t_expiry = t_license["date"]["expiry"]
 
-            self._logger.info(f"SNAPP: GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+            self._logger.info(f"SANDFLY GET_LICENSE : [{t_customer}] : [{t_expiry}]")
 
             now = datetime.utcnow()
             expiry_date = extract_sandfly_date(t_expiry)
@@ -578,7 +578,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_hostid)
             self._logger.info(
-                f"SNAPP: HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
+                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
             )
 
             t_key_data = f"{t_nodename} ({t_hostname})"
@@ -603,7 +603,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_key_value)
             self._logger.info(
-                f"SNAPP: SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
+                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
             )
 
             yield (
@@ -639,7 +639,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_external_id)
             self._logger.error(
-                f"SNAPP: GET_RESULTS-time : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
+                f"SANDFLY GET_RESULTS-time : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
             )
 
             # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
@@ -659,7 +659,7 @@ class SandflyDataSource(BaseDataSource):
             )
 
         self._logger.info(
-            f"SNAPP: GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+            f"SANDFLY GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
         )
         if last_sequence_id is not None:
             self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
@@ -681,7 +681,7 @@ class SandflyDataSource(BaseDataSource):
 
                 doc_id = hash_id(t_external_id)
                 self._logger.error(
-                    f"SNAPP: GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
+                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
 
                 # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
@@ -701,7 +701,7 @@ class SandflyDataSource(BaseDataSource):
                 )
 
             self._logger.info(
-                f"SNAPP: GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+                f"SANDFLY GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
             )
             if last_sequence_id is not None:
                 self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
@@ -718,7 +718,7 @@ class SandflyDataSource(BaseDataSource):
             t_customer = t_license["customer"]["name"]
             t_expiry = t_license["date"]["expiry"]
 
-            self._logger.info(f"SNAPP: GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+            self._logger.info(f"SANDFLY GET_LICENSE : [{t_customer}] : [{t_expiry}]")
 
             now = datetime.utcnow()
             expiry_date = extract_sandfly_date(t_expiry)
@@ -752,7 +752,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_hostid)
             self._logger.info(
-                f"SNAPP: HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
+                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostid}] : [{t_hostname}] [{t_nodename}]"
             )
 
             t_key_data = f"{t_nodename} ({t_hostname})"
@@ -778,7 +778,7 @@ class SandflyDataSource(BaseDataSource):
 
             doc_id = hash_id(t_key_value)
             self._logger.info(
-                f"SNAPP: SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
+                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_key_value}] - [{t_friendly}] : [{get_more_results}]"
             )
 
             yield (
@@ -795,7 +795,7 @@ class SandflyDataSource(BaseDataSource):
             )
 
         last_sequence_id = self._sync_cursor[CURSOR_SEQUENCE_ID_KEY]
-        self._logger.info(f"SNAPP: INCREMENTAL last_sequence_id : [{last_sequence_id}]")
+        self._logger.info(f"SANDFLY INCREMENTAL last_sequence_id : [{last_sequence_id}]")
         get_more_results = True
 
         while get_more_results:
@@ -815,7 +815,7 @@ class SandflyDataSource(BaseDataSource):
 
                 doc_id = hash_id(t_external_id)
                 self._logger.error(
-                    f"SNAPP: GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
+                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
 
                 # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
@@ -836,7 +836,7 @@ class SandflyDataSource(BaseDataSource):
                 )
 
             self._logger.info(
-                f"SNAPP: INCREMENTAL GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+                f"SANDFLY INCREMENTAL GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
             )
             self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
 
