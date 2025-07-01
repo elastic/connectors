@@ -638,7 +638,7 @@ class SandflyDataSource(BaseDataSource):
                 t_key_data = "- no data -"
 
             doc_id = hash_id(t_external_id)
-            self._logger.error(
+            self._logger.info(
                 f"SANDFLY GET_RESULTS-time : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
             )
 
@@ -680,7 +680,7 @@ class SandflyDataSource(BaseDataSource):
                     t_key_data = "- no data -"
 
                 doc_id = hash_id(t_external_id)
-                self._logger.error(
+                self._logger.info(
                     f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
 
@@ -814,7 +814,7 @@ class SandflyDataSource(BaseDataSource):
                     t_key_data = "- no data -"
 
                 doc_id = hash_id(t_external_id)
-                self._logger.error(
+                self._logger.info(
                     f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
 
