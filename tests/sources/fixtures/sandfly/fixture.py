@@ -56,7 +56,9 @@ class SandflyAPI:
         self.app.route("/v4/license", methods=["GET"])(self.get_license)
         self.app.route("/v4/hosts", methods=["GET"])(self.get_hosts)
         self.app.route("/v4/sshhunter/summary", methods=["GET"])(self.get_ssh_summary)
-        self.app.route("/v4/sshhunter/key/<string:key_id>", methods=["GET"])(self.get_ssh_key)
+        self.app.route("/v4/sshhunter/key/<string:key_id>", methods=["GET"])(
+            self.get_ssh_key
+        )
         self.app.route("/v4/results", methods=["POST"])(self.get_results)
 
     def get_access_token(self):
@@ -93,10 +95,7 @@ class SandflyAPI:
     def get_ssh_summary(self):
         return {
             "more_results": False,
-            "data": [
-                {"id": f"{key_id}"}
-                for key_id in range(1, KEYS_COUNT + 1)
-            ],
+            "data": [{"id": f"{key_id}"} for key_id in range(1, KEYS_COUNT + 1)],
         }
 
     def get_ssh_key(self, key_id):
@@ -137,7 +136,10 @@ class SandflyAPI:
                     "sequence_id": f"1000{result_id}",
                     "external_id": _external_date(current_date) + "." + fake.sha1(),
                     "header": {"end_time": _format_date(current_date)},
-                    "data": {"key_data": fake.file_name(extension="sh"), "status": "alert"},
+                    "data": {
+                        "key_data": fake.file_name(extension="sh"),
+                        "status": "alert",
+                    },
                 }
                 for result_id in range(self.results_start, self.results_stop)
             ],
