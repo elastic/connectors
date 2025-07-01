@@ -187,7 +187,7 @@ def interactive_service_type_prompt():
 @click.option(
     "--index-name",
     prompt=f"{click.style('?', fg='green')} Index name",
-    help="Name of the index. If the connector will be native, `search-` will be prepended to the index name.",
+    help="Name of the index. For managed connectors, index name should be prefixed with `content-`. For self-managed connectors, no prefix is required.",
 )
 @click.option(
     "--service-type",
