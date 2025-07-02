@@ -330,9 +330,7 @@ class SandflyClient:
             t_content_json = json.loads(t_content)
             t_total = t_content_json["total"]
             t_more_results = t_content_json["more_results"]
-            self._logger.debug(
-                f"GET_RESULTS_BY_ID : [{t_total}] : [{t_more_results}]"
-            )
+            self._logger.debug(f"GET_RESULTS_BY_ID : [{t_total}] : [{t_more_results}]")
 
             t_data_list = t_content_json["data"]
             for t_result_item in t_data_list:
