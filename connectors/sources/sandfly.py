@@ -525,11 +525,11 @@ class SandflyDataSource(BaseDataSource):
 
         return self._sync_cursor
 
-    def _format_doc(self, doc_id, doc_time, doc_tag, doc_text, doc_field, doc_data):
+    def _format_doc(self, doc_id, doc_time, doc_text, doc_field, doc_data):
         document = {
             "_id": doc_id,
             "_timestamp": doc_time,
-            "sandfly_source": doc_tag,
+            "sandfly_data_type": doc_field,
             "sandfly_key_data": doc_text,
             doc_field: doc_data,
         }
@@ -589,7 +589,6 @@ class SandflyDataSource(BaseDataSource):
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_tag="hosts_tag",
                     doc_text=t_key_data,
                     doc_field="sandfly_hosts",
                     doc_data=t_host_item,
@@ -612,7 +611,6 @@ class SandflyDataSource(BaseDataSource):
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_tag="ssh_keys_tag",
                     doc_text=t_friendly,
                     doc_field="sandfly_ssh_keys",
                     doc_data=t_key_item,
@@ -652,7 +650,6 @@ class SandflyDataSource(BaseDataSource):
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=t_timestamp,
-                    doc_tag="results_tag",
                     doc_text=t_key_data,
                     doc_field="sandfly_results",
                     doc_data=t_result_item,
@@ -694,7 +691,6 @@ class SandflyDataSource(BaseDataSource):
                     self._format_doc(
                         doc_id=doc_id,
                         doc_time=t_timestamp,
-                        doc_tag="results_tag",
                         doc_text=t_key_data,
                         doc_field="sandfly_results",
                         doc_data=t_result_item,
@@ -763,7 +759,6 @@ class SandflyDataSource(BaseDataSource):
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_tag="hosts_tag",
                     doc_text=t_key_data,
                     doc_field="sandfly_hosts",
                     doc_data=t_host_item,
@@ -787,7 +782,6 @@ class SandflyDataSource(BaseDataSource):
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_tag="ssh_keys_tag",
                     doc_text=t_friendly,
                     doc_field="sandfly_ssh_keys",
                     doc_data=t_key_item,
@@ -830,7 +824,6 @@ class SandflyDataSource(BaseDataSource):
                     self._format_doc(
                         doc_id=doc_id,
                         doc_time=t_timestamp,
-                        doc_tag="results_tag",
                         doc_text=t_key_data,
                         doc_field="sandfly_results",
                         doc_data=t_result_item,
