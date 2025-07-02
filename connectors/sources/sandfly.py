@@ -330,7 +330,7 @@ class SandflyClient:
             t_content_json = json.loads(t_content)
             t_total = t_content_json["total"]
             t_more_results = t_content_json["more_results"]
-            self._logger.warning(
+            self._logger.debug(
                 f"GET_RESULTS_BY_ID : [{t_total}] : [{t_more_results}]"
             )
 
@@ -380,7 +380,7 @@ class SandflyClient:
 
             t_total = t_content_json["total"]
             t_more_results = t_content_json["more_results"]
-            self._logger.warning(
+            self._logger.debug(
                 f"GET_RESULTS_BY_TIME : [{t_total}] : [{t_more_results}]"
             )
 
