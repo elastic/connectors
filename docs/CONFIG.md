@@ -55,22 +55,20 @@ connectors:
   - connector_id: 1234
     service_type: <service_type>
     api_key: <key2>
-    # Used to write data to the `search-*` index associated with connector 1234
+    # Used to write data to the content index associated with connector 1234
     # You may have multiple connectors in your config file!
   - connector_id: 5678
     service_type: <service_type>
     api_key: <key3>
-  # Used to write data to the `search-*` index associated with connector 5678
+  # Used to write data to the content index associated with connector 5678
   - connector_id: abcd
     service_type: <service_type>
   # No explicit api key specified, so this connector will used <key1>
 ```
 
-## Connector service on Elastic Cloud
 
-When you have an Enterprise Search deployment on Elastic Cloud (post 8.5.0), the connector service is **automatically deployed**.
-The connector service runs in native mode on Elastic Cloud, and the Elasticsearch connection configurations (i.e. `host`, `username`, `password`) are automatically configured.
-A special Cloud user (`cloud-internal-enterprise_search-server`) is used for the Elasticsearch connection.
-This user has proper privileges on the connector index (`.elastic-connectors`), the connector job index (`.elastic-connectors-sync-jobs`) and the connector content indices (`search-*`).
+## Managed connectors on Elastic Cloud
 
-To run self-managed connector clients, you will need to run the connector service on-prem, as described in the first section.
+Elastic managed connectors are now available via agentless deployment on Elastic Cloud. The connector service runs using a Fleet Server account that has the `manage_connector` permission and access to the connector indices (`.elastic-connectors`, `.elastic-connectors-sync-jobs`) and the connector content indices (`content-*`).
+
+The Elasticsearch connection configurations (i.e. `host`, `api_key`) are automatically configured by the Fleet Server infrastructure.

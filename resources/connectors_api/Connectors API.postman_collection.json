@@ -40,7 +40,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"index_name\": \"search-test-index\",\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
+							"raw": "{\n    \"index_name\": \"test-index\",\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -67,7 +67,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"index_name\": \"search-test-index\",\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
+							"raw": "{\n    \"index_name\": \"test-index\",\n    \"name\": \"my-connector\",\n    \"is_native\": false,\n    \"service_type\": \"google_drive\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -1296,7 +1296,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"index_name\": \"search-test-index-2\"\n}",
+							"raw": "{\n    \"index_name\": \"test-index-2\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
