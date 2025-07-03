@@ -17,7 +17,6 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
-    Queries,
     configured_tables,
     is_wildcard,
 )
@@ -39,38 +38,6 @@ RETRY_INTERVAL = 2
 
 def format_list(list_):
     return ", ".join(list_)
-
-
-class MySQLQueries(Queries):
-    def __init__(self, database):
-        self.database = database
-
-    def all_tables(self, **kwargs):
-        return f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}'"
-
-    def table_primary_key(self, table):
-        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
-
-    def table_data(self, table, primary_keys=None, limit=None, offset=None):
-        if primary_keys:
-            return f"SELECT * FROM `{self.database}`.`{table}` ORDER BY '{', '.join(primary_keys)}' LIMIT {limit} OFFSET {offset}"
-        else:
-            return f"SELECT * FROM `{self.database}`.`{table}`"
-
-    def table_last_update_time(self, table):
-        return f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
-
-    def columns(self, table):
-        return f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' ORDER BY ORDINAL_POSITION"
-
-    def ping(self):
-        pass
-
-    def table_data_count(self, table):
-        return f"SELECT COUNT(*) FROM `{self.database}`.`{table}`"
-
-    def all_schemas(self):
-        pass
 
 
 class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
@@ -160,7 +127,6 @@ class MySQLClient:
         self.fetch_size = fetch_size
         self.ssl_enabled = ssl_enabled
         self.ssl_certificate = ssl_certificate
-        self.queries = MySQLQueries(self.database)
         self.connection_pool = None
         self.connection = None
         self._logger = logger_
@@ -198,7 +164,9 @@ class MySQLClient:
     )
     async def get_all_table_names(self):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-            await cursor.execute(self.queries.all_tables())
+            await cursor.execute(
+                f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}'"
+            )
             return [table[0] for table in await cursor.fetchall()]
 
     async def ping(self):
@@ -221,7 +189,9 @@ class MySQLClient:
             return [f"{column[0]}" for column in cursor.description]
 
     async def get_column_names_for_table(self, table):
-        return await self.get_column_names_for_query(self.queries.table_data(table))
+        return await self.get_column_names_for_query(
+            f"SELECT * FROM `{self.database}`.`{table}`"
+        )
 
     @retryable(
         retries=RETRIES,
@@ -230,7 +200,9 @@ class MySQLClient:
     )
     async def get_primary_key_column_names(self, table):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-            await cursor.execute(self.queries.table_primary_key(table))
+            await cursor.execute(
+                f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
+            )
 
             return [f"{column[0]}" for column in await cursor.fetchall()]
 
@@ -241,7 +213,9 @@ class MySQLClient:
     )
     async def get_last_update_time(self, table):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-            await cursor.execute(self.queries.table_last_update_time(table))
+            await cursor.execute(
+                f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
+            )
 
             result = await cursor.fetchone()
 
@@ -259,12 +233,7 @@ class MySQLClient:
         offset = 0
         while offset < table_row_count:
             async for row in self._fetchmany_in_batches(
-                self.queries.table_data(
-                    table,
-                    primary_keys=primary_keys,
-                    limit=self.fetch_size,
-                    offset=offset,
-                )
+                f"SELECT * FROM `{self.database}`.`{table}` ORDER BY '{', '.join(primary_keys)}' LIMIT {self.fetch_size} OFFSET {offset}"
             ):
                 if row:
                     yield row
@@ -390,7 +359,6 @@ class MySqlDataSource(BaseDataSource):
         self.certificate = self.configuration["ssl_ca"]
         self.database = self.configuration["database"]
         self.tables = self.configuration["tables"]
-        self.queries = MySQLQueries(self.database)
 
     @classmethod
     def get_default_configuration(cls):
@@ -593,7 +561,9 @@ class MySqlDataSource(BaseDataSource):
             column_names = await client.get_column_names_for_table(table)
 
             async with client.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-                await cursor.execute(client.queries.table_data_count(table=table))
+                await cursor.execute(
+                    f"SELECT COUNT(*) FROM `{self.database}`.`{table}`"
+                )
                 table_row_count = await cursor.fetchone()
 
             async for row in client.yield_rows_for_table(
@@ -630,7 +600,7 @@ class MySqlDataSource(BaseDataSource):
                 [await client.get_last_update_time(table) for table in tables],
             )
         )
-        column_names = await client.get_column_names_for_query(query=query)
+        column_names = await client.get_column_names_for_query(query)
 
         if set(primary_key_columns) - set(column_names):
             self._logger.warning(
