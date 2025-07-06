@@ -10,7 +10,7 @@ from tests.sources.support import create_source
 
 
 @asynccontextmanager
-async def create_abs_source(
+async def create_onelake_source(
     use_text_extraction_service=False,
 ):
     async with create_source(
@@ -30,7 +30,7 @@ async def create_abs_source(
 async def test_init():
     """Test OneLakeDataSource initialization"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         # Check that all configuration values are set correctly
         assert source.tenant_id == source.configuration["tenant_id"]
         assert source.client_id == source.configuration["client_id"]
@@ -79,7 +79,7 @@ def test_get_default_configuration():
 async def test_initialize():
     """Test initialize method"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_service_client = Mock()
         mock_file_system_client = Mock()
         mock_directory_client = Mock()
@@ -126,7 +126,7 @@ async def test_ping_for_successful_connection():
     """Test ping method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch.object(
             source, "_get_directory_paths", new_callable=AsyncMock
         ) as mock_get_paths:
@@ -142,7 +142,7 @@ async def test_ping_for_failed_connection():
     """Test ping method of OneLakeDataSource class with negative case"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch.object(
             source, "_get_directory_paths", new_callable=AsyncMock
         ) as mock_get_paths:
@@ -160,7 +160,7 @@ async def test_get_token_credentials():
     """Test _get_token_credentials method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         tenant_id = source.configuration["tenant_id"]
         client_id = source.configuration["client_id"]
         client_secret = source.configuration["client_secret"]
@@ -182,7 +182,7 @@ async def test_get_token_credentials():
 async def test_get_token_credentials_error():
     """Test _get_token_credentials method when credential creation fails"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch(
             "connectors.sources.onelake.ClientSecretCredential", autospec=True
         ) as mock_credential:
@@ -197,7 +197,7 @@ async def test_get_service_client():
     """Test _get_service_client method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_service_client = Mock()
         mock_credentials = Mock()
 
@@ -224,7 +224,7 @@ async def test_get_service_client():
 async def test_get_service_client_error():
     """Test _get_service_client method when client creation fails"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch(
             "connectors.sources.onelake.DataLakeServiceClient",
             side_effect=Exception("Service client error"),
@@ -238,7 +238,7 @@ async def test_get_file_system_client():
     """Test _get_file_system_client method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_system_client = Mock()
         workspace_name = source.configuration["workspace_name"]
 
@@ -263,7 +263,7 @@ async def test_get_file_system_client():
 async def test_get_file_system_client_error():
     """Test _get_file_system_client method when client creation fails"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_service_client = Mock()
         mock_service_client.get_file_system_client.side_effect = Exception("Test error")
         source.service_client = mock_service_client
@@ -277,7 +277,7 @@ async def test_get_directory_client():
     """Test _get_directory_client method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_directory_client = Mock()
         data_path = source.configuration["data_path"]
 
@@ -300,7 +300,7 @@ async def test_get_directory_client():
 async def test_get_directory_client_error():
     """Test _get_directory_client method when client creation fails"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_system_client = Mock()
         mock_file_system_client.get_directory_client.side_effect = Exception(
             "Test error"
@@ -319,7 +319,7 @@ async def test_get_file_client_success():
     mock_directory_client = Mock()
     mock_directory_client.get_file_client.return_value = mock_file_client
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         # Mock the directory_client directly since that's what _get_file_client uses
         source.directory_client = mock_directory_client
 
@@ -333,7 +333,7 @@ async def test_get_file_client_success():
 async def test_get_file_client_error():
     """Test file client retrieval with error"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_directory_client = Mock()
         mock_directory_client.get_file_client.side_effect = Exception(
             "Error while getting file client"
@@ -349,7 +349,7 @@ async def test_get_directory_paths():
     """Test _get_directory_paths method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_paths = ["path1", "path2"]
         directory_path = "mock_directory_path"
 
@@ -375,7 +375,7 @@ async def test_get_directory_paths():
 async def test_get_directory_paths_with_initialize():
     """Test _get_directory_paths method when file_system_client is None"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_paths = ["path1", "path2"]
         directory_path = "mock_directory_path"
 
@@ -407,7 +407,7 @@ async def test_get_directory_paths_with_initialize():
 async def test_get_directory_paths_error():
     """Test _get_directory_paths method when getting paths fails"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         directory_path = "mock_directory_path"
 
         # Set up the file_system_client so initialize() is not called
@@ -428,7 +428,7 @@ async def test_format_file():
     """Test format_file method of OneLakeDataSource class"""
 
     # Setup
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_client = MagicMock()
         mock_file_properties = MagicMock(
             creation_time=datetime(2022, 4, 21, 12, 12, 30),
@@ -465,7 +465,7 @@ async def test_format_file():
 async def test_format_file_error():
     """Test format_file method when getting properties fails"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_client = MagicMock()
         mock_file_client.file_system_name = "my_file_system"
 
@@ -482,7 +482,7 @@ async def test_format_file_error():
 async def test_format_file_empty_name():
     """Test format_file method with empty file name"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_client = MagicMock()
         mock_file_properties = MagicMock(
             creation_time=datetime(2022, 4, 21, 12, 12, 30),
@@ -512,7 +512,7 @@ async def test_download_file():
     mock_download = Mock()
     mock_chunks = ["chunk1", "chunk2", "chunk3"]
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(
                 return_value=mock_download
@@ -536,7 +536,7 @@ async def test_download_file_with_error():
     # Setup
     mock_file_client = Mock()
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(
                 side_effect=Exception("Test error")
@@ -552,7 +552,7 @@ async def test_download_file_with_error():
 async def test_get_content_with_download():
     """Test get_content method when doit=True"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
 
         class FileClientMock:
             file_system_name = "mockfilesystem"
@@ -594,7 +594,7 @@ async def test_get_content_with_download():
 async def test_get_content_without_download():
     """Test get_content method when doit=False"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         actual_response = await source.get_content("file1.txt", doit=False)
         assert actual_response is None
 
@@ -609,7 +609,7 @@ async def test_prepare_files():
         Mock(name="doc2.txt"),
     ]
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_results = [
             {"name": "doc1.txt", "id": "1"},
             {"name": "doc2.txt", "id": "2"},
@@ -647,7 +647,7 @@ async def test_get_docs():
         for doc in mock_file_docs:
             yield doc
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         with patch.object(
             source, "_get_directory_paths", new_callable=AsyncMock
         ) as mock_get_paths:
@@ -675,7 +675,7 @@ async def test_get_docs():
 async def test_process_items_concurrently():
     """Test _process_items_concurrently method"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         items = ["item1", "item2", "item3"]
 
         async def mock_process_item(item):
@@ -691,7 +691,7 @@ async def test_process_items_concurrently():
 async def test_process_items_concurrently_with_custom_concurrency():
     """Test _process_items_concurrently method with custom max_concurrency"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         items = ["item1", "item2"]
 
         async def mock_process_item(item):
@@ -709,7 +709,7 @@ async def test_process_items_concurrently_with_custom_concurrency():
 async def test_get_files_properties():
     """Test get_files_properties method"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
         mock_file_client1 = Mock()
         mock_file_client2 = Mock()
         mock_properties1 = Mock()
@@ -738,7 +738,7 @@ async def test_get_files_properties():
 async def test_get_content_file_cannot_be_downloaded():
     """Test get_content method when file cannot be downloaded"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
 
         class FileClientMock:
             file_system_name = "mockfilesystem"
@@ -776,7 +776,7 @@ async def test_get_content_file_cannot_be_downloaded():
 async def test_get_content_extracted_doc_is_none():
     """Test get_content method when download_and_extract_file returns None"""
 
-    async with create_abs_source() as source:
+    async with create_onelake_source() as source:
 
         class FileClientMock:
             file_system_name = "mockfilesystem"
