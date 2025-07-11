@@ -258,9 +258,6 @@ class SandflyClient:
         await self.http_session.close()
         self.my_client.close()
 
-    # async def ping(self):
-    #     return True
-
     async def ping(self):
         try:
             await self.my_token.get()
@@ -498,18 +495,12 @@ class SandflyDataSource(BaseDataSource):
             },
         }
 
-    # async def ping(self):
-    #     return True
-
     async def ping(self):
         try:
             await self.client.ping()
             return True
         except Exception:
             raise
-
-    # async def changed(self):
-    #     return True
 
     async def close(self):
         await self.client.close()
@@ -552,8 +543,8 @@ class SandflyDataSource(BaseDataSource):
             if "limits" in t_license:
                 if "features" in t_license["limits"]:
                     t_features_list = t_license["limits"]["features"]
-                    for f in t_features_list:
-                        if f == "elasticsearch_replication":
+                    for feature in t_features_list:
+                        if feature == "elasticsearch_replication":
                             is_licensed = True
 
             if not is_licensed:
@@ -563,10 +554,6 @@ class SandflyDataSource(BaseDataSource):
         async for t_host_item in self.client.get_hosts():
             t_hostid = t_host_item["host_id"]
             t_hostname = t_host_item["hostname"]
-
-            # filename = f"x_host_item_{t_hostid}_{t_hostname}.json"
-            # async with aiofiles.open(filename, "w") as file:
-            #   await file.write(json.dumps(t_host_item, indent=4, default=str, sort_keys=False))
 
             t_nodename = "<unknown>"
             if "data" in t_host_item:
@@ -640,10 +627,6 @@ class SandflyDataSource(BaseDataSource):
                 f"SANDFLY GET_RESULTS-time : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
             )
 
-            # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
-            # async with aiofiles.open(filename, "w") as file:
-            #   await file.write(json.dumps(t_result_item, indent=4, default=str, sort_keys=False))
-
             yield (
                 self._format_doc(
                     doc_id=doc_id,
@@ -680,10 +663,6 @@ class SandflyDataSource(BaseDataSource):
                 self._logger.debug(
                     f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
-
-                # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
-                # async with aiofiles.open(filename, "w") as file:
-                #   await file.write(json.dumps(t_result_item, indent=4, default=str, sort_keys=False))
 
                 yield (
                     self._format_doc(
@@ -726,8 +705,8 @@ class SandflyDataSource(BaseDataSource):
             if "limits" in t_license:
                 if "features" in t_license["limits"]:
                     t_features_list = t_license["limits"]["features"]
-                    for f in t_features_list:
-                        if f == "elasticsearch_replication":
+                    for feature in t_features_list:
+                        if feature == "elasticsearch_replication":
                             is_licensed = True
 
             if not is_licensed:
@@ -813,10 +792,6 @@ class SandflyDataSource(BaseDataSource):
                 self._logger.debug(
                     f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
                 )
-
-                # filename = f"x_result_{last_sequence_id}_{doc_id}.json"
-                # async with aiofiles.open(filename, "w") as file:
-                #   await file.write(json.dumps(t_result_item, indent=4, default=str, sort_keys=False))
 
                 yield (
                     self._format_doc(
