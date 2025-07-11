@@ -172,13 +172,13 @@ async def sandfly_data_source():
 async def test_sandfly_date(sandfly_client, mock_responses):
     t_expiry = "2025-06-23T17:35:23Z"
     expiry_date = extract_sandfly_date(t_expiry)
-    assert expiry_date
+    assert type(expiry_date) is datetime
 
     now = datetime.utcnow()
     t_date_str1 = format_sandfly_date(now, True)
-    assert t_date_str1
+    assert type(t_date_str1) is str and len(t_date_str1) == 20
     t_date_str2 = format_sandfly_date(now, False)
-    assert t_date_str2
+    assert type(t_date_str2) is str and len(t_date_str2) == 20
 
 
 # Tests for SandflyClient
@@ -191,7 +191,7 @@ async def test_client_ping_success(sandfly_client, mock_responses):
         status=200,
         payload=TOKEN_RESPONSE_DATA,
     )
-    assert await sandfly_client.ping()
+    assert await sandfly_client.ping() is True
 
 
 @pytest.mark.asyncio
@@ -222,9 +222,9 @@ async def test_client_get_license(sandfly_client, mock_responses):
 
     async for t_license in sandfly_client.get_license():
         t_customer = t_license["customer"]["name"]
-        assert t_customer
+        assert t_customer == "Sandfly"
         t_expiry = t_license["date"]["expiry"]
-        assert t_expiry
+        assert t_expiry == "2026-12-30T19:30:45Z"
 
 
 @pytest.mark.asyncio
@@ -243,13 +243,13 @@ async def test_client_get_hosts(sandfly_client, mock_responses):
 
     async for t_host_item in sandfly_client.get_hosts():
         t_hostid = t_host_item["host_id"]
-        assert t_hostid
+        assert t_hostid in ("1001", "1002", "1003")
         t_hostname = t_host_item["hostname"]
-        assert t_hostname
+        assert "192.168.11." in t_hostname
         if "data" in t_host_item:
             if t_host_item["data"] is not None:
                 t_nodename = t_host_item["data"]["os"]["info"]["node"]
-                assert t_nodename
+                assert "sandfly-" in t_nodename
 
 
 @pytest.mark.asyncio
@@ -281,9 +281,9 @@ async def test_client_get_ssh_keys(sandfly_client, mock_responses):
     async for t_key_item, get_more_results in sandfly_client.get_ssh_keys():
         assert get_more_results is False
         t_friendly = t_key_item["friendly_name"]
-        assert t_friendly
+        assert t_friendly in ("a b c", "d e f")
         t_key_value = t_key_item["key_value"]
-        assert t_key_value
+        assert "KeyValue#" in t_key_value
 
 
 @pytest.mark.asyncio
@@ -306,9 +306,9 @@ async def test_client_get_results_by_time(sandfly_client, mock_responses):
     ):
         assert get_more_results is False
         last_sequence_id = t_result_item["sequence_id"]
-        assert last_sequence_id
+        assert last_sequence_id in ("1003", "1004")
         t_status = t_result_item["data"]["status"]
-        assert t_status
+        assert t_status == "alert"
 
     mock_responses.post(
         URL_SANDFLY_RESULTS,
@@ -321,9 +321,9 @@ async def test_client_get_results_by_time(sandfly_client, mock_responses):
     ):
         assert get_more_results is False
         last_sequence_id = t_result_item["sequence_id"]
-        assert last_sequence_id
+        assert last_sequence_id in ("1003", "1004")
         t_status = t_result_item["data"]["status"]
-        assert t_status
+        assert t_status == "alert"
 
 
 @pytest.mark.asyncio
@@ -346,9 +346,9 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
     ):
         assert get_more_results is False
         last_sequence_id = t_result_item["sequence_id"]
-        assert last_sequence_id
+        assert last_sequence_id in ("1003", "1004")
         t_status = t_result_item["data"]["status"]
-        assert t_status
+        assert t_status == "alert"
 
     mock_responses.post(
         URL_SANDFLY_RESULTS,
@@ -361,9 +361,9 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
     ):
         assert get_more_results is False
         last_sequence_id = t_result_item["sequence_id"]
-        assert last_sequence_id
+        assert last_sequence_id in ("1003", "1004")
         t_status = t_result_item["data"]["status"]
-        assert t_status
+        assert t_status == "alert"
 
 
 # Tests for SandflyDataSource
@@ -376,7 +376,7 @@ async def test_data_source_ping_success(sandfly_data_source, mock_responses):
         status=200,
         payload=TOKEN_RESPONSE_DATA,
     )
-    assert await sandfly_data_source.ping()
+    assert await sandfly_data_source.ping() is True
 
 
 @pytest.mark.asyncio
