@@ -184,7 +184,7 @@ class MySQLClient:
     )
     async def get_column_names_for_query(self, query):
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
-            await cursor.execute(query)
+            await cursor.execute(f"SELECT q.* FROM ({query}) as q LIMIT 0")
 
             return [f"{column[0]}" for column in cursor.description]
 
