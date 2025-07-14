@@ -46,6 +46,7 @@ async def slack_data_source():
 @pytest.mark.asyncio
 async def test_slack_client_list_channels(slack_client, mock_responses):
     page1 = {
+        "ok": True,
         "channels": [{"name": "channel1", "is_member": True}],
         "response_metadata": {"next_cursor": "abc"},
     }
@@ -54,10 +55,11 @@ async def test_slack_client_list_channels(slack_client, mock_responses):
         payload=page1,
     )
     page2 = {
+        "ok": True,
         "channels": [
             {"name": "channel2", "id": "2", "is_member": False},
             {"name": "channel3", "is_member": True},
-        ]
+        ],
     }
     mock_responses.get(
         "https://slack.com/api/conversations.list?limit=200&cursor=abc",
@@ -88,18 +90,18 @@ async def test_slack_client_list_messages(slack_client, mock_responses):
     message3 = {"text": "message3", "type": "message", "ts": timestamp3}
     reply = {"text": "reply", "type": "message"}
 
-    page1 = {"messages": [message1, message2], "has_more": True}
+    page1 = {"ok": True, "messages": [message1, message2], "has_more": True}
     mock_responses.get(
         f"https://slack.com/api/conversations.history?channel=1&limit=200&oldest={timestamp1}&latest={timestamp3}",
         payload=page1,
     )
-    replies = {"messages": [message1, reply]}
+    replies = {"ok": True, "messages": [message1, reply]}
     mock_responses.get(
         f"https://slack.com/api/conversations.replies?channel=1&limit=200&ts={timestamp1}",
         payload=replies,
     )
 
-    page2 = {"messages": [message3]}
+    page2 = {"ok": True, "messages": [message3]}
     mock_responses.get(
         f"https://slack.com/api/conversations.history?channel=1&limit=200&oldest={timestamp1}&latest={timestamp2}",
         payload=page2,
@@ -118,7 +120,7 @@ async def test_slack_client_list_messages(slack_client, mock_responses):
 
 @pytest.mark.asyncio
 async def test_slack_client_list_users(slack_client, mock_responses):
-    response_data = {"members": [{"id": "user1"}]}
+    response_data = {"ok": True, "members": [{"id": "user1"}]}
     mock_responses.get(
         "https://slack.com/api/users.list?limit=200",
         payload=response_data,
@@ -136,8 +138,8 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_handle_throttled_error(slack_client, mock_responses):
     channel = {"id": 1, "name": "test"}
-    error_response_data = {"error": "rate_limited"}
-    response_data = {"messages": [{"text": "message", "type": "message"}]}
+    error_response_data = {"ok": False, "error": "rate_limited"}
+    response_data = {"ok": True, "messages": [{"text": "message", "type": "message"}]}
     mock_responses.get(
         "https://slack.com/api/conversations.history?channel=1&latest=456&limit=200&oldest=123",
         status=429,
@@ -172,7 +174,7 @@ async def test_ping(slack_client, mock_responses):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_bad_ping(slack_client, mock_responses):
-    response_data = {"error": "not_authed"}
+    response_data = {"ok": False, "error": "not_authed"}
     mock_responses.get(
         "https://slack.com/api/auth.test",
         status=401,
