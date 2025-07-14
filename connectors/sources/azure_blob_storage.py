@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Azure Blob Storage source module responsible to fetch documents from Azure Blob Storage"""
+
 from functools import partial
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
@@ -205,12 +206,12 @@ class AzureBlobStorageDataSource(BaseDataSource):
     def _get_container_client(self, container_name):
         if self.container_clients.get(container_name) is None:
             try:
-                self.container_clients[
-                    container_name
-                ] = ContainerClient.from_connection_string(
-                    conn_str=self.connection_string,
-                    container_name=container_name,
-                    retry_total=self.retry_count,
+                self.container_clients[container_name] = (
+                    ContainerClient.from_connection_string(
+                        conn_str=self.connection_string,
+                        container_name=container_name,
+                        retry_total=self.retry_count,
+                    )
                 )
                 return self.container_clients[container_name]
             except Exception as exception:
@@ -229,7 +230,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                 blob=blob_name,
                 offset=offset,
                 length=length,
-                max_concurrency=MAX_CONCURRENT_DOWNLOADS,
+                max_concurrency=self.concurrent_downloads,
             )
             content = await data.read()
             length = data.size

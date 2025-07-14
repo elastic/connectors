@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Outlook source class methods"""
+
 from contextlib import asynccontextmanager
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -419,7 +420,10 @@ def side_effect_function(url, headers):
     Args:
         url, ssl: Params required for get call
     """
-    if url == "https://graph.microsoft.com/v1.0/users?$top=999":
+    if (
+        url
+        == "https://graph.microsoft.com/v1.0/users?$top=999&$filter=accountEnabled%20eq%20true"
+    ):
         return get_json_mock(
             mock_response={
                 "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$top=999&$skipToken=fake-skip-token",
@@ -666,12 +670,15 @@ async def test_get_content(attachment, expected_content):
 
 @pytest.mark.asyncio
 async def test_get_content_with_extraction_service():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=str(RESPONSE_CONTENT),
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=str(RESPONSE_CONTENT),
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_outlook_source(use_text_extraction_service=True) as source:
             response = await source.get_content(
@@ -696,7 +703,9 @@ async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
         source.client.is_cloud = is_cloud
         source.client._get_user_instance.get_users = AsyncIterator([user_response])
 
-        async for source_account in source.client._get_user_instance.get_user_accounts():
+        async for (
+            source_account
+        ) in source.client._get_user_instance.get_user_accounts():
             assert source_account == "account"
 
 

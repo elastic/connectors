@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Oracle source module is responsible to fetch documents from Oracle."""
+
 import asyncio
 import os
 from functools import cached_property, partial
@@ -139,11 +140,13 @@ class OracleClient:
         Returns:
             cursor: Synchronous cursor
         """
+        self._logger.debug(f"Retrieving the cursor for query '{query}'")
         try:
             loop = asyncio.get_running_loop()
             if self.connection is None:
                 self.connection = await loop.run_in_executor(
-                    executor=None, func=self.engine.connect  # pyright: ignore
+                    executor=None,
+                    func=self.engine.connect,  # pyright: ignore
                 )
             cursor = await loop.run_in_executor(
                 executor=None,
@@ -152,7 +155,7 @@ class OracleClient:
             return cursor
         except Exception as exception:
             self._logger.warning(
-                f"Something went wrong while getting cursor. Exception: {exception}"
+                f"Something went wrong while getting cursor; error: {exception}"
             )
             raise
 
@@ -168,6 +171,9 @@ class OracleClient:
     async def get_tables_to_fetch(self):
         tables = configured_tables(self.tables)
         if is_wildcard(tables):
+            self._logger.info(
+                "Fetching all tables as the configuration field 'tables' is set to '*'"
+            )
             async for row in fetch(
                 cursor_func=partial(
                     self.get_cursor,
@@ -180,6 +186,7 @@ class OracleClient:
             ):
                 yield row[0]
         else:
+            self._logger.info(f"Fetching user-configured tables '{tables}'")
             for table in tables:
                 yield table
 
@@ -199,6 +206,7 @@ class OracleClient:
         return row_count
 
     async def get_table_primary_key(self, table):
+        self._logger.debug(f"Extracting primary keys for table '{table}'")
         primary_keys = [
             key
             async for [key] in fetch(
@@ -213,9 +221,11 @@ class OracleClient:
                 retry_count=self.retry_count,
             )
         ]
+        self._logger.debug(f"Found primary keys for table '{table}'")
         return primary_keys
 
     async def get_table_last_update_time(self, table):
+        self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
                 cursor_func=partial(
@@ -242,6 +252,8 @@ class OracleClient:
         Yields:
             list: It will first yield the column names, then data in each row
         """
+        self._logger.debug(f"Streaming records from database for table '{table}'")
+        record_count = 0
         async for data in fetch(
             cursor_func=partial(
                 self.get_cursor,
@@ -253,7 +265,9 @@ class OracleClient:
             fetch_size=self.fetch_size,
             retry_count=self.retry_count,
         ):
+            record_count += 1
             yield data
+        self._logger.info(f"Found {record_count} records for table '{table}'")
 
 
 class OracleDataSource(BaseDataSource):
@@ -406,10 +420,10 @@ class OracleDataSource(BaseDataSource):
 
     async def ping(self):
         """Verify the connection with the database-server configured by user"""
-        self._logger.info("Validating the Connector Configuration...")
+        self._logger.debug("Validating that the Connector can connect to Oracle...")
         try:
             await self.oracle_client.ping()
-            self._logger.info("Successfully connected to Oracle.")
+            self._logger.debug("Successfully connected to Oracle")
         except Exception as e:
             msg = f"Can't connect to Oracle on {self.oracle_client.host}"
             raise Exception(msg) from e
@@ -424,9 +438,11 @@ class OracleDataSource(BaseDataSource):
             Dict: Document to be indexed
         """
         try:
+            self._logger.info(f"Fetching records for table '{table}'")
             row_count = await self.oracle_client.get_table_row_count(table=table)
             if row_count > 0:
                 # Query to get the table's primary key
+                self._logger.debug(f"Total {row_count} rows found in table '{table}'")
                 keys = await self.oracle_client.get_table_primary_key(table=table)
                 keys = map_column_names(column_names=keys, tables=[table])
                 if keys:
@@ -436,9 +452,9 @@ class OracleDataSource(BaseDataSource):
                                 table=table
                             )
                         )
-                    except Exception:
+                    except Exception as e:
                         self._logger.warning(
-                            f"Unable to fetch last_updated_time for {table}"
+                            f"Unable to fetch last updated time for table '{table}'; error: {e}"
                         )
                         last_update_time = None
                     streamer = self.oracle_client.data_streamer(table=table)
@@ -462,13 +478,13 @@ class OracleDataSource(BaseDataSource):
                         yield self.serialize(doc=row)
                 else:
                     self._logger.warning(
-                        f"Skipping {table} table from database {self.database} since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+                        f"Skipping '{table}' table from database '{self.database}' since no primary key is associated with it. Assign a primary key to the table to index it in the next sync interval."
                     )
             else:
-                self._logger.warning(f"No rows found for {table}.")
+                self._logger.warning(f"No records found for table '{table}'")
         except (InternalClientError, ProgrammingError) as exception:
             self._logger.warning(
-                f"Something went wrong while fetching document for table {table}. Error: {exception}"
+                f"Something went wrong while fetching records from table '{table}'; error: {exception}"
             )
 
     async def get_docs(self, filtering=None):
@@ -479,9 +495,8 @@ class OracleDataSource(BaseDataSource):
         """
         table_count = 0
         async for table in self.oracle_client.get_tables_to_fetch():
-            self._logger.debug(f"Found table: {table} in database: {self.database}.")
             table_count += 1
             async for row in self.fetch_documents(table=table):
                 yield row, None
         if table_count < 1:
-            self._logger.warning(f"Fetched 0 tables for the database: {self.database}")
+            self._logger.warning(f"Fetched 0 tables for the database '{self.database}'")

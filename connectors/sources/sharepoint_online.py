@@ -18,6 +18,7 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
 from aiohttp.client_reqrep import RequestInfo
+from azure.identity.aio import CertificateCredential
 from fastjsonschema import JsonSchemaValueException
 
 from connectors.access_control import (
@@ -193,7 +194,7 @@ class MicrosoftSecurityToken:
         - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app
     """
 
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id):
         """Initializer.
 
         Args:
@@ -207,7 +208,6 @@ class MicrosoftSecurityToken:
         self._tenant_id = tenant_id
         self._tenant_name = tenant_name
         self._client_id = client_id
-        self._client_secret = client_secret
 
         self._token_cache = CacheWithTimeout()
 
@@ -226,10 +226,8 @@ class MicrosoftSecurityToken:
         if cached_value:
             return cached_value
 
-        # We measure now before request to be on a pessimistic side
-        now = datetime.utcnow()
         try:
-            access_token, expires_in = await self._fetch_token()
+            access_token, expires_at = await self._fetch_token()
         except ClientResponseError as e:
             # Both Graph API and REST API return error codes that indicate different problems happening when authenticating.
             # Error Code serves as a good starting point classifying these errors, see the messages below:
@@ -244,7 +242,7 @@ class MicrosoftSecurityToken:
                     msg = f"Failed to authorize to Sharepoint REST API. Response Status: {e.status}, Message: {e.message}"
                     raise TokenFetchFailed(msg) from e
 
-        self._token_cache.set_value(access_token, now + timedelta(seconds=expires_in))
+        self._token_cache.set_value(access_token, expires_at)
 
         return access_token
 
@@ -260,7 +258,16 @@ class MicrosoftSecurityToken:
         raise NotImplementedError
 
 
-class GraphAPIToken(MicrosoftSecurityToken):
+class SecretAPIToken(MicrosoftSecurityToken):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+        super().__init__(http_session, tenant_id, tenant_name, client_id)
+        self._client_secret = client_secret
+
+    async def _fetch_token(self):
+        return await super()._fetch_token()
+
+
+class GraphAPIToken(SecretAPIToken):
     """Token to connect to Microsoft Graph API endpoints."""
 
     @retryable(retries=3)
@@ -275,15 +282,17 @@ class GraphAPIToken(MicrosoftSecurityToken):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"client_id={self._client_id}&scope=https://graph.microsoft.com/.default&client_secret={self._client_secret}&grant_type=client_credentials"
 
+        # We measure now before request to be on a pessimistic side
+        now = datetime.utcnow()
         async with self._http_session.post(url, headers=headers, data=data) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
 
-            return access_token, expires_in
+            return access_token, now + timedelta(seconds=expires_in)
 
 
-class SharepointRestAPIToken(MicrosoftSecurityToken):
+class SharepointRestAPIToken(SecretAPIToken):
     """Token to connect to Sharepoint REST API endpoints."""
 
     @retryable(retries=DEFAULT_RETRY_COUNT)
@@ -304,12 +313,53 @@ class SharepointRestAPIToken(MicrosoftSecurityToken):
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
+        # We measure now before request to be on a pessimistic side
+        now = datetime.utcnow()
         async with self._http_session.post(url, headers=headers, data=data) as resp:
             json_response = await resp.json()
             access_token = json_response["access_token"]
             expires_in = int(json_response["expires_in"])
 
-            return access_token, expires_in
+            return access_token, now + timedelta(seconds=expires_in)
+
+
+class EntraAPIToken(MicrosoftSecurityToken):
+    """Token to connect to Microsoft Graph API endpoints."""
+
+    def __init__(
+        self,
+        http_session,
+        tenant_id,
+        tenant_name,
+        client_id,
+        certificate,
+        private_key,
+        scope,
+    ):
+        super().__init__(http_session, tenant_id, tenant_name, client_id)
+        self._certificate = certificate
+        self._private_key = private_key
+        self._scope = scope
+
+    @retryable(retries=3)
+    async def _fetch_token(self):
+        """Fetch API token for usage with Graph API
+
+        Returns:
+            (str, int) - a tuple containing access token as a string and number of seconds it will be valid for as an integer
+        """
+
+        secrets_concat = self._certificate + "\n" + self._private_key
+
+        credentials = CertificateCredential(
+            self._tenant_id, self._client_id, certificate_data=secrets_concat.encode()
+        )
+
+        token = await credentials.get_token(self._scope)
+
+        await credentials.close()
+
+        return token.token, datetime.utcfromtimestamp(token.expires_on)
 
 
 def retryable_aiohttp_call(retries):
@@ -522,7 +572,15 @@ class MicrosoftAPISession:
 
 
 class SharepointOnlineClient:
-    def __init__(self, tenant_id, tenant_name, client_id, client_secret):
+    def __init__(
+        self,
+        tenant_id,
+        tenant_name,
+        client_id,
+        client_secret=None,
+        certificate=None,
+        private_key=None,
+    ):
         # Sharepoint / Graph API has quite strict throttling policies
         # If connector is overzealous, it can be banned for not respecting throttling policies
         # However if connector has a low setting for the tcp_connector limit, then it'll just be slow.
@@ -544,12 +602,35 @@ class SharepointOnlineClient:
             "https://(.*).sharepoint.com"
         )  # Used later for url validation
 
-        self.graph_api_token = GraphAPIToken(
-            self._http_session, tenant_id, tenant_name, client_id, client_secret
-        )
-        self.rest_api_token = SharepointRestAPIToken(
-            self._http_session, tenant_id, tenant_name, client_id, client_secret
-        )
+        if client_secret and not certificate and not private_key:
+            self.graph_api_token = GraphAPIToken(
+                self._http_session, tenant_id, tenant_name, client_id, client_secret
+            )
+            self.rest_api_token = SharepointRestAPIToken(
+                self._http_session, tenant_id, tenant_name, client_id, client_secret
+            )
+        elif certificate and private_key:
+            self.graph_api_token = EntraAPIToken(
+                self._http_session,
+                tenant_id,
+                tenant_name,
+                client_id,
+                certificate,
+                private_key,
+                "https://graph.microsoft.com/.default",
+            )
+            self.rest_api_token = EntraAPIToken(
+                self._http_session,
+                tenant_id,
+                tenant_name,
+                client_id,
+                certificate,
+                private_key,
+                f"https://{self._tenant_name}.sharepoint.com/.default",
+            )
+        else:
+            msg = "Unexpected authentication: either a client_secret or certificate+private_key should be provided"
+            raise Exception(msg)
 
         self._logger = logger
 
@@ -589,14 +670,20 @@ class SharepointOnlineClient:
             return
 
     async def site_collections(self):
-        filter_ = url_encode("siteCollection/root ne null")
-        select = "siteCollection,webUrl"
+        try:
+            filter_ = url_encode("siteCollection/root ne null")
+            select = "siteCollection,webUrl"
 
-        async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/?$filter={filter_}&$select={select}"
-        ):
-            for site_collection in page:
-                yield site_collection
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/?$filter={filter_}&$select={select}"
+            ):
+                for site_collection in page:
+                    yield site_collection
+        except PermissionsMissing:
+            self._logger.warning(
+                "Looks like 'Sites.Read.All' permission is missing to fetch all root-level site collections, hence fetching only tenant root site"
+            )
+            yield await self._graph_api_client.fetch(url=f"{GRAPH_API_URL}/sites/root")
 
     async def site_role_assignments(self, site_web_url):
         self._validate_sharepoint_rest_url(site_web_url)
@@ -718,16 +805,23 @@ class SharepointOnlineClient:
 
     async def _all_sites(self, sharepoint_host, allowed_root_sites):
         select = ""
-        async for page in self._graph_api_client.scroll(
-            f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
-        ):
-            for site in page:
-                # Filter out site collections that are not needed
-                if [WILDCARD] != allowed_root_sites and site[
-                    "name"
-                ] not in allowed_root_sites:
-                    continue
-                yield site
+        try:
+            async for page in self._graph_api_client.scroll(
+                f"{GRAPH_API_URL}/sites/{sharepoint_host}/sites?search=*&$select={select}"
+            ):
+                for site in page:
+                    # Filter out site collections that are not needed
+                    if [WILDCARD] != allowed_root_sites and site[
+                        "name"
+                    ] not in allowed_root_sites:
+                        continue
+                    yield site
+        except PermissionsMissing as exception:
+            if allowed_root_sites == [WILDCARD]:
+                msg = "The configuration field 'Comma-separated list of sites' with '*' value is only compatible with 'Sites.Read.All' permission."
+            else:
+                msg = "To enumerate all sites, the connector requires 'Sites.Read.All' permission"
+            raise PermissionsMissing(msg) from exception
 
     async def _fetch_site_and_subsites_by_path(self, sharepoint_host, allowed_site):
         self._logger.debug(
@@ -758,7 +852,7 @@ class SharepointOnlineClient:
 
     async def _recurse_sites(self, site_with_subsites):
         subsites = site_with_subsites.pop("sites", [])
-        site_with_subsites.pop("sites@odata.context", None)  # remove unnecesary field
+        site_with_subsites.pop("sites@odata.context", None)  # remove unnecessary field
         yield site_with_subsites
         if subsites:
             async for site in self._scroll_subsites_by_parent_id(
@@ -1144,11 +1238,27 @@ class SharepointOnlineDataSource(BaseDataSource):
             tenant_id = self.configuration["tenant_id"]
             tenant_name = self.configuration["tenant_name"]
             client_id = self.configuration["client_id"]
+            auth_method = self.configuration["auth_method"]
             client_secret = self.configuration["secret_value"]
+            certificate = self.configuration["certificate"]
+            private_key = self.configuration["private_key"]
 
-            self._client = SharepointOnlineClient(
-                tenant_id, tenant_name, client_id, client_secret
-            )
+            if auth_method == "secret":
+                self._client = SharepointOnlineClient(
+                    tenant_id, tenant_name, client_id, client_secret=client_secret
+                )
+            elif auth_method == "certificate":
+                self._client = SharepointOnlineClient(
+                    tenant_id,
+                    tenant_name,
+                    client_id,
+                    client_secret,
+                    certificate=certificate,
+                    private_key=private_key,
+                )
+            else:
+                msg = f"Unexpected auth method: {auth_method}"
+                raise Exception(msg)
 
         return self._client
 
@@ -1170,17 +1280,45 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "order": 3,
                 "type": "str",
             },
+            "auth_method": {
+                "label": "Authentication Method",
+                "order": 4,
+                "type": "str",
+                "display": "dropdown",
+                "options": [
+                    {"label": "Client Secret", "value": "secret"},
+                    {"label": "Certificate", "value": "certificate"},
+                ],
+                "value": "secret",
+            },
             "secret_value": {
                 "label": "Secret value",
-                "order": 4,
+                "order": 5,
                 "sensitive": True,
                 "type": "str",
+                "depends_on": [{"field": "auth_method", "value": "secret"}],
+            },
+            "certificate": {
+                "label": "Content of certificate file",
+                "display": "textarea",
+                "sensitive": True,
+                "order": 6,
+                "type": "str",
+                "depends_on": [{"field": "auth_method", "value": "certificate"}],
+            },
+            "private_key": {
+                "label": "Content of private key file",
+                "display": "textarea",
+                "sensitive": True,
+                "order": 7,
+                "type": "str",
+                "depends_on": [{"field": "auth_method", "value": "certificate"}],
             },
             "site_collections": {
                 "display": "textarea",
                 "label": "Comma-separated list of sites",
                 "tooltip": "A comma-separated list of sites to ingest data from. If enumerating all sites, use * to include all available sites, or specify a list of site names. Otherwise, specify a list of site paths.",
-                "order": 5,
+                "order": 8,
                 "type": "list",
                 "value": "*",
             },
@@ -1188,7 +1326,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Enumerate all sites?",
                 "tooltip": "If enabled, sites will be fetched in bulk, then filtered down to the configured list of sites. This is efficient when syncing many sites. If disabled, each configured site will be fetched with an individual request. This is efficient when syncing fewer sites.",
-                "order": 6,
+                "order": 9,
                 "type": "bool",
                 "value": True,
             },
@@ -1196,7 +1334,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "display": "toggle",
                 "label": "Fetch sub-sites of configured sites?",
                 "tooltip": "Whether subsites of the configured site(s) should be automatically fetched.",
-                "order": 7,
+                "order": 10,
                 "type": "bool",
                 "value": True,
                 "depends_on": [{"field": "enumerate_all_sites", "value": False}],
@@ -1204,7 +1342,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_text_extraction_service": {
                 "display": "toggle",
                 "label": "Use text extraction service",
-                "order": 8,
+                "order": 11,
                 "tooltip": "Requires a separate deployment of the Elastic Text Extraction Service. Requires that pipeline settings disable text extraction.",
                 "type": "bool",
                 "ui_restrictions": ["advanced"],
@@ -1213,7 +1351,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             "use_document_level_security": {
                 "display": "toggle",
                 "label": "Enable document level security",
-                "order": 9,
+                "order": 12,
                 "tooltip": "Document level security ensures identities and permissions set in Sharepoint Online are maintained in Elasticsearch. This enables you to restrict and personalize read-access users and groups have to documents in this index. Access control syncs ensure this metadata is kept up to date in your Elasticsearch documents.",
                 "type": "bool",
                 "value": False,
@@ -1222,7 +1360,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch drive item permissions",
-                "order": 10,
+                "order": 13,
                 "tooltip": "Enable this option to fetch drive item specific permissions. This setting can increase sync time.",
                 "type": "bool",
                 "value": True,
@@ -1231,7 +1369,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique page permissions",
-                "order": 11,
+                "order": 14,
                 "tooltip": "Enable this option to fetch unique page permissions. This setting can increase sync time. If this setting is disabled a page will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1240,7 +1378,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list permissions",
-                "order": 12,
+                "order": 15,
                 "tooltip": "Enable this option to fetch unique list permissions. This setting can increase sync time. If this setting is disabled a list will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1249,7 +1387,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 "depends_on": [{"field": "use_document_level_security", "value": True}],
                 "display": "toggle",
                 "label": "Fetch unique list item permissions",
-                "order": 13,
+                "order": 16,
                 "tooltip": "Enable this option to fetch unique list item permissions. This setting can increase sync time. If this setting is disabled a list item will inherit permissions from its parent site.",
                 "type": "bool",
                 "value": True,
@@ -1616,20 +1754,26 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_admin_access_control,
                 ) = await self._site_access_control(site)
 
-                yield self._decorate_with_access_control(
-                    site, site_access_control
-                ), None
+                yield (
+                    self._decorate_with_access_control(site, site_access_control),
+                    None,
+                )
 
                 async for site_drive in self.site_drives(site):
-                    yield self._decorate_with_access_control(
-                        site_drive, site_access_control
-                    ), None
+                    yield (
+                        self._decorate_with_access_control(
+                            site_drive, site_access_control
+                        ),
+                        None,
+                    )
 
                     async for page in self.client.drive_items(site_drive["id"]):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
-                            async for drive_item in self._drive_items_batch_with_permissions(
+                            async for (
+                                drive_item
+                            ) in self._drive_items_batch_with_permissions(
                                 site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
@@ -1647,8 +1791,11 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         drive_item, site_access_control
                                     )
 
-                                yield drive_item, self.download_function(
-                                    drive_item, max_drive_item_age
+                                yield (
+                                    drive_item,
+                                    self.download_function(
+                                        drive_item, max_drive_item_age
+                                    ),
                                 )
 
                         self.update_drive_delta_link(
@@ -1710,17 +1857,23 @@ class SharepointOnlineDataSource(BaseDataSource):
                     site_admin_access_control,
                 ) = await self._site_access_control(site)
 
-                yield self._decorate_with_access_control(
-                    site, site_access_control
-                ), None, OP_INDEX
+                yield (
+                    self._decorate_with_access_control(site, site_access_control),
+                    None,
+                    OP_INDEX,
+                )
 
                 # Edit operation on a drive_item doesn't update the
-                # lastModifiedDateTime of the parent site_drive. Therfore, we
+                # lastModifiedDateTime of the parent site_drive. Therefore, we
                 # set check_timestamp to False when iterating over site_drives.
                 async for site_drive in self.site_drives(site, check_timestamp=False):
-                    yield self._decorate_with_access_control(
-                        site_drive, site_access_control
-                    ), None, OP_INDEX
+                    yield (
+                        self._decorate_with_access_control(
+                            site_drive, site_access_control
+                        ),
+                        None,
+                        OP_INDEX,
+                    )
 
                     delta_link = self.get_drive_delta_link(site_drive["id"])
 
@@ -1730,7 +1883,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                         for drive_items_batch in iterable_batches_generator(
                             page.items, SPO_API_MAX_BATCH_SIZE
                         ):
-                            async for drive_item in self._drive_items_batch_with_permissions(
+                            async for (
+                                drive_item
+                            ) in self._drive_items_batch_with_permissions(
                                 site_drive["id"], drive_items_batch, site["webUrl"]
                             ):
                                 drive_item["_id"] = drive_item["id"]
@@ -1748,9 +1903,13 @@ class SharepointOnlineDataSource(BaseDataSource):
                                         drive_item, site_access_control
                                     )
 
-                                yield drive_item, self.download_function(
-                                    drive_item, max_drive_item_age
-                                ), self.drive_item_operation(drive_item)
+                                yield (
+                                    drive_item,
+                                    self.download_function(
+                                        drive_item, max_drive_item_age
+                                    ),
+                                    self.drive_item_operation(drive_item),
+                                )
 
                         self.update_drive_delta_link(
                             drive_id=site_drive["id"], link=page.delta_link()
@@ -1968,10 +2127,13 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 content_type = list_item["contentType"]["name"]
 
-                if content_type in [
-                    "Web Template Extensions",
-                    "Client Side Component Manifests",
-                ]:  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
+                if (
+                    content_type
+                    in [
+                        "Web Template Extensions",
+                        "Client Side Component Manifests",
+                    ]
+                ):  # TODO: make it more flexible. For now I ignore them cause they 404 all the time
                     continue
 
                 has_unique_role_assignments = False
@@ -1993,7 +2155,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         list_item_access_control = []
 
-                        async for role_assignment in self.client.site_list_item_role_assignments(
+                        async for (
+                            role_assignment
+                        ) in self.client.site_list_item_role_assignments(
                             site_web_url, site_list_name, list_item_natural_id
                         ):
                             list_item_access_control.extend(
@@ -2012,7 +2176,9 @@ class SharepointOnlineDataSource(BaseDataSource):
                     )
 
                 if "Attachments" in list_item["fields"]:
-                    async for list_item_attachment in self.client.site_list_item_attachments(
+                    async for (
+                        list_item_attachment
+                    ) in self.client.site_list_item_attachments(
                         site_web_url, site_list_name, list_item_natural_id
                     ):
                         list_item_attachment["_id"] = list_item_attachment["odata.id"]
@@ -2020,17 +2186,17 @@ class SharepointOnlineDataSource(BaseDataSource):
                         list_item_attachment["_timestamp"] = list_item[
                             "lastModifiedDateTime"
                         ]
-                        list_item_attachment[
-                            "_original_filename"
-                        ] = list_item_attachment.get("FileName", "")
+                        list_item_attachment["_original_filename"] = (
+                            list_item_attachment.get("FileName", "")
+                        )
                         if (
                             "ServerRelativePath" in list_item_attachment
                             and "DecodedUrl"
                             in list_item_attachment.get("ServerRelativePath", {})
                         ):
-                            list_item_attachment[
-                                "webUrl"
-                            ] = f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                            list_item_attachment["webUrl"] = (
+                                f"https://{site_collection}{list_item_attachment['ServerRelativePath']['DecodedUrl']}"
+                            )
                         else:
                             self._logger.debug(
                                 f"Unable to populate webUrl for list item attachment {list_item_attachment['_id']}"
@@ -2078,7 +2244,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         site_list_access_control = []
 
-                        async for role_assignment in self.client.site_list_role_assignments(
+                        async for (
+                            role_assignment
+                        ) in self.client.site_list_role_assignments(
                             site_url, site_list_name
                         ):
                             site_list_access_control.extend(
@@ -2126,9 +2294,7 @@ class SharepointOnlineDataSource(BaseDataSource):
                 # full explanation of the bit-math: https://stackoverflow.com/questions/51897160/how-to-parse-getusereffectivepermissions-sharepoint-response-in-java
                 # this approach was confirmed as valid by a Microsoft Sr. Support Escalation Engineer
                 base_permission_low = int(
-                    nested_get_from_dict(
-                        binding, ["BasePermissions", "Low"], "0"
-                    )  # pyright: ignore
+                    nested_get_from_dict(binding, ["BasePermissions", "Low"], "0")  # pyright: ignore
                 )
                 role_type_kind = binding.get("RoleTypeKind", 0)
                 if (
@@ -2204,7 +2370,9 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                         page_access_control = []
 
-                        async for role_assignment in self.client.site_page_role_assignments(
+                        async for (
+                            role_assignment
+                        ) in self.client.site_page_role_assignments(
                             url, site_page["Id"]
                         ):
                             page_access_control.extend(
@@ -2488,7 +2656,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         email = user.get("Email", user.get("mail"))
         user_id = user.get(
             "id"
-        )  # not captial "Id", Sharepoint REST uses this for non-unique IDs like `1`
+        )  # not capital "Id", Sharepoint REST uses this for non-unique IDs like `1`
 
         if user_principal_name:
             user_access_control.append(_prefix_user(user_principal_name))

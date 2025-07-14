@@ -11,9 +11,11 @@ import inspect
 import os
 import platform
 import re
+import secrets
 import shutil
 import ssl
-import subprocess
+import string
+import subprocess  # noqa S404
 import time
 import urllib.parse
 from copy import deepcopy
@@ -115,7 +117,7 @@ def epoch_timestamp_zulu():
 def next_run(quartz_definition, now):
     """Returns the datetime in UTC timezone of the next run."""
     # Year is optional and is never present.
-    seconds, minutes, hours, day_of_month, month, day_of_week, year = (
+    _, minutes, hours, day_of_month, month, day_of_week, year = (
         quartz_definition.split(" ") + [None]
     )[:7]
 
@@ -457,7 +459,7 @@ class ConcurrentTasks:
             )
         elif task.exception():
             logger.error(
-                f"Exception found for task {task.get_name()}: {task.exception()}",
+                f"Exception found for task {task.get_name()}", exc_info=task.exception()
             )
 
     def _add_task(self, coroutine, name=None):
@@ -754,10 +756,10 @@ def truncate_id(_id):
 
 def has_duplicates(strings_list):
     seen = set()
-    for string in strings_list:
-        if string in seen:
+    for s in strings_list:
+        if s in seen:
             return True
-        seen.add(string)
+        seen.add(s)
     return False
 
 
@@ -976,6 +978,15 @@ def nested_get_from_dict(dictionary, keys, default=None):
     return nested_get(dictionary, keys, default)
 
 
+def sanitize(doc):
+    if doc["_id"]:
+        # guarantee that IDs are strings, and not numeric
+        doc["_id"] = str(doc["_id"])
+        doc["id"] = doc["_id"]
+
+    return doc
+
+
 class Counters:
     """
     A utility to provide code readability to managing a collection of counts
@@ -994,8 +1005,6 @@ class Counters:
 
     def to_dict(self):
         return deepcopy(self._storage)
-
-        pass
 
 
 class TooManyErrors(Exception):
@@ -1099,3 +1108,9 @@ class ErrorMonitor:
             if error_rate > self.max_error_rate:
                 msg = f"Exceeded maximum error ratio of {self.max_error_rate} for last {self.error_window_size} operations. Last error: {self.last_error}"
                 raise TooManyErrors(msg) from self.last_error
+
+
+def generate_random_id(length=4):
+    return "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
+    )

@@ -4,8 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 # ruff: noqa: T201
-"""Dropbox module responsible to generate files/folders using flask.
-"""
+"""Dropbox module responsible to generate files/folders using flask."""
 
 import io
 import json
@@ -41,6 +40,9 @@ class DropboxAPI:
         self.app.route("/oauth2/token", methods=["POST"])(self.get_dropbox_token)
         self.app.route("/2/users/get_current_account", methods=["POST"])(
             self.get_current_account
+        )
+        self.app.route("/2/team/token/get_authenticated_admin", methods=["POST"])(
+            self.get_authenticated_admin
         )
         self.app.route("/2/files/list_folder", methods=["POST"])(self.files_list_folder)
         self.app.route("/2/files/list_folder/continue", methods=["POST"])(
@@ -90,6 +92,30 @@ class DropboxAPI:
                 "root_namespace_id": "8936575200",
                 "home_namespace_id": "8936575200",
             },
+        }
+
+    def get_authenticated_admin(self):
+        return {
+            "admin_profile": {
+                "team_member_id": "dbmid:team_member_id",
+                "account_id": "dbid:account_id",
+                "email": "jane.doe@gmail.com",
+                "email_verified": True,
+                "secondary_emails": [],
+                "status": {".tag": "active"},
+                "name": {
+                    "given_name": "Jane",
+                    "surname": "Doe",
+                    "familiar_name": "Jane",
+                    "display_name": "Jane Doe",
+                    "abbreviated_name": "JD",
+                },
+                "membership_type": {".tag": "full"},
+                "joined_on": "2024-07-18T09:28:45Z",
+                "groups": ["g:d9ae612e704114800000000000000004"],
+                "member_folder_id": "3311111067",
+                "root_folder_id": "3311111139",
+            }
         }
 
     def files_list_folder(self):

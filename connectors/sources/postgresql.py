@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Postgresql source module is responsible to fetch documents from PostgreSQL."""
+
 import ssl
 from functools import cached_property, partial
 from urllib.parse import quote
@@ -55,9 +56,15 @@ class PostgreSQLQueries(Queries):
     def table_primary_key(self, **kwargs):
         """Query to get the primary key"""
         return (
-            f"SELECT a.attname AS c FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid "
-            f"AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '\"{kwargs['schema']}\".\"{kwargs['table']}\"'::regclass "
-            f"AND i.indisprimary"
+            f"SELECT a.attname AS c "
+            f"FROM pg_index i "
+            f"JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+            f"JOIN pg_class t ON t.oid = i.indrelid "
+            f"JOIN pg_constraint c ON c.conindid = i.indexrelid "
+            f"WHERE i.indrelid = '\"{kwargs['schema']}\".\"{kwargs['table']}\"'::regclass "
+            f"AND t.relkind = 'r' "
+            f"AND c.contype = 'p' "
+            f"ORDER BY array_position(i.indkey, a.attnum)"
         )
 
     def table_data(self, **kwargs):
@@ -522,7 +529,7 @@ class PostgreSQLDataSource(BaseDataSource):
             primary_key_columns.extend(
                 await self.postgresql_client.get_table_primary_key(table)
             )
-        primary_key_columns = sorted(primary_key_columns)
+
         return (
             map_column_names(
                 column_names=primary_key_columns, schema=self.schema, tables=tables

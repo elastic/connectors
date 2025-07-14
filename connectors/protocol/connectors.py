@@ -12,13 +12,19 @@ Main classes are :
 - SyncJob: represents a document in `.elastic-connectors-sync-jobs`
 
 """
+
 import socket
 from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
 
-from elasticsearch import ApiError
+from elasticsearch import (
+    ApiError,
+)
+from elasticsearch import (
+    NotFoundError as ElasticNotFoundError,
+)
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
@@ -161,6 +167,61 @@ class ConnectorIndex(ESIndex):
         else:
             await self.update(doc_id=doc_id, doc={"last_seen": iso_utc()})
 
+    async def connector_put(
+        self,
+        connector_id,
+        service_type,
+        connector_name=None,
+        index_name=None,
+        is_native=False,
+    ):
+        await self.api.connector_put(
+            connector_id=connector_id,
+            service_type=service_type,
+            connector_name=connector_name,
+            index_name=index_name,
+            is_native=is_native,
+        )
+
+    async def connector_exists(self, connector_id, include_deleted=False):
+        try:
+            doc = await self.api.connector_get(
+                connector_id=connector_id, include_deleted=include_deleted
+            )
+            return doc is not None
+        except ElasticNotFoundError:
+            return False
+        except Exception as e:
+            logger.error(
+                f"Error while checking existence of connector '{connector_id}': {e}"
+            )
+            raise e
+
+    async def connector_update_scheduling(
+        self, connector_id, full=None, incremental=None, access_control=None
+    ):
+        scheduling = {}
+
+        if full is not None:
+            scheduling["full"] = full
+
+        if incremental is not None:
+            scheduling["incremental"] = incremental
+
+        if access_control is not None:
+            scheduling["access_control"] = access_control
+
+        await self.api.connector_update_scheduling(
+            connector_id=connector_id, scheduling=scheduling
+        )
+
+    async def connector_update_configuration(
+        self, connector_id, schema=None, values=None
+    ):
+        await self.api.connector_update_configuration(
+            connector_id=connector_id, configuration=schema, values=values
+        )
+
     async def supported_connectors(self, native_service_types=None, connector_ids=None):
         if native_service_types is None:
             native_service_types = []
@@ -172,19 +233,20 @@ class ConnectorIndex(ESIndex):
 
         native_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
                     {"term": {"is_native": True}},
                     {"terms": {"service_type": native_service_types}},
-                ]
+                ],
             }
         }
 
         custom_connectors_query = {
             "bool": {
+                "must_not": [{"term": {"deleted": True}}],
                 "filter": [
-                    {"term": {"is_native": False}},
                     {"terms": {"_id": connector_ids}},
-                ]
+                ],
             }
         }
         if len(native_service_types) > 0 and len(connector_ids) > 0:
@@ -501,7 +563,7 @@ class Filter(dict):
 
 
 PIPELINE_DEFAULT = {
-    "name": "ent-search-generic-ingestion",
+    "name": "search-default-ingestion",
     "extract_binary_content": True,
     "reduce_whitespace": True,
     "run_ml_inference": True,
@@ -680,9 +742,10 @@ class Connector(ESDocument):
     def api_key_secret_id(self):
         return self.get("api_key_secret_id")
 
-    async def heartbeat(self, interval):
+    async def heartbeat(self, interval, force=False):
         if (
-            self.last_seen is None
+            force
+            or self.last_seen is None
             or (datetime.now(timezone.utc) - self.last_seen).total_seconds() > interval
         ):
             self.log_debug("Sending heartbeat")
@@ -762,6 +825,10 @@ class Connector(ESDocument):
             "status": Status.ERROR.value,
             "error": str(error),
         }
+        await self.index.update(doc_id=self.id, doc=doc)
+
+    async def connected(self):
+        doc = {"status": Status.CONNECTED.value, "error": None}
         await self.index.update(doc_id=self.id, doc=doc)
 
     async def sync_done(self, job, cursor=None):
@@ -856,7 +923,7 @@ class Connector(ESDocument):
         try:
             source_klass = get_source_klass(fqn)
         except Exception as e:
-            self.log_critical(e, exc_info=True)
+            self.log_error(e, exc_info=True)
             msg = f"Could not instantiate {fqn} for {configured_service_type}"
             raise DataSourceError(msg) from e
 
@@ -993,9 +1060,9 @@ class Connector(ESDocument):
             filtering = self.filtering.to_list()
             for filter_ in filtering:
                 if filter_.get("domain", "") == Filtering.DEFAULT_DOMAIN:
-                    filter_.get("draft", {"validation": {}})[
-                        "validation"
-                    ] = validation_result.to_dict()
+                    filter_.get("draft", {"validation": {}})["validation"] = (
+                        validation_result.to_dict()
+                    )
                     if validation_result.state == FilteringValidationState.VALID:
                         filter_["active"] = filter_.get("draft")
 

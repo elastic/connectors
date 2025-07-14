@@ -3,14 +3,13 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-""" Helpers to build sources + FQN-based Registry
-"""
+"""Helpers to build sources + FQN-based Registry"""
 
 import asyncio
 import importlib
 import re
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from functools import cache
@@ -140,9 +139,19 @@ class Field:
             return value
 
         # list requires special type casting
-        if cast_type == list:
+        if cast_type is list:
             if isinstance(value, str):
-                return [item.strip() for item in value.split(",")] if value else []
+                items = []
+                if value:
+                    for item in value.split(","):
+                        item = item.strip()
+                        if not item:
+                            logger.debug(
+                                "Empty string detected in the comma-separated list. It will be skipped."
+                            )
+                        else:
+                            items.append(item)
+                return items
             elif isinstance(value, int):
                 return [value]
             elif isinstance(value, set):
@@ -385,7 +394,7 @@ class BaseDataSource:
     advanced_rules_enabled = False
     dls_enabled = False
     incremental_sync_enabled = False
-    native_connector_api_keys_enabled = True
+    native_connector_api_keys_enabled = False
 
     def __init__(self, configuration):
         # Initialize to the global logger
@@ -670,7 +679,7 @@ class BaseDataSource:
             elif isinstance(value, dict):
                 for key, svalue in value.items():
                     value[key] = _serialize(svalue)
-            elif isinstance(value, (datetime, date)):
+            elif isinstance(value, (datetime, date, time)):
                 value = value.isoformat()
             elif isinstance(value, Decimal128):
                 value = value.to_decimal()
@@ -756,12 +765,18 @@ class BaseDataSource:
         try:
             async with self.create_temp_file(file_extension) as async_buffer:
                 temp_filename = async_buffer.name
+                self._logger.debug(
+                    f"Created temp file for {source_filename}: {temp_filename}"
+                )
 
                 await self.download_to_temp_file(
                     temp_filename,
                     source_filename,
                     async_buffer,
                     download_func,
+                )
+                self._logger.debug(
+                    f"Downloaded {source_filename} content into {temp_filename}"
                 )
 
                 doc = await self.handle_file_content_extraction(

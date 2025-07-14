@@ -11,9 +11,10 @@ import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 
 from connectors.config import load_config
+from connectors.es import DEFAULT_LANGUAGE
 from connectors.es.management_client import ESManagementClient
-from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.logger import set_extra_logger
+from connectors.protocol import ConnectorIndex
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
 
@@ -49,112 +50,47 @@ set_extra_logger(logger, log_level=logging.DEBUG, prefix="KBN-FAKE")
 async def prepare(service_type, index_name, config, connector_definition=None):
     klass = get_source_klass(config["sources"][service_type])
     es = ESManagementClient(config["elasticsearch"])
+    connector_index = ConnectorIndex(config["elasticsearch"])
 
     await es.ensure_ingest_pipeline_exists(
-        "ent-search-generic-ingestion",
+        "search-default-ingestion",
         DEFAULT_PIPELINE["version"],
         DEFAULT_PIPELINE["description"],
         DEFAULT_PIPELINE["processors"],
     )
 
     try:
-        # https:#github.com/elastic/enterprise-search-team/discussions/2153#discussioncomment-2999765
-        doc = connector_definition or {
-            # Used by the frontend to manage the api key
-            # associated with the connector
-            "api_key_id": "",
-            # Configurations, e.g. API key
-            "configuration": klass.get_default_configuration(),
-            # Name of the index the documents will be written to.
-            # Set by Kibana, *not* the connector.
-            "index_name": index_name,
-            # used to surface copy and icons in the front end
-            "service_type": service_type,
-            # Current status of the connector, and the value can be
-            "status": "configured",
-            "language": "en",
-            # Last sync
-            "last_access_control_sync_error": None,
-            "last_access_control_sync_scheduled_at": None,
-            "last_access_control_sync_status": None,
-            "last_sync_status": None,
-            "last_sync_error": None,
-            "last_sync_scheduled_at": None,
-            "last_synced": None,
-            # Written by connector on each operation,
-            # used by Kibana to hint to user about status of connector
-            "last_seen": None,
-            # Date the connector was created
-            "created_at": None,
-            # Date the connector was updated
-            "updated_at": None,
-            "filtering": [
-                {
-                    "domain": "DEFAULT",
-                    "draft": {
-                        "advanced_snippet": {
-                            "updated_at": "2023-01-31T16:41:27.341Z",
-                            "created_at": "2023-01-31T16:38:49.244Z",
-                            "value": {},
-                        },
-                        "rules": [
-                            {
-                                "field": "_",
-                                "updated_at": "2023-01-31T16:41:27.341Z",
-                                "created_at": "2023-01-31T16:38:49.244Z",
-                                "rule": "regex",
-                                "id": "DEFAULT",
-                                "value": ".*",
-                                "order": 1,
-                                "policy": "include",
-                            }
-                        ],
-                        "validation": {"state": "valid", "errors": []},
-                    },
-                    "active": {
-                        "advanced_snippet": {
-                            "updated_at": "2023-01-31T16:41:27.341Z",
-                            "created_at": "2023-01-31T16:38:49.244Z",
-                            "value": {},
-                        },
-                        "rules": [
-                            {
-                                "field": "_",
-                                "updated_at": "2023-01-31T16:41:27.341Z",
-                                "created_at": "2023-01-31T16:38:49.244Z",
-                                "rule": "regex",
-                                "id": "DEFAULT",
-                                "value": ".*",
-                                "order": 1,
-                                "policy": "include",
-                            }
-                        ],
-                        "validation": {"state": "valid", "errors": []},
-                    },
-                }
-            ],
-            # Scheduling intervals
-            "scheduling": {
-                "full": {
-                    "enabled": True,
-                    "interval": "1 * * * * *",
-                },
-            },  # quartz syntax
-            "pipeline": {
-                "extract_binary_content": True,
-                "name": "ent-search-generic-ingestion",
-                "reduce_whitespace": True,
-                "run_ml_inference": True,
-            },
-            "sync_cursor": None,
-            "is_native": False,
-        }
+        if connector_definition is not None:
+            connector_configuration = connector_definition["configuration"]
+        else:
+            connector_configuration = klass.get_default_configuration()
 
-        logger.info(f"Prepare {CONNECTORS_INDEX} document")
-        await es.upsert(
-            index_name=CONNECTORS_INDEX,
-            _id=config["connectors"][0]["connector_id"],
-            doc=doc,
+        connector_name = f"{service_type}-functional-test"
+
+        logger.info(f"Creating '{connector_name}' connector")
+
+        await connector_index.connector_put(
+            connector_id=config["connectors"][0]["connector_id"],
+            service_type=service_type,
+            connector_name=connector_name,
+            index_name=index_name,
+        )
+
+        logger.info(f"Updating scheduling for '{connector_name}' connector")
+
+        await connector_index.connector_update_scheduling(
+            connector_id=config["connectors"][0]["connector_id"],
+            full={
+                "enabled": True,
+                "interval": "1 * * * * ?",  # every minute
+            },
+        )
+
+        logger.info(f"Updating configuration for '{connector_name}' connector")
+
+        await connector_index.connector_update_configuration(
+            connector_id=config["connectors"][0]["connector_id"],
+            schema=connector_configuration,
         )
 
         logger.info(f"Prepare {index_name}")

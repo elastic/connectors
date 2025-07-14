@@ -1,8 +1,13 @@
+#
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License 2.0;
+# you may not use this file except in compliance with the Elastic License 2.0.
+#
 import asyncio
 from collections import OrderedDict
 
+from connectors.es import DEFAULT_LANGUAGE
 from connectors.es.cli_client import CLIClient
-from connectors.es.settings import DEFAULT_LANGUAGE
 from connectors.protocol import (
     CONCRETE_CONNECTORS_INDEX,
     CONCRETE_JOBS_INDEX,
@@ -162,7 +167,7 @@ class Connector:
                 "custom_scheduling": {},
                 "pipeline": {
                     "extract_binary_content": True,
-                    "name": "ent-search-generic-ingestion",
+                    "name": "search-default-ingestion",
                     "reduce_whitespace": True,
                     "run_ml_inference": True,
                 },

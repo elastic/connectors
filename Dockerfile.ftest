@@ -1,5 +1,16 @@
-FROM python:3.10
-COPY . /connectors
-WORKDIR /connectors
+FROM cgr.dev/chainguard/wolfi-base:latest
+ARG python_version=3.11
+
+USER root
+RUN apk add --no-cache python3=~${python_version} make git
+
+COPY --chown=nonroot:nonroot . /app
+
+USER nonroot
+WORKDIR /app
 RUN make clean install
-RUN bin/pip install -r requirements/ftest.txt
+RUN .venv/bin/pip install -r requirements/ftest.txt
+
+USER root
+RUN apk del make git
+USER nonroot

@@ -10,6 +10,7 @@ This is the main entry point of the framework. When the project is installed as
 a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
+
 import asyncio
 import functools
 import json
@@ -21,6 +22,7 @@ import click
 from click import ClickException, UsageError
 
 from connectors import __version__
+from connectors.build_info import __build_info__
 from connectors.config import load_config
 from connectors.content_extraction import ContentExtraction
 from connectors.logger import logger, set_logger
@@ -72,13 +74,19 @@ async def _start_service(actions, config, loop):
         return await multi_service.run()
 
 
+def _get_uvloop():
+    import uvloop
+
+    return uvloop
+
+
 def get_event_loop(uvloop=False):
     if uvloop:
         # activate uvloop if lib is present
         try:
             import uvloop
 
-            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            asyncio.set_event_loop_policy(_get_uvloop().EventLoopPolicy())
         except Exception as e:
             logger.warning(
                 f"Unable to enable uvloop: {e}. Running with default event loop"
@@ -170,7 +178,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 
 
 @click.command()
-@click.version_option(__version__, "-v", "--version", message="%(version)s")
+@click.version_option(__build_info__, "-v", "--version", message="%(version)s")
 @click.option(
     "--action",
     type=click.Choice(

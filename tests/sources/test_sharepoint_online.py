@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from io import BytesIO
-from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, Mock, PropertyMock, patch
 
 import aiohttp
 import pytest
@@ -28,6 +28,7 @@ from connectors.sources.sharepoint_online import (
     WILDCARD,
     BadRequestError,
     DriveItemsPage,
+    EntraAPIToken,
     GraphAPIToken,
     InternalServerError,
     InvalidSharepointTenant,
@@ -229,7 +230,11 @@ BATCH_THROTTLED_RESPONSE = {
 
 @asynccontextmanager
 async def create_spo_source(
+    tenant_id="1",
     tenant_name="test",
+    client_id="2",
+    secret_value="3",
+    auth_method="secret",
     site_collections=WILDCARD,
     use_document_level_security=False,
     use_text_extraction_service=False,
@@ -239,9 +244,10 @@ async def create_spo_source(
 ):
     async with create_source(
         SharepointOnlineDataSource,
-        tenant_id="1",
-        client_id="2",
-        secret_value="3",
+        auth_method=auth_method,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        secret_value=secret_value,
         tenant_name=tenant_name,
         site_collections=site_collections,
         use_document_level_security=use_document_level_security,
@@ -280,17 +286,17 @@ def access_control_is_equal(actual, expected):
 
 class TestMicrosoftSecurityToken:
     class StubMicrosoftSecurityToken(MicrosoftSecurityToken):
-        def __init__(self, bearer, expires_in):
-            super().__init__(None, None, None, None, None)
+        def __init__(self, bearer, expires_at):
+            super().__init__(None, None, None, None)
             self.bearer = bearer
-            self.expires_in = expires_in
+            self.expires_at = expires_at
 
         async def _fetch_token(self):
-            return (self.bearer, self.expires_in)
+            return (self.bearer, self.expires_at)
 
     class StubMicrosoftSecurityTokenWrongConfig(MicrosoftSecurityToken):
         def __init__(self, error_code, message=None):
-            super().__init__(None, None, None, None, None)
+            super().__init__(None, None, None, None)
             self.error_code = error_code
             self.message = message
 
@@ -304,7 +310,7 @@ class TestMicrosoftSecurityToken:
     @pytest.mark.asyncio
     async def test_fetch_token_raises_not_implemented_error(self):
         with pytest.raises(NotImplementedError) as e:
-            mst = MicrosoftSecurityToken(None, None, None, None, None)
+            mst = MicrosoftSecurityToken(None, None, None, None)
 
             await mst._fetch_token()
 
@@ -324,13 +330,14 @@ class TestMicrosoftSecurityToken:
         assert actual == bearer
 
     @pytest.mark.asyncio
+    @freeze_time()
     async def test_get_returns_cached_value_when_token_did_not_expire(self):
         original_bearer = "something"
         updated_bearer = "another"
-        expires_in = 1
+        expires_at = datetime.utcnow() + timedelta(seconds=1)
 
         token = TestMicrosoftSecurityToken.StubMicrosoftSecurityToken(
-            original_bearer, expires_in
+            original_bearer, expires_at
         )
 
         first_bearer = await token.get()
@@ -345,16 +352,16 @@ class TestMicrosoftSecurityToken:
     async def test_get_returns_new_value_when_token_expired(self):
         original_bearer = "something"
         updated_bearer = "another"
-        expires_in = 0.01
+        expires_at = datetime.utcnow() + timedelta(seconds=-1)
 
         token = TestMicrosoftSecurityToken.StubMicrosoftSecurityToken(
-            original_bearer, expires_in
+            original_bearer, expires_at
         )
 
         first_bearer = await token.get()
         token.bearer = updated_bearer
 
-        await asyncio.sleep(expires_in + 0.01)
+        await asyncio.sleep(0.01)
 
         second_bearer = await token.get()
 
@@ -407,8 +414,10 @@ class TestGraphAPIToken:
         await session.close()
 
     @pytest.mark.asyncio
+    @freeze_time()
     async def test_fetch_token(self, token, mock_responses):
         bearer = "hello"
+        now = datetime.utcnow()
         expires_in = 15
 
         mock_responses.post(
@@ -419,13 +428,14 @@ class TestGraphAPIToken:
         actual_token, actual_expires_in = await token._fetch_token()
 
         assert actual_token == bearer
-        assert actual_expires_in == expires_in
+        assert actual_expires_in == now + timedelta(seconds=expires_in)
 
     @pytest.mark.asyncio
+    @freeze_time()
     async def test_fetch_token_retries(self, token, mock_responses, patch_sleep):
         bearer = "hello"
         expires_in = 15
-
+        now = datetime.utcnow()
         first_request_error = ClientResponseError(None, None)
         first_request_error.status = 500
         first_request_error.message = "Something went wrong"
@@ -440,7 +450,7 @@ class TestGraphAPIToken:
         actual_token, actual_expires_in = await token._fetch_token()
 
         assert actual_token == bearer
-        assert actual_expires_in == expires_in
+        assert actual_expires_in == now + timedelta(seconds=expires_in)
 
 
 class TestSharepointRestAPIToken:
@@ -453,9 +463,11 @@ class TestSharepointRestAPIToken:
         await session.close()
 
     @pytest.mark.asyncio
+    @freeze_time()
     async def test_fetch_token(self, token, mock_responses):
         bearer = "hello"
         expires_in = 15
+        now = datetime.utcnow()
 
         mock_responses.post(
             re.compile(".*"),
@@ -465,15 +477,17 @@ class TestSharepointRestAPIToken:
         actual_token, actual_expires_in = await token._fetch_token()
 
         assert actual_token == bearer
-        assert actual_expires_in == expires_in
+        assert actual_expires_in == now + timedelta(seconds=expires_in)
 
     # This test is a duplicate of test for TestGraphAPIToken.
     # When we introduce reusable retryable function instead of a wrapper
     # Then this test can be removed
     @pytest.mark.asyncio
+    @freeze_time()
     async def test_fetch_token_retries(self, token, mock_responses, patch_sleep):
         bearer = "hello"
         expires_in = 15
+        now = datetime.utcnow()
 
         first_request_error = ClientResponseError(None, None)
         first_request_error.status = 500
@@ -489,7 +503,76 @@ class TestSharepointRestAPIToken:
         actual_token, actual_expires_in = await token._fetch_token()
 
         assert actual_token == bearer
-        assert actual_expires_in == expires_in
+        assert actual_expires_in == now + timedelta(seconds=expires_in)
+
+
+class TestEntraAPIToken:
+    @pytest_asyncio.fixture
+    async def token(self):
+        session = aiohttp.ClientSession()
+
+        yield EntraAPIToken(
+            session,
+            "abc123",
+            "tenant_name",
+            "client_id",
+            "certificate",
+            "private_key",
+            "scope",
+        )
+
+        await session.close()
+
+    @pytest.mark.asyncio
+    async def test_fetch_token(self, token, mock_responses):
+        bearer = "hello"
+        expires_at = datetime.utcnow().timestamp() + 30
+
+        entra_token = MagicMock()
+        type(entra_token).token = PropertyMock(return_value=bearer)
+        type(entra_token).expires_on = PropertyMock(return_value=expires_at)
+
+        certificate_credential_mock = AsyncMock()
+        certificate_credential_mock.get_token = AsyncMock(return_value=entra_token)
+        certificate_credential_mock.close = AsyncMock()
+
+        with patch(
+            "connectors.sources.sharepoint_online.CertificateCredential",
+            return_value=certificate_credential_mock,
+        ):
+            actual_token, actual_expires_at = await token._fetch_token()
+
+        certificate_credential_mock.close.assert_called_once()
+
+        assert actual_token == bearer
+        assert actual_expires_at == datetime.utcfromtimestamp(expires_at)
+
+    @pytest.mark.asyncio
+    async def test_fetch_token_retries(self, token, mock_responses, patch_sleep):
+        bearer = "hello"
+        expires_at = datetime.utcnow().timestamp() + 30
+
+        entra_token = MagicMock()
+        type(entra_token).token = PropertyMock(return_value=bearer)
+        type(entra_token).expires_on = PropertyMock(return_value=expires_at)
+
+        def effect(*args, **kwargs):
+            # Two exceptions, then return token
+            yield Exception
+            yield Exception
+            yield entra_token
+
+        certificate_credential_mock = AsyncMock()
+        certificate_credential_mock.get_token = AsyncMock(side_effect=effect())
+
+        with patch(
+            "connectors.sources.sharepoint_online.CertificateCredential",
+            return_value=certificate_credential_mock,
+        ):
+            actual_token, actual_expires_at = await token._fetch_token()
+
+        assert actual_token == bearer
+        assert actual_expires_at == datetime.utcfromtimestamp(expires_at)
 
 
 class TestMicrosoftAPISession:
@@ -1028,14 +1111,62 @@ class TestSharepointOnlineClient:
 
     @pytest.mark.asyncio
     async def test_site_collections(self, client, patch_scroll):
-        actual_items = ["1", "2", "3", "4"]
+        first_site_collection = {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": "This is the first test site collection",
+            "id": "site-id-1",
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection-1",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
+        second_site_collection = {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": "This is the second test site collection",
+            "id": "site-id-2",
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection-2",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
 
-        returned_items = await self._execute_scrolling_method(
-            client.site_collections, patch_scroll, actual_items
+        patch_scroll.side_effect = AsyncIterator(
+            [[first_site_collection, second_site_collection]]
         )
+        returned_items = []
+        async for site_collection in client.site_collections():
+            returned_items.append(site_collection)
 
-        assert len(returned_items) == len(actual_items)
-        assert returned_items == actual_items
+        assert len(returned_items) == 2
+        assert returned_items == [first_site_collection, second_site_collection]
+
+    @pytest.mark.asyncio
+    async def test_site_collections_when_permission_missing(
+        self, client, patch_fetch, patch_scroll
+    ):
+        actual_response = {
+            "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
+            "createdDateTime": "2023-12-12T12:00:00.000Z",
+            "description": "This is a test site collection",
+            "id": "site-id",
+            "lastModifiedDateTime": "2023-12-12T12:00:00.000Z",
+            "name": "fake-site-collection",
+            "webUrl": "https://example.sharepoint.com",
+            "displayName": "Fake Site Collection",
+            "root": {},
+            "siteCollection": {"hostname": "example.sharepoint.com"},
+        }
+
+        patch_scroll.side_effect = PermissionsMissing()
+        patch_fetch.side_effect = [actual_response]
+        async for site_collection in client.site_collections():
+            assert site_collection == actual_response
 
     @pytest.mark.asyncio
     async def test_sites_wildcard(self, client, patch_scroll):
@@ -1125,6 +1256,32 @@ class TestSharepointOnlineClient:
 
         assert len(returned_items) == 3
         assert returned_items == expected_items
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exception, raises",
+        [
+            (
+                PermissionsMissing(),
+                PermissionsMissing,
+            ),
+            (
+                ClientResponseError(
+                    status=400,
+                    request_info=aiohttp.RequestInfo(
+                        real_url="", method=None, headers=None, url=""
+                    ),
+                    history=None,
+                ),
+                ClientResponseError,
+            ),
+        ],
+    )
+    async def test_all_sites_with_error(self, client, patch_scroll, exception, raises):
+        sharepoint_host = "example.sharepoint.com"
+        patch_scroll.side_effect = exception
+        with pytest.raises(raises):
+            await anext(client._all_sites(sharepoint_host, []))
 
     @pytest.mark.asyncio
     async def test_site_drives(self, client, patch_scroll):
@@ -2215,7 +2372,7 @@ class TestSharepointOnlineDataSource:
                 self.site_drives
             )
             assert len([i for i in results if i["object_type"] == "drive_item"]) == sum(
-                [len(j) for j in self.drive_items]
+                len(j) for j in self.drive_items
             )
             assert len([i for i in results if i["object_type"] == "site_list"]) == len(
                 self.site_lists
@@ -2288,7 +2445,7 @@ class TestSharepointOnlineDataSource:
                 for site_drive in site_drives
             )
 
-            assert len(drive_items) == sum([len(j) for j in self.drive_items])
+            assert len(drive_items) == sum(len(j) for j in self.drive_items)
 
             expected_drive_item_access_control = [
                 _prefix_user_id(USER_ONE_ID),
@@ -2347,9 +2504,11 @@ class TestSharepointOnlineDataSource:
     ):
         async with create_spo_source() as source:
             with pytest.raises(SyncCursorEmpty):
-                async for _doc, _download_func, _operation in source.get_docs_incrementally(
-                    sync_cursor=sync_cursor
-                ):
+                async for (
+                    _doc,
+                    _download_func,
+                    _operation,
+                ) in source.get_docs_incrementally(sync_cursor=sync_cursor):
                     pass
 
     @pytest.mark.asyncio
@@ -2362,9 +2521,9 @@ class TestSharepointOnlineDataSource:
 
         sync_cursor = {"site_drives": {}, "cursor_timestamp": self.month_ago}
         for site_drive in self.site_drives:
-            sync_cursor["site_drives"][
-                site_drive["id"]
-            ] = "http://fakesharepoint.com/deltalink"
+            sync_cursor["site_drives"][site_drive["id"]] = (
+                "http://fakesharepoint.com/deltalink"
+            )
 
         deleted = 0
         for page in self.drive_items_delta:
@@ -2622,7 +2781,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_with_permissions = []
 
-            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_with_permission
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_with_permissions.append(drive_item_with_permission)
@@ -2643,7 +2804,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_without_permissions = []
 
-            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_without_permissions
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
@@ -2664,7 +2827,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_without_permissions = []
 
-            async for drive_item_without_permissions in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_without_permissions
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_without_permissions.append(drive_item_without_permissions)
@@ -2703,7 +2868,9 @@ class TestSharepointOnlineDataSource:
 
             drive_items_with_permissions = []
 
-            async for drive_item_with_permission in source._drive_items_batch_with_permissions(
+            async for (
+                drive_item_with_permission
+            ) in source._drive_items_batch_with_permissions(
                 drive_id, drive_items_batch, "dummy_site_web_url"
             ):
                 drive_items_with_permissions.append(drive_item_with_permission)
@@ -2840,8 +3007,16 @@ class TestSharepointOnlineDataSource:
         assert config is not None
 
     @pytest.mark.asyncio
-    async def test_validate_config_empty_config(self, patch_sharepoint_client):
-        async with create_source(SharepointOnlineDataSource) as source:
+    async def test_validate_config_empty_config_with_secret_auth(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(
+            tenant_id="",
+            tenant_name="",
+            client_id="",
+            secret_value="",
+            auth_method="secret",
+        ) as source:
             with pytest.raises(ConfigurableFieldValueError) as e:
                 await source.validate_config()
 
@@ -2849,6 +3024,22 @@ class TestSharepointOnlineDataSource:
             assert e.match("Tenant name")
             assert e.match("Client ID")
             assert e.match("Secret value")
+
+    @pytest.mark.asyncio
+    async def test_validate_config_empty_config_with_cert_auth(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source(
+            tenant_id="", tenant_name="", client_id="", auth_method="certificate"
+        ) as source:
+            with pytest.raises(ConfigurableFieldValueError) as e:
+                await source.validate_config()
+
+            assert e.match("Tenant ID")
+            assert e.match("Tenant name")
+            assert e.match("Client ID")
+            assert e.match("Content of certificate file")
+            assert e.match("Content of private key file")
 
     @pytest.mark.asyncio
     async def test_validate_config(self, patch_sharepoint_client):
@@ -2969,12 +3160,15 @@ class TestSharepointOnlineDataSource:
         attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(attachment_id, async_buffer):
@@ -3001,12 +3195,15 @@ class TestSharepointOnlineDataSource:
         attachment = {"odata.id": "1", "_original_filename": "file.ppt"}
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(attachment_id, async_buffer):
@@ -3075,12 +3272,15 @@ class TestSharepointOnlineDataSource:
         }
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(drive_id, drive_item_id, async_buffer):
@@ -3114,12 +3314,15 @@ class TestSharepointOnlineDataSource:
         }
         message = "This is the text content of drive item"
 
-        with patch(
-            "connectors.content_extraction.ContentExtraction.extract_text",
-            return_value=message,
-        ) as extraction_service_mock, patch(
-            "connectors.content_extraction.ContentExtraction.get_extraction_config",
-            return_value={"host": "http://localhost:8090"},
+        with (
+            patch(
+                "connectors.content_extraction.ContentExtraction.extract_text",
+                return_value=message,
+            ) as extraction_service_mock,
+            patch(
+                "connectors.content_extraction.ContentExtraction.get_extraction_config",
+                return_value={"host": "http://localhost:8090"},
+            ),
         ):
 
             async def download_func(drive_id, drive_item_id, async_buffer):

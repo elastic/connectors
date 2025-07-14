@@ -116,7 +116,11 @@ class ContentExtraction:
                 content = await self.send_filepointer(filepath, original_filename)
             else:
                 content = await self.send_file(filepath, original_filename)
-        except (ClientConnectionError, ServerTimeoutError) as e:
+        except ServerTimeoutError as e:
+            logger.error(
+                f"Text extraction request to {self.host} timed out for {filename}: {e}"
+            )
+        except ClientConnectionError as e:
             logger.error(
                 f"Connection to {self.host} failed while extracting data from {filename}. Error: {e}"
             )

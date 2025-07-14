@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:${VERSION}
+    image: ${ELASTICSEARCH_DRA_DOCKER_IMAGE}
     container_name: elasticsearch
     environment:
       - cluster.name=docker-cluster
@@ -24,30 +24,11 @@ services:
     networks:
       - esnet
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:${VERSION}
-    ports:
-      - 5601:5601
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-        - "elasticsearch"
-    profiles:
-      - "enterprise-search"
-    environment:
-      ELASTICSEARCH_URL: http://host.docker.internal:9200
-      ELASTICSEARCH_HOSTS: http://host.docker.internal:9200
-      ENTERPRISESEARCH_HOST: http://host.docker.internal:3002
-      ELASTICSEARCH_USERNAME: kibana_system
-      ELASTICSEARCH_PASSWORD: changeme
-    networks:
-      - esnet
-
   graphql:
-    build: 
+    build:
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
-    command: bin/python tests/sources/fixtures/graphql/fixture.py
+    command: .venv/bin/python tests/sources/fixtures/graphql/fixture.py
     ports:
       - "9094:9094"
     volumes:

@@ -27,64 +27,12 @@ class TemporaryConnectorApiWrapper(ESClient):
     def __init__(self, elastic_config):
         super().__init__(elastic_config)
 
-    async def connector_check_in(self, connector_id):
+    async def connector_get(self, connector_id, include_deleted):
         return await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_check_in",
+            "GET",
+            f"/_connector/{connector_id}",
             headers={"accept": "application/json"},
-        )
-
-    async def connector_update_filtering_draft_validation(
-        self, connector_id, validation_result
-    ):
-        return await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_filtering/_validation",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={"validation": validation_result},
-        )
-
-    async def connector_activate_filtering_draft(self, connector_id):
-        return await self.client.perform_request(
-            "PUT",
-            f"/_connector/{connector_id}/_filtering/_activate",
-            headers={"accept": "application/json"},
-        )
-
-    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
-        await self.client.perform_request(
-            "PUT",
-            f"/_connector/_sync_job/{sync_job_id}/_claim",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={
-                "worker_hostname": worker_hostname,
-                **({"sync_cursor": sync_cursor} if sync_cursor else {}),
-            },
-        )
-
-    async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
-        return await self.client.perform_request(
-            "POST",
-            "/_connector/_sync_job",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={
-                "id": connector_id,
-                "job_type": job_type,
-                "trigger_method": trigger_method,
-            },
-        )
-
-    async def connector_sync_job_update_stats(
-        self, sync_job_id, ingestion_stats, metadata
-    ):
-        await self.client.perform_request(
-            "PUT",
-            f"/_connector/_sync_job/{sync_job_id}/_stats",
-            headers={"accept": "application/json", "Content-Type": "application/json"},
-            body={
-                **ingestion_stats,
-                **({"metadata": metadata} if metadata else {}),
-            },
+            params={"include_deleted": include_deleted},
         )
 
 
@@ -95,7 +43,45 @@ class ESApi(ESClient):
 
     async def connector_check_in(self, connector_id):
         return await self._retrier.execute_with_retry(
-            partial(self._api_wrapper.connector_check_in, connector_id)
+            partial(self.client.connector.check_in, connector_id=connector_id)
+        )
+
+    async def connector_get(self, connector_id, include_deleted=False):
+        return await self._retrier.execute_with_retry(
+            partial(self._api_wrapper.connector_get, connector_id, include_deleted)
+        )
+
+    async def connector_put(
+        self, connector_id, service_type, connector_name, index_name, is_native
+    ):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.put,
+                connector_id=connector_id,
+                service_type=service_type,
+                name=connector_name,
+                index_name=index_name,
+                is_native=is_native,
+            )
+        )
+
+    async def connector_update_scheduling(self, connector_id, scheduling):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.update_scheduling,
+                connector_id=connector_id,
+                scheduling=scheduling,
+            )
+        )
+
+    async def connector_update_configuration(self, connector_id, configuration, values):
+        return await self._retrier.execute_with_retry(
+            partial(
+                self.client.connector.update_configuration,
+                connector_id=connector_id,
+                configuration=configuration,
+                values=values,
+            )
         )
 
     async def connector_update_filtering_draft_validation(
@@ -103,34 +89,36 @@ class ESApi(ESClient):
     ):
         return await self._retrier.execute_with_retry(
             partial(
-                self._api_wrapper.connector_update_filtering_draft_validation,
-                connector_id,
-                validation_result,
+                self.client.connector.update_filtering_validation,
+                connector_id=connector_id,
+                validation=validation_result,
             )
         )
 
     async def connector_activate_filtering_draft(self, connector_id):
         return await self._retrier.execute_with_retry(
-            partial(self._api_wrapper.connector_activate_filtering_draft, connector_id)
+            partial(
+                self.client.connector.update_active_filtering, connector_id=connector_id
+            )
         )
 
     async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
         return await self._retrier.execute_with_retry(
             partial(
-                self._api_wrapper.connector_sync_job_claim,
-                sync_job_id,
-                worker_hostname,
-                sync_cursor,
+                self.client.connector.sync_job_claim,
+                connector_sync_job_id=sync_job_id,
+                worker_hostname=worker_hostname,
+                sync_cursor=sync_cursor,
             )
         )
 
     async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
         return await self._retrier.execute_with_retry(
             partial(
-                self._api_wrapper.connector_sync_job_create,
-                connector_id,
-                job_type,
-                trigger_method,
+                self.client.connector.sync_job_post,
+                id=connector_id,
+                job_type=job_type,
+                trigger_method=trigger_method,
             )
         )
 
@@ -139,10 +127,10 @@ class ESApi(ESClient):
     ):
         return await self._retrier.execute_with_retry(
             partial(
-                self._api_wrapper.connector_sync_job_update_stats,
-                sync_job_id,
-                ingestion_stats,
-                metadata,
+                self.client.connector.sync_job_update_stats,
+                connector_sync_job_id=sync_job_id,
+                body=ingestion_stats,
+                metadata=metadata if metadata else {},
             )
         )
 
@@ -185,18 +173,18 @@ class ESIndex(ESClient):
         return self._create_object(resp_body)
 
     async def fetch_response_by_id(self, doc_id):
-        if not self.serverless:
-            await self._retrier.execute_with_retry(
-                partial(self.client.indices.refresh, index=self.index_name)
-            )
-
         try:
+            if not self.serverless:
+                await self._retrier.execute_with_retry(
+                    partial(self.client.indices.refresh, index=self.index_name)
+                )
+
             resp = await self._retrier.execute_with_retry(
                 partial(self.client.get, index=self.index_name, id=doc_id)
             )
         except ApiError as e:
-            logger.critical(f"The server returned {e.status_code}")
-            logger.critical(e.body, exc_info=True)
+            logger.error(f"The server returned {e.status_code}")
+            logger.error(e.body, exc_info=True)
             if e.status_code == 404:
                 msg = f"Couldn't find document in {self.index_name} by id {doc_id}"
                 raise DocumentNotFoundError(msg) from e

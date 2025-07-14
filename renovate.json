@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>elastic/renovate-config",
+    "github>elastic/renovate-config:only-chainguard"
+  ],
+  "schedule": [
+    "* * * * 0,6"
+  ],
+  "labels": [
+    "renovate",
+    "auto-backport",
+    "v8.17.0",
+    "v8.18.0",
+    "v8.19.0",
+    "v9.0.0",
+    "v9.1.0",
+    "v9.2.0"
+  ],
+  "packageRules": [
+    {
+      "enabled": false,
+      "matchPackageNames": [
+        "/^cgr.dev//"
+      ]
+    },
+    {
+      "matchPackageNames": [
+        "docker.elastic.co/wolfi/python"
+      ],
+      "matchCurrentValue": "/3\\.11(-dev)?/",
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ],
+      "enabled": false
+    }
+  ]
+}

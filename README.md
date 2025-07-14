@@ -8,30 +8,26 @@
 This repository contains the source code for all Elastic connectors, developed by the Search team at Elastic.
 Use connectors to sync data from popular data sources to Elasticsearch.
 
-These connectors are available as:
-- [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) to be self-managed on your own infrastructure
-- [**Native connectors**](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html) using our fully managed service on Elastic Cloud
+These connectors are available to be self-managed on your own infrastructure.
 
-ℹ️ For an overview of the steps involved in deploying connector clients refer to [**Connector clients**](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html) in the official Elastic documentation.
+> [!NOTE]  
+> Managed connectors on Elastic Cloud Hosted are no longer available as of version 9.0.
+
+ℹ️ For an overview of the steps involved in deploying connectors refer to [**Self-managed connectors**](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-build-connector.html) in the official Elastic documentation.
 
 To get started quickly with self-managed connectors using Docker Compose, check out this [README file](./scripts/stack/README.md).
 
 ### Connector documentation
 
-The main documentation for _using_ connectors lives in the Search solution's docs.
-Here are the main pages:
+The main documentation for using connectors lives in the [Elastic docs](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors.html).
+You'll find the individual references for each connector there.
 
-- [Connectors overview](https://www.elastic.co/guide/en/enterprise-search/current/connectors.html)
-- [Connector clients](https://www.elastic.co/guide/en/enterprise-search/current/build-connector.html)
-- [Native connectors](https://www.elastic.co/guide/en/enterprise-search/current/native-connectors.html)
-
-You'll also find the individual references for each connector there.
 For everything to do with _developing_ connectors, you'll find that here in this repo.
 
 #### API documentation
 
 Since 8.12.0, you can manage connectors and sync jobs programmatically using APIs.
-Refer to the [Connector API documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/connector-apis.html) in the Elasticsearch docs.
+Refer to the [Connector API documentation](https://www.elastic.co/docs/api/doc/elasticsearch/v8/group/endpoint-connector).
 
 #### Command-line interface
 
@@ -44,7 +40,7 @@ This is shared code that is not used by individual connectors, but helps to coor
 
 ## Connector framework
 
-This repo is also the home of the Elastic connector framework. This framework enables developers to build Elastic-supported connector clients.
+This repo is also the home of the Elastic connector framework. This framework enables developers to build Elastic-supported self-managed connectors.
 The framework implements common functionalities out of the box, so developers can focus on the logic specific to integrating their chosen data source.
 
 The framework ensures compatibility, makes it easier for our team to review PRs, and help out in the development process. When you build using our framework, we provide a pathway for the connector to be officially supported by Elastic.
@@ -60,7 +56,7 @@ For more information, instructions, and options, see the [README file](./scripts
 The framework serves two distinct, but related use cases:
 
 - Customizing an existing Elastic connector client
-- Building a new connector client
+- Building a new self-managed connector
 
 ### Guides for using the framework
 

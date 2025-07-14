@@ -8,13 +8,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 from elasticsearch import (
-    AuthorizationException as ElasticAuthorizationException,
-)
-from elasticsearch import (
     ConflictError,
-)
-from elasticsearch import (
-    NotFoundError as ElasticNotFoundError,
 )
 
 from connectors.es.client import License
@@ -24,7 +18,6 @@ from connectors.protocol import Filter, JobStatus, JobType, Pipeline
 from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.sync_job_runner import (
-    ApiKeyNotFoundError,
     SyncJobRunner,
     SyncJobStartError,
 )
@@ -44,7 +37,7 @@ def mock_connector():
     connector.last_sync_status = JobStatus.COMPLETED
     connector.features.sync_rules_enabled.return_value = True
     connector.features.incremental_sync_enabled.return_value = True
-    connector.features.native_connector_api_keys_enabled.return_value = True
+    connector.features.native_connector_api_keys_enabled.return_value = False
     connector.sync_cursor = SYNC_CURSOR
     connector.document_count = AsyncMock(return_value=TOTAL_DOCUMENT_COUNT)
     connector.sync_starts = AsyncMock(return_value=True)
@@ -88,6 +81,8 @@ def create_runner(
     index_name=SEARCH_INDEX_NAME,
     sync_cursor=SYNC_CURSOR,
     connector=None,
+    service_config=None,
+    es_config=None,
 ):
     source_klass = Mock()
     data_provider = Mock()
@@ -112,8 +107,8 @@ def create_runner(
     if not connector:
         connector = mock_connector()
 
-    es_config = {}
-    service_config = {}
+    es_config = es_config if es_config is not None else {}
+    service_config = service_config if service_config is not None else {}
 
     return SyncJobRunner(
         source_klass=source_klass,
@@ -143,21 +138,6 @@ def sync_orchestrator_mock():
         sync_orchestrator_klass_mock.return_value = sync_orchestrator_mock
 
         yield sync_orchestrator_mock
-
-
-@pytest.fixture(autouse=True)
-def es_management_client_mock():
-    with patch(
-        "connectors.sync_job_runner.ESManagementClient"
-    ) as es_management_client_klass_mock:
-        es_management_client_mock = Mock()
-        es_management_client_mock.get_connector_secret = AsyncMock(
-            return_value="my-secret"
-        )
-        es_management_client_mock.close = AsyncMock()
-        es_management_client_klass_mock.return_value = es_management_client_mock
-
-        yield es_management_client_mock
 
 
 def create_runner_yielding_docs(docs=None):
@@ -950,178 +930,6 @@ async def test_unsupported_job_type():
 
     with pytest.raises(SyncJobStartError):
         await sync_job_runner.execute()
-
-
-@pytest.mark.parametrize(
-    "job_type, sync_cursor",
-    [
-        (JobType.FULL, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR),
-        (JobType.ACCESS_CONTROL, None),
-    ],
-)
-@pytest.mark.asyncio
-async def test_native_connector_sync_fails_when_api_key_secret_missing(
-    job_type, sync_cursor, sync_orchestrator_mock, es_management_client_mock
-):
-    ingestion_stats = {
-        "indexed_document_count": 0,
-        "indexed_document_volume": 0,
-        "deleted_document_count": 0,
-        "total_document_count": TOTAL_DOCUMENT_COUNT,
-    }
-    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    es_management_client_mock.get_connector_secret.side_effect = ElasticNotFoundError(
-        message="not found", meta=None, body={}
-    )
-
-    sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor)
-
-    await sync_job_runner.execute()
-
-    sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_job.fail.assert_awaited_with(
-        ANY, ingestion_stats=ingestion_stats
-    )
-    sync_job_runner.sync_job.done.assert_not_awaited()
-    sync_job_runner.sync_job.cancel.assert_not_awaited()
-    sync_job_runner.sync_job.suspend.assert_not_awaited()
-
-    assert sync_job_runner.sync_orchestrator is None
-
-    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type)
-    sync_job_runner.connector.sync_done.assert_awaited_with(
-        sync_job_runner.sync_job, cursor=sync_cursor
-    )
-
-
-@pytest.mark.parametrize(
-    "job_type, sync_cursor",
-    [
-        (JobType.FULL, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR),
-        (JobType.ACCESS_CONTROL, None),
-    ],
-)
-@pytest.mark.asyncio
-async def test_connector_client_sync_succeeds_when_api_key_secret_missing(
-    job_type, sync_cursor, sync_orchestrator_mock
-):
-    connector = mock_connector()
-    connector.native = False
-
-    ingestion_stats = {
-        "indexed_document_count": 25,
-        "indexed_document_volume": 30,
-        "deleted_document_count": 20,
-    }
-    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-    sync_orchestrator_mock.update_authorization = AsyncMock(
-        side_effect=ApiKeyNotFoundError()
-    )
-
-    sync_job_runner = create_runner(
-        job_type=job_type, connector=connector, sync_cursor=sync_cursor
-    )
-    await sync_job_runner.execute()
-
-    ingestion_stats["total_document_count"] = TOTAL_DOCUMENT_COUNT
-
-    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type)
-    sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_orchestrator.async_bulk.assert_awaited()
-    sync_job_runner.sync_job.done.assert_awaited_with(ingestion_stats=ingestion_stats)
-    sync_job_runner.sync_job.fail.assert_not_awaited()
-    sync_job_runner.sync_job.cancel.assert_not_awaited()
-    sync_job_runner.sync_job.suspend.assert_not_awaited()
-    sync_job_runner.connector.sync_done.assert_awaited_with(
-        sync_job_runner.sync_job, cursor=sync_cursor
-    )
-
-
-@pytest.mark.parametrize(
-    "job_type, sync_cursor",
-    [
-        (JobType.FULL, SYNC_CURSOR),
-        (JobType.INCREMENTAL, SYNC_CURSOR),
-    ],
-)
-@pytest.mark.asyncio
-async def test_native_connector_content_sync_fails_when_api_key_invalid(
-    job_type, sync_cursor, sync_orchestrator_mock
-):
-    expected_error = f"Connector is not authorized to access index [{SEARCH_INDEX_NAME}]. API key may need to be regenerated. Status code: [403]."
-    ingestion_stats = {
-        "indexed_document_count": 0,
-        "indexed_document_volume": 0,
-        "deleted_document_count": 0,
-        "total_document_count": TOTAL_DOCUMENT_COUNT,
-    }
-    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-
-    error_meta = Mock()
-    error_meta.status = 403
-    sync_orchestrator_mock.prepare_content_index.side_effect = (
-        ElasticAuthorizationException(message=None, meta=error_meta, body={})
-    )
-
-    sync_job_runner = create_runner(job_type=job_type, sync_cursor=sync_cursor)
-
-    await sync_job_runner.execute()
-
-    sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_job.fail.assert_awaited_with(
-        expected_error, ingestion_stats=ingestion_stats
-    )
-    sync_job_runner.sync_job.done.assert_not_awaited()
-    sync_job_runner.sync_job.cancel.assert_not_awaited()
-    sync_job_runner.sync_job.suspend.assert_not_awaited()
-
-    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type)
-    sync_job_runner.connector.sync_done.assert_awaited_with(
-        sync_job_runner.sync_job, cursor=sync_cursor
-    )
-
-
-@pytest.mark.asyncio
-async def test_native_acl_connector_sync_fails_when_api_key_invalid(
-    sync_orchestrator_mock,
-):
-    job_type = JobType.ACCESS_CONTROL
-    expected_error = f"Connector is not authorized to access index [{ACCESS_CONTROL_INDEX_NAME}]. API key may need to be regenerated. Status code: [403]."
-
-    ingestion_stats = {
-        "indexed_document_count": 0,
-        "indexed_document_volume": 0,
-        "deleted_document_count": 0,
-        "total_document_count": TOTAL_DOCUMENT_COUNT,
-    }
-    sync_orchestrator_mock.ingestion_stats.return_value = ingestion_stats
-
-    error_meta = Mock()
-    error_meta.status = 403
-    sync_orchestrator_mock.async_bulk.side_effect = ElasticAuthorizationException(
-        message=None, meta=error_meta, body={}
-    )
-
-    sync_job_runner = create_runner(
-        job_type=job_type, index_name=ACCESS_CONTROL_INDEX_NAME, sync_cursor=None
-    )
-
-    await sync_job_runner.execute()
-
-    sync_job_runner.sync_job.claim.assert_awaited()
-    sync_job_runner.sync_job.fail.assert_awaited_with(
-        expected_error, ingestion_stats=ingestion_stats
-    )
-    sync_job_runner.sync_job.done.assert_not_awaited()
-    sync_job_runner.sync_job.cancel.assert_not_awaited()
-    sync_job_runner.sync_job.suspend.assert_not_awaited()
-
-    sync_job_runner.connector.sync_starts.assert_awaited_with(job_type)
-    sync_job_runner.connector.sync_done.assert_awaited_with(
-        sync_job_runner.sync_job, cursor=None
-    )
 
 
 @pytest.mark.parametrize(

@@ -10,6 +10,8 @@ Event loop
 - instantiates connector plugins
 - mirrors an Elasticsearch index with a collection of documents
 """
+
+import functools
 from datetime import datetime, timezone
 
 from connectors.es.client import License, with_concurrency_control
@@ -26,6 +28,7 @@ from connectors.protocol import (
 )
 from connectors.services.base import BaseService
 from connectors.source import get_source_klass
+from connectors.utils import ConcurrentTasks
 
 
 class JobSchedulingService(BaseService):
@@ -36,9 +39,22 @@ class JobSchedulingService(BaseService):
         self.idling = self.service_config["idling"]
         self.heartbeat_interval = self.service_config["heartbeat"]
         self.source_list = config["sources"]
+        self.first_run = True
         self.last_wake_up_time = datetime.now(timezone.utc)
+        self.max_concurrency = self.service_config.get(
+            "max_concurrent_scheduling_tasks"
+        )
+        self.schedule_tasks_pool = ConcurrentTasks(max_concurrency=self.max_concurrency)
+
+    def stop(self):
+        super().stop()
+        self.schedule_tasks_pool.cancel()
 
     async def _schedule(self, connector):
+        # To do some first-time stuff
+        just_started = self.first_run
+        self.first_run = False
+
         if self.running is False:
             connector.log_debug("Skipping run because service is terminating")
             return
@@ -61,11 +77,11 @@ class JobSchedulingService(BaseService):
             return
         except DataSourceError as e:
             await connector.error(e)
-            connector.log_critical(e, exc_info=True)
+            connector.log_error(e, exc_info=True)
             raise
 
         # the heartbeat is always triggered
-        await connector.heartbeat(self.heartbeat_interval)
+        await connector.heartbeat(self.heartbeat_interval, force=just_started)
 
         connector.log_debug(f"Status is {connector.status}")
 
@@ -100,6 +116,11 @@ class JobSchedulingService(BaseService):
 
             if connector.features.sync_rules_enabled():
                 await connector.validate_filtering(validator=data_source)
+
+            connector.log_debug(
+                "Connector is configured correctly and can reach the data source"
+            )
+            await connector.connected()
         except Exception as e:
             connector.log_error(e, exc_info=True)
             await connector.error(e)
@@ -111,9 +132,7 @@ class JobSchedulingService(BaseService):
             (
                 is_platinum_license_enabled,
                 license_enabled,
-            ) = await self.connector_index.has_active_license_enabled(
-                License.PLATINUM
-            )  # pyright: ignore
+            ) = await self.connector_index.has_active_license_enabled(License.PLATINUM)  # pyright: ignore
 
             if is_platinum_license_enabled:
                 await self._try_schedule_sync(connector, JobType.ACCESS_CONTROL)
@@ -158,13 +177,19 @@ class JobSchedulingService(BaseService):
                         native_service_types=native_service_types,
                         connector_ids=connector_ids,
                     ):
-                        await self._schedule(connector)
+                        if not self.schedule_tasks_pool.try_put(
+                            functools.partial(self._schedule, connector)
+                        ):
+                            connector.log_debug(
+                                f"Job Scheduling service is already running {self.max_concurrency} concurrent scheduling jobs and can't run more at this point. Increase 'max_concurrent_scheduling_tasks' in config if you want the service to run more concurrent scheduling jobs."  # pyright: ignore
+                            )
 
                 except Exception as e:
-                    self.logger.critical(e, exc_info=True)
+                    self.logger.error(e, exc_info=True)
                     self.raise_if_spurious(e)
 
                 # Immediately break instead of sleeping
+                await self.schedule_tasks_pool.join()
                 if not self.running:
                     break
                 self.last_wake_up_time = datetime.now(timezone.utc)
@@ -215,7 +240,7 @@ class JobSchedulingService(BaseService):
                 next_sync = connector.next_sync(job_type, last_wake_up_time)
                 connector.log_debug(f"Next '{job_type_value}' sync is at {next_sync}")
             except Exception as e:
-                connector.log_critical(e, exc_info=True)
+                connector.log_error(e, exc_info=True)
                 await connector.error(str(e))
                 return False
 

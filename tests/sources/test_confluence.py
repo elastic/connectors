@@ -4,6 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 """Tests the Confluence database source class methods"""
+
 import ssl
 from contextlib import asynccontextmanager
 from copy import copy
@@ -23,10 +24,14 @@ from connectors.sources.confluence import (
     CONFLUENCE_CLOUD,
     CONFLUENCE_DATA_CENTER,
     CONFLUENCE_SERVER,
+    BadRequest,
     ConfluenceClient,
     ConfluenceDataSource,
+    Forbidden,
     InternalServerError,
+    InvalidConfluenceDataSourceTypeError,
     NotFound,
+    Unauthorized,
 )
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
@@ -55,6 +60,7 @@ RESPONSE_SPACE = {
 SPACE = {
     "id": 4554779,
     "name": "DEMO",
+    "key": "DM",
     "_links": {
         "webui": "/spaces/DM",
     },
@@ -109,6 +115,32 @@ RESPONSE_PAGE = {
     "_links": {},
 }
 
+RESPONSE_PAGE_WITH_HTML = {
+    "results": [
+        {
+            "id": 4779,
+            "title": "ES-scrum",
+            "type": "page",
+            "history": {
+                "lastUpdated": {"when": "2023-01-24T04:07:19.672Z"},
+                "createdDate": "2023-01-03T09:24:50.633Z",
+                "createdBy": {"publicName": "user1"},
+            },
+            "children": {"attachment": {"size": 2}},
+            "body": {"storage": {"value": "<p>This is a test page</p>"}},
+            "space": {"name": "DEMO"},
+            "_links": {
+                "webui": "/spaces/~1234abc/pages/4779/ES-scrum",
+            },
+            "ancestors": [{"title": "parent_title"}],
+        }
+    ],
+    "start": 0,
+    "limit": 1,
+    "size": 1,
+    "_links": {},
+}
+
 EXPECTED_PAGE = {
     "_id": "4779",
     "type": "page",
@@ -131,6 +163,7 @@ EXPECTED_SPACE = {
     "url": "http://127.0.0.1:9696/spaces/DM",
     "createdDate": "2023-01-03T09:24:50.633Z",
     "author": "user1",
+    "key": "DM",
 }
 
 RESPONSE_ATTACHMENT = {
@@ -465,10 +498,12 @@ EXPECTED_QUERY_RESPONSE = {
 
 
 @asynccontextmanager
-async def create_confluence_source(use_text_extraction_service=False):
+async def create_confluence_source(
+    use_text_extraction_service=False, data_source=CONFLUENCE_SERVER
+):
     async with create_source(
         ConfluenceDataSource,
-        data_source=CONFLUENCE_SERVER,
+        data_source=data_source,
         username="admin",
         password="changeme",
         confluence_url=HOST_URL,
@@ -819,6 +854,60 @@ async def test_get_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_400_status():
+    error = ClientResponseError(None, None)
+    error.status = 400
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(BadRequest):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_401_status():
+    error = ClientResponseError(None, None)
+    error.status = 401
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(Unauthorized):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_get_with_403_status():
+    error = ClientResponseError(None, None)
+    error.status = 403
+
+    async with create_confluence_source() as source:
+        with patch(
+            "aiohttp.ClientSession.get",
+            side_effect=error,
+        ):
+            with pytest.raises(Forbidden):
+                response = await source.confluence_client.api_call(
+                    url="http://localhost:1000/err"
+                )
+                await response.json()
+
+
+@pytest.mark.asyncio
 async def test_get_with_404_status():
     error = ClientResponseError(None, None)
     error.status = 404
@@ -1038,12 +1127,15 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
     lambda *_: True,
 )
 async def test_download_attachment_with_text_extraction_enabled_adds_body():
-    with patch(
-        "connectors.content_extraction.ContentExtraction.extract_text",
-        return_value=RESPONSE_CONTENT,
-    ), patch(
-        "connectors.content_extraction.ContentExtraction.get_extraction_config",
-        return_value={"host": "http://localhost:8090"},
+    with (
+        patch(
+            "connectors.content_extraction.ContentExtraction.extract_text",
+            return_value=RESPONSE_CONTENT,
+        ),
+        patch(
+            "connectors.content_extraction.ContentExtraction.get_extraction_config",
+            return_value={"host": "http://localhost:8090"},
+        ),
     ):
         async with create_confluence_source(use_text_extraction_service=True) as source:
             source.confluence_client._get_session().get = AsyncMock(
@@ -1114,12 +1206,32 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
 
 
 @pytest.mark.asyncio
-async def test_get_session():
-    """Test that the instance of session returned is always the same for the datasource class."""
+@pytest.mark.parametrize(
+    "data_source_type", [CONFLUENCE_CLOUD, CONFLUENCE_DATA_CENTER, CONFLUENCE_SERVER]
+)
+async def test_get_session(data_source_type):
+    async with create_confluence_source(data_source=data_source_type) as source:
+        try:
+            source.confluence_client._get_session()
+        except Exception as e:
+            pytest.fail(
+                f"Should not raise for valid data source type '{data_source_type}'. Exception: {e}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_session_multiple_calls_return_same_instance():
     async with create_confluence_source() as source:
         first_instance = source.confluence_client._get_session()
         second_instance = source.confluence_client._get_session()
         assert first_instance is second_instance
+
+
+@pytest.mark.asyncio
+async def test_get_session_raise_on_invalid_data_source_type():
+    async with create_confluence_source(data_source="invalid") as source:
+        with pytest.raises(InvalidConfluenceDataSourceTypeError):
+            source.confluence_client._get_session()
 
 
 @pytest.mark.asyncio
@@ -1230,8 +1342,12 @@ async def test_get_access_control_dls_enabled():
         source._dls_enabled = MagicMock(return_value=True)
         source.confluence_client.data_source_type = "confluence_cloud"
 
-        source.atlassian_access_control.fetch_all_users = AsyncIterator([mock_users])
-        source.atlassian_access_control.fetch_user = AsyncIterator([mock_user1])
+        source.atlassian_access_control.fetch_all_users_for_confluence = AsyncIterator(
+            [mock_users]
+        )
+        source.atlassian_access_control.fetch_user_for_confluence = AsyncIterator(
+            [mock_user1]
+        )
 
         user_documents = []
         async for user_doc in source.get_access_control():
@@ -1626,3 +1742,14 @@ async def test_fetch_page_blog_documents_with_labels():
                     "ancestors": [{"title": "parent_title"}],
                     "labels": ["label1", "label2"],
                 }
+
+
+@pytest.mark.asyncio
+async def test_fetch_documents_with_html():
+    async with create_confluence_source() as source:
+        source.confluence_client._get_session().get = AsyncMock(
+            return_value=JSONAsyncMock(RESPONSE_PAGE_WITH_HTML)
+        )
+        source.confluence_client.index_labels = True
+        async for response, _, _, _, _ in source.fetch_documents(api_query=""):
+            assert response == EXPECTED_PAGE

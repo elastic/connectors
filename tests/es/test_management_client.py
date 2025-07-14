@@ -14,7 +14,6 @@ from elasticsearch import (
 )
 
 from connectors.es.management_client import ESManagementClient
-from connectors.es.settings import Settings
 from tests.commons import AsyncIterator
 
 
@@ -54,130 +53,7 @@ class TestESManagementClient:
         lang_code = "en"
         await es_management_client.create_content_index(index_name, lang_code)
 
-        es_management_client.client.indices.create.assert_called_with(
-            index=index_name, mappings=ANY, settings=ANY
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_mappings_when_mappings_exist(
-        self, es_management_client
-    ):
-        index_name = "something"
-        mappings = {}
-        existing_mappings_response = {index_name: {"mappings": ["something"]}}
-
-        es_management_client.client.indices.get_mapping = AsyncMock(
-            return_value=existing_mappings_response
-        )
-
-        await es_management_client.ensure_content_index_mappings(index_name, mappings)
-        es_management_client.client.indices.put_mapping.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_mappings_when_mappings_do_not_exist(
-        self, es_management_client
-    ):
-        index_name = "something"
-        mappings = {
-            "dynamic": True,
-            "dynamic_templates": ["something"],
-            "properties": "something_else",
-        }
-        existing_mappings_response = {index_name: {"mappings": {}}}
-
-        es_management_client.client.indices.get_mapping = AsyncMock(
-            return_value=existing_mappings_response
-        )
-
-        await es_management_client.ensure_content_index_mappings(index_name, mappings)
-        es_management_client.client.indices.put_mapping.assert_awaited_with(
-            index=index_name,
-            dynamic=mappings["dynamic"],
-            dynamic_templates=mappings["dynamic_templates"],
-            properties=mappings["properties"],
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_mappings_when_mappings_do_not_exist_but_no_mappings_provided(
-        self, es_management_client
-    ):
-        index_name = "something"
-        mappings = None
-        existing_mappings_response = {index_name: {"mappings": {}}}
-
-        es_management_client.client.indices.get_mapping = AsyncMock(
-            return_value=existing_mappings_response
-        )
-
-        await es_management_client.ensure_content_index_mappings(index_name, mappings)
-        es_management_client.client.indices.put_mapping.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_exist(
-        self, es_management_client
-    ):
-        index_name = "something"
-        index = {"settings": {"index": {"analysis": "something"}}}
-
-        await es_management_client.ensure_content_index_settings(index_name, index)
-        es_management_client.client.indices.close.assert_not_called()
-        es_management_client.client.indices.put_settings.assert_not_called()
-        es_management_client.client.indices.open.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_do_not_exist(
-        self, es_management_client
-    ):
-        language_code = "en"
-        index_name = "something"
-        index = {}
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        await es_management_client.ensure_content_index_settings(
-            index_name, index, language_code
-        )
-
-        es_management_client.client.indices.close.assert_called()
-        es_management_client.client.indices.put_settings.assert_awaited_with(
-            index=index_name, body=settings
-        )
-        es_management_client.client.indices.open.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_do_not_exist_for_serverless(
-        self, es_management_client
-    ):
-        es_management_client.serverless = True
-        language_code = "en"
-        index_name = "something"
-        index = {}
-        settings = Settings(language_code=language_code, analysis_icu=False).to_hash()
-
-        await es_management_client.ensure_content_index_settings(
-            index_name, index, language_code
-        )
-
-        es_management_client.client.perform_request.assert_awaited_with(
-            "PUT",
-            f"/{index_name}/_settings?reopen=true",
-            headers={"accept": "application/json", "content-type": "application/json"},
-            body=settings,
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_content_index_settings_when_settings_exist_for_serverless(
-        self, es_management_client
-    ):
-        es_management_client.serverless = True
-        language_code = "en"
-        index_name = "something"
-        index = {"settings": {"index": {"analysis": "something"}}}
-
-        await es_management_client.ensure_content_index_settings(
-            index_name, index, language_code
-        )
-
-        es_management_client.client.perform_request.assert_not_called()
+        es_management_client.client.indices.create.assert_called_with(index=index_name)
 
     @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_do_not_exist(
@@ -257,13 +133,6 @@ class TestESManagementClient:
         es_management_client.client.indices.stats.assert_awaited_with(index="search-*")
 
     @pytest.mark.asyncio
-    async def test_index_exists(self, es_management_client):
-        index_name = "search-mongo"
-        es_management_client.client.indices.exists = AsyncMock(return_value=True)
-
-        assert await es_management_client.index_exists(index_name=index_name) is True
-
-    @pytest.mark.asyncio
     async def test_upsert(self, es_management_client):
         _id = "123"
         index_name = "search-mongo"
@@ -291,9 +160,10 @@ class TestESManagementClient:
             return_value=AsyncIterator(records),
         ):
             ids = []
-            async for doc_id, _ in es_management_client.yield_existing_documents_metadata(
-                "something"
-            ):
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
                 ids.append(doc_id)
 
             assert ids == []
@@ -314,9 +184,10 @@ class TestESManagementClient:
             return_value=AsyncIterator(records),
         ):
             ids = []
-            async for doc_id, _ in es_management_client.yield_existing_documents_metadata(
-                "something"
-            ):
+            async for (
+                doc_id,
+                _,
+            ) in es_management_client.yield_existing_documents_metadata("something"):
                 ids.append(doc_id)
 
             assert ids == ["1", "2"]
@@ -357,6 +228,72 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_create_connector_secret(self, es_management_client, mock_responses):
+        secret_id = "secret-id"
+        secret_value = "my-secret"
+
+        es_management_client.client.perform_request = AsyncMock(
+            return_value={"id": secret_id}
+        )
+
+        returned_id = await es_management_client.create_connector_secret(secret_value)
+        assert returned_id == secret_id
+        es_management_client.client.perform_request.assert_awaited_with(
+            "POST",
+            "/_connector/_secret",
+            body={"value": secret_value},
+            headers={"accept": "application/json", "content-type": "application/json"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_extract_index_or_alias_with_index(self, es_management_client):
+        response = {
+            "shapo-online": {
+                "aliases": {"search-shapo-online": {}},
+                "mappings": {},
+                "settings": {},
+            }
+        }
+
+        es_management_client.client.indices.get = AsyncMock(return_value=response)
+
+        index = await es_management_client.get_index_or_alias("shapo-online")
+
+        assert index == response["shapo-online"]
+
+    @pytest.mark.asyncio
+    async def test_extract_index_or_alias_with_alias(self, es_management_client):
+        response = {
+            "shapo-online": {
+                "aliases": {"search-shapo-online": {}},
+                "mappings": {},
+                "settings": {},
+            }
+        }
+
+        es_management_client.client.indices.get = AsyncMock(return_value=response)
+
+        index = await es_management_client.get_index_or_alias("search-shapo-online")
+
+        assert index == response["shapo-online"]
+
+    @pytest.mark.asyncio
+    async def test_extract_index_or_alias_when_none_present(self, es_management_client):
+        response = {
+            "shapo-online": {
+                "aliases": {"search-shapo-online": {}},
+                "mappings": {},
+                "settings": {},
+            }
+        }
+
+        es_management_client.client.indices.get = AsyncMock(return_value=response)
+
+        index = await es_management_client.get_index_or_alias("nonexistent")
+
+        assert index is None
+
+    @pytest.mark.asyncio
+    async def test_get_index_or_alias(self, es_management_client, mock_responses):
         secret_id = "secret-id"
         secret_value = "my-secret"
 

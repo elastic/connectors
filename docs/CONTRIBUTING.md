@@ -38,9 +38,9 @@ If something is not working as expected, please open an [issue](https://github.c
 ## Getting help
 
 The Ingestion team at Elastic maintains this repository and is happy to help.
-Try posting your question to the [Elastic discuss forums](https://discuss.elastic.co/c/enterprise-search/84).
+Try posting your question to the [Elastic discuss forums](https://discuss.elastic.co/c/search/84).
 Be sure to mention that you're using Connectors and also let us know what service type you're trying to use, and any errors/issues you are encountering.
-You can also find us in the `#enterprise-search` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
+You can also find us in the `#search-connectors` channel of the [Elastic Community Slack](http://elasticstack.slack.com).
 
 ## Types of contribution
 
@@ -68,7 +68,7 @@ To make sure we're building great connectors, we will be pretty strict on this c
 
 Any patch with changes outside [connectors/sources](../connectors/sources) or [config.yml.example](../config.yml.example) and [requirements.txt](../requirements.txt) will be rejected.
 
-If you need changes in the framework, or you are not sure about how to do something, reach out to the [Ingestion team](https://github.com/orgs/elastic/teams/ingestion-team/members) and/or file an issue.
+If you need changes in the framework, or you are not sure about how to do something, reach out to the [Ingestion team](https://github.com/orgs/elastic/teams/search-extract-and-transform/members) and/or file an issue.
 
 ### Correct code/file organization
 

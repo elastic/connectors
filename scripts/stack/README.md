@@ -17,7 +17,7 @@ These scripts can also be used as a starting place for adding Connectors to your
 
 ## Prerequisites
 * Linux or macOS (Although Windows can run the Connectors service, it is not currently supported via these scripts)
-* Python 3.10
+* Python 3.10 or 3.11
 * Docker with Docker Compose Installed
     * It is recommended to run Docker with at least 4GB of available RAM.
 * Curl 8.7.1 or higher
@@ -86,7 +86,7 @@ Then, to complete this in Kibana:
   * Finally, set your schedule and sync
 
 Note - some of the connectors require a valid Elasticsearch license above `basic`.
-To see which connectors require a higher license tier, see the [Connectors reference](https://www.elastic.co/guide/en/enterprise-search/current/connectors-references.html).
+To see which connectors require a higher license tier, see the [Connectors reference](https://www.elastic.co/guide/en/elasticsearch/reference/current/es-connectors-refs.html).
 
 ## Manual Configuration
 

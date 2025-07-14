@@ -3,6 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
+import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -93,6 +94,7 @@ def mock_connector(
     connector.heartbeat = AsyncMock()
     connector.reload = AsyncMock()
     connector.error = AsyncMock()
+    connector.connected = AsyncMock()
     connector.update_last_sync_scheduled_at_by_job_type = AsyncMock()
 
     return connector
@@ -379,6 +381,45 @@ async def test_run_when_connector_fields_are_invalid(
 
 @pytest.mark.asyncio
 @patch("connectors.services.job_scheduling.get_source_klass")
+async def test_run_when_connector_failed_validation_then_succeeded(
+    get_source_klass_mock, connector_index_mock, set_env
+):
+    error_message = "Something invalid is in config!"
+    actual_error = Exception(error_message)
+
+    data_source_mock = Mock()
+
+    def _source_klass(config):
+        return data_source_mock
+
+    def _error_once():
+        data_source_mock.validate_config.reset_mock(side_effect=True)
+        raise actual_error
+
+    get_source_klass_mock.return_value = _source_klass
+
+    data_source_mock.validate_config_fields = Mock()
+    data_source_mock.validate_config = AsyncMock(side_effect=_error_once)
+    data_source_mock.ping = AsyncMock()
+    data_source_mock.close = AsyncMock()
+
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
+    connector_index_mock.supported_connectors.return_value = AsyncIterator(
+        [connector], reusable=True
+    )
+    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+
+    data_source_mock.validate_config_fields.assert_called()
+    data_source_mock.validate_config.assert_awaited()
+    data_source_mock.ping.assert_awaited()
+    data_source_mock.close.assert_awaited()
+
+    connector.error.assert_awaited_with(actual_error)
+    connector.connected.assert_awaited()
+
+
+@pytest.mark.asyncio
+@patch("connectors.services.job_scheduling.get_source_klass")
 async def test_run_when_connector_ping_fails(
     get_source_klass_mock, connector_index_mock, set_env
 ):
@@ -438,3 +479,55 @@ async def test_run_when_connector_validate_config_fails(
     data_source_mock.close.assert_awaited_once()
 
     connector.error.assert_awaited_with(error)
+
+
+@pytest.mark.asyncio
+async def test_initial_loop_run_heartbeat_only_once(
+    connector_index_mock, sync_job_index_mock, set_env
+):
+    connector = mock_connector(next_sync=None)
+    connector_index_mock.supported_connectors.return_value = AsyncIterator(
+        [connector, connector, connector, connector]
+    )  # to emulate 4 runs
+    await create_and_run_service(JobSchedulingService)
+
+    connector.prepare.assert_awaited()
+    connector.heartbeat.assert_awaited()
+    assert connector.heartbeat.call_count == 4
+    # Only the first call to heartbeat should pass "True"
+    assert connector.heartbeat.call_args_list[0].kwargs["force"] is True
+    assert connector.heartbeat.call_args_list[1].kwargs["force"] is False
+    assert connector.heartbeat.call_args_list[2].kwargs["force"] is False
+    assert connector.heartbeat.call_args_list[3].kwargs["force"] is False
+    connector.update_last_sync_scheduled_at_by_job_type.assert_not_awaited()
+    sync_job_index_mock.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("connectors.services.job_scheduling.get_source_klass")
+async def test_run_when_validation_is_very_slow(
+    get_source_klass_mock, connector_index_mock, set_env
+):
+    data_source_mock = Mock()
+
+    def _source_klass(config):
+        return data_source_mock
+
+    async def _remote_validation():
+        await asyncio.sleep(999)
+
+    get_source_klass_mock.return_value = _source_klass
+
+    data_source_mock.validate_config_fields = Mock()
+    data_source_mock.validate_config = AsyncMock(side_effect=_remote_validation)
+    data_source_mock.ping = AsyncMock()
+    data_source_mock.close = AsyncMock()
+
+    connector = mock_connector(next_sync=datetime.now(timezone.utc))
+    connector_index_mock.supported_connectors.return_value = AsyncIterator([connector])
+    await create_and_run_service(JobSchedulingService, stop_after=0.15)
+
+    data_source_mock.validate_config_fields.assert_called()
+    data_source_mock.validate_config.assert_awaited_once()
+    data_source_mock.ping.assert_not_awaited()
+    data_source_mock.close.assert_awaited_once()

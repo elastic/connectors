@@ -7,10 +7,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest import mock
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
+from uuid import UUID
 
 import pytest
-from bson import DBRef, ObjectId
+from bson import Binary, DBRef, ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import OperationFailure
 
@@ -20,12 +21,15 @@ from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSourc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
 
+DEFAULT_DATABASE = "db"
+DEFAULT_COLLECTION = "col"
+
 
 @asynccontextmanager
 async def create_mongo_source(
     host="mongodb://127.0.0.1:27021",
-    database="db",
-    collection="col",
+    database=DEFAULT_DATABASE,
+    collection=DEFAULT_COLLECTION,
     ssl_enabled=False,
     ssl_ca="",
     tls_insecure=False,
@@ -164,7 +168,7 @@ def build_resp():
 async def test_get_docs(*args):
     async with create_mongo_source() as source:
         num = 0
-        async for (doc, _) in source.get_docs():
+        async for doc, _ in source.get_docs():
             assert doc["id"] in ("one", "two")
             num += 1
 
@@ -202,10 +206,6 @@ async def test_ping_when_called_then_does_not_raise(*args):
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
     async with create_mongo_source() as source:
-        collection_mock = Mock()
-        collection_mock.find = AsyncIterator(items=[{"_id": 1}])
-        source.collection = collection_mock
-
         filtering = Filter(
             {
                 "advanced_snippet": {
@@ -229,7 +229,13 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
         )
 
         with mock.patch.object(source, "get_client") as mock_client:
-            mock_client.__enter__.return_value = Mock()
+            with mock_client() as client_mock:
+                database_mock = MagicMock()
+                client_mock.__getitem__.return_value = database_mock
+
+                collection_mock = MagicMock()
+                collection_mock.find = AsyncIterator(items=[{"_id": 1}])
+                database_mock.__getitem__.return_value = collection_mock
 
             async for _ in source.get_docs(filtering):
                 pass
@@ -241,10 +247,6 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
 @pytest.mark.asyncio
 async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
     async with create_mongo_source() as source:
-        collection_mock = Mock()
-        collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
-        source.collection = collection_mock
-
         filtering = Filter(
             {
                 "advanced_snippet": {
@@ -265,7 +267,14 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present(
         )
 
         with mock.patch.object(source, "get_client") as mock_client:
-            mock_client.__enter__.return_value = Mock()
+            with mock_client() as client_mock:
+                database_mock = MagicMock()
+                client_mock.__getitem__.return_value = database_mock
+
+                collection_mock = MagicMock()
+                collection_mock.aggregate = AsyncIterator(items=[{"_id": 1}])
+                database_mock.__getitem__.return_value = collection_mock
+
             async for _ in source.get_docs(filtering):
                 pass
 
@@ -323,12 +332,15 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
     configured_database_name = "hello"
     configured_collection_name = "third"
 
-    with mock.patch(
-        "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-        return_value=future_with_result(server_database_names),
-    ), mock.patch(
-        "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
-        return_value=future_with_result(server_collection_names),
+    with (
+        mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+            return_value=future_with_result(server_database_names),
+        ),
+        mock.patch(
+            "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+            return_value=future_with_result(server_collection_names),
+        ),
     ):
         async with create_mongo_source(
             database=configured_database_name,
@@ -425,6 +437,26 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
             {"id": ObjectId("507f1f77bcf86cd799439011")},
             {"id": "507f1f77bcf86cd799439011"},
         ),
+        (
+            {"some_real_uuid": UUID("abddda2e-96f9-4f51-a512-f1225b0717c0")},
+            {"some_real_uuid": UUID("abddda2e-96f9-4f51-a512-f1225b0717c0")},
+        ),
+        (
+            {
+                "some_binary_uuid": Binary(
+                    b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 4
+                )
+            },
+            {"some_binary_uuid": UUID("abddda2e-96f9-4f51-a512-f1225b0717c0")},
+        ),
+        (
+            {
+                "some_binary_uuid": Binary(
+                    b'\xab\xdd\xda.\x96\xf9OQ\xa5\x12\xf1"[\x07\x17\xc0', 3
+                )
+            },
+            {"some_binary_uuid": None},
+        ),
     ],
 )
 async def test_serialize(raw, output):
@@ -460,12 +492,15 @@ async def test_ssl_successful_connection(
     async with create_mongo_source(
         ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
     ) as source:
-        with mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
-            return_value=future_with_result(["db"]),
-        ), mock.patch(
-            "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
-            return_value=future_with_result(["col"]),
+        with (
+            mock.patch(
+                "motor.motor_asyncio.AsyncIOMotorClient.list_database_names",
+                return_value=future_with_result(["db"]),
+            ),
+            mock.patch(
+                "motor.motor_asyncio.AsyncIOMotorDatabase.list_collection_names",
+                return_value=future_with_result(["col"]),
+            ),
         ):
             await source.validate_config()
 

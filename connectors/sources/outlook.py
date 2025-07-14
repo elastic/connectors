@@ -3,8 +3,8 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-"""Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms.
-"""
+"""Microsoft Outlook source module is responsible to fetch documents from Outlook server or cloud platforms."""
+
 import asyncio
 import os
 from copy import copy
@@ -44,6 +44,7 @@ from connectors.utils import (
     html_to_text,
     iso_utc,
     retryable,
+    url_encode,
 )
 
 RETRIES = 3
@@ -410,7 +411,8 @@ class Office365Users:
     )
     async def get_users(self):
         access_token = await self._fetch_token()
-        url = f"https://graph.microsoft.com/v1.0/users?$top={TOP}"
+        filter_ = url_encode("accountEnabled eq true")
+        url = f"https://graph.microsoft.com/v1.0/users?$top={TOP}&$filter={filter_}"
         while True:
             try:
                 async with self._get_session.get(
@@ -941,9 +943,14 @@ class OutlookDataSource(BaseDataSource):
                 attachment_type=attachment_type,
                 timezone=timezone,
             )
-            yield self._decorate_with_access_control(
-                document, [account.primary_smtp_address]
-            ), partial(self.get_content, attachment=copy(attachment), timezone=timezone)
+            yield (
+                self._decorate_with_access_control(
+                    document, [account.primary_smtp_address]
+                ),
+                partial(
+                    self.get_content, attachment=copy(attachment), timezone=timezone
+                ),
+            )
 
     async def _fetch_mails(self, account, timezone):
         async for mail, mail_type in self.client.get_mails(account=account):
@@ -952,9 +959,12 @@ class OutlookDataSource(BaseDataSource):
                 mail_type=mail_type,
                 timezone=timezone,
             )
-            yield self._decorate_with_access_control(
-                document, [account.primary_smtp_address]
-            ), None
+            yield (
+                self._decorate_with_access_control(
+                    document, [account.primary_smtp_address]
+                ),
+                None,
+            )
 
             if mail.has_attachments:
                 async for doc in self._fetch_attachments(
@@ -972,9 +982,12 @@ class OutlookDataSource(BaseDataSource):
                 contact=contact,
                 timezone=timezone,
             )
-            yield self._decorate_with_access_control(
-                document, [account.primary_smtp_address]
-            ), None
+            yield (
+                self._decorate_with_access_control(
+                    document, [account.primary_smtp_address]
+                ),
+                None,
+            )
 
     async def _fetch_tasks(self, account, timezone):
         self._logger.debug(f"Fetching tasks for {account.primary_smtp_address}")
@@ -982,9 +995,12 @@ class OutlookDataSource(BaseDataSource):
             document = self.doc_formatter.task_doc_formatter(
                 task=task, timezone=timezone
             )
-            yield self._decorate_with_access_control(
-                document, [account.primary_smtp_address]
-            ), None
+            yield (
+                self._decorate_with_access_control(
+                    document, [account.primary_smtp_address]
+                ),
+                None,
+            )
 
             if task.has_attachments:
                 async for doc in self._fetch_attachments(
@@ -1027,9 +1043,12 @@ class OutlookDataSource(BaseDataSource):
             child_calendar=str(child_calendar),
             timezone=timezone,
         )
-        yield self._decorate_with_access_control(
-            document, [account.primary_smtp_address]
-        ), None
+        yield (
+            self._decorate_with_access_control(
+                document, [account.primary_smtp_address]
+            ),
+            None,
+        )
 
         if calendar.has_attachments:
             async for doc in self._fetch_attachments(

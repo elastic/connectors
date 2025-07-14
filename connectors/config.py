@@ -1,3 +1,4 @@
+#
 # Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
@@ -24,6 +25,13 @@ def load_config(config_file):
     configuration = dict(_merge_dicts(_default_config(), nested_yaml_config))
     _ent_search_config(configuration)
 
+    return configuration
+
+
+def add_defaults(config, default_config=None):
+    if default_config is None:
+        default_config = _default_config()
+    configuration = dict(_merge_dicts(default_config, config))
     return configuration
 
 
@@ -56,6 +64,7 @@ def _default_config():
             "username": "elastic",
             "password": "changeme",
             "ssl": True,
+            "verify_certs": True,
             "bulk": {
                 "queue_max_size": 1024,
                 "queue_max_mem_size": 25,
@@ -86,7 +95,7 @@ def _default_config():
             "initial_backoff_duration": 1,
             "backoff_multiplier": 2,
             "log_level": "info",
-            "feature_use_connectors_api": False,
+            "feature_use_connectors_api": True,
         },
         "service": {
             "idling": 30,
@@ -97,6 +106,7 @@ def _default_config():
             "max_errors_span": 600,
             "max_concurrent_content_syncs": 1,
             "max_concurrent_access_control_syncs": 1,
+            "max_concurrent_scheduling_tasks": 4,
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",

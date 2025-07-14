@@ -10,6 +10,7 @@ This is the main entry point of the framework. When the project is installed as
 a Python package, an `elastic-ingest` executable is added in the PATH and
 executes the `main` function of this module, which starts the service.
 """
+
 import asyncio
 import json
 import os
@@ -26,7 +27,7 @@ from connectors.cli.connector import Connector
 from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
-from connectors.es.settings import Settings
+from connectors.es import DEFAULT_LANGUAGE
 
 __all__ = ["main"]
 
@@ -158,7 +159,7 @@ def list_connectors(obj):
         click.echo(e)
 
 
-language_keys = [*Settings().language_data.keys()]
+language_keys = [DEFAULT_LANGUAGE]
 
 
 # Support blank values for languge

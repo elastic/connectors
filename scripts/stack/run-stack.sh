@@ -19,6 +19,14 @@ eval set -- "$parsed_params"
 
 source $CURDIR/set-env.sh $CURDIR/.env
 
+# Check if the network exists
+if ! docker network ls --format '{{.Name}}' | grep -w 'elastic' > /dev/null; then
+  echo "Network 'elastic' does not exist. Creating..."
+  docker network create elastic
+else
+  echo "Network 'elastic' already exists."
+fi
+
 # for now, always update the images, make this an arg later
 if [ "${update_images:-}" = true ]
 then
@@ -33,10 +41,10 @@ if [[ "${connectors_only}" != true ]]; then
   source $CURDIR/wait-for-elasticsearch.sh
 
   # Start Kibana
+  source $CURDIR/update-kibana-user-password.sh
   echo "Starting Kibana..."
   docker-compose -f $compose_file up --detach kibana
   source $CURDIR/wait-for-kibana.sh
-  source $CURDIR/update-kibana-user-password.sh
 fi
 
 source ./copy-config.sh
