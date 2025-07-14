@@ -138,6 +138,21 @@ class SandflySession:
     def close(self):
         self._sleeps.cancel()
 
+    async def ping(self, server_url):
+        try:
+            await self._http_session.head(server_url)
+        except ClientResponseError as exception:
+            # The 401 Unauthorized means the Sandfly Server is up and running, so return True
+            if exception.status == 401:
+                return True
+            else:
+                self._logger.info(
+                    f"SandflySession PING : [{server_url}] exception.status [{exception.status}]"
+                )
+                raise
+        except Exception:
+            raise
+
     @asynccontextmanager
     @retryable(
         retries=RETRIES,
@@ -260,8 +275,8 @@ class SandflyClient:
 
     async def ping(self):
         try:
-            await self.my_token.get()
-            self._logger.debug(
+            await self.my_client.ping(self.server_url)
+            self._logger.info(
                 f"SandflyClient PING : Successfully connected to Sandfly Security [{self.server_url}]"
             )
             return True

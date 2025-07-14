@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import pytest_asyncio
+from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
 from connectors.source import (
@@ -15,7 +16,6 @@ from connectors.source import (
 )
 from connectors.sources.sandfly import (
     CURSOR_SEQUENCE_ID_KEY,
-    FetchTokenError,
     SandflyClient,
     SandflyDataSource,
     SandflyLicenseExpired,
@@ -186,10 +186,9 @@ async def test_sandfly_date(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 async def test_client_ping_success(sandfly_client, mock_responses):
-    mock_responses.post(
-        URL_SANDFLY_LOGIN,
-        status=200,
-        payload=TOKEN_RESPONSE_DATA,
+    mock_responses.head(
+        SANDFLY_SERVER_URL,
+        status=401,  # Error code 401 Unauthorized means server is running
     )
     assert await sandfly_client.ping() is True
 
@@ -197,12 +196,11 @@ async def test_client_ping_success(sandfly_client, mock_responses):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_client_ping_failure(sandfly_client, mock_responses):
-    mock_responses.post(
-        URL_SANDFLY_LOGIN,
+    mock_responses.head(
+        SANDFLY_SERVER_URL,
         status=403,
-        payload=FAILED_LOGIN_RESPONSE_DATA,
     )
-    with pytest.raises(FetchTokenError):
+    with pytest.raises(ClientResponseError):
         await sandfly_client.ping()
 
 
@@ -371,10 +369,9 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 async def test_data_source_ping_success(sandfly_data_source, mock_responses):
-    mock_responses.post(
-        URL_SANDFLY_LOGIN,
-        status=200,
-        payload=TOKEN_RESPONSE_DATA,
+    mock_responses.head(
+        SANDFLY_SERVER_URL,
+        status=401,  # Error code 401 Unauthorized means server is running
     )
     assert await sandfly_data_source.ping() is True
 
@@ -382,12 +379,11 @@ async def test_data_source_ping_success(sandfly_data_source, mock_responses):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
-    mock_responses.post(
-        URL_SANDFLY_LOGIN,
+    mock_responses.head(
+        SANDFLY_SERVER_URL,
         status=403,
-        payload=FAILED_LOGIN_RESPONSE_DATA,
     )
-    with pytest.raises(FetchTokenError):
+    with pytest.raises(ClientResponseError):
         await sandfly_data_source.ping()
 
 

@@ -52,6 +52,7 @@ class SandflyAPI:
         self.results_stop = 0
         self.results_loop = 0
 
+        self.app.route("/v4", methods=["HEAD"])(self.do_ping)
         self.app.route("/v4/auth/login", methods=["POST"])(self.get_access_token)
         self.app.route("/v4/license", methods=["GET"])(self.get_license)
         self.app.route("/v4/hosts", methods=["GET"])(self.get_hosts)
@@ -60,6 +61,14 @@ class SandflyAPI:
             self.get_ssh_key
         )
         self.app.route("/v4/results", methods=["POST"])(self.get_results)
+
+    def do_ping(self):
+        return {
+            "data": "",
+            "detail": "authentication failed",
+            "status": 401,
+            "title": "Unauthorized",
+        }
 
     def get_access_token(self):
         return {
