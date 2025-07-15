@@ -39,6 +39,17 @@ class ThrottledError(Exception):
     pass
 
 
+class SlackAPIError(Exception):
+    """Internal exception class that wraps all non-ok responses from Slack"""
+
+    def __init__(self, reason):
+        self.__reason = reason
+
+    @property
+    def reason(self):
+        return self.__reason
+
+
 class SlackClient:
     def __init__(self, configuration):
         self.token = configuration["token"]
@@ -53,8 +64,13 @@ class SlackClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    def ping(self):
-        return self.test_auth()
+    async def ping(self):
+        url = f"{BASE_URL}/auth.test"
+        try:
+            await self._get_json(url)
+            return True
+        except SlackAPIError:
+            return False
 
     async def close(self):
         await self._http_session.close()
@@ -132,11 +148,6 @@ class SlackClient:
             if not cursor:
                 break
 
-    async def test_auth(self):
-        url = f"{BASE_URL}/auth.test"
-        response = await self._get_json(url)
-        return response.get("ok", False)
-
     def _add_cursor(self, url, cursor):
         return f"{url}&{CURSOR}={cursor}"
 
@@ -146,7 +157,12 @@ class SlackClient:
     async def _get_json(self, absolute_url):
         self._logger.debug(f"Fetching url: {absolute_url}")
         async with self._call_api(absolute_url) as resp:
-            return await resp.json()
+            json_content = await resp.json()
+
+            if json_content.get("ok", False) is False:
+                raise SlackAPIError(json_content.get("error", "unknown"))
+
+            return json_content
 
     @asynccontextmanager
     @retryable(retries=3)
@@ -269,14 +285,14 @@ class SlackDataSource(BaseDataSource):
             self._logger.info(f"Listed channel: '{channel['name']}'")
             yield self.remap_channel(channel)
             channel_id = channel["id"]
-            join_response = {}
             if self.auto_join_channels and not channel.get("is_member", False):
-                join_response = await self.slack_client.join_channel(
-                    channel_id
-                )  # can't get channel content if the bot is not in the channel
-                if not join_response.get("ok"):
+                try:
+                    await self.slack_client.join_channel(
+                        channel_id
+                    )  # can't get channel content if the bot is not in the channel
+                except SlackAPIError as e:
                     self._logger.warning(
-                        f"Not syncing channel: '{channel['name']}' because: {join_response.get('error', 'channel join failed')}"
+                        f"Not syncing channel: '{channel['name']}' because: {e.reason}"
                     )
                     continue
             async for message in self.slack_client.list_messages(
