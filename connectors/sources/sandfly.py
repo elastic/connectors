@@ -179,7 +179,7 @@ class SandflySession:
                 raise ResourceNotFound(msg) from exception
             else:
                 raise
-        except FetchTokenError as exception:
+        except FetchTokenError:
             raise
         except Exception:
             raise
@@ -213,7 +213,7 @@ class SandflySession:
                 raise ResourceNotFound(msg) from exception
             else:
                 raise
-        except FetchTokenError as exception:
+        except FetchTokenError:
             raise
         except Exception:
             raise
