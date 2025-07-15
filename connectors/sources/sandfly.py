@@ -141,6 +141,7 @@ class SandflySession:
     async def ping(self, server_url):
         try:
             await self._http_session.head(server_url)
+            return True
         except ClientResponseError as exception:
             # The 401 Unauthorized means the Sandfly Server is up and running, so return True
             if exception.status == 401:
