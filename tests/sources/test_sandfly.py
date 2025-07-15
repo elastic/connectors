@@ -16,6 +16,8 @@ from connectors.source import (
 )
 from connectors.sources.sandfly import (
     CURSOR_SEQUENCE_ID_KEY,
+    FetchTokenError,
+    ResourceNotFound,
     SandflyClient,
     SandflyDataSource,
     SandflyLicenseExpired,
@@ -196,12 +198,81 @@ async def test_client_ping_success(sandfly_client, mock_responses):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_client_ping_failure(sandfly_client, mock_responses):
+    request_error = ClientResponseError(None, None)
+    request_error.status = 403
+    request_error.message = "Forbidden"
     mock_responses.head(
         SANDFLY_SERVER_URL,
-        status=403,
+        exception=request_error,
     )
+
     with pytest.raises(ClientResponseError):
         await sandfly_client.ping()
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_client_login_failures(sandfly_client, mock_responses):
+    request_error = FetchTokenError(None, None)
+    request_error.status = 403
+    request_error.message = "Forbidden"
+
+    mock_responses.post(
+        URL_SANDFLY_LOGIN,
+        exception=request_error,
+    )
+
+    mock_responses.get(
+        URL_SANDFLY_LICENSE,
+        exception=request_error,
+    )
+
+    with pytest.raises(FetchTokenError):
+        async for _ in sandfly_client.get_license():
+            pass
+
+    mock_responses.post(
+        URL_SANDFLY_RESULTS,
+        exception=request_error,
+    )
+
+    with pytest.raises(FetchTokenError):
+        t_time_since = "2025-06-01T00:00:00Z"
+        async for _, _ in sandfly_client.get_results_by_time(t_time_since, False):
+            pass
+
+
+@pytest.mark.asyncio
+@patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
+async def test_client_resource_not_found(sandfly_client, mock_responses):
+    mock_responses.post(
+        URL_SANDFLY_LOGIN,
+        status=200,
+        payload=TOKEN_RESPONSE_DATA,
+    )
+
+    request_error = ClientResponseError(None, None)
+    request_error.status = 404
+    request_error.message = "Resource Not Found"
+
+    mock_responses.get(
+        URL_SANDFLY_LICENSE,
+        exception=request_error,
+    )
+
+    with pytest.raises(ResourceNotFound):
+        async for _ in sandfly_client.get_license():
+            pass
+
+    mock_responses.post(
+        URL_SANDFLY_RESULTS,
+        exception=request_error,
+    )
+
+    with pytest.raises(ResourceNotFound):
+        t_time_since = "2025-06-01T00:00:00Z"
+        async for _, _ in sandfly_client.get_results_by_time(t_time_since, False):
+            pass
 
 
 @pytest.mark.asyncio
@@ -379,9 +450,12 @@ async def test_data_source_ping_success(sandfly_data_source, mock_responses):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
+    request_error = ClientResponseError(None, None)
+    request_error.status = 403
+    request_error.message = "Forbidden"
     mock_responses.head(
         SANDFLY_SERVER_URL,
-        status=403,
+        exception=request_error,
     )
     with pytest.raises(ClientResponseError):
         await sandfly_data_source.ping()
