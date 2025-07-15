@@ -146,9 +146,6 @@ class SandflySession:
             if exception.status == 401:
                 return True
             else:
-                self._logger.info(
-                    f"SandflySession PING : [{server_url}] exception.status [{exception.status}]"
-                )
                 raise
         except Exception:
             raise
@@ -158,7 +155,7 @@ class SandflySession:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=ResourceNotFound,
+        skipped_exceptions=[ResourceNotFound, FetchTokenError],
     )
     async def _get(self, absolute_url):
         try:
@@ -182,6 +179,8 @@ class SandflySession:
                 raise ResourceNotFound(msg) from exception
             else:
                 raise
+        except FetchTokenError as exception:
+            raise
         except Exception:
             raise
 
@@ -190,7 +189,7 @@ class SandflySession:
         retries=RETRIES,
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
-        skipped_exceptions=ResourceNotFound,
+        skipped_exceptions=[ResourceNotFound, FetchTokenError],
     )
     async def _post(self, absolute_url, payload):
         try:
@@ -214,6 +213,8 @@ class SandflySession:
                 raise ResourceNotFound(msg) from exception
             else:
                 raise
+        except FetchTokenError as exception:
+            raise
         except Exception:
             raise
 
@@ -223,8 +224,9 @@ class SandflySession:
                 return await response.text()
         except Exception as exception:
             self._logger.warning(
-                f"Content for {url} is being skipped. Error: {exception}."
+                f"Content-GET for {url} is being skipped. Error: {exception}."
             )
+            raise
 
     async def content_post(self, url, payload):
         try:
@@ -232,8 +234,9 @@ class SandflySession:
                 return await response.text()
         except Exception as exception:
             self._logger.warning(
-                f"Content for {url} is being skipped. Error: {exception}."
+                f"Content-POST for {url} is being skipped. Error: {exception}."
             )
+            raise
 
 
 class SandflyClient:
