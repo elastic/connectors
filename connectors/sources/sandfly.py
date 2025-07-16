@@ -541,6 +541,16 @@ class SandflyDataSource(BaseDataSource):
         }
         return document
 
+    def extract_sshkey_data(self, key_item):
+        friendly = key_item["friendly_name"]
+        key_value = key_item["key_value"]
+
+        doc_id = hash_id(key_value)
+
+        self._logger.debug(f"SANDFLY SSH_KEYS : [{doc_id}] : [{friendly}]")
+
+        return friendly, doc_id
+
     def extract_host_data(self, host_item):
         hostid = host_item["host_id"]
         hostname = host_item["hostname"]
@@ -610,14 +620,8 @@ class SandflyDataSource(BaseDataSource):
 
         get_more_results = False
 
-        async for key_item, get_more_results in self.client.get_ssh_keys():
-            friendly = key_item["friendly_name"]
-            key_value = key_item["key_value"]
-
-            doc_id = hash_id(key_value)
-            self._logger.debug(
-                f"SANDFLY SSH_KEYS : [{doc_id}] : [{friendly}] : [{get_more_results}]"
-            )
+        async for key_item, _get_more_results in self.client.get_ssh_keys():
+            friendly, doc_id = self.extract_sshkey_data(key_item)
 
             yield (
                 self._format_doc(
@@ -740,14 +744,8 @@ class SandflyDataSource(BaseDataSource):
 
         get_more_results = False
 
-        async for key_item, get_more_results in self.client.get_ssh_keys():
-            friendly = key_item["friendly_name"]
-            key_value = key_item["key_value"]
-
-            doc_id = hash_id(key_value)
-            self._logger.debug(
-                f"SANDFLY SSH_KEYS : [{doc_id}] : [{friendly}] : [{get_more_results}]"
-            )
+        async for key_item, _get_more_results in self.client.get_ssh_keys():
+            friendly, doc_id = self.extract_sshkey_data(key_item)
 
             yield (
                 self._format_doc(
