@@ -149,7 +149,6 @@ class SyncJobRunner:
                 configuration=self.sync_job.configuration
             )
             self.data_provider.set_logger(self.sync_job.logger)
-            self.data_provider.set_error_monitor(self.error_monitor)
             self.data_provider.set_framework_config(
                 self._data_source_framework_config()
             )

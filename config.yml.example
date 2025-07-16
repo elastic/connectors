@@ -237,8 +237,13 @@
 ##    to download and/or process.
 #service.max_file_download_size: 10485760
 #
+#
 ##  The interval (in seconds) to run job cleanup task.
 #service.job_cleanup_interval: 300
+#
+#
+##  Connector service log level.
+#service.log_level: INFO
 #
 #
 ## ------------------------------- Extraction Service ----------------------------------

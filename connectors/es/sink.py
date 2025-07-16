@@ -627,10 +627,6 @@ class Extractor:
                 # too many errors happened when downloading
                 lazy_downloads.raise_any_exception()
 
-                # We try raising every loop to not miss a moment when
-                # too many errors happened when downloading
-                lazy_downloads.raise_any_exception()
-
                 await asyncio.sleep(0)
 
             # Sit and wait until an error happens
