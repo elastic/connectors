@@ -172,15 +172,15 @@ async def sandfly_data_source():
 
 @pytest.mark.asyncio
 async def test_sandfly_date(sandfly_client, mock_responses):
-    t_expiry = "2025-06-23T17:35:23Z"
-    expiry_date = extract_sandfly_date(t_expiry)
+    expiry = "2025-06-23T17:35:23Z"
+    expiry_date = extract_sandfly_date(expiry)
     assert type(expiry_date) is datetime
 
     now = datetime.utcnow()
-    t_date_str1 = format_sandfly_date(now, True)
-    assert type(t_date_str1) is str and len(t_date_str1) == 20
-    t_date_str2 = format_sandfly_date(now, False)
-    assert type(t_date_str2) is str and len(t_date_str2) == 20
+    date_str1 = format_sandfly_date(now, True)
+    assert type(date_str1) is str and len(date_str1) == 20
+    date_str2 = format_sandfly_date(now, False)
+    assert type(date_str2) is str and len(date_str2) == 20
 
 
 # Tests for SandflyClient
@@ -237,8 +237,8 @@ async def test_client_login_failures(sandfly_client, mock_responses):
     )
 
     with pytest.raises(FetchTokenError):
-        t_time_since = "2025-06-01T00:00:00Z"
-        async for _, _ in sandfly_client.get_results_by_time(t_time_since, False):
+        time_since = "2025-06-01T00:00:00Z"
+        async for _, _ in sandfly_client.get_results_by_time(time_since, False):
             pass
 
 
@@ -270,8 +270,8 @@ async def test_client_resource_not_found(sandfly_client, mock_responses):
     )
 
     with pytest.raises(ResourceNotFound):
-        t_time_since = "2025-06-01T00:00:00Z"
-        async for _, _ in sandfly_client.get_results_by_time(t_time_since, False):
+        time_since = "2025-06-01T00:00:00Z"
+        async for _, _ in sandfly_client.get_results_by_time(time_since, False):
             pass
 
 
@@ -289,11 +289,11 @@ async def test_client_get_license(sandfly_client, mock_responses):
         payload=LICENSE_RESPONSE_DATA,
     )
 
-    async for t_license in sandfly_client.get_license():
-        t_customer = t_license["customer"]["name"]
-        assert t_customer == "Sandfly"
-        t_expiry = t_license["date"]["expiry"]
-        assert t_expiry == "2026-12-30T19:30:45Z"
+    async for license_data in sandfly_client.get_license():
+        customer_name = license_data["customer"]["name"]
+        assert customer_name == "Sandfly"
+        expiry = license_data["date"]["expiry"]
+        assert expiry == "2026-12-30T19:30:45Z"
 
 
 @pytest.mark.asyncio
@@ -310,15 +310,15 @@ async def test_client_get_hosts(sandfly_client, mock_responses):
         payload=HOSTS_RESPONSE_DATA,
     )
 
-    async for t_host_item in sandfly_client.get_hosts():
-        t_hostid = t_host_item["host_id"]
-        assert t_hostid in ("1001", "1002", "1003")
-        t_hostname = t_host_item["hostname"]
-        assert "192.168.11." in t_hostname
-        if "data" in t_host_item:
-            if t_host_item["data"] is not None:
-                t_nodename = t_host_item["data"]["os"]["info"]["node"]
-                assert "sandfly-" in t_nodename
+    async for host_item in sandfly_client.get_hosts():
+        hostid = host_item["host_id"]
+        assert hostid in ("1001", "1002", "1003")
+        hostname = host_item["hostname"]
+        assert "192.168.11." in hostname
+        if "data" in host_item:
+            if host_item["data"] is not None:
+                nodename = host_item["data"]["os"]["info"]["node"]
+                assert "sandfly-" in nodename
 
 
 @pytest.mark.asyncio
@@ -347,12 +347,12 @@ async def test_client_get_ssh_keys(sandfly_client, mock_responses):
         payload=SSH_KEY2_RESPONSE_DATA,
     )
 
-    async for t_key_item, get_more_results in sandfly_client.get_ssh_keys():
+    async for key_item, get_more_results in sandfly_client.get_ssh_keys():
         assert get_more_results is False
-        t_friendly = t_key_item["friendly_name"]
-        assert t_friendly in ("a b c", "d e f")
-        t_key_value = t_key_item["key_value"]
-        assert "KeyValue#" in t_key_value
+        friendly = key_item["friendly_name"]
+        assert friendly in ("a b c", "d e f")
+        key_value = key_item["key_value"]
+        assert "KeyValue#" in key_value
 
 
 @pytest.mark.asyncio
@@ -369,15 +369,15 @@ async def test_client_get_results_by_time(sandfly_client, mock_responses):
         payload=RESULTS_NO_MORE_RESPONSE_DATA,
     )
 
-    t_time_since = "2025-06-01T00:00:00Z"
-    async for t_result_item, get_more_results in sandfly_client.get_results_by_time(
-        t_time_since, False
+    time_since = "2025-06-01T00:00:00Z"
+    async for result_item, get_more_results in sandfly_client.get_results_by_time(
+        time_since, False
     ):
         assert get_more_results is False
-        last_sequence_id = t_result_item["sequence_id"]
+        last_sequence_id = result_item["sequence_id"]
         assert last_sequence_id in ("1003", "1004")
-        t_status = t_result_item["data"]["status"]
-        assert t_status == "alert"
+        status = result_item["data"]["status"]
+        assert status == "alert"
 
     mock_responses.post(
         URL_SANDFLY_RESULTS,
@@ -385,14 +385,14 @@ async def test_client_get_results_by_time(sandfly_client, mock_responses):
         payload=RESULTS_NO_MORE_RESPONSE_DATA,
     )
 
-    async for t_result_item, get_more_results in sandfly_client.get_results_by_time(
-        t_time_since, True
+    async for result_item, get_more_results in sandfly_client.get_results_by_time(
+        time_since, True
     ):
         assert get_more_results is False
-        last_sequence_id = t_result_item["sequence_id"]
+        last_sequence_id = result_item["sequence_id"]
         assert last_sequence_id in ("1003", "1004")
-        t_status = t_result_item["data"]["status"]
-        assert t_status == "alert"
+        status = result_item["data"]["status"]
+        assert status == "alert"
 
 
 @pytest.mark.asyncio
@@ -409,15 +409,15 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
         payload=RESULTS_NO_MORE_RESPONSE_DATA,
     )
 
-    t_last_sequence_id = "1000"
-    async for t_result_item, get_more_results in sandfly_client.get_results_by_id(
-        t_last_sequence_id, False
+    last_sequence_id = "1000"
+    async for result_item, get_more_results in sandfly_client.get_results_by_id(
+        last_sequence_id, False
     ):
         assert get_more_results is False
-        last_sequence_id = t_result_item["sequence_id"]
+        last_sequence_id = result_item["sequence_id"]
         assert last_sequence_id in ("1003", "1004")
-        t_status = t_result_item["data"]["status"]
-        assert t_status == "alert"
+        status = result_item["data"]["status"]
+        assert status == "alert"
 
     mock_responses.post(
         URL_SANDFLY_RESULTS,
@@ -425,14 +425,14 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
         payload=RESULTS_NO_MORE_RESPONSE_DATA,
     )
 
-    async for t_result_item, get_more_results in sandfly_client.get_results_by_id(
-        t_last_sequence_id, True
+    async for result_item, get_more_results in sandfly_client.get_results_by_id(
+        last_sequence_id, True
     ):
         assert get_more_results is False
-        last_sequence_id = t_result_item["sequence_id"]
+        last_sequence_id = result_item["sequence_id"]
         assert last_sequence_id in ("1003", "1004")
-        t_status = t_result_item["data"]["status"]
-        assert t_status == "alert"
+        status = result_item["data"]["status"]
+        assert status == "alert"
 
 
 # Tests for SandflyDataSource

@@ -130,7 +130,7 @@ class SandflySession:
         self._logger = logger_
 
         self._http_session = http_session
-        self._my_token = token
+        self._token = token
 
     def set_logger(self, logger_):
         self._logger = logger_
@@ -160,7 +160,7 @@ class SandflySession:
     )
     async def _get(self, absolute_url):
         try:
-            access_token = await self._my_token.get()
+            access_token = await self._token.get()
             headers = {
                 "Accept": "application/json",
                 "Content-type": "application/json",
@@ -173,7 +173,7 @@ class SandflySession:
                 yield response
         except ClientResponseError as exception:
             if exception.status == 401:
-                await self._my_token.get(is_cache=False)
+                await self._token.get(is_cache=False)
                 raise
             elif exception.status == 404:
                 msg = "Resource Not Found"
@@ -194,7 +194,7 @@ class SandflySession:
     )
     async def _post(self, absolute_url, payload):
         try:
-            access_token = await self._my_token.get()
+            access_token = await self._token.get()
             headers = {
                 "Accept": "application/json",
                 "Content-type": "application/json",
@@ -207,7 +207,7 @@ class SandflySession:
                 yield response
         except ClientResponseError as exception:
             if exception.status == 401:
-                await self._my_token.get(is_cache=False)
+                await self._token.get(is_cache=False)
                 raise
             elif exception.status == 404:
                 msg = "Resource Not Found"
@@ -250,36 +250,36 @@ class SandflyClient:
         self.server_url = self.configuration["server_url"]
         self.verify_ssl = self.configuration["verify_ssl"]
 
-        t_connector = aiohttp.TCPConnector(
+        connector = aiohttp.TCPConnector(
             family=socket.AF_INET, verify_ssl=self.verify_ssl
         )
         self.http_session = aiohttp.ClientSession(
-            connector=t_connector, raise_for_status=True
+            connector=connector, raise_for_status=True
         )
 
-        self.my_token = SandflyAccessToken(
+        self.token = SandflyAccessToken(
             http_session=self.http_session,
             configuration=configuration,
             logger_=self._logger,
         )
-        self.my_client = SandflySession(
+        self.client = SandflySession(
             http_session=self.http_session,
-            token=self.my_token,
+            token=self.token,
             logger_=self._logger,
         )
 
     def set_logger(self, logger_):
         self._logger = logger_
-        self.my_token.set_logger(self._logger)
-        self.my_client.set_logger(self._logger)
+        self.token.set_logger(self._logger)
+        self.client.set_logger(self._logger)
 
     async def close(self):
         await self.http_session.close()
-        self.my_client.close()
+        self.client.close()
 
     async def ping(self):
         try:
-            await self.my_client.ping(self.server_url)
+            await self.client.ping(self.server_url)
             self._logger.info(
                 f"SandflyClient PING : Successfully connected to Sandfly Security [{self.server_url}]"
             )
@@ -340,17 +340,17 @@ class SandflyClient:
                 ],
             }
 
-        t_content = await self.my_client.content_post(url=results_url, payload=payload)
+        content = await self.client.content_post(url=results_url, payload=payload)
 
-        if t_content is not None:
-            t_content_json = json.loads(t_content)
-            t_total = t_content_json["total"]
-            t_more_results = t_content_json["more_results"]
-            self._logger.debug(f"GET_RESULTS_BY_ID : [{t_total}] : [{t_more_results}]")
+        if content is not None:
+            content_json = json.loads(content)
+            total = content_json["total"]
+            more_results = content_json["more_results"]
+            self._logger.debug(f"GET_RESULTS_BY_ID : [{total}] : [{more_results}]")
 
-            t_data_list = t_content_json["data"]
-            for t_result_item in t_data_list:
-                yield t_result_item, t_more_results
+            data_list = content_json["data"]
+            for result_item in data_list:
+                yield result_item, more_results
 
     async def get_results_by_time(self, time_since, enable_pass):
         results_url = f"{self.server_url}/results"
@@ -387,57 +387,55 @@ class SandflyClient:
                 ],
             }
 
-        t_content = await self.my_client.content_post(url=results_url, payload=payload)
+        content = await self.client.content_post(url=results_url, payload=payload)
 
-        if t_content is not None:
-            t_content_json = json.loads(t_content)
+        if content is not None:
+            content_json = json.loads(content)
 
-            t_total = t_content_json["total"]
-            t_more_results = t_content_json["more_results"]
-            self._logger.debug(
-                f"GET_RESULTS_BY_TIME : [{t_total}] : [{t_more_results}]"
-            )
+            total = content_json["total"]
+            more_results = content_json["more_results"]
+            self._logger.debug(f"GET_RESULTS_BY_TIME : [{total}] : [{more_results}]")
 
-            t_data_list = t_content_json["data"]
-            for t_result_item in t_data_list:
-                yield t_result_item, t_more_results
+            data_list = content_json["data"]
+            for result_item in data_list:
+                yield result_item, more_results
 
     async def get_ssh_keys(self):
         ssh_url = f"{self.server_url}/sshhunter/summary"
-        t_content = await self.my_client.content_get(url=ssh_url)
+        content = await self.client.content_get(url=ssh_url)
 
-        if t_content is not None:
-            t_content_json = json.loads(t_content)
+        if content is not None:
+            content_json = json.loads(content)
 
-            t_more_results = t_content_json["more_results"]
-            t_data_list = t_content_json["data"]
+            more_results = content_json["more_results"]
+            data_list = content_json["data"]
 
-            for t_key in t_data_list:
-                t_key_id = t_key["id"]
-                key_url = f"{self.server_url}/sshhunter/key/{t_key_id}"
+            for key in data_list:
+                key_id = key["id"]
+                key_url = f"{self.server_url}/sshhunter/key/{key_id}"
 
-                t_key_details = await self.my_client.content_get(url=key_url)
-                if t_key_details is not None:
-                    yield json.loads(t_key_details), t_more_results
+                key_details = await self.client.content_get(url=key_url)
+                if key_details is not None:
+                    yield json.loads(key_details), more_results
 
     async def get_hosts(self):
         hosts_url = f"{self.server_url}/hosts"
-        t_content = await self.my_client.content_get(url=hosts_url)
+        content = await self.client.content_get(url=hosts_url)
 
-        if t_content is not None:
-            t_content_json = json.loads(t_content)
+        if content is not None:
+            content_json = json.loads(content)
 
-            t_data_list = t_content_json["data"]
-            for t_host in t_data_list:
-                yield t_host
+            data_list = content_json["data"]
+            for host in data_list:
+                yield host
 
     async def get_license(self):
         license_url = f"{self.server_url}/license"
-        t_content = await self.my_client.content_get(url=license_url)
+        content = await self.client.content_get(url=license_url)
 
-        if t_content is not None:
-            t_content_json = json.loads(t_content)
-            yield t_content_json
+        if content is not None:
+            content_json = json.loads(content)
+            yield content_json
 
 
 class SandflyDataSource(BaseDataSource):
@@ -546,23 +544,25 @@ class SandflyDataSource(BaseDataSource):
     async def get_docs(self, filtering=None):
         self.init_sync_cursor()
 
-        async for t_license in self.client.get_license():
-            t_customer = t_license["customer"]["name"]
-            t_expiry = t_license["date"]["expiry"]
+        async for license_data in self.client.get_license():
+            customer = license_data["customer"]["name"]
+            expiry = license_data["date"]["expiry"]
 
-            self._logger.debug(f"SANDFLY GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+            self._logger.debug(f"SANDFLY GET_LICENSE : [{customer}] : [{expiry}]")
 
             now = datetime.utcnow()
-            expiry_date = extract_sandfly_date(t_expiry)
+            expiry_date = extract_sandfly_date(expiry)
             if expiry_date < now:
-                msg = f"Sandfly Server [{self.server_url}] license has expired [{t_expiry}]"
+                msg = (
+                    f"Sandfly Server [{self.server_url}] license has expired [{expiry}]"
+                )
                 raise SandflyLicenseExpired(msg)
 
             is_licensed = False
-            if "limits" in t_license:
-                if "features" in t_license["limits"]:
-                    t_features_list = t_license["limits"]["features"]
-                    for feature in t_features_list:
+            if "limits" in license_data:
+                if "features" in license_data["limits"]:
+                    features_list = license_data["limits"]["features"]
+                    for feature in features_list:
                         if feature == "elasticsearch_replication":
                             is_licensed = True
 
@@ -570,89 +570,89 @@ class SandflyDataSource(BaseDataSource):
                 msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
                 raise SandflyNotLicensed(msg)
 
-        async for t_host_item in self.client.get_hosts():
-            t_hostid = t_host_item["host_id"]
-            t_hostname = t_host_item["hostname"]
+        async for host_item in self.client.get_hosts():
+            hostid = host_item["host_id"]
+            hostname = host_item["hostname"]
 
-            t_nodename = "<unknown>"
-            if "data" in t_host_item:
-                if t_host_item["data"] is not None:
-                    if "os" in t_host_item["data"]:
-                        if "info" in t_host_item["data"]["os"]:
-                            if "node" in t_host_item["data"]["os"]["info"]:
-                                t_nodename = t_host_item["data"]["os"]["info"]["node"]
+            nodename = "<unknown>"
+            if "data" in host_item:
+                if host_item["data"] is not None:
+                    if "os" in host_item["data"]:
+                        if "info" in host_item["data"]["os"]:
+                            if "node" in host_item["data"]["os"]["info"]:
+                                nodename = host_item["data"]["os"]["info"]["node"]
 
-            doc_id = hash_id(t_hostid)
+            doc_id = hash_id(hostid)
             self._logger.debug(
-                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostname}] [{t_nodename}]"
+                f"SANDFLY HOSTS : [{doc_id}] : [{hostname}] [{nodename}]"
             )
 
-            t_key_data = f"{t_nodename} ({t_hostname})"
+            key_data = f"{nodename} ({hostname})"
 
             yield (
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_text=t_key_data,
+                    doc_text=key_data,
                     doc_field="sandfly_hosts",
-                    doc_data=t_host_item,
+                    doc_data=host_item,
                 ),
                 None,
             )
 
         get_more_results = False
 
-        async for t_key_item, get_more_results in self.client.get_ssh_keys():
-            t_friendly = t_key_item["friendly_name"]
-            t_key_value = t_key_item["key_value"]
+        async for key_item, get_more_results in self.client.get_ssh_keys():
+            friendly = key_item["friendly_name"]
+            key_value = key_item["key_value"]
 
-            doc_id = hash_id(t_key_value)
+            doc_id = hash_id(key_value)
             self._logger.debug(
-                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_friendly}] : [{get_more_results}]"
+                f"SANDFLY SSH_KEYS : [{doc_id}] : [{friendly}] : [{get_more_results}]"
             )
 
             yield (
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_text=t_friendly,
+                    doc_text=friendly,
                     doc_field="sandfly_ssh_keys",
-                    doc_data=t_key_item,
+                    doc_data=key_item,
                 ),
                 None,
             )
 
         now = datetime.utcnow()
         then = now + timedelta(days=-self.fetch_days)
-        t_time_since = format_sandfly_date(date=then, flag=True)
+        time_since = format_sandfly_date(date=then, flag=True)
 
         last_sequence_id = None
         get_more_results = False
 
-        async for t_result_item, get_more_results in self.client.get_results_by_time(
-            t_time_since, self.enable_pass
+        async for result_item, get_more_results in self.client.get_results_by_time(
+            time_since, self.enable_pass
         ):
-            last_sequence_id = t_result_item["sequence_id"]
-            t_external_id = t_result_item["external_id"]
-            t_timestamp = t_result_item["header"]["end_time"]
-            t_key_data = t_result_item["data"]["key_data"]
-            t_status = t_result_item["data"]["status"]
+            last_sequence_id = result_item["sequence_id"]
+            external_id = result_item["external_id"]
+            timestamp = result_item["header"]["end_time"]
+            key_data = result_item["data"]["key_data"]
+            status = result_item["data"]["status"]
 
-            if len(t_key_data) == 0:
-                t_key_data = "- no data -"
+            if len(key_data) == 0:
+                key_data = "- no data -"
 
-            doc_id = hash_id(t_external_id)
+            doc_id = hash_id(external_id)
             self._logger.debug(
-                f"SANDFLY GET_RESULTS-time : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
+                f"SANDFLY GET_RESULTS-time : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
             )
 
             yield (
                 self._format_doc(
                     doc_id=doc_id,
-                    doc_time=t_timestamp,
-                    doc_text=t_key_data,
+                    doc_time=timestamp,
+                    doc_text=key_data,
                     doc_field="sandfly_results",
-                    doc_data=t_result_item,
+                    doc_data=result_item,
                 ),
                 None,
             )
@@ -666,30 +666,30 @@ class SandflyDataSource(BaseDataSource):
         while get_more_results:
             get_more_results = False
 
-            async for t_result_item, get_more_results in self.client.get_results_by_id(
+            async for result_item, get_more_results in self.client.get_results_by_id(
                 last_sequence_id, self.enable_pass
             ):
-                last_sequence_id = t_result_item["sequence_id"]
-                t_external_id = t_result_item["external_id"]
-                t_timestamp = t_result_item["header"]["end_time"]
-                t_key_data = t_result_item["data"]["key_data"]
-                t_status = t_result_item["data"]["status"]
+                last_sequence_id = result_item["sequence_id"]
+                external_id = result_item["external_id"]
+                timestamp = result_item["header"]["end_time"]
+                key_data = result_item["data"]["key_data"]
+                status = result_item["data"]["status"]
 
-                if len(t_key_data) == 0:
-                    t_key_data = "- no data -"
+                if len(key_data) == 0:
+                    key_data = "- no data -"
 
-                doc_id = hash_id(t_external_id)
+                doc_id = hash_id(external_id)
                 self._logger.debug(
-                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
+                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
                 )
 
                 yield (
                     self._format_doc(
                         doc_id=doc_id,
-                        doc_time=t_timestamp,
-                        doc_text=t_key_data,
+                        doc_time=timestamp,
+                        doc_text=key_data,
                         doc_field="sandfly_results",
-                        doc_data=t_result_item,
+                        doc_data=result_item,
                     ),
                     None,
                 )
@@ -708,23 +708,25 @@ class SandflyDataSource(BaseDataSource):
             msg = "Unable to start incremental sync. Please perform a full sync to re-enable incremental syncs."
             raise SyncCursorEmpty(msg)
 
-        async for t_license in self.client.get_license():
-            t_customer = t_license["customer"]["name"]
-            t_expiry = t_license["date"]["expiry"]
+        async for license_data in self.client.get_license():
+            customer = license_data["customer"]["name"]
+            expiry = license_data["date"]["expiry"]
 
-            self._logger.debug(f"SANDFLY GET_LICENSE : [{t_customer}] : [{t_expiry}]")
+            self._logger.debug(f"SANDFLY GET_LICENSE : [{customer}] : [{expiry}]")
 
             now = datetime.utcnow()
-            expiry_date = extract_sandfly_date(t_expiry)
+            expiry_date = extract_sandfly_date(expiry)
             if expiry_date < now:
-                msg = f"Sandfly Server [{self.server_url}] license has expired [{t_expiry}]"
+                msg = (
+                    f"Sandfly Server [{self.server_url}] license has expired [{expiry}]"
+                )
                 raise SandflyLicenseExpired(msg)
 
             is_licensed = False
-            if "limits" in t_license:
-                if "features" in t_license["limits"]:
-                    t_features_list = t_license["limits"]["features"]
-                    for feature in t_features_list:
+            if "limits" in license_data:
+                if "features" in license_data["limits"]:
+                    features_list = license_data["limits"]["features"]
+                    for feature in features_list:
                         if feature == "elasticsearch_replication":
                             is_licensed = True
 
@@ -732,32 +734,32 @@ class SandflyDataSource(BaseDataSource):
                 msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
                 raise SandflyNotLicensed(msg)
 
-        async for t_host_item in self.client.get_hosts():
-            t_hostid = t_host_item["host_id"]
-            t_hostname = t_host_item["hostname"]
+        async for host_item in self.client.get_hosts():
+            hostid = host_item["host_id"]
+            hostname = host_item["hostname"]
 
-            t_nodename = "<unknown>"
-            if "data" in t_host_item:
-                if t_host_item["data"] is not None:
-                    if "os" in t_host_item["data"]:
-                        if "info" in t_host_item["data"]["os"]:
-                            if "node" in t_host_item["data"]["os"]["info"]:
-                                t_nodename = t_host_item["data"]["os"]["info"]["node"]
+            nodename = "<unknown>"
+            if "data" in host_item:
+                if host_item["data"] is not None:
+                    if "os" in host_item["data"]:
+                        if "info" in host_item["data"]["os"]:
+                            if "node" in host_item["data"]["os"]["info"]:
+                                nodename = host_item["data"]["os"]["info"]["node"]
 
-            doc_id = hash_id(t_hostid)
+            doc_id = hash_id(hostid)
             self._logger.debug(
-                f"SANDFLY HOSTS : [{doc_id}] : [{t_hostname}] [{t_nodename}]"
+                f"SANDFLY HOSTS : [{doc_id}] : [{hostname}] [{nodename}]"
             )
 
-            t_key_data = f"{t_nodename} ({t_hostname})"
+            key_data = f"{nodename} ({hostname})"
 
             yield (
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_text=t_key_data,
+                    doc_text=key_data,
                     doc_field="sandfly_hosts",
-                    doc_data=t_host_item,
+                    doc_data=host_item,
                 ),
                 None,
                 OP_INDEX,
@@ -765,22 +767,22 @@ class SandflyDataSource(BaseDataSource):
 
         get_more_results = False
 
-        async for t_key_item, get_more_results in self.client.get_ssh_keys():
-            t_friendly = t_key_item["friendly_name"]
-            t_key_value = t_key_item["key_value"]
+        async for key_item, get_more_results in self.client.get_ssh_keys():
+            friendly = key_item["friendly_name"]
+            key_value = key_item["key_value"]
 
-            doc_id = hash_id(t_key_value)
+            doc_id = hash_id(key_value)
             self._logger.debug(
-                f"SANDFLY SSH_KEYS : [{doc_id}] : [{t_friendly}] : [{get_more_results}]"
+                f"SANDFLY SSH_KEYS : [{doc_id}] : [{friendly}] : [{get_more_results}]"
             )
 
             yield (
                 self._format_doc(
                     doc_id=doc_id,
                     doc_time=iso_utc(),
-                    doc_text=t_friendly,
+                    doc_text=friendly,
                     doc_field="sandfly_ssh_keys",
-                    doc_data=t_key_item,
+                    doc_data=key_item,
                 ),
                 None,
                 OP_INDEX,
@@ -795,30 +797,30 @@ class SandflyDataSource(BaseDataSource):
         while get_more_results:
             get_more_results = False
 
-            async for t_result_item, get_more_results in self.client.get_results_by_id(
+            async for result_item, get_more_results in self.client.get_results_by_id(
                 last_sequence_id, self.enable_pass
             ):
-                last_sequence_id = t_result_item["sequence_id"]
-                t_external_id = t_result_item["external_id"]
-                t_timestamp = t_result_item["header"]["end_time"]
-                t_key_data = t_result_item["data"]["key_data"]
-                t_status = t_result_item["data"]["status"]
+                last_sequence_id = result_item["sequence_id"]
+                external_id = result_item["external_id"]
+                timestamp = result_item["header"]["end_time"]
+                key_data = result_item["data"]["key_data"]
+                status = result_item["data"]["status"]
 
-                if len(t_key_data) == 0:
-                    t_key_data = "- no data -"
+                if len(key_data) == 0:
+                    key_data = "- no data -"
 
-                doc_id = hash_id(t_external_id)
+                doc_id = hash_id(external_id)
                 self._logger.debug(
-                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{t_external_id}] - [{t_status}] [{last_sequence_id}] [{t_key_data}] [{t_timestamp}] : [{get_more_results}]"
+                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
                 )
 
                 yield (
                     self._format_doc(
                         doc_id=doc_id,
-                        doc_time=t_timestamp,
-                        doc_text=t_key_data,
+                        doc_time=timestamp,
+                        doc_text=key_data,
                         doc_field="sandfly_results",
-                        doc_data=t_result_item,
+                        doc_data=result_item,
                     ),
                     None,
                     OP_INDEX,
