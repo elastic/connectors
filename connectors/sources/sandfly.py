@@ -541,6 +541,25 @@ class SandflyDataSource(BaseDataSource):
         }
         return document
 
+    def extract_host_data(self, host_item):
+        hostid = host_item["host_id"]
+        hostname = host_item["hostname"]
+
+        nodename = "<unknown>"
+        if "data" in host_item:
+            if host_item["data"] is not None:
+                if "os" in host_item["data"]:
+                    if "info" in host_item["data"]["os"]:
+                        if "node" in host_item["data"]["os"]["info"]:
+                            nodename = host_item["data"]["os"]["info"]["node"]
+
+        key_data = f"{nodename} ({hostname})"
+        doc_id = hash_id(hostid)
+
+        self._logger.debug(f"SANDFLY HOSTS : [{doc_id}] : [{key_data}]")
+
+        return key_data, doc_id
+
     def validate_license(self, license_data):
         customer = license_data["customer"]["name"]
         expiry = license_data["date"]["expiry"]
@@ -576,23 +595,7 @@ class SandflyDataSource(BaseDataSource):
                 raise
 
         async for host_item in self.client.get_hosts():
-            hostid = host_item["host_id"]
-            hostname = host_item["hostname"]
-
-            nodename = "<unknown>"
-            if "data" in host_item:
-                if host_item["data"] is not None:
-                    if "os" in host_item["data"]:
-                        if "info" in host_item["data"]["os"]:
-                            if "node" in host_item["data"]["os"]["info"]:
-                                nodename = host_item["data"]["os"]["info"]["node"]
-
-            doc_id = hash_id(hostid)
-            self._logger.debug(
-                f"SANDFLY HOSTS : [{doc_id}] : [{hostname}] [{nodename}]"
-            )
-
-            key_data = f"{nodename} ({hostname})"
+            key_data, doc_id = self.extract_host_data(host_item)
 
             yield (
                 self._format_doc(
@@ -721,23 +724,7 @@ class SandflyDataSource(BaseDataSource):
                 raise
 
         async for host_item in self.client.get_hosts():
-            hostid = host_item["host_id"]
-            hostname = host_item["hostname"]
-
-            nodename = "<unknown>"
-            if "data" in host_item:
-                if host_item["data"] is not None:
-                    if "os" in host_item["data"]:
-                        if "info" in host_item["data"]["os"]:
-                            if "node" in host_item["data"]["os"]["info"]:
-                                nodename = host_item["data"]["os"]["info"]["node"]
-
-            doc_id = hash_id(hostid)
-            self._logger.debug(
-                f"SANDFLY HOSTS : [{doc_id}] : [{hostname}] [{nodename}]"
-            )
-
-            key_data = f"{nodename} ({hostname})"
+            key_data, doc_id = self.extract_host_data(host_item)
 
             yield (
                 self._format_doc(
