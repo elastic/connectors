@@ -541,34 +541,39 @@ class SandflyDataSource(BaseDataSource):
         }
         return document
 
+    def validate_license(self, license_data):
+        customer = license_data["customer"]["name"]
+        expiry = license_data["date"]["expiry"]
+
+        self._logger.debug(f"SANDFLY VALIDATE_LICENSE : [{customer}] : [{expiry}]")
+
+        now = datetime.utcnow()
+        expiry_date = extract_sandfly_date(expiry)
+        if expiry_date < now:
+            msg = f"Sandfly Server [{self.server_url}] license has expired [{expiry}]"
+            raise SandflyLicenseExpired(msg)
+
+        is_licensed = False
+        if "limits" in license_data:
+            if "features" in license_data["limits"]:
+                features_list = license_data["limits"]["features"]
+                for feature in features_list:
+                    if feature == "elasticsearch_replication":
+                        is_licensed = True
+
+        if not is_licensed:
+            msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
+            raise SandflyNotLicensed(msg)
+
     async def get_docs(self, filtering=None):
         self.init_sync_cursor()
 
         async for license_data in self.client.get_license():
-            customer = license_data["customer"]["name"]
-            expiry = license_data["date"]["expiry"]
-
-            self._logger.debug(f"SANDFLY GET_LICENSE : [{customer}] : [{expiry}]")
-
-            now = datetime.utcnow()
-            expiry_date = extract_sandfly_date(expiry)
-            if expiry_date < now:
-                msg = (
-                    f"Sandfly Server [{self.server_url}] license has expired [{expiry}]"
-                )
-                raise SandflyLicenseExpired(msg)
-
-            is_licensed = False
-            if "limits" in license_data:
-                if "features" in license_data["limits"]:
-                    features_list = license_data["limits"]["features"]
-                    for feature in features_list:
-                        if feature == "elasticsearch_replication":
-                            is_licensed = True
-
-            if not is_licensed:
-                msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
-                raise SandflyNotLicensed(msg)
+            try:
+                self.validate_license(license_data)
+            except Exception as exception:
+                self._logger.error(f"SandflyDataSource GET_DOCS : [{exception}]")
+                raise
 
         async for host_item in self.client.get_hosts():
             hostid = host_item["host_id"]
@@ -709,30 +714,11 @@ class SandflyDataSource(BaseDataSource):
             raise SyncCursorEmpty(msg)
 
         async for license_data in self.client.get_license():
-            customer = license_data["customer"]["name"]
-            expiry = license_data["date"]["expiry"]
-
-            self._logger.debug(f"SANDFLY GET_LICENSE : [{customer}] : [{expiry}]")
-
-            now = datetime.utcnow()
-            expiry_date = extract_sandfly_date(expiry)
-            if expiry_date < now:
-                msg = (
-                    f"Sandfly Server [{self.server_url}] license has expired [{expiry}]"
-                )
-                raise SandflyLicenseExpired(msg)
-
-            is_licensed = False
-            if "limits" in license_data:
-                if "features" in license_data["limits"]:
-                    features_list = license_data["limits"]["features"]
-                    for feature in features_list:
-                        if feature == "elasticsearch_replication":
-                            is_licensed = True
-
-            if not is_licensed:
-                msg = f"Sandfly Server [{self.server_url}] is not licensed for Elasticsearch Replication"
-                raise SandflyNotLicensed(msg)
+            try:
+                self.validate_license(license_data)
+            except Exception as exception:
+                self._logger.error(f"SandflyDataSource GET_DOCS_INC : [{exception}]")
+                raise
 
         async for host_item in self.client.get_hosts():
             hostid = host_item["host_id"]
