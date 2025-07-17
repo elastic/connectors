@@ -1525,7 +1525,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         The document contains all groups of a user and his email and/or username under `query.template.params.access_control`.
 
         Returns:
-            dict: dictionary representing an user access control document
+            dict: dictionary representing a user access control document
             {
                 "_id": "some.user@spo.com",
                 "identity": {
@@ -1582,7 +1582,10 @@ class SharepointOnlineDataSource(BaseDataSource):
         )
 
         if "createdDateTime" in user:
-            created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
+            try:
+                created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
+            except (ValueError, TypeError):
+                created_at = None
         else:
             created_at = iso_utc()
 
