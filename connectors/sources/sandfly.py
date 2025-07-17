@@ -541,6 +541,24 @@ class SandflyDataSource(BaseDataSource):
         }
         return document
 
+    def extract_results_data(self, result_item, get_more_results):
+        last_sequence_id = result_item["sequence_id"]
+        external_id = result_item["external_id"]
+        timestamp = result_item["header"]["end_time"]
+        key_data = result_item["data"]["key_data"]
+        status = result_item["data"]["status"]
+
+        if len(key_data) == 0:
+            key_data = "- no data -"
+
+        doc_id = hash_id(external_id)
+
+        self._logger.debug(
+            f"SANDFLY RESULTS : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
+        )
+
+        return timestamp, key_data, last_sequence_id, doc_id
+
     def extract_sshkey_data(self, key_item):
         friendly = key_item["friendly_name"]
         key_value = key_item["key_value"]
@@ -618,8 +636,6 @@ class SandflyDataSource(BaseDataSource):
                 None,
             )
 
-        get_more_results = False
-
         async for key_item, _get_more_results in self.client.get_ssh_keys():
             friendly, doc_id = self.extract_sshkey_data(key_item)
 
@@ -644,18 +660,8 @@ class SandflyDataSource(BaseDataSource):
         async for result_item, get_more_results in self.client.get_results_by_time(
             time_since, self.enable_pass
         ):
-            last_sequence_id = result_item["sequence_id"]
-            external_id = result_item["external_id"]
-            timestamp = result_item["header"]["end_time"]
-            key_data = result_item["data"]["key_data"]
-            status = result_item["data"]["status"]
-
-            if len(key_data) == 0:
-                key_data = "- no data -"
-
-            doc_id = hash_id(external_id)
-            self._logger.debug(
-                f"SANDFLY GET_RESULTS-time : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
+            timestamp, key_data, last_sequence_id, doc_id = self.extract_results_data(
+                result_item, get_more_results
             )
 
             yield (
@@ -670,7 +676,7 @@ class SandflyDataSource(BaseDataSource):
             )
 
         self._logger.debug(
-            f"SANDFLY GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+            f"SANDFLY GET_MORE_RESULTS-time : [{last_sequence_id}] : [{get_more_results}]"
         )
         if last_sequence_id is not None:
             self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
@@ -681,18 +687,8 @@ class SandflyDataSource(BaseDataSource):
             async for result_item, get_more_results in self.client.get_results_by_id(
                 last_sequence_id, self.enable_pass
             ):
-                last_sequence_id = result_item["sequence_id"]
-                external_id = result_item["external_id"]
-                timestamp = result_item["header"]["end_time"]
-                key_data = result_item["data"]["key_data"]
-                status = result_item["data"]["status"]
-
-                if len(key_data) == 0:
-                    key_data = "- no data -"
-
-                doc_id = hash_id(external_id)
-                self._logger.debug(
-                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
+                timestamp, key_data, last_sequence_id, doc_id = (
+                    self.extract_results_data(result_item, get_more_results)
                 )
 
                 yield (
@@ -707,7 +703,7 @@ class SandflyDataSource(BaseDataSource):
                 )
 
             self._logger.debug(
-                f"SANDFLY GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+                f"SANDFLY GET_MORE_RESULTS-id : [{last_sequence_id}] : [{get_more_results}]"
             )
             if last_sequence_id is not None:
                 self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
@@ -771,18 +767,8 @@ class SandflyDataSource(BaseDataSource):
             async for result_item, get_more_results in self.client.get_results_by_id(
                 last_sequence_id, self.enable_pass
             ):
-                last_sequence_id = result_item["sequence_id"]
-                external_id = result_item["external_id"]
-                timestamp = result_item["header"]["end_time"]
-                key_data = result_item["data"]["key_data"]
-                status = result_item["data"]["status"]
-
-                if len(key_data) == 0:
-                    key_data = "- no data -"
-
-                doc_id = hash_id(external_id)
-                self._logger.debug(
-                    f"SANDFLY GET_RESULTS-id : [{doc_id}] : [{external_id}] - [{status}] [{last_sequence_id}] [{key_data}] [{timestamp}] : [{get_more_results}]"
+                timestamp, key_data, last_sequence_id, doc_id = (
+                    self.extract_results_data(result_item, get_more_results)
                 )
 
                 yield (
@@ -798,7 +784,7 @@ class SandflyDataSource(BaseDataSource):
                 )
 
             self._logger.debug(
-                f"SANDFLY INCREMENTAL GET_MORE_RESULTS : [{last_sequence_id}] : [{get_more_results}]"
+                f"SANDFLY INCREMENTAL GET_MORE_RESULTS-id : [{last_sequence_id}] : [{get_more_results}]"
             )
             self._sync_cursor[CURSOR_SEQUENCE_ID_KEY] = last_sequence_id
 
