@@ -1581,13 +1581,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
         )
 
-        if "createdDateTime" in user:
-            try:
-                created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
-            except (ValueError, TypeError):
-                created_at = None
-        else:
-            created_at = iso_utc()
+        def _parse_created_date_time(createdDateTime):
+            return datetime.strptime(createdDateTime, TIMESTAMP_FORMAT)
+
+        created_at = user.get("createdDateTime")
+        if created_at is not None:
+            created_at = _parse_created_date_time(created_at)
+
 
         return {
             # For `_id` we're intentionally using the email/username without the prefix
