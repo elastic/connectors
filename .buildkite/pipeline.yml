@@ -27,7 +27,7 @@ notify:
       message: "${BUILDKITE_MESSAGE}"
 
 env:
-  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+  DOCKERFILE_FTEST_PATH: "tests/Dockerfile.ftest"
 
 steps:
   - label: ":eyes: Notice check"
