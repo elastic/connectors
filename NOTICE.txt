@@ -3521,7 +3521,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.0.4
+9.0.5
 Apache Software License
 Elastic License 2.0
 
