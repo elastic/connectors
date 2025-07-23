@@ -3,9 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-import urllib.parse
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
 
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.google import (
@@ -14,7 +12,6 @@ from connectors.sources.google import (
     remove_universe_domain,
     validate_service_account_json,
 )
-
 
 # Default timeout for Google Calendar API calls (in seconds)
 DEFAULT_TIMEOUT = 60
@@ -47,9 +44,7 @@ class GoogleCalendarClient(GoogleServiceAccountClient):
 
     async def ping(self):
         """Verify connectivity to Google Calendar API."""
-        return await self.api_call(
-            resource="calendarList", method="list", maxResults=1
-        )
+        return await self.api_call(resource="calendarList", method="list", maxResults=1)
 
     async def list_calendar_list(self):
         """Fetch all calendar list entries from Google Calendar.
@@ -119,13 +114,13 @@ class GoogleCalendarClient(GoogleServiceAccountClient):
 
 class GoogleCalendarDataSource(BaseDataSource):
     """Google Calendar connector for Elastic Enterprise Search.
-    
+
     This connector fetches data from a user's Google Calendar (read-only mode):
       - CalendarList entries (the user's list of calendars)
       - Each underlying Calendar resource
       - Events belonging to each Calendar
       - Free/Busy data for each Calendar
-    
+
     Reference:
         https://developers.google.com/calendar/api/v3/reference
     """
@@ -184,9 +179,7 @@ class GoogleCalendarDataSource(BaseDataSource):
             dict: The loaded service account credentials.
         """
         service_account_credentials = self.configuration["service_account_credentials"]
-        return load_service_account_json(
-            service_account_credentials, "Google Calendar"
-        )
+        return load_service_account_json(service_account_credentials, "Google Calendar")
 
     def calendar_client(self):
         """Get or create a Google Calendar client.
@@ -226,31 +219,31 @@ class GoogleCalendarDataSource(BaseDataSource):
 
     async def get_docs(self, filtering=None):
         """Yields documents from Google Calendar API.
-        
+
         Each document is a tuple with:
         - a mapping with the data to index
         - an optional mapping with attachment data
         """
         client = self.calendar_client()
-        
+
         # 1) Get the user's calendarList
         calendar_list_entries = []
         async for cal_list_doc in self._generate_calendar_list_docs(client):
             yield cal_list_doc, None
             calendar_list_entries.append(cal_list_doc)
-        
+
         # 2) For each calendar in the user's calendarList, yield its Calendar resource
         for cal_list_doc in calendar_list_entries:
             async for calendar_doc in self._generate_calendar_docs(
                 client, cal_list_doc["calendar_id"]
             ):
                 yield calendar_doc, None
-        
+
         # 3) For each calendar, yield event documents
         for cal_list_doc in calendar_list_entries:
             async for event_doc in self._generate_event_docs(client, cal_list_doc):
                 yield event_doc, None
-        
+
         # 4) (Optionally) yield free/busy data for each calendar
         if self.include_freebusy:
             calendar_ids = [cal["calendar_id"] for cal in calendar_list_entries]
@@ -262,10 +255,10 @@ class GoogleCalendarDataSource(BaseDataSource):
 
     async def _generate_calendar_list_docs(self, client):
         """Yield documents for each calendar in the user's CalendarList.
-        
+
         Args:
             client (GoogleCalendarClient): The Google Calendar client.
-            
+
         Yields:
             dict: Calendar list entry document.
         """
@@ -291,11 +284,11 @@ class GoogleCalendarDataSource(BaseDataSource):
 
     async def _generate_calendar_docs(self, client, calendar_id):
         """Yield a document for the specified calendar_id.
-        
+
         Args:
             client (GoogleCalendarClient): The Google Calendar client.
             calendar_id (str): The calendar ID.
-            
+
         Yields:
             dict: Calendar document.
         """
@@ -316,23 +309,25 @@ class GoogleCalendarDataSource(BaseDataSource):
 
     async def _generate_event_docs(self, client, cal_list_doc):
         """Yield documents for all events in the given calendar.
-        
+
         Args:
             client (GoogleCalendarClient): The Google Calendar client.
             cal_list_doc (dict): Calendar list entry document.
-            
+
         Yields:
             dict: Event document.
         """
         calendar_id = cal_list_doc["calendar_id"]
-        
+
         # Create calendar reference for events
         calendar_ref = {
             "id": calendar_id,
-            "name": cal_list_doc.get("summary_override") or cal_list_doc.get("summary") or "",
+            "name": cal_list_doc.get("summary_override")
+            or cal_list_doc.get("summary")
+            or "",
             "type": "calendar",
         }
-        
+
         try:
             async for page in client.list_events(calendar_id):
                 for event in page.get("items", []):
@@ -346,7 +341,7 @@ class GoogleCalendarDataSource(BaseDataSource):
                     end_date = end_info.get("date")
                     created_at_str = event.get("created")
                     updated_at_str = event.get("updated")
-                    
+
                     # Convert created/updated to datetime if present
                     created_at = (
                         datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
@@ -358,7 +353,7 @@ class GoogleCalendarDataSource(BaseDataSource):
                         if updated_at_str
                         else None
                     )
-                    
+
                     doc = {
                         "_id": event_id,
                         "type": "event",
@@ -389,15 +384,17 @@ class GoogleCalendarDataSource(BaseDataSource):
                     }
                     yield doc
         except Exception as e:
-            self._logger.warning(f"Error fetching events for calendar {calendar_id}: {str(e)}")
+            self._logger.warning(
+                f"Error fetching events for calendar {calendar_id}: {str(e)}"
+            )
 
     async def _generate_freebusy_docs(self, client, calendar_ids):
         """Yield documents for free/busy data for the next 7 days for each calendar.
-        
+
         Args:
             client (GoogleCalendarClient): The Google Calendar client.
             calendar_ids (list): List of calendar IDs.
-            
+
         Yields:
             dict: Free/busy document.
         """
@@ -405,14 +402,14 @@ class GoogleCalendarDataSource(BaseDataSource):
         in_7_days = now + timedelta(days=7)
         time_min = now.isoformat() + "Z"
         time_max = in_7_days.isoformat() + "Z"
-        
+
         try:
             data = await client.get_free_busy(calendar_ids, time_min, time_max)
             calendars = data.get("calendars", {})
-            
+
             for calendar_id, busy_info in calendars.items():
                 busy_ranges = busy_info.get("busy", [])
-                
+
                 doc = {
                     "_id": f"{calendar_id}_freebusy",
                     "type": "freebusy",

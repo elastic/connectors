@@ -70,14 +70,14 @@ async def test_raise_on_invalid_configuration():
 async def test_get_default_configuration():
     """Test the default configuration for Google Calendar connector"""
     config = GoogleCalendarDataSource.get_default_configuration()
-    
+
     assert "service_account_credentials" in config
     assert config["service_account_credentials"]["type"] == "str"
     assert config["service_account_credentials"]["sensitive"] is True
-    
+
     assert "subject" in config
     assert config["subject"]["type"] == "str"
-    
+
     assert "include_freebusy" in config
     assert config["include_freebusy"]["type"] == "bool"
     assert config["include_freebusy"]["value"] is False
@@ -131,19 +131,19 @@ async def test_get_docs():
                     "backgroundColor": "#ffffff",
                     "foregroundColor": "#000000",
                     "accessRole": "owner",
-                    "primary": True
+                    "primary": True,
                 }
-            ]
+            ],
         }
-        
+
         calendar_response = {
             "id": "calendar1",
             "summary": "Calendar 1",
             "description": "Calendar 1 Description",
             "location": "Location 1",
-            "timeZone": "UTC"
+            "timeZone": "UTC",
         }
-        
+
         events_response = {
             "kind": "calendar#events",
             "items": [
@@ -153,60 +153,45 @@ async def test_get_docs():
                     "description": "Event 1 Description",
                     "location": "Event Location",
                     "colorId": "1",
-                    "start": {
-                        "dateTime": "2025-07-23T10:00:00Z"
-                    },
-                    "end": {
-                        "dateTime": "2025-07-23T11:00:00Z"
-                    },
+                    "start": {"dateTime": "2025-07-23T10:00:00Z"},
+                    "end": {"dateTime": "2025-07-23T11:00:00Z"},
                     "created": "2025-07-20T10:00:00Z",
                     "updated": "2025-07-21T10:00:00Z",
                     "status": "confirmed",
-                    "organizer": {
-                        "email": "organizer@example.com"
-                    },
-                    "creator": {
-                        "email": "creator@example.com"
-                    },
-                    "attendees": [
-                        {
-                            "email": "attendee@example.com"
-                        }
-                    ]
+                    "organizer": {"email": "organizer@example.com"},
+                    "creator": {"email": "creator@example.com"},
+                    "attendees": [{"email": "attendee@example.com"}],
                 }
-            ]
+            ],
         }
-        
+
         freebusy_response = {
             "calendars": {
                 "calendar1": {
                     "busy": [
-                        {
-                            "start": "2025-07-23T10:00:00Z",
-                            "end": "2025-07-23T11:00:00Z"
-                        }
+                        {"start": "2025-07-23T10:00:00Z", "end": "2025-07-23T11:00:00Z"}
                     ]
                 }
             }
         }
-        
+
         # Mock the client methods
         mock_client = mock.MagicMock()
         mock_client.list_calendar_list = AsyncIterator([calendar_list_response])
         mock_client.get_calendar = mock.AsyncMock(return_value=calendar_response)
         mock_client.list_events = AsyncIterator([events_response])
         mock_client.get_free_busy = mock.AsyncMock(return_value=freebusy_response)
-        
+
         # Mock the calendar_client method to return our mock client
         with mock.patch.object(source, "calendar_client", return_value=mock_client):
             # Collect the documents yielded by get_docs
             documents = []
             async for doc, _ in source.get_docs():
                 documents.append(doc)
-            
+
             # We should have 4 documents: 1 calendar list entry, 1 calendar, 1 event, and 1 freebusy
             assert len(documents) == 4
-            
+
             # Verify the calendar list entry
             calendar_list_doc = next(
                 (doc for doc in documents if doc["type"] == "calendar_list"), None
@@ -215,7 +200,7 @@ async def test_get_docs():
             assert calendar_list_doc["calendar_id"] == "calendar1"
             assert calendar_list_doc["summary"] == "Calendar 1"
             assert calendar_list_doc["summary_override"] == "Calendar 1 Override"
-            
+
             # Verify the calendar
             calendar_doc = next(
                 (doc for doc in documents if doc["type"] == "calendar"), None
@@ -224,16 +209,14 @@ async def test_get_docs():
             assert calendar_doc["calendar_id"] == "calendar1"
             assert calendar_doc["summary"] == "Calendar 1"
             assert calendar_doc["description"] == "Calendar 1 Description"
-            
+
             # Verify the event
-            event_doc = next(
-                (doc for doc in documents if doc["type"] == "event"), None
-            )
+            event_doc = next((doc for doc in documents if doc["type"] == "event"), None)
             assert event_doc is not None
             assert event_doc["event_id"] == "event1"
             assert event_doc["summary"] == "Event 1"
             assert event_doc["description"] == "Event 1 Description"
-            
+
             # Verify the freebusy document
             freebusy_doc = next(
                 (doc for doc in documents if doc["type"] == "freebusy"), None
@@ -253,40 +236,29 @@ async def test_get_docs_without_freebusy():
         # Mock responses for calendar list, calendar details, and events
         calendar_list_response = {
             "kind": "calendar#calendarList",
-            "items": [
-                {
-                    "id": "calendar1",
-                    "summary": "Calendar 1"
-                }
-            ]
+            "items": [{"id": "calendar1", "summary": "Calendar 1"}],
         }
-        
-        calendar_response = {
-            "id": "calendar1",
-            "summary": "Calendar 1"
-        }
-        
-        events_response = {
-            "kind": "calendar#events",
-            "items": []
-        }
-        
+
+        calendar_response = {"id": "calendar1", "summary": "Calendar 1"}
+
+        events_response = {"kind": "calendar#events", "items": []}
+
         # Mock the client methods
         mock_client = mock.MagicMock()
         mock_client.list_calendar_list = AsyncIterator([calendar_list_response])
         mock_client.get_calendar = mock.AsyncMock(return_value=calendar_response)
         mock_client.list_events = AsyncIterator([events_response])
-        
+
         # Mock the calendar_client method to return our mock client
         with mock.patch.object(source, "calendar_client", return_value=mock_client):
             # Collect the documents yielded by get_docs
             documents = []
             async for doc, _ in source.get_docs():
                 documents.append(doc)
-            
+
             # We should have 2 documents: 1 calendar list entry and 1 calendar
             assert len(documents) == 2
-            
+
             # Verify the calendar list entry
             calendar_list_doc = next(
                 (doc for doc in documents if doc["type"] == "calendar_list"), None
@@ -294,7 +266,7 @@ async def test_get_docs_without_freebusy():
             assert calendar_list_doc is not None
             assert calendar_list_doc["calendar_id"] == "calendar1"
             assert calendar_list_doc["summary"] == "Calendar 1"
-            
+
             # Verify the calendar
             calendar_doc = next(
                 (doc for doc in documents if doc["type"] == "calendar"), None
@@ -302,7 +274,7 @@ async def test_get_docs_without_freebusy():
             assert calendar_doc is not None
             assert calendar_doc["calendar_id"] == "calendar1"
             assert calendar_doc["summary"] == "Calendar 1"
-            
+
             # Verify there's no freebusy document
             freebusy_doc = next(
                 (doc for doc in documents if doc["type"] == "freebusy"), None
@@ -313,18 +285,19 @@ async def test_get_docs_without_freebusy():
 @pytest.mark.asyncio
 async def test_client_methods():
     """Test the GoogleCalendarClient methods."""
-    
+
     client = GoogleCalendarClient(
-        json_credentials={"project_id": "dummy123"},
-        subject="test@example.com"
+        json_credentials={"project_id": "dummy123"}, subject="test@example.com"
     )
-    
+
     # Mock the api_call and api_call_paged methods
     with mock.patch.object(
         client, "api_call", mock.AsyncMock(return_value={"id": "calendar1"})
     ):
         with mock.patch.object(
-            client, "api_call_paged", side_effect=lambda *args, **kwargs: AsyncIterator([{"items": []}])
+            client,
+            "api_call_paged",
+            side_effect=lambda *args, **kwargs: AsyncIterator([{"items": []}]),
         ):
             # Test ping
             result = await client.ping()
@@ -332,37 +305,37 @@ async def test_client_methods():
             client.api_call.assert_called_once_with(
                 resource="calendarList", method="list", maxResults=1
             )
-            
+
             # Reset mock
             client.api_call.reset_mock()
-            
+
             # Test get_calendar
             result = await client.get_calendar("calendar1")
             assert result == {"id": "calendar1"}
             client.api_call.assert_called_once_with(
                 resource="calendars", method="get", calendarId="calendar1"
             )
-            
+
             # Test list_calendar_list
             async for page in client.list_calendar_list():
                 assert page == {"items": []}
             client.api_call_paged.assert_called_once_with(
                 resource="calendarList", method="list", maxResults=100
             )
-            
+
             # Reset mock
             client.api_call_paged.reset_mock()
-            
+
             # Test list_events
             async for page in client.list_events("calendar1"):
                 assert page == {"items": []}
             client.api_call_paged.assert_called_once_with(
                 resource="events", method="list", calendarId="calendar1", maxResults=100
             )
-            
+
             # Reset mock
             client.api_call.reset_mock()
-            
+
             # Test get_free_busy
             result = await client.get_free_busy(
                 ["calendar1"], "2025-07-23T10:00:00Z", "2025-07-23T11:00:00Z"
