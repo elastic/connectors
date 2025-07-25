@@ -89,7 +89,7 @@ test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 build-connectors-base-image:
-	docker build . -f Dockerfile.wolfi -t connectors-base
+	docker build . -f ${DOCKERFILE_PATH} -t connectors-base
 
 ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
 	tests/ftest.sh $(NAME) $(PERF8)
