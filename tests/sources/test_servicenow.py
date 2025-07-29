@@ -857,6 +857,92 @@ async def test_get_docs_with_advanced_rules(filtering):
             },
         ] == response_list
 
+@pytest.mark.parametrize(
+    "filtering",
+    [
+        Filter(
+            {
+                ADVANCED_SNIPPET: {
+                    "value": [
+                        {"service": "Incident", "query": "user_nameSTARTSWITHa"},
+                    ]
+                }
+            }
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_docs_with_advanced_rules_pagination(filtering):
+    expected_filter_apis = [
+        {
+            "headers": [
+                {"name": "Content-Type", "value": "application/json"},
+                {"name": "Accept", "value": "application/json"},
+            ],
+            "id": mock.ANY,
+            "method": "GET",
+            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=0",
+        },
+        {
+            "headers": [
+                {"name": "Content-Type", "value": "application/json"},
+                {"name": "Accept", "value": "application/json"},
+            ],
+            "id": mock.ANY,
+            "method": "GET",
+            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=2"
+        }
+    ]
+
+    with patch("connectors.sources.servicenow.TABLE_FETCH_SIZE", 2):
+        async with create_service_now_source() as source:
+            source.servicenow_client._api_call = mock.AsyncMock(
+                return_value=MockResponse(
+                    res=SAMPLE_RESPONSE,
+                    headers={"Content-Type": "application/json", "x-total-count": 3},
+                )
+            )
+
+            response_list = []
+            with mock.patch.object(
+                ServiceNowClient,
+                "filter_services",
+                return_value=({"Incident": "incident"}, []),
+            ):
+                with mock.patch.object(
+                    ServiceNowClient,
+                    "get_data",
+                    return_value=AsyncIterator(
+                        [
+                            [
+                                {
+                                    "sys_updated_on": "2023-10-10 05:21:45",
+                                    "sys_id": "id_1",
+                                    "email": "admin@email.com",
+                                    "user_name": "demo.user",
+                                }
+                            ]
+                        ]
+                    ),
+                ):
+                    with mock.patch.object(
+                        source, "_fetch_table_data", wraps=source._fetch_table_data
+                    ) as mock_fetch_table_data:
+                        async for response in source.get_docs(filtering):
+                            response_list.append(response[0])
+
+            mock_fetch_table_data.assert_called_once_with(expected_filter_apis, [])
+            assert [
+               {
+                   "sys_updated_on": "2023-10-10 05:21:45",
+                   "sys_id": "id_1",
+                   "email": "admin@email.com",
+                   "user_name": "demo.user",
+                   '_id': 'id_1',
+                   '_timestamp': '2023-10-10T05:21:45',
+               }
+           ] == response_list
+
 
 @pytest.mark.asyncio
 async def test_get_access_control():
