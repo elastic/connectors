@@ -857,6 +857,7 @@ async def test_get_docs_with_advanced_rules(filtering):
             },
         ] == response_list
 
+
 @pytest.mark.parametrize(
     "filtering",
     [
@@ -890,8 +891,8 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
             ],
             "id": mock.ANY,
             "method": "GET",
-            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=2"
-        }
+            "url": "/api/now/table/incident?sysparm_query=ORDERBYsys_created_on%5Euser_nameSTARTSWITHa&sysparm_limit=2&sysparm_offset=2",
+        },
     ]
 
     with patch("connectors.sources.servicenow.TABLE_FETCH_SIZE", 2):
@@ -933,15 +934,15 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
 
             mock_fetch_table_data.assert_called_once_with(expected_filter_apis, [])
             assert [
-               {
-                   "sys_updated_on": "2023-10-10 05:21:45",
-                   "sys_id": "id_1",
-                   "email": "admin@email.com",
-                   "user_name": "demo.user",
-                   '_id': 'id_1',
-                   '_timestamp': '2023-10-10T05:21:45',
-               }
-           ] == response_list
+                {
+                    "sys_updated_on": "2023-10-10 05:21:45",
+                    "sys_id": "id_1",
+                    "email": "admin@email.com",
+                    "user_name": "demo.user",
+                    "_id": "id_1",
+                    "_timestamp": "2023-10-10T05:21:45",
+                }
+            ] == response_list
 
 
 @pytest.mark.asyncio
