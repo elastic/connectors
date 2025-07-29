@@ -20,7 +20,7 @@ notify:
       message: "${BUILDKITE_MESSAGE}"
 
 env:
-  DOCKERFILE_FTEST_PATH: "tests/Dockerfile.ftest"
+  DOCKERFILE_PATH: "Dockerfile.wolfi"
 
 steps:
   - label: "🔨 [Python {{ matrix }}] MySQL"
