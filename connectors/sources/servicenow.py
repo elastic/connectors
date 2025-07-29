@@ -7,6 +7,7 @@
 
 import base64
 import json
+import math
 import os
 import uuid
 from enum import Enum
@@ -204,7 +205,7 @@ class ServiceNowClient:
             params = {"sysparm_query": rule["query"]}
             table_name = mapping[rule["service"]]
             total_count = await self.get_table_length(table_name)
-            for page in range(int(total_count / TABLE_FETCH_SIZE) + 1):
+            for page in range(math.ceil(total_count / TABLE_FETCH_SIZE)):
                 apis.append(
                     {
                         "id": str(uuid.uuid4()),
@@ -225,7 +226,7 @@ class ServiceNowClient:
             {"name": "Accept", "value": "application/json"},
         ]
         apis = []
-        for page in range(int(total_count / TABLE_FETCH_SIZE) + 1):
+        for page in range(math.ceil(total_count / TABLE_FETCH_SIZE)):
             apis.append(
                 {
                     "id": str(uuid.uuid4()),
