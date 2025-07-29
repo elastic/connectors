@@ -194,7 +194,7 @@ class ServiceNowClient:
             full_url = f"{url}?{params_string}"
         return full_url
 
-    def get_filter_apis(self, rules, mapping):
+    async def get_filter_apis(self, rules, mapping):
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -203,18 +203,20 @@ class ServiceNowClient:
         for rule in rules:
             params = {"sysparm_query": rule["query"]}
             table_name = mapping[rule["service"]]
-            apis.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "headers": headers,
-                    "method": "GET",
-                    "url": self._prepare_url(
-                        url=ENDPOINTS["TABLE"].format(table=table_name),
-                        params=params.copy(),
-                        offset=0,
-                    ),
-                }
-            )
+            total_count = await self.get_table_length(table_name)
+            for page in range(int(total_count / TABLE_FETCH_SIZE) + 1):
+                apis.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "headers": headers,
+                        "method": "GET",
+                        "url": self._prepare_url(
+                            url=ENDPOINTS["TABLE"].format(table=table_name),
+                            params=params.copy(),
+                            offset=page * TABLE_FETCH_SIZE,
+                        ),
+                    }
+                )
         return apis
 
     def get_record_apis(self, url, params, total_count):
@@ -894,7 +896,7 @@ class ServiceNowDataSource(BaseDataSource):
                         advanced_rules_index + TABLE_BATCH_SIZE
                     )  # noqa
                 ]
-                filter_apis = self.servicenow_client.get_filter_apis(
+                filter_apis = await self.servicenow_client.get_filter_apis(
                     rules=batched_advanced_rules, mapping=servicenow_mapping
                 )
 
