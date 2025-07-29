@@ -8,7 +8,7 @@ VERSION=$(shell cat connectors/VERSION)
 
 DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
-DOCKERFILE_FTEST_PATH?=Dockerfile.ftest
+DOCKERFILE_FTEST_PATH?=tests/Dockerfile.ftest
 
 config.yml:
 	- cp -n config.yml.example config.yml
@@ -75,7 +75,10 @@ test: .venv/bin/pytest .venv/bin/elastic-ingest
 release: install
 	.venv/bin/python setup.py sdist
 
-ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
+build-connectors-base-image:
+	docker build . -f ${DOCKERFILE_PATH} -t connectors-base
+
+ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
 	tests/ftest.sh $(NAME) $(PERF8)
 
 ftrace: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
