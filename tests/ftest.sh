@@ -17,7 +17,7 @@ MAX_DURATION=600
 CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
 ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
 
-export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-Dockerfile.ftest}
+export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-tests/Dockerfile.ftest}
 export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
