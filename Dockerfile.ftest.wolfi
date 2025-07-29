@@ -1,7 +1,0 @@
-FROM docker.elastic.co/wolfi/python:3.11-dev@sha256:757718a1cf9316383404410940e6810b6a64a06d7b3a34efe1163a2f15ffbcf7
-USER root
-COPY . /connectors
-WORKDIR /connectors
-RUN make clean install
-RUN .venv/bin/pip install -r requirements/ftest.txt
-ENTRYPOINT []
