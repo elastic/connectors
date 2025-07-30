@@ -1525,7 +1525,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         The document contains all groups of a user and his email and/or username under `query.template.params.access_control`.
 
         Returns:
-            dict: dictionary representing an user access control document
+            dict: dictionary representing a user access control document
             {
                 "_id": "some.user@spo.com",
                 "identity": {
@@ -1581,10 +1581,13 @@ class SharepointOnlineDataSource(BaseDataSource):
             {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
         )
 
-        if "createdDateTime" in user:
-            created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
-        else:
-            created_at = iso_utc()
+        def _parse_created_date_time(createdDateTime):
+            return datetime.strptime(createdDateTime, TIMESTAMP_FORMAT)
+
+        created_at = user.get("createdDateTime")
+        if created_at is not None:
+            created_at = _parse_created_date_time(created_at)
+
 
         return {
             # For `_id` we're intentionally using the email/username without the prefix
