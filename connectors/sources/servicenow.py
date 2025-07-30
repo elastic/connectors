@@ -196,28 +196,17 @@ class ServiceNowClient:
         return full_url
 
     async def get_filter_apis(self, rules, mapping):
-        headers = [
-            {"name": "Content-Type", "value": "application/json"},
-            {"name": "Accept", "value": "application/json"},
-        ]
         apis = []
         for rule in rules:
             params = {"sysparm_query": rule["query"]}
             table_name = mapping[rule["service"]]
             total_count = await self.get_table_length(table_name)
-            for page in range(math.ceil(total_count / TABLE_FETCH_SIZE)):
-                apis.append(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "headers": headers,
-                        "method": "GET",
-                        "url": self._prepare_url(
-                            url=ENDPOINTS["TABLE"].format(table=table_name),
-                            params=params.copy(),
-                            offset=page * TABLE_FETCH_SIZE,
-                        ),
-                    }
-                )
+            paginated_apis = self.get_record_apis(
+                url=ENDPOINTS["TABLE"].format(table=table_name),
+                params=params,
+                total_count=total_count,
+            )
+            apis.extend(paginated_apis)
         return apis
 
     def get_record_apis(self, url, params, total_count):
