@@ -7,6 +7,7 @@
 
 import base64
 import json
+import math
 import os
 import uuid
 from enum import Enum
@@ -194,27 +195,18 @@ class ServiceNowClient:
             full_url = f"{url}?{params_string}"
         return full_url
 
-    def get_filter_apis(self, rules, mapping):
-        headers = [
-            {"name": "Content-Type", "value": "application/json"},
-            {"name": "Accept", "value": "application/json"},
-        ]
+    async def get_filter_apis(self, rules, mapping):
         apis = []
         for rule in rules:
             params = {"sysparm_query": rule["query"]}
             table_name = mapping[rule["service"]]
-            apis.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "headers": headers,
-                    "method": "GET",
-                    "url": self._prepare_url(
-                        url=ENDPOINTS["TABLE"].format(table=table_name),
-                        params=params.copy(),
-                        offset=0,
-                    ),
-                }
+            total_count = await self.get_table_length(table_name)
+            paginated_apis = self.get_record_apis(
+                url=ENDPOINTS["TABLE"].format(table=table_name),
+                params=params,
+                total_count=total_count,
             )
+            apis.extend(paginated_apis)
         return apis
 
     def get_record_apis(self, url, params, total_count):
@@ -223,7 +215,7 @@ class ServiceNowClient:
             {"name": "Accept", "value": "application/json"},
         ]
         apis = []
-        for page in range(int(total_count / TABLE_FETCH_SIZE) + 1):
+        for page in range(math.ceil(total_count / TABLE_FETCH_SIZE)):
             apis.append(
                 {
                     "id": str(uuid.uuid4()),
@@ -894,7 +886,7 @@ class ServiceNowDataSource(BaseDataSource):
                         advanced_rules_index + TABLE_BATCH_SIZE
                     )  # noqa
                 ]
-                filter_apis = self.servicenow_client.get_filter_apis(
+                filter_apis = await self.servicenow_client.get_filter_apis(
                     rules=batched_advanced_rules, mapping=servicenow_mapping
                 )
 
