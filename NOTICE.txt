@@ -1328,8 +1328,8 @@ PERFORMANCE OF THIS SOFTWARE.
 
 
 aiohttp
-3.11.10
-Apache Software License
+3.12.14
+Apache-2.0
    Copyright aio-libs contributors.
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -3521,7 +3521,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-9.1.0
+9.1.1
 Apache Software License
 Elastic License 2.0
 
