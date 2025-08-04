@@ -91,10 +91,10 @@ fi
 # Select the appropriate Docker tarball name based on architecture
 case $ARCH in
   x86_64)
-    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image.tar.gz"
+    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-amd64.tar.gz"
     ;;
   aarch64)
-    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-aarch64.tar.gz"
+    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-arm64.tar.gz"
     ;;
   *)
     echo "Error: Unsupported architecture $ARCH"
