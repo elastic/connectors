@@ -13,7 +13,7 @@ definitions:
           limit: 2
 
 env:
-  DOCKERFILE_FTEST_PATH: "Dockerfile.ftest.wolfi"
+  DOCKERFILE_PATH: "Dockerfile.wolfi"
 
 steps:
   - label: "🔨 [Python {{ matrix }}] MySQL"
