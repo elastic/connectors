@@ -2687,8 +2687,8 @@ documentation is licensed as follows:
 
 
 charset-normalizer
-3.4.2
-MIT License
+3.4.3
+MIT
 MIT License
 
 Copyright (c) 2025 TAHRI Ahmed R.
@@ -4349,7 +4349,7 @@ SOFTWARE.
 
 
 greenlet
-3.2.3
+3.2.4
 MIT AND Python-2.0
 The following files are derived from Stackless Python and are subject to the
 same license as Stackless Python:
