@@ -1214,6 +1214,12 @@ def _get_login_name(raw_login_name):
     return None
 
 
+def _parse_created_date_time(created_date_time):
+    if created_date_time is None:
+        return None
+    return datetime.strptime(created_date_time, TIMESTAMP_FORMAT)
+
+
 class SharepointOnlineDataSource(BaseDataSource):
     """Sharepoint Online"""
 
@@ -1580,11 +1586,6 @@ class SharepointOnlineDataSource(BaseDataSource):
         access_control = list(
             {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
         )
-
-        def _parse_created_date_time(created_date_time):
-            if created_date_time is None:
-                return None
-            return datetime.strptime(created_date_time, TIMESTAMP_FORMAT)
 
         created_at = _parse_created_date_time(user.get("createdDateTime"))
 
