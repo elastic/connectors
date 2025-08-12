@@ -3531,7 +3531,6 @@ class TestSharepointOnlineDataSource:
             user_doc = await source._user_access_control_doc(user)
 
             assert user_doc["_id"] == user["EMail"]
-            assert "created_at" in user_doc
             assert user_doc["created_at"] is None
 
     @pytest.mark.asyncio
