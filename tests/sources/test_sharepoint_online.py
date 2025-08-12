@@ -3691,6 +3691,18 @@ class TestSharepointOnlineDataSource:
                 [_prefix_group(GROUP_ONE_ID)],
             ),
             (
+                # Everyone Except External Users group (access control: mapped group identifier)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "LoginName": "c:0-.f|rolemanager|spo-grid-all-users",
+                        "Title": "Everyone except external users",
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                },
+                ["group:EveryoneExceptExternalUsers"],
+            ),
+            (
                 # Unknown type (access control: nothing)
                 {
                     "Member": {

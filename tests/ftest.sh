@@ -17,7 +17,7 @@ MAX_DURATION=600
 CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
 ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
 
-export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-Dockerfile.ftest}
+export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-tests/Dockerfile.ftest}
 export PERF8_TRACE=${PERF8_TRACE:-False}
 export REFRESH_RATE="${REFRESH_RATE:-5}"
 export DATA_SIZE="${DATA_SIZE:-medium}"
@@ -91,10 +91,10 @@ fi
 # Select the appropriate Docker tarball name based on architecture
 case $ARCH in
   x86_64)
-    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image.tar.gz"
+    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-amd64.tar.gz"
     ;;
   aarch64)
-    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-aarch64.tar.gz"
+    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-arm64.tar.gz"
     ;;
   *)
     echo "Error: Unsupported architecture $ARCH"

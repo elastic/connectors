@@ -2631,8 +2631,20 @@ class SharepointOnlineDataSource(BaseDataSource):
         a reference to a group's owners, or an individual, and will act accordingly.
         :param member: The dict representing a generic SPO entity. May be a group or an individual
         :return: the access control list (ACL) for this "member"
+
+        Detect when a member has the login name: c:0-.f|rolemanager|spo-grid-all-users.
+        Map it to a standard identifier in _allow_access_control.
         """
         login_name = member.get("LoginName")
+
+        # Handle "Everyone Except External Users" group
+        if login_name and login_name.startswith(
+            "c:0-.f|rolemanager|spo-grid-all-users"
+        ):
+            self._logger.debug(
+                f"Detected 'Everyone Except External Users' group: '{member.get('Title')}'."
+            )
+            return ["group:EveryoneExceptExternalUsers"]
 
         # 'LoginName' looking like a group indicates a group
         is_group = (
