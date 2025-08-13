@@ -39,7 +39,6 @@ from connectors.utils import (
     CancellableSleeps,
     convert_to_b64,
     html_to_text,
-    iso_utc,
     iso_zulu,
     iterable_batches_generator,
     nested_get_from_dict,
@@ -1214,6 +1213,12 @@ def _get_login_name(raw_login_name):
     return None
 
 
+def _parse_created_date_time(created_date_time):
+    if created_date_time is None:
+        return None
+    return datetime.strptime(created_date_time, TIMESTAMP_FORMAT)
+
+
 class SharepointOnlineDataSource(BaseDataSource):
     """Sharepoint Online"""
 
@@ -1525,7 +1530,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         The document contains all groups of a user and his email and/or username under `query.template.params.access_control`.
 
         Returns:
-            dict: dictionary representing an user access control document
+            dict: dictionary representing a user access control document
             {
                 "_id": "some.user@spo.com",
                 "identity": {
@@ -1581,10 +1586,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             {prefixed_mail, prefixed_username, prefixed_user_id}.union(prefixed_groups)
         )
 
-        if "createdDateTime" in user:
-            created_at = datetime.strptime(user["createdDateTime"], TIMESTAMP_FORMAT)
-        else:
-            created_at = iso_utc()
+        created_at = _parse_created_date_time(user.get("createdDateTime"))
 
         return {
             # For `_id` we're intentionally using the email/username without the prefix
