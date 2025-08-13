@@ -3517,7 +3517,9 @@ class TestSharepointOnlineDataSource:
             all(group in access_control for group in expected_groups)
 
     @pytest.mark.asyncio
-    async def test_user_access_control_doc_with_null_created_date_time(self, patch_sharepoint_client):
+    async def test_user_access_control_doc_with_null_created_date_time(
+        self, patch_sharepoint_client
+    ):
         async with create_spo_source() as source:
             patch_sharepoint_client.groups_user_transitive_member_of = AsyncIterator([])
 

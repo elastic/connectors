@@ -39,7 +39,6 @@ from connectors.utils import (
     CancellableSleeps,
     convert_to_b64,
     html_to_text,
-    iso_utc,
     iso_zulu,
     iterable_batches_generator,
     nested_get_from_dict,
