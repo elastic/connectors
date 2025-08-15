@@ -639,13 +639,7 @@
         "type": "text"
       },
       "Subject": {
-        "fields": {
-          "keyword": {
-            "ignore_above": 256,
-            "type": "keyword"
-          }
-        },
-        "type": "text"
+        "type": "semantic_text"
       },
       "Type": {
         "fields": {
