@@ -31,7 +31,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.source import BaseDataSource
-from connectors.utils import ErrorMonitor, truncate_id
+from connectors.utils import truncate_id
 
 UTF_8 = "utf-8"
 
