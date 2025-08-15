@@ -3476,6 +3476,7 @@ class TestSharepointOnlineDataSource:
         "connectors.sources.sharepoint_online.TIMESTAMP_FORMAT",
         TIMESTAMP_FORMAT_PATCHED,
     )
+    @pytest.mark.asyncio
     async def test_user_access_control_doc(self, patch_sharepoint_client):
         async with create_spo_source() as source:
             created_at = "2023-05-25T13:30:54Z"
@@ -3514,6 +3515,25 @@ class TestSharepointOnlineDataSource:
             assert expected_email in access_control
             assert expected_user in access_control
             all(group in access_control for group in expected_groups)
+
+    @pytest.mark.asyncio
+    async def test_user_access_control_doc_with_null_created_date_time(
+        self, patch_sharepoint_client
+    ):
+        async with create_spo_source() as source:
+            patch_sharepoint_client.groups_user_transitive_member_of = AsyncIterator([])
+
+            user = {
+                "id": "2",
+                "UserName": "pre_june2018_user",
+                "EMail": "null@spo.com",
+                "createdDateTime": None,
+            }
+
+            user_doc = await source._user_access_control_doc(user)
+
+            assert user_doc["_id"] == user["EMail"]
+            assert user_doc["created_at"] is None
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(self, patch_sharepoint_client):
@@ -3671,6 +3691,18 @@ class TestSharepointOnlineDataSource:
                     "RoleDefinitionBindings": READ_BINDING,
                 },
                 [_prefix_group(GROUP_ONE_ID)],
+            ),
+            (
+                # Everyone Except External Users group (access control: mapped group identifier)
+                {
+                    "Member": {
+                        "odata.type": "SP.User",
+                        "LoginName": "c:0-.f|rolemanager|spo-grid-all-users",
+                        "Title": "Everyone except external users",
+                    },
+                    "RoleDefinitionBindings": READ_BINDING,
+                },
+                ["group:EveryoneExceptExternalUsers"],
             ),
             (
                 # Unknown type (access control: nothing)
