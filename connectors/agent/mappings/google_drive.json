@@ -1,0 +1,81 @@
+{
+"mappings": {
+    "_meta": {
+      "briefing": "This index contains data from Google Drive."
+    },
+    "properties": {
+      "_timestamp": {
+        "type": "date"
+      },
+      "body": {
+        "type": "semantic_text",
+        "meta": {
+          "description": "This is the main content of the document."
+        }
+      },
+      "created_at": {
+        "type": "date"
+      },
+      "file_extension": {
+        "type": "keyword"
+      },
+      "id": {
+        "type": "keyword"
+      },
+      "last_updated": {
+        "type": "date"
+      },
+      "mime_type": {
+        "type": "keyword"
+      },
+      "name": {
+        "type": "text",
+        "meta": {
+          "description": "This is the name of a document."
+        }
+      },
+      "path": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text",
+        "meta": {
+          "description": "This is the Google Drive path of the document."
+        }
+      },
+      "shared_drive": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text",
+        "meta": {
+          "description": "A document with this field is from a shared drive"
+        }
+      },
+      "size": {
+        "type": "text"
+      },
+      "trashed": {
+        "type": "boolean"
+      },
+      "type": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "url": {
+        "type": "text"
+      }
+    }
+  }
+}
