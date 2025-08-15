@@ -109,10 +109,6 @@ class SyncJobRunner:
         self.es_config = es_config
         self.service_config = service_config
         self.sync_orchestrator = None
-        error_monitor_config = service_config.get("extraction", {}).get(
-            "error_monitor", {}
-        )
-        self.error_monitor = ErrorMonitor(**error_monitor_config)
         self.job_reporting_task = None
         self.bulk_options = self.es_config.get("bulk", {})
         self._start_time = None

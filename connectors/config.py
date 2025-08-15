@@ -110,16 +110,6 @@ def _default_config():
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
-            "extraction": {
-                "error_monitor": {
-                    "enabled": True,
-                    "max_total_errors": 1000,
-                    "max_consecutive_errors": 10,
-                    "max_error_rate": 0.15,
-                    "error_window_size": 100,
-                    "error_queue_size": 10,
-                },
-            },
         },
         "sources": {
             "azure_blob_storage": "connectors.sources.azure_blob_storage:AzureBlobStorageDataSource",
