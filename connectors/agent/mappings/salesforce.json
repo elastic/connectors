@@ -10,32 +10,17 @@
             "type": "keyword"
           },
           "Name": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
-            "type": "text"
+            "type": "text",
+            "meta": {
+              "description": "The name of the account."
+            }
           },
           "attributes": {
             "properties": {
               "type": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
-                "type": "text"
+                "type": "keyword"
               },
               "url": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               }
             }
@@ -48,12 +33,6 @@
       "BillingAddress": {
         "properties": {
           "city": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
             "type": "text"
           },
           "country": {
@@ -115,12 +94,6 @@
                   "CreatedBy": {
                     "properties": {
                       "Email": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       },
                       "Id": {
@@ -132,21 +105,9 @@
                       "attributes": {
                         "properties": {
                           "type": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
-                            "type": "text"
+                            "type": "keyword"
                           },
                           "url": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
                             "type": "text"
                           }
                         }
@@ -180,12 +141,6 @@
                         "type": "keyword"
                       },
                       "VersionDataUrl": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       },
                       "VersionNumber": {
@@ -194,21 +149,9 @@
                       "attributes": {
                         "properties": {
                           "type": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
-                            "type": "text"
+                            "type": "keyword"
                           },
                           "url": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
                             "type": "text"
                           }
                         }
@@ -218,38 +161,23 @@
                   "Owner": {
                     "properties": {
                       "Email": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       },
                       "Id": {
                         "type": "keyword"
                       },
                       "Name": {
-                        "type": "text"
+                        "type": "text",
+                        "meta": {
+                          "description": "The name of the ContentDocument owner."
+                        }
                       },
                       "attributes": {
                         "properties": {
                           "type": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
-                            "type": "text"
+                            "type": "keyword"
                           },
                           "url": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
                             "type": "text"
                           }
                         }
@@ -267,21 +195,9 @@
                   "attributes": {
                     "properties": {
                       "type": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
-                        "type": "text"
+                        "type": "keyword"
                       },
                       "url": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       }
                     }
@@ -303,21 +219,9 @@
               "attributes": {
                 "properties": {
                   "type": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
-                    "type": "text"
+                    "type": "keyword"
                   },
                   "url": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
                     "type": "text"
                   }
                 }
@@ -341,38 +245,23 @@
       "CreatedBy": {
         "properties": {
           "Email": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
             "type": "text"
           },
           "Id": {
             "type": "keyword"
           },
           "Name": {
-            "type": "text"
+            "type": "text",
+            "meta": {
+              "description": "The name of the user who created the document."
+            }
           },
           "attributes": {
             "properties": {
               "type": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
-                "type": "text"
+                "type": "keyword"
               },
               "url": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               }
             }
@@ -398,58 +287,31 @@
           "records": {
             "properties": {
               "BccAddress": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               },
               "CcAddress": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               },
               "CreatedBy": {
                 "properties": {
                   "Email": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
                     "type": "text"
                   },
                   "Id": {
                     "type": "keyword"
                   },
                   "Name": {
-                    "type": "text"
+                    "type": "text",
+                    "meta": {
+                      "description": "The name of the user who created the email message."
+                    }
                   },
                   "attributes": {
                     "properties": {
                       "type": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
-                        "type": "text"
+                        "type": "keyword"
                       },
                       "url": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       }
                     }
@@ -457,12 +319,6 @@
                 }
               },
               "FromAddress": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               },
               "FromName": {
@@ -506,35 +362,20 @@
                   "service": "elasticsearch",
                   "task_type": "sparse_embedding"
                 },
-                "type": "semantic_text"
+                "type": "semantic_text",
+                "meta": {
+                  "description": "The body of the email message."
+                }
               },
               "ToAddress": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               },
               "attributes": {
                 "properties": {
                   "type": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
-                    "type": "text"
+                    "type": "keyword"
                   },
                   "url": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
                     "type": "text"
                   }
                 }
@@ -549,52 +390,34 @@
       "Feeds": {
         "properties": {
           "Body": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
-            "type": "text"
+            "type": "semantic_text"
           },
           "CommentCount": {
-            "type": "long"
+            "type": "long",
+            "meta": {
+              "description": "The number of comments on the feed."
+            }
           },
           "CreatedBy": {
             "properties": {
               "Email": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               },
               "Id": {
                 "type": "keyword"
               },
               "Name": {
-                "type": "text"
+                "type": "text",
+                "meta": {
+                  "description": "The name of the user who created the feed."
+                }
               },
               "attributes": {
                 "properties": {
                   "type": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
-                    "type": "text"
+                    "type": "keyword"
                   },
                   "url": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
                     "type": "text"
                   }
                 }
@@ -612,49 +435,31 @@
               "records": {
                 "properties": {
                   "CommentBody": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
-                    "type": "text"
+                    "type": "semantic_text",
+                    "meta": {
+                      "description": "The body of the feed comment."
+                    }
                   },
                   "CreatedBy": {
                     "properties": {
                       "Email": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       },
                       "Id": {
                         "type": "keyword"
                       },
                       "Name": {
-                        "type": "text"
+                        "type": "text",
+                        "meta": {
+                          "description": "The name of the user who created the feed comment."
+                        }
                       },
                       "attributes": {
                         "properties": {
                           "type": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
-                            "type": "text"
+                            "type": "keyword"
                           },
                           "url": {
-                            "fields": {
-                              "keyword": {
-                                "ignore_above": 256,
-                                "type": "keyword"
-                              }
-                            },
                             "type": "text"
                           }
                         }
@@ -673,21 +478,9 @@
                   "attributes": {
                     "properties": {
                       "type": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
-                        "type": "text"
+                        "type": "keyword"
                       },
                       "url": {
-                        "fields": {
-                          "keyword": {
-                            "ignore_above": 256,
-                            "type": "keyword"
-                          }
-                        },
                         "type": "text"
                       }
                     }
@@ -723,21 +516,9 @@
           "attributes": {
             "properties": {
               "type": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
-                "type": "text"
+                "type": "keyword"
               },
               "url": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               }
             }
@@ -769,7 +550,10 @@
         "type": "text"
       },
       "Name": {
-        "type": "text"
+        "type": "text",
+        "meta": {
+          "description": "The name of the user who created this record."
+        }
       },
       "Opportunities": {
         "properties": {
@@ -782,7 +566,10 @@
                 "type": "keyword"
               },
               "Name": {
-                "type": "text"
+                "type": "text",
+                "meta": {
+                  "description": "The name of the opportunity."
+                }
               },
               "StageName": {
                 "type": "text"
@@ -790,21 +577,9 @@
               "attributes": {
                 "properties": {
                   "type": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
-                    "type": "text"
+                    "type": "keyword"
                   },
                   "url": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
                     "type": "text"
                   }
                 }
@@ -819,38 +594,23 @@
       "Owner": {
         "properties": {
           "Email": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
             "type": "text"
           },
           "Id": {
             "type": "keyword"
           },
           "Name": {
-            "type": "text"
+            "type": "text",
+            "meta": {
+              "description": "The name of the user who owns this record."
+            }
           },
           "attributes": {
             "properties": {
               "type": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
-                "type": "text"
+                "type": "keyword"
               },
               "url": {
-                "fields": {
-                  "keyword": {
-                    "ignore_above": 256,
-                    "type": "keyword"
-                  }
-                },
                 "type": "text"
               }
             }
@@ -861,12 +621,6 @@
         "type": "keyword"
       },
       "PhotoUrl": {
-        "fields": {
-          "keyword": {
-            "ignore_above": 256,
-            "type": "keyword"
-          }
-        },
         "type": "text"
       },
       "StageName": {
@@ -902,36 +656,15 @@
         },
         "type": "text"
       },
-      "_newmetafield": {
-        "fields": {
-          "keyword": {
-            "ignore_above": 256,
-            "type": "keyword"
-          }
-        },
-        "type": "text"
-      },
       "_timestamp": {
         "type": "date"
       },
       "attributes": {
         "properties": {
           "type": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
-            "type": "text"
+            "type": "keyword"
           },
           "url": {
-            "fields": {
-              "keyword": {
-                "ignore_above": 256,
-                "type": "keyword"
-              }
-            },
             "type": "text"
           }
         }
@@ -1004,24 +737,12 @@
         "type": "keyword"
       },
       "url": {
-        "fields": {
-          "keyword": {
-            "ignore_above": 256,
-            "type": "keyword"
-          }
-        },
-        "type": "keyword"
+        "type": "text"
       },
       "version_number": {
         "type": "keyword"
       },
       "version_url": {
-        "fields": {
-          "keyword": {
-            "ignore_above": 256,
-            "type": "keyword"
-          }
-        },
         "type": "text"
       }
     }
