@@ -303,7 +303,7 @@
                   "Name": {
                     "type": "text",
                     "meta": {
-                      "description": "The name of the user who created the email message."
+                      "description": "The name of the user who created the email."
                     }
                   },
                   "attributes": {
