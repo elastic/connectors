@@ -390,7 +390,7 @@
       "Feeds": {
         "properties": {
           "Body": {
-            "type": "semantic_text"
+            "type": "text"
           },
           "CommentCount": {
             "type": "long",
@@ -435,7 +435,7 @@
               "records": {
                 "properties": {
                   "CommentBody": {
-                    "type": "semantic_text",
+                    "type": "text",
                     "meta": {
                       "description": "The body of the feed comment."
                     }
