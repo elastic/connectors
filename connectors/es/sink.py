@@ -370,7 +370,6 @@ class Sink:
             while True:
                 batch_num += 1
                 doc_size, doc = await self.fetch_doc()
-                print(f"Sink: fetched doc {doc}")
                 if doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
                 operation = doc["_op_type"]
