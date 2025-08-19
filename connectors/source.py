@@ -791,7 +791,7 @@ class BaseDataSource:
             if return_doc_if_failed:
                 return doc
             else:
-                return
+                return None
 
     @asynccontextmanager
     async def create_temp_file(self, file_extension):
