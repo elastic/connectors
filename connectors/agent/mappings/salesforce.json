@@ -185,11 +185,6 @@
                     }
                   },
                   "Title": {
-                    "inference_id": ".elser-2-elasticsearch",
-                    "model_settings": {
-                      "service": "elasticsearch",
-                      "task_type": "sparse_embedding"
-                    },
                     "type": "semantic_text"
                   },
                   "attributes": {
@@ -272,11 +267,6 @@
         "type": "date"
       },
       "Description": {
-        "inference_id": ".elser-2-elasticsearch",
-        "model_settings": {
-          "service": "elasticsearch",
-          "task_type": "sparse_embedding"
-        },
         "type": "semantic_text"
       },
       "EmailMessages": {
@@ -349,19 +339,10 @@
                 "type": "text"
               },
               "Subject": {
-                "inference_id": ".elser-2-elasticsearch",
-                "model_settings": {
-                  "service": "elasticsearch",
-                  "task_type": "sparse_embedding"
-                },
+
                 "type": "semantic_text"
               },
               "TextBody": {
-                "inference_id": ".elser-2-elasticsearch",
-                "model_settings": {
-                  "service": "elasticsearch",
-                  "task_type": "sparse_embedding"
-                },
                 "type": "semantic_text",
                 "meta": {
                   "description": "The body of the email message."
@@ -395,7 +376,7 @@
           "CommentCount": {
             "type": "long",
             "meta": {
-              "description": "The number of comments on the feed."
+              "description": "The number of comments in the feed."
             }
           },
           "CreatedBy": {
@@ -664,11 +645,6 @@
         }
       },
       "body": {
-        "inference_id": ".elser-2-elasticsearch",
-        "model_settings": {
-          "service": "elasticsearch",
-          "task_type": "sparse_embedding"
-        },
         "type": "semantic_text"
       },
       "content_size": {
@@ -720,11 +696,6 @@
         "type": "text"
       },
       "title": {
-        "inference_id": ".elser-2-elasticsearch",
-        "model_settings": {
-          "service": "elasticsearch",
-          "task_type": "sparse_embedding"
-        },
         "type": "semantic_text"
       },
       "type": {
