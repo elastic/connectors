@@ -310,7 +310,9 @@ class Sink:
                     try:
                         del stats[op][data["_id"]]
                     except KeyError:
-                        self._logger.info(f"KeyError in _populate_stats: {op}, {data['_id']}")
+                        self._logger.info(
+                            f"KeyError in _populate_stats: {op}, {data['_id']}"
+                        )
 
         self.counters.increment(
             INDEXED_DOCUMENT_COUNT, len(stats[OP_INDEX]) + len(stats[OP_UPDATE])
