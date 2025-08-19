@@ -307,7 +307,10 @@ class Sink:
             for op, data in item.items():
                 # "result" is only present in successful operations
                 if "result" not in data:
-                    del stats[op][data["_id"]]
+                    try:
+                        del stats[op][data["_id"]]
+                    except KeyError:
+                        self._logger.info(f"KeyError in _populate_stats: {op}, {data['_id']}")
 
         self.counters.increment(
             INDEXED_DOCUMENT_COUNT, len(stats[OP_INDEX]) + len(stats[OP_UPDATE])
@@ -367,6 +370,7 @@ class Sink:
             while True:
                 batch_num += 1
                 doc_size, doc = await self.fetch_doc()
+                print(f"Sink: fetched doc {doc}")
                 if doc in (END_DOCS, EXTRACTOR_ERROR):
                     break
                 operation = doc["_op_type"]
