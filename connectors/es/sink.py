@@ -307,11 +307,11 @@ class Sink:
             for op, data in item.items():
                 # "result" is only present in successful operations
                 if "result" not in data:
-                    try:
+                    if data["_id"] in stats[op]:
                         del stats[op][data["_id"]]
-                    except KeyError:
-                        self._logger.info(
-                            f"KeyError in _populate_stats: {op}, {data['_id']}"
+                    else:
+                        self._logger.debug(
+                            f"Document {data['_id']} not in stats for operation: {op}"
                         )
 
         self.counters.increment(
