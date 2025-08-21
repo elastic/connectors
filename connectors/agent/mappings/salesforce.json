@@ -71,13 +71,10 @@
         "type": "keyword"
       },
       "Company": {
-        "fields": {
-          "keyword": {
-            "ignore_above": 256,
-            "type": "keyword"
-          }
-        },
-        "type": "text"
+        "type": "text",
+        "meta": {
+          "description": "The name of the company."
+        }
       },
       "ContentDocumentLinks": {
         "properties": {
@@ -118,13 +115,10 @@
                     "type": "date"
                   },
                   "FileExtension": {
-                    "fields": {
-                      "keyword": {
-                        "ignore_above": 256,
-                        "type": "keyword"
-                      }
-                    },
-                    "type": "text"
+                    "type": "keyword",
+                    "meta": {
+                      "description": "The file extension of the content."
+                    }
                   },
                   "Id": {
                     "type": "keyword"

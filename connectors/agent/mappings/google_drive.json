@@ -1,7 +1,7 @@
 {
 "mappings": {
     "_meta": {
-      "briefing": "This index contains data from Google Drive. It includes information about files, folders, and their metadata."
+      "briefing": "This index contains information about files, folders, and their metadata from Google Drive."
     },
     "properties": {
       "_timestamp": {
@@ -73,7 +73,10 @@
         }
       },
       "trashed": {
-        "type": "boolean"
+        "type": "boolean",
+        "meta": {
+          "description": "Indicates whether the document was deleted."
+        }
       },
       "type": {
         "fields": {

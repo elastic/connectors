@@ -1,0 +1,24 @@
+{
+  "description": "ingest pipeline for salesforce content",
+  "processors": [
+    {
+      "remove": {
+        "field": [
+          "AccountId",
+          "version_url",
+          "version_number",
+          "ConvertedAccount",
+          "ConvertedContact",
+          "ConvertedOpportunity",
+          "Feeds.CommentCount",
+          "Feeds.attributes",
+          "FeedComments.attributes",
+          "FeedComments.ParentId",
+          "FeedComments.IsDeleted",
+          "FeedComments.totalSize"
+        ],
+        "description": "removes fields that are not needed in the index"
+      }
+    }
+  ]
+}
