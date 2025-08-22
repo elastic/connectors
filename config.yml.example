@@ -6,7 +6,17 @@
 #
 #
 ## ------------------------------- Connectors -------------------------------
-#
+
+connectors:
+-
+  connector_id: "A47y0ZgBXuGQ6xq9eEBe"
+  service_type: "box"
+  api_key: "dnUzeTBaZ0JobHZteFprLXdiUFM6RHpVQnluMVBReFM1WkRrN3NYU2g3dw=="
+elasticsearch:
+  host: "http://localhost:9200"
+  api_key: "dnUzeTBaZ0JobHZteFprLXdiUFM6RHpVQnluMVBReFM1WkRrN3NYU2g3dw=="
+
+
 ##  The list of self-managed connectors/customized connectors configurations.
 ##    Each object in the list requires `connector_id` and `service_type`.
 ##    An example is:
