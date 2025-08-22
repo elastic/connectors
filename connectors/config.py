@@ -10,11 +10,12 @@ from envyaml import EnvYAML
 
 from connectors.logger import logger
 from connectors.utils import (
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
     DEFAULT_MAX_FILE_SIZE,
     DEFAULT_QUEUE_MEM_SIZE,
-    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
-    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
 )
+
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -67,7 +68,7 @@ def _default_config():
             "verify_certs": True,
             "bulk": {
                 "queue_max_size": 1024,
-                "queue_max_mem_size": 25 * 1024 * 1024, # 25 MB
+                "queue_max_mem_size": 25 * 1024 * 1024,  # 25 MB
                 "queue_refresh_interval": 1,
                 "queue_refresh_timeout": 600,
                 "display_every": 100,
@@ -243,6 +244,5 @@ class DataSourceFrameworkConfig:
 
         def build(self):
             return DataSourceFrameworkConfig(
-                self.max_file_size,
-                self.max_queue_mem_size
+                self.max_file_size, self.max_queue_mem_size
             )

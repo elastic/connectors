@@ -484,9 +484,11 @@ class BoxDataSource(BaseDataSource):
 
         if max_mem_size_from_config > QUEUE_MEM_SIZE:
             self.queue.update_maxmemsize(max_mem_size_from_config)
-            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+            logger.debug(
+                f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}"
+            )
 
-    async def get_docs(self, filtering=None): # type: ignore
+    async def get_docs(self, filtering=None):  # type: ignore
         # update queue max memory size if needed
         self._update_queue_max_mem_size()
 

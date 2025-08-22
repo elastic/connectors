@@ -1219,3 +1219,42 @@ async def test_get_docs_with_dls_enabled():
             async for item, _ in source.get_docs():
                 item.get(ACCESS_CONTROL, []).sort()
                 assert item in EXPECTED_RESPONSES
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_increases():
+    async with create_jira_source() as source:
+        # Patch framework_config and queue
+        source.framework_config = MagicMock()
+        source.framework_config.max_queue_mem_size = 25 * 1024 * 1024  # 26214400
+        source.queue = MagicMock()
+        source.queue.update_maxmemsize = MagicMock()
+        # Patch logger
+        with (
+            patch("connectors.sources.jira.logger") as mock_logger,
+            patch(
+                "connectors.sources.jira.QUEUE_MEM_SIZE",
+                5 * 1024 * 1024,  # 5242880, less than max_queue_mem_size
+            ),
+        ):
+            source._update_queue_max_mem_size()
+            mock_logger.debug.assert_called_once_with(
+                "MemQueue max memory size updated from 5242880 to 26214400"
+            )
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_no_update():
+    async with create_jira_source() as source:
+        source.framework_config = MagicMock()
+        source.framework_config.max_queue_mem_size = (
+            5 * 1024 * 1024
+        )  # Assume QUEUE_MEM_SIZE is more than this
+        source.queue = MagicMock()
+        with (
+            patch("connectors.sources.jira.logger") as mock_logger,
+            patch("connectors.sources.jira.QUEUE_MEM_SIZE", 25 * 1024 * 1024),
+        ):
+            source._update_queue_max_mem_size()
+            source.queue.update_maxmemsize.assert_not_called()
+            mock_logger.debug.assert_not_called()

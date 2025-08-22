@@ -452,7 +452,7 @@ class MicrosoftTeamsClient:
                     url=absolute_url,
                 ) as resp:
                     yield resp
-        except aiohttp.client_exceptions.ClientOSError: # type: ignore
+        except aiohttp.client_exceptions.ClientOSError:  # type: ignore
             self._logger.error(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
             )
@@ -1276,9 +1276,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         if max_mem_size_from_config > QUEUE_MEM_SIZE:
             self.queue.update_maxmemsize(max_mem_size_from_config)
-            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+            logger.debug(
+                f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}"
+            )
 
-    async def get_docs(self, filtering=None): # type: ignore
+    async def get_docs(self, filtering=None):  # type: ignore
         """Executes the logic to fetch Microsoft Teams objects in async manner
 
         Args:

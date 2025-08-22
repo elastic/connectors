@@ -426,3 +426,31 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
             with pytest.raises(Exception):
                 await source._fetch(doc_id=0)
             assert source.queue.get_nowait()[1] == END_SIGNAL
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_increases():
+    async with create_source(BoxDataSource) as source:
+        source.framework_config.max_queue_mem_size = 25 * 1024 * 1024
+        with (
+            patch.object(source.queue, "update_maxmemsize") as update_mock,
+            patch("connectors.sources.box.logger") as logger_mock,
+        ):
+            source._update_queue_max_mem_size()
+            update_mock.assert_called_once_with(25 * 1024 * 1024)
+            logger_mock.debug.assert_called_once_with(
+                "MemQueue max memory size updated from 5242880 to 26214400"
+            )
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_no_update():
+    async with create_source(BoxDataSource) as source:
+        source.framework_config.max_queue_mem_size = 5 * 1024 * 1024
+        with (
+            patch.object(source.queue, "update_maxmemsize") as update_mock,
+            patch("connectors.sources.box.logger") as logger_mock,
+        ):
+            source._update_queue_max_mem_size()
+            update_mock.assert_not_called()
+            logger_mock.debug.assert_not_called()

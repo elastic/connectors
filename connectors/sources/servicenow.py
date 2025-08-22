@@ -384,7 +384,7 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
     async def _remote_validation(self, advanced_rules):
         try:
-            ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules) # type: ignore
+            ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules)  # type: ignore
         except fastjsonschema.JsonSchemaValueException as e:
             return SyncRuleValidationResult(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES,
@@ -567,7 +567,7 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
-    async def get_access_control(self): # type: ignore
+    async def get_access_control(self):  # type: ignore
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -867,9 +867,11 @@ class ServiceNowDataSource(BaseDataSource):
 
         if max_mem_size_from_config > QUEUE_MEM_SIZE:
             self.queue.update_maxmemsize(max_mem_size_from_config)
-            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+            logger.debug(
+                f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}"
+            )
 
-    async def get_docs(self, filtering=None): # type: ignore
+    async def get_docs(self, filtering=None):  # type: ignore
         """Get documents from ServiceNow.
 
         Args:

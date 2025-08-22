@@ -367,6 +367,18 @@ async def test_mem_queue_put_nowait():
     assert e is not None
 
 
+@pytest.mark.asyncio
+async def test_mem_queue_update_maxmemsize():
+    initial_max_size = 5 * 1024 * 1024
+    new_max_size = 10 * 1024 * 1024
+
+    queue = MemQueue(maxmemsize=initial_max_size)
+    assert queue.maxmemsize == initial_max_size
+
+    queue.update_maxmemsize(new_max_size)
+    assert queue.maxmemsize == new_max_size
+
+
 def test_get_base64_value():
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))

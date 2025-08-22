@@ -1093,3 +1093,40 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
                     records_ids=["record_1", "record_2"], access_control=[]
                 )
                 assert source.queue.get_nowait() == END_SIGNAL
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_updates_when_config_exceeds_constant():
+    async with create_service_now_source() as source:
+        # Patch framework_config and queue
+        source.framework_config = Mock()
+        source.framework_config.max_queue_mem_size = (
+            25 * 1024 * 1024
+        )  # Assume QUEUE_MEM_SIZE is less than this
+        source.queue = Mock()
+        with (
+            patch("connectors.sources.servicenow.QUEUE_MEM_SIZE", 5 * 1024 * 1024),
+            patch("connectors.sources.servicenow.logger") as mock_logger,
+        ):
+            source._update_queue_max_mem_size()
+            source.queue.update_maxmemsize.assert_called_once_with(25 * 1024 * 1024)
+            mock_logger.debug.assert_called_once_with(
+                "MemQueue max memory size updated from 5242880 to 26214400"
+            )
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_does_not_update_when_config_not_exceed():
+    async with create_service_now_source() as source:
+        source.framework_config = Mock()
+        source.framework_config.max_queue_mem_size = (
+            5 * 1024 * 1024
+        )  # Assume QUEUE_MEM_SIZE is greater
+        source.queue = Mock()
+        with (
+            patch("connectors.sources.servicenow.QUEUE_MEM_SIZE", 5 * 1024 * 1024),
+            patch("connectors.sources.servicenow.logger") as mock_logger,
+        ):
+            source._update_queue_max_mem_size()
+            source.queue.update_maxmemsize.assert_not_called()
+            mock_logger.debug.assert_not_called()

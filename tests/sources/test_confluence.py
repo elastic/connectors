@@ -1753,3 +1753,38 @@ async def test_fetch_documents_with_html():
         source.confluence_client.index_labels = True
         async for response, _, _, _, _ in source.fetch_documents(api_query=""):
             assert response == EXPECTED_PAGE
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_updates_when_config_exceeds_constant():
+    async with create_confluence_source() as source:
+        # Patch framework_config and queue
+        source.framework_config = MagicMock()
+        source.framework_config.max_queue_mem_size = (
+            25 * 1024 * 1024
+        )  # Assume QUEUE_MEM_SIZE is less than this
+        source.queue = MagicMock()
+        # Patch logger
+        with patch("connectors.sources.confluence.logger") as mock_logger:
+            # Patch QUEUE_MEM_SIZE to a known value
+            with patch("connectors.sources.confluence.QUEUE_MEM_SIZE", 5 * 1024 * 1024):
+                source._update_queue_max_mem_size()
+                source.queue.update_maxmemsize.assert_called_once_with(25 * 1024 * 1024)
+                mock_logger.debug.assert_called_once_with(
+                    "MemQueue max memory size updated from 5242880 to 26214400"
+                )
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_does_not_update_when_config_not_exceeding():
+    async with create_confluence_source() as source:
+        source.framework_config = MagicMock()
+        source.framework_config.max_queue_mem_size = (
+            5 * 1024 * 1024
+        )  # Assume QUEUE_MEM_SIZE is more than this
+        source.queue = MagicMock()
+        with patch("connectors.sources.confluence.logger") as mock_logger:
+            with patch("connectors.sources.confluence.QUEUE_MEM_SIZE", 5 * 1024 * 1024):
+                source._update_queue_max_mem_size()
+                source.queue.update_maxmemsize.assert_not_called()
+                mock_logger.debug.assert_not_called()

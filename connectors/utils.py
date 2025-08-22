@@ -36,11 +36,11 @@ ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_QUEUE_SIZE = 1024
 DEFAULT_DISPLAY_EVERY = 100
-DEFAULT_QUEUE_MEM_SIZE = 5242880 # 5 MB
+DEFAULT_QUEUE_MEM_SIZE = 5242880  # 5 MB
 DEFAULT_CHUNK_MEM_SIZE = 25
 DEFAULT_MAX_CONCURRENCY = 5
 DEFAULT_CONCURRENT_DOWNLOADS = 10
-DEFAULT_MAX_FILE_SIZE = 10485760 # 10 MB
+DEFAULT_MAX_FILE_SIZE = 10485760  # 10 MB
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
 
@@ -300,14 +300,15 @@ class MemQueue(asyncio.Queue):
         self._current_memsize = 0
         self.refresh_timeout = refresh_timeout
 
-        logger.debug(f"MemQueue created with maxsize={maxsize}, maxmemsize={maxmemsize}, "
-                     f"refresh_interval={refresh_interval}, refresh_timeout={refresh_timeout}")
+        logger.debug(
+            f"MemQueue created with maxsize={maxsize}, maxmemsize={maxmemsize}, "
+            f"refresh_interval={refresh_interval}, refresh_timeout={refresh_timeout}"
+        )
 
     def qmemsize(self):
         return self._current_memsize
 
     def update_maxmemsize(self, new_maxmemsize):
-        current_maxmemsize = self.maxmemsize
         self.maxmemsize = new_maxmemsize
 
     def _get(self):

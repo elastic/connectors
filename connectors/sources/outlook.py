@@ -819,7 +819,7 @@ class OutlookDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def get_access_control(self): # type: ignore
+    async def get_access_control(self):  # type: ignore
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -1062,7 +1062,7 @@ class OutlookDataSource(BaseDataSource):
         await self.client.ping()
         self._logger.info("Successfully connected to Outlook")
 
-    async def get_docs(self, filtering=None): # type: ignore
+    async def get_docs(self, filtering=None):  # type: ignore
         """Executes the logic to fetch outlook objects in async manner
 
         Args:

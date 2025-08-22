@@ -1215,3 +1215,62 @@ async def test_get_user_drive_root_children():
         source.client.scroll = AsyncIterator([[{"name": "microsoft teams chat files"}]])
         child = await source.client.get_user_drive_root_children(drive_id=1)
         assert child["name"] == "microsoft teams chat files"
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_increases():
+    class FrameworkConfig:
+        max_queue_mem_size = 25 * 1024 * 1024  # Assume QUEUE_MEM_SIZE is less than this
+
+    class DummyQueue:
+        def __init__(self):
+            self.updated = False
+            self.size = None
+
+        def update_maxmemsize(self, size):
+            self.updated = True
+            self.size = size
+
+    async with create_source(MicrosoftTeamsDataSource) as source:
+        # Patch instance attributes directly
+        source.framework_config = FrameworkConfig()
+        dummy_queue = DummyQueue()
+        source.queue = dummy_queue
+
+        # Patch module-level constants using patch
+        with (
+            patch("connectors.sources.microsoft_teams.QUEUE_MEM_SIZE", 5 * 1024 * 1024),
+            patch("connectors.sources.microsoft_teams.logger", logger),
+        ):
+            source._update_queue_max_mem_size()
+            assert dummy_queue.updated is True
+            assert dummy_queue.size == 25 * 1024 * 1024
+
+
+@pytest.mark.asyncio
+async def test_update_queue_max_mem_size_no_update():
+    class FrameworkConfig:
+        max_queue_mem_size = (
+            5 * 1024 * 1024
+        )  # Assume QUEUE_MEM_SIZE is greater than this
+
+    class DummyQueue:
+        def __init__(self):
+            self.updated = False
+
+        def update_maxmemsize(self, size):
+            self.updated = True
+
+    async with create_source(MicrosoftTeamsDataSource) as source:
+        # Patch instance attributes directly
+        source.framework_config = FrameworkConfig()
+        dummy_queue = DummyQueue()
+        source.queue = dummy_queue
+
+        # Patch module-level constants using patch
+        with (
+            patch("connectors.sources.microsoft_teams.QUEUE_MEM_SIZE", 5 * 1024 * 1024),
+            patch("connectors.sources.microsoft_teams.logger", logger),
+        ):
+            source._update_queue_max_mem_size()
+            assert dummy_queue.updated is False
