@@ -238,6 +238,11 @@
 #service.max_file_download_size: 10485760
 #
 #
+##  The maximum amount of memory, in bytes, a data source's queue can utilize.
+##    It is up to each data source to determine how this value is used.
+#service.queue_max_mem_size: 5242880
+#
+#
 ##  The interval (in seconds) to run job cleanup task.
 #service.job_cleanup_interval: 300
 #
