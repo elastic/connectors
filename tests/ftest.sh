@@ -65,7 +65,7 @@ function download_docker_tarball {
   MAX_RETRIES=3
 
   echo "Downloading Docker image tarball from $TAR_URL..."
-  curl --retry $MAX_RETRIES --retry-connrefused -O "$TAR_URL"
+  curl --http1.1 --retry $MAX_RETRIES --retry-connrefused -O "$TAR_URL"
 
   if [ ! -f "$TAR_FILE" ]; then
     echo "Error: Download failed. File $TAR_FILE not found."
