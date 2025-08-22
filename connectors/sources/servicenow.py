@@ -384,7 +384,7 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
     async def _remote_validation(self, advanced_rules):
         try:
-            ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules)
+            ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules) # type: ignore
         except fastjsonschema.JsonSchemaValueException as e:
             return SyncRuleValidationResult(
                 rule_id=SyncRuleValidationResult.ADVANCED_RULES,
@@ -567,7 +567,7 @@ class ServiceNowDataSource(BaseDataSource):
         ):
             yield user
 
-    async def get_access_control(self):
+    async def get_access_control(self): # type: ignore
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -858,7 +858,18 @@ class ServiceNowDataSource(BaseDataSource):
             else:
                 yield item
 
-    async def get_docs(self, filtering=None):
+    def _update_queue_max_mem_size(self):
+        """
+        Helper function to update the queue's max memory size
+        if the configured value exceeds the constant defined in the data source
+        """
+        max_mem_size_from_config = self.framework_config.max_queue_mem_size
+
+        if max_mem_size_from_config > QUEUE_MEM_SIZE:
+            self.queue.update_maxmemsize(max_mem_size_from_config)
+            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+
+    async def get_docs(self, filtering=None): # type: ignore
         """Get documents from ServiceNow.
 
         Args:
@@ -867,6 +878,8 @@ class ServiceNowDataSource(BaseDataSource):
         Yields:
             dict: Documents from ServiceNow.
         """
+        # update queue max memory size if needed
+        self._update_queue_max_mem_size()
 
         self._logger.info("Fetching ServiceNow data")
         if filtering and filtering.has_advanced_rules():

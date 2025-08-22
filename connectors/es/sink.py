@@ -1023,7 +1023,7 @@ class SyncOrchestrator:
 
         stream = MemQueue(
             maxsize=queue_size,
-            maxmemsize=queue_mem_size * 1024 * 1024,
+            maxmemsize=queue_mem_size,
             refresh_timeout=mem_queue_refresh_timeout,
             refresh_interval=mem_queue_refresh_interval,
         )

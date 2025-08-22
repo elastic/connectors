@@ -729,7 +729,7 @@ class JiraDataSource(BaseDataSource):
                 return project_access_controls
         return list(access_control)
 
-    async def get_access_control(self):
+    async def get_access_control(self): # type: ignore
         """Get access control documents for active Atlassian users.
 
         This method fetches access control documents for active Atlassian users when document level security (DLS)
@@ -1017,7 +1017,18 @@ class JiraDataSource(BaseDataSource):
             else:
                 yield item
 
-    async def get_docs(self, filtering=None):
+    def _update_queue_max_mem_size(self):
+        """
+        Helper function to update the queue's max memory size
+        if the configured value exceeds the constant defined in the data source
+        """
+        max_mem_size_from_config = self.framework_config.max_queue_mem_size
+
+        if max_mem_size_from_config > QUEUE_MEM_SIZE:
+            self.queue.update_maxmemsize(max_mem_size_from_config)
+            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+
+    async def get_docs(self, filtering=None): # type: ignore
         """Executes the logic to fetch jira objects in async manner
 
         Args:
@@ -1026,6 +1037,9 @@ class JiraDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        # update queue max memory size if needed
+        self._update_queue_max_mem_size()
+
         self.custom_fields = await anext(self.jira_client.get_jira_fields())
 
         if filtering and filtering.has_advanced_rules():

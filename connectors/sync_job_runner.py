@@ -218,8 +218,13 @@ class SyncJobRunner:
                 await self.data_provider.close()
 
     def _data_source_framework_config(self):
-        builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
+        builder = DataSourceFrameworkConfig.Builder()
+
+        builder.with_max_file_size(
             self.service_config.get("max_file_download_size")
+        )
+        builder.with_max_queue_memory_size(
+            self.service_config.get("queue_max_mem_size")
         )
         return builder.build()
 

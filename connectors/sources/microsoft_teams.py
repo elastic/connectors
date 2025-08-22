@@ -452,7 +452,7 @@ class MicrosoftTeamsClient:
                     url=absolute_url,
                 ) as resp:
                     yield resp
-        except aiohttp.client_exceptions.ClientOSError:
+        except aiohttp.client_exceptions.ClientOSError: # type: ignore
             self._logger.error(
                 "Graph API dropped the connection. It might indicate, that connector makes too many requests - decrease concurrency settings, otherwise Graph API can block this app."
             )
@@ -1267,7 +1267,18 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
         await self.queue.put(EndSignal.CALENDAR_TASK_FINISHED)
 
-    async def get_docs(self, filtering=None):
+    def _update_queue_max_mem_size(self):
+        """
+        Helper function to update the queue's max memory size
+        if the configured value exceeds the constant defined in the data source
+        """
+        max_mem_size_from_config = self.framework_config.max_queue_mem_size
+
+        if max_mem_size_from_config > QUEUE_MEM_SIZE:
+            self.queue.update_maxmemsize(max_mem_size_from_config)
+            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+
+    async def get_docs(self, filtering=None): # type: ignore
         """Executes the logic to fetch Microsoft Teams objects in async manner
 
         Args:
@@ -1276,6 +1287,9 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the files.
         """
+        # update queue max memory size if needed
+        self._update_queue_max_mem_size()
+
         async for chats in self.client.get_user_chats():
             for chat in chats:
                 await self.fetchers.put(partial(self.user_chat_producer, chat))

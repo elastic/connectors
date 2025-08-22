@@ -767,7 +767,7 @@ class ConfluenceDataSource(BaseDataSource):
                     user=user
                 )
 
-    async def get_access_control(self):
+    async def get_access_control(self): # type: ignore
         """Get access control documents for active Atlassian users.
 
         This method fetches access control documents for active Atlassian users when document level security (DLS)
@@ -1277,7 +1277,18 @@ class ConfluenceDataSource(BaseDataSource):
             else:
                 yield item
 
-    async def get_docs(self, filtering=None):
+    def _update_queue_max_mem_size(self):
+        """
+        Helper function to update the queue's max memory size
+        if the configured value exceeds the constant defined in the data source
+        """
+        max_mem_size_from_config = self.framework_config.max_queue_mem_size
+
+        if max_mem_size_from_config > QUEUE_MEM_SIZE:
+            self.queue.update_maxmemsize(max_mem_size_from_config)
+            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+
+    async def get_docs(self, filtering=None): # type: ignore
         """Executes the logic to fetch Confluence content in async manner.
 
         Args:
@@ -1285,6 +1296,9 @@ class ConfluenceDataSource(BaseDataSource):
         Yields:
             dictionary: dictionary containing meta-data of the content.
         """
+        # update queue max memory size if needed
+        self._update_queue_max_mem_size()
+
         self._logger.info("Successfully connected to Confluence")
         if filtering and filtering.has_advanced_rules():
             advanced_rules = filtering.get_advanced_rules()

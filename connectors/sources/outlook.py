@@ -50,8 +50,6 @@ from connectors.utils import (
 RETRIES = 3
 RETRY_INTERVAL = 2
 
-QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
-
 OUTLOOK_SERVER = "outlook_server"
 OUTLOOK_CLOUD = "outlook_cloud"
 API_SCOPE = "https://graph.microsoft.com/.default"
@@ -821,7 +819,7 @@ class OutlookDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def get_access_control(self):
+    async def get_access_control(self): # type: ignore
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -1064,7 +1062,7 @@ class OutlookDataSource(BaseDataSource):
         await self.client.ping()
         self._logger.info("Successfully connected to Outlook")
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering=None): # type: ignore
         """Executes the logic to fetch outlook objects in async manner
 
         Args:

@@ -9,12 +9,12 @@ import os
 from envyaml import EnvYAML
 
 from connectors.logger import logger
-
-DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
-DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
-
-DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
-
+from connectors.utils import (
+    DEFAULT_MAX_FILE_SIZE,
+    DEFAULT_QUEUE_MEM_SIZE,
+    DEFAULT_ELASTICSEARCH_MAX_RETRIES,
+    DEFAULT_ELASTICSEARCH_RETRY_INTERVAL
+)
 
 def load_config(config_file):
     logger.info(f"Loading config from {config_file}")
@@ -67,7 +67,7 @@ def _default_config():
             "verify_certs": True,
             "bulk": {
                 "queue_max_size": 1024,
-                "queue_max_mem_size": 25,
+                "queue_max_mem_size": 25 * 1024 * 1024, # 25 MB
                 "queue_refresh_interval": 1,
                 "queue_refresh_timeout": 600,
                 "display_every": 100,
@@ -108,6 +108,7 @@ def _default_config():
             "max_concurrent_access_control_syncs": 1,
             "max_concurrent_scheduling_tasks": 4,
             "max_file_download_size": DEFAULT_MAX_FILE_SIZE,
+            "queue_max_mem_size": DEFAULT_QUEUE_MEM_SIZE,
             "job_cleanup_interval": 300,
             "log_level": "INFO",
         },
@@ -220,19 +221,28 @@ class DataSourceFrameworkConfig:
     preventing them from requiring substantial changes to access new configs that may be added.
     """
 
-    def __init__(self, max_file_size):
+    def __init__(self, max_file_size, queue_max_mem_size):
         """
         Should not be called directly. Use the Builder.
         """
         self.max_file_size = max_file_size
+        self.max_queue_mem_size = queue_max_mem_size
 
     class Builder:
         def __init__(self):
             self.max_file_size = DEFAULT_MAX_FILE_SIZE
+            self.max_queue_mem_size = DEFAULT_QUEUE_MEM_SIZE
 
         def with_max_file_size(self, max_file_size):
             self.max_file_size = max_file_size
             return self
 
+        def with_max_queue_memory_size(self, queue_max_mem_size):
+            self.max_queue_mem_size = queue_max_mem_size
+            return self
+
         def build(self):
-            return DataSourceFrameworkConfig(self.max_file_size)
+            return DataSourceFrameworkConfig(
+                self.max_file_size,
+                self.max_queue_mem_size
+            )

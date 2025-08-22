@@ -475,7 +475,21 @@ class BoxDataSource(BaseDataSource):
             else:
                 yield item
 
-    async def get_docs(self, filtering=None):
+    def _update_queue_max_mem_size(self):
+        """
+        Helper function to update the queue's max memory size
+        if the configured value exceeds the constant defined in the data source
+        """
+        max_mem_size_from_config = self.framework_config.max_queue_mem_size
+
+        if max_mem_size_from_config > QUEUE_MEM_SIZE:
+            self.queue.update_maxmemsize(max_mem_size_from_config)
+            logger.debug(f"MemQueue max memory size updated from {QUEUE_MEM_SIZE} to {max_mem_size_from_config}")
+
+    async def get_docs(self, filtering=None): # type: ignore
+        # update queue max memory size if needed
+        self._update_queue_max_mem_size()
+
         seen_ids = set()
         root_folder = "0"
         if self.is_enterprise == BOX_ENTERPRISE:
