@@ -15,7 +15,12 @@
           "FeedComments.attributes",
           "FeedComments.ParentId",
           "FeedComments.IsDeleted",
-          "FeedComments.totalSize"
+          "FeedComments.totalSize",
+          "PhotoUrl",
+          "StageName",
+          "OwnerId",
+          "content_size",
+          "linked_ids"
         ],
         "description": "removes fields that are not needed in the index",
         "ignore_failure": true

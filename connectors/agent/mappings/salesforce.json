@@ -1,7 +1,7 @@
 {
   "mappings": {
     "_meta": {
-      "briefing": "This index contains data from Salesforce."
+      "briefing": "This index contains data from Salesforce. It may contain Accounts, Opportunities, Cases, email content, and billing addresses. You can also find comments and relevent documents pertaining to these accounts, opportunities and cases."
     },
     "properties": {
       "Account": {
@@ -333,7 +333,6 @@
                 "type": "text"
               },
               "Subject": {
-
                 "type": "semantic_text"
               },
               "TextBody": {
