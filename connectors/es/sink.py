@@ -307,7 +307,12 @@ class Sink:
             for op, data in item.items():
                 # "result" is only present in successful operations
                 if "result" not in data:
-                    del stats[op][data["_id"]]
+                    if data["_id"] in stats[op]:
+                        del stats[op][data["_id"]]
+                    else:
+                        self._logger.debug(
+                            f"Document {data['_id']} not in stats for operation: {op}"
+                        )
 
         self.counters.increment(
             INDEXED_DOCUMENT_COUNT, len(stats[OP_INDEX]) + len(stats[OP_UPDATE])
