@@ -5,9 +5,9 @@
       "rename": {
         "field": "name",
         "target_field": "title",
-        "description": "renames the name field to title"
-      },
-      "ignore_failure": true
+        "description": "renames the name field to title",
+        "ignore_failure": true
+      }
     }
   ]
 }
