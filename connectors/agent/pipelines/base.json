@@ -1,0 +1,9 @@
+{
+  "pipeline": {
+    "extract_binary_content": true,
+    "reduce_whitespace": true,
+    "run_ml_inference": false
+  },
+  "description": "",
+  "processors": []
+}

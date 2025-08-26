@@ -17,7 +17,8 @@
           "FeedComments.IsDeleted",
           "FeedComments.totalSize"
         ],
-        "description": "removes fields that are not needed in the index"
+        "description": "removes fields that are not needed in the index",
+        "ignore_failure": true
       }
     }
   ]
