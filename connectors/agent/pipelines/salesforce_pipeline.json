@@ -23,7 +23,8 @@
           "linked_ids"
         ],
         "description": "removes fields that are not needed in the index",
-        "ignore_failure": true
+        "ignore_failure": true,
+        "ignore_missing": true
       }
     }
   ]
