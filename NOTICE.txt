@@ -91,8 +91,8 @@ SOFTWARE.
 
 
 PyMySQL
-1.1.1
-MIT License
+1.1.2
+UNKNOWN
 Copyright (c) 2010, 2013 PyMySQL contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -7780,7 +7780,7 @@ DEALINGS IN THE SOFTWARE.
 
 
 typing_extensions
-4.14.1
+4.15.0
 UNKNOWN
 A. HISTORY OF THE SOFTWARE
 ==========================
