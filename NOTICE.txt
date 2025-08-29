@@ -7432,7 +7432,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.7
+2.8
 MIT License
 MIT License
 
