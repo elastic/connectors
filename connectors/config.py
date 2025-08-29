@@ -117,6 +117,7 @@ def _default_config():
             "confluence": "connectors.sources.confluence:ConfluenceDataSource",
             "dir": "connectors.sources.directory:DirectoryDataSource",
             "dropbox": "connectors.sources.dropbox:DropboxDataSource",
+            "elasticsearch_mappings": "connectors.sources.elasticsearch_mappings:ElasticsearchMappingsDataSource",
             "github": "connectors.sources.github:GitHubDataSource",
             "gmail": "connectors.sources.gmail:GMailDataSource",
             "google_cloud_storage": "connectors.sources.google_cloud_storage:GoogleCloudStorageDataSource",
