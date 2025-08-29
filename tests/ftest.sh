@@ -16,6 +16,9 @@ MAX_RSS="200M"
 MAX_DURATION=600
 CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
 ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
+# Retry configuration
+CURL_MAX_RETRIES=3
+CURL_RETRY_DELAY=5
 
 export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-tests/Dockerfile.ftest}
 export PERF8_TRACE=${PERF8_TRACE:-False}
@@ -24,9 +27,12 @@ export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION="${CONNECTORS_VERSION}-SNAPSHOT"
 
-# Retry configuration
-CURL_MAX_RETRIES=3
-CURL_RETRY_DELAY=5
+
+
+
+# Download and load ES Docker images from DRA artifacts instead of relying on the snapshot image in the registry.
+# This is needed for the release process when the ES snapshot image may not yet be available.
+# Snapshot images are pushed to the registry by the unified release workflow.
 
 # Determine system architecture
 ARCH=$(uname -m)
