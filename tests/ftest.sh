@@ -16,6 +16,9 @@ MAX_RSS="200M"
 MAX_DURATION=600
 CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
 ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
+# Retry configuration
+CURL_MAX_RETRIES=3
+CURL_RETRY_DELAY=5
 
 export DOCKERFILE_FTEST_PATH=${DOCKERFILE_FTEST_PATH:-tests/Dockerfile.ftest}
 export PERF8_TRACE=${PERF8_TRACE:-False}
@@ -24,106 +27,203 @@ export DATA_SIZE="${DATA_SIZE:-medium}"
 export RUNNING_FTEST=True
 export VERSION="${CONNECTORS_VERSION}-SNAPSHOT"
 
+
+
+
 # Download and load ES Docker images from DRA artifacts instead of relying on the snapshot image in the registry.
 # This is needed for the release process when the ES snapshot image may not yet be available.
 # Snapshot images are pushed to the registry by the unified release workflow.
 
+# Determine system architecture
+ARCH=$(uname -m)
+if [[ $ARCH == "arm64" ]]; then
+  ARCH="aarch64"
+fi
+
+# Function to check if Docker image exists locally
+function check_local_image {
+  local version=$1
+  local arch=$2
+  local image_name="elasticsearch:${version}-${arch}"
+
+  if docker image inspect "$image_name" >/dev/null 2>&1; then
+    echo "$image_name"
+    return 0
+  fi
+  return 1
+}
+
+# Function to generate fallback versions for patch
+function get_fallback_versions {
+  local version=$1
+  local version_without_snapshot=${version%-SNAPSHOT}
+
+  # Extract major.minor.patch components
+  local major=$(echo "$version_without_snapshot" | cut -d. -f1)
+  local minor=$(echo "$version_without_snapshot" | cut -d. -f2)
+  local patch=$(echo "$version_without_snapshot" | cut -d. -f3)
+
+  local fallback_versions=()
+
+  # Try current patch version first
+  fallback_versions+=("${major}.${minor}.${patch}-SNAPSHOT")
+
+  # Try only n-1 (previous patch version)
+  if [ "$patch" -gt 0 ]; then
+    fallback_versions+=("${major}.${minor}.$((patch-1))-SNAPSHOT")
+  fi
+
+  echo "${fallback_versions[@]}"
+}
+
 # Function to resolve the DRA manifest URL
 function resolve_dra_manifest {
-  DRA_ARTIFACT=$1
-  DRA_VERSION=$2
+  local dra_artifact=$1
+  local dra_version=$2
 
-  # Perform the curl request and capture the output and exit code
-  RESPONSE=$(curl -sS -f $ARTIFACT_BASE_URL/$DRA_ARTIFACT/latest/$DRA_VERSION.json 2>&1)
-  CURL_EXIT_CODE=$?
+  local response=$(curl -sS -f --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused "$ARTIFACT_BASE_URL/$dra_artifact/latest/$dra_version.json" 2>&1)
+  local curl_exit_code=$?
 
-  # Check if the curl command failed
-  if [ $CURL_EXIT_CODE -ne 0 ]; then
-    echo "Error: Failed to fetch DRA manifest for artifact $DRA_ARTIFACT and version $DRA_VERSION."
-    echo "Details: $RESPONSE"
-    exit 1
+  if [ $curl_exit_code -ne 0 ]; then
+    echo "Error: Failed to fetch DRA manifest for artifact $dra_artifact and version $dra_version." >&2
+    echo "Details: $response" >&2
+    return 1
   fi
 
-  # Extract the manifest_url using jq
-  MANIFEST_URL=$(echo "$RESPONSE" | jq -r '.manifest_url' 2>/dev/null)
+  local manifest_url=$(echo "$response" | jq -r '.manifest_url' 2>/dev/null)
 
-  # Check if the jq command succeeded and if manifest_url is non-empty
-  if [ -z "$MANIFEST_URL" ] || [ "$MANIFEST_URL" == "null" ]; then
-    echo "Error: No manifest_url found in the response for artifact $DRA_ARTIFACT and version $DRA_VERSION."
-    echo "Response: $RESPONSE"
-    exit 1
+  if [ -z "$manifest_url" ] || [ "$manifest_url" == "null" ]; then
+    echo "Error: No manifest_url found in the response for artifact $dra_artifact and version $dra_version." >&2
+    echo "Response: $response" >&2
+    return 1
   fi
 
-  # Output the manifest URL
-  echo "$MANIFEST_URL"
+  echo "$manifest_url"
+}
+
+# Function to get Docker tarball URL from manifest
+function get_docker_tarball_url {
+  local manifest_url=$1
+  local tarball_name=$2
+
+  local tarball_url=$(curl -sS --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused "$manifest_url" | jq -r ".projects.elasticsearch.packages.\"$tarball_name\".url")
+
+  if [ -z "$tarball_url" ] || [ "$tarball_url" == "null" ]; then
+    return 1
+  fi
+
+  echo "$tarball_url"
 }
 
 # Function to download the Docker image tarball
 function download_docker_tarball {
-  TAR_URL=$1
-  TAR_FILE=$2
-  MAX_RETRIES=3
+  local tar_url=$1
+  local tar_file=$2
 
-  echo "Downloading Docker image tarball from $TAR_URL..."
-  curl --http1.1 --retry $MAX_RETRIES --retry-connrefused -O "$TAR_URL"
+  echo "Downloading Docker image tarball from $tar_url..."
+  curl --http1.1 --retry $CURL_MAX_RETRIES --retry-delay $CURL_RETRY_DELAY --retry-connrefused -O "$tar_url"
 
-  if [ ! -f "$TAR_FILE" ]; then
-    echo "Error: Download failed. File $TAR_FILE not found."
-    exit 1
+  if [ ! -f "$tar_file" ]; then
+    echo "Error: Download failed. File $tar_file not found." >&2
+    return 1
   fi
 }
 
 # Function to load the Docker image directly from the tarball
 function load_docker_image {
-  TAR_FILE=$1
-  echo "Loading Docker image from $TAR_FILE..."
-  docker load < "$TAR_FILE"
+  local tar_file=$1
+  local version=$2
+  local arch=$3
+
+  echo "Loading Docker image from $tar_file..."
+  docker load < "$tar_file"
+
+  # Tag the image with version and arch for future reference
+  local loaded_image=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "elasticsearch" | head -1)
+  if [ -n "$loaded_image" ]; then
+    docker tag "$loaded_image" "elasticsearch:${version}-${arch}"
+    echo "Tagged image as elasticsearch:${version}-${arch}"
+  fi
 }
 
-# Determine system architecture
-ARCH=$(uname -m)
+# Function to get Docker tarball name based on architecture
+function get_docker_tarball_name {
+  local version=$1
+  local arch=$2
 
-# Normalize architecture name
-if [[ $ARCH == "arm64" ]]; then
-  ARCH="aarch64"
-fi
+  case $arch in
+    x86_64)
+      echo "elasticsearch-${version}-docker-image-amd64.tar.gz"
+      ;;
+    aarch64)
+      echo "elasticsearch-${version}-docker-image-arm64.tar.gz"
+      ;;
+    *)
+      echo "Error: Unsupported architecture $arch" >&2
+      return 1
+      ;;
+  esac
+}
 
-# Select the appropriate Docker tarball name based on architecture
-case $ARCH in
-  x86_64)
-    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-amd64.tar.gz"
-    ;;
-  aarch64)
-    DOCKER_TARBALL_NAME="elasticsearch-$VERSION-docker-image-arm64.tar.gz"
-    ;;
-  *)
-    echo "Error: Unsupported architecture $ARCH"
-    exit 1
-    ;;
-esac
+# Function to fetch and load Docker image with fallback logic
+function fetch_elasticsearch_image {
+  local target_version=$VERSION
+  local fallback_versions=($(get_fallback_versions "$target_version"))
 
-# Get the DRA manifest URL for Elasticsearch
-ELASTICSEARCH_DRA_MANIFEST=$(resolve_dra_manifest "elasticsearch" $VERSION)
+  # Check if exact version exists locally first
+  if local_image=$(check_local_image "$target_version" "$ARCH"); then
+    echo "Found local image: $local_image"
+    export ELASTICSEARCH_DRA_DOCKER_IMAGE="$local_image"
+    return 0
+  fi
 
-# Parse Docker image tarball information
-DOCKER_TARBALL_URL=$(curl -sS "$ELASTICSEARCH_DRA_MANIFEST" | jq -r ".projects.elasticsearch.packages.\"$DOCKER_TARBALL_NAME\".url")
+  # Try to fetch from registry with fallback
+  for version in "${fallback_versions[@]}"; do
+    echo "Attempting to fetch Elasticsearch version: $version"
 
-if [ -z "$DOCKER_TARBALL_URL" ] || [ "$DOCKER_TARBALL_URL" == "null" ]; then
-  echo "Error: Docker tarball URL not found in the manifest."
+    local tarball_name=$(get_docker_tarball_name "$version" "$ARCH")
+    if [ $? -ne 0 ]; then
+      continue
+    fi
+
+    local manifest_url=$(resolve_dra_manifest "elasticsearch" "$version")
+    if [ $? -ne 0 ]; then
+      echo "Failed to resolve manifest for version $version, trying next..." >&2
+      continue
+    fi
+
+    local tarball_url=$(get_docker_tarball_url "$manifest_url" "$tarball_name")
+    if [ $? -ne 0 ]; then
+      echo "Failed to get tarball URL for version $version, trying next..." >&2
+      continue
+    fi
+
+    # Download and load the image
+    if download_docker_tarball "$tarball_url" "$tarball_name" && \
+       load_docker_image "$tarball_name" "$version" "$ARCH"; then
+
+      export ELASTICSEARCH_DRA_DOCKER_IMAGE="elasticsearch:${version}-${ARCH}"
+      echo "Successfully loaded Elasticsearch $version. Image name: $ELASTICSEARCH_DRA_DOCKER_IMAGE"
+
+      # Clean up
+      rm -f "$tarball_name"
+      return 0
+    fi
+
+    echo "Failed to download/load version $version, trying next..." >&2
+  done
+
+  echo "Error: Failed to fetch any compatible Elasticsearch version" >&2
+  return 1
+}
+
+# Main execution
+echo "Fetching Elasticsearch Docker image for version $VERSION on $ARCH architecture..."
+if fetch_elasticsearch_image; then
+  echo "Docker image setup completed successfully"
+else
   exit 1
 fi
-
-# Execute the functions to download and load the image
-download_docker_tarball "$DOCKER_TARBALL_URL" "$DOCKER_TARBALL_NAME"
-load_docker_image "$DOCKER_TARBALL_NAME"
-
-# Export image name following DRA conventions
-export ELASTICSEARCH_DRA_DOCKER_IMAGE="elasticsearch:$ARCH"
-
-echo "Docker image for Elasticsearch $VERSION loaded successfully. Image name: $ELASTICSEARCH_DRA_DOCKER_IMAGE"
-
-echo "Cleaning up the downloaded tarball..."
-rm -f "$DOCKER_TARBALL_NAME"
 
 if [ "$PERF8_TRACE" == true ]; then
     echo 'Tracing is enabled, memray stats will be delivered'
