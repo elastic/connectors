@@ -1,0 +1,708 @@
+{
+  "mappings": {
+    "_meta": {
+      "briefing": "This index contains data from Salesforce. It may contain Accounts, Opportunities, Cases, email content, and billing addresses. You can also find comments and relevent documents pertaining to these accounts, opportunities and cases."
+    },
+    "properties": {
+      "Account": {
+        "properties": {
+          "Id": {
+            "type": "keyword"
+          },
+          "Name": {
+            "type": "text",
+            "meta": {
+              "description": "The name of the account."
+            }
+          },
+          "attributes": {
+            "properties": {
+              "type": {
+                "type": "keyword"
+              },
+              "url": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      },
+      "AccountId": {
+        "type": "keyword"
+      },
+      "BillingAddress": {
+        "properties": {
+          "city": {
+            "type": "text"
+          },
+          "country": {
+            "fields": {
+              "keyword": {
+                "ignore_above": 256,
+                "type": "keyword"
+              }
+            },
+            "type": "text"
+          },
+          "postalCode": {
+            "type": "keyword"
+          },
+          "state": {
+            "fields": {
+              "keyword": {
+                "ignore_above": 256,
+                "type": "keyword"
+              }
+            },
+            "type": "text"
+          },
+          "street": {
+            "fields": {
+              "keyword": {
+                "ignore_above": 256,
+                "type": "keyword"
+              }
+            },
+            "type": "text"
+          }
+        }
+      },
+      "CaseNumber": {
+        "type": "keyword"
+      },
+      "Company": {
+        "type": "text",
+        "meta": {
+          "description": "The name of the company."
+        }
+      },
+      "ContentDocumentLinks": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "records": {
+            "properties": {
+              "ContentDocument": {
+                "properties": {
+                  "ContentSize": {
+                    "type": "long"
+                  },
+                  "CreatedBy": {
+                    "properties": {
+                      "Email": {
+                        "type": "text"
+                      },
+                      "Id": {
+                        "type": "keyword"
+                      },
+                      "Name": {
+                        "type": "text"
+                      },
+                      "attributes": {
+                        "properties": {
+                          "type": {
+                            "type": "keyword"
+                          },
+                          "url": {
+                            "type": "text"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "CreatedDate": {
+                    "type": "date"
+                  },
+                  "FileExtension": {
+                    "type": "keyword",
+                    "meta": {
+                      "description": "The file extension of the content."
+                    }
+                  },
+                  "Id": {
+                    "type": "keyword"
+                  },
+                  "LastModifiedDate": {
+                    "type": "date"
+                  },
+                  "LatestPublishedVersion": {
+                    "properties": {
+                      "CreatedDate": {
+                        "type": "date"
+                      },
+                      "Id": {
+                        "type": "keyword"
+                      },
+                      "VersionDataUrl": {
+                        "type": "text"
+                      },
+                      "VersionNumber": {
+                        "type": "keyword"
+                      },
+                      "attributes": {
+                        "properties": {
+                          "type": {
+                            "type": "keyword"
+                          },
+                          "url": {
+                            "type": "text"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "Owner": {
+                    "properties": {
+                      "Email": {
+                        "type": "text"
+                      },
+                      "Id": {
+                        "type": "keyword"
+                      },
+                      "Name": {
+                        "type": "text",
+                        "meta": {
+                          "description": "The name of the ContentDocument owner."
+                        }
+                      },
+                      "attributes": {
+                        "properties": {
+                          "type": {
+                            "type": "keyword"
+                          },
+                          "url": {
+                            "type": "text"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "Title": {
+                    "type": "semantic_text"
+                  },
+                  "attributes": {
+                    "properties": {
+                      "type": {
+                        "type": "keyword"
+                      },
+                      "url": {
+                        "type": "text"
+                      }
+                    }
+                  },
+                  "linked_ids": {
+                    "type": "keyword"
+                  },
+                  "linked_sobject_id": {
+                    "fields": {
+                      "keyword": {
+                        "ignore_above": 256,
+                        "type": "keyword"
+                      }
+                    },
+                    "type": "text"
+                  }
+                }
+              },
+              "attributes": {
+                "properties": {
+                  "type": {
+                    "type": "keyword"
+                  },
+                  "url": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          },
+          "totalSize": {
+            "type": "long"
+          }
+        }
+      },
+      "ConvertedAccount": {
+        "type": "object"
+      },
+      "ConvertedContact": {
+        "type": "object"
+      },
+      "ConvertedOpportunity": {
+        "type": "object"
+      },
+      "CreatedBy": {
+        "properties": {
+          "Email": {
+            "type": "text"
+          },
+          "Id": {
+            "type": "keyword"
+          },
+          "Name": {
+            "type": "text",
+            "meta": {
+              "description": "The name of the user who created the document."
+            }
+          },
+          "attributes": {
+            "properties": {
+              "type": {
+                "type": "keyword"
+              },
+              "url": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      },
+      "CreatedDate": {
+        "type": "date"
+      },
+      "Description": {
+        "type": "semantic_text"
+      },
+      "EmailMessages": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "records": {
+            "properties": {
+              "BccAddress": {
+                "type": "text"
+              },
+              "CcAddress": {
+                "type": "text"
+              },
+              "CreatedBy": {
+                "properties": {
+                  "Email": {
+                    "type": "text"
+                  },
+                  "Id": {
+                    "type": "keyword"
+                  },
+                  "Name": {
+                    "type": "text",
+                    "meta": {
+                      "description": "The name of the user who created the email."
+                    }
+                  },
+                  "attributes": {
+                    "properties": {
+                      "type": {
+                        "type": "keyword"
+                      },
+                      "url": {
+                        "type": "text"
+                      }
+                    }
+                  }
+                }
+              },
+              "FromAddress": {
+                "type": "text"
+              },
+              "FromName": {
+                "type": "text"
+              },
+              "Id": {
+                "type": "keyword"
+              },
+              "IsDeleted": {
+                "type": "boolean"
+              },
+              "LastModifiedById": {
+                "type": "keyword"
+              },
+              "MessageDate": {
+                "type": "date"
+              },
+              "ParentId": {
+                "type": "keyword"
+              },
+              "Status": {
+                "fields": {
+                  "keyword": {
+                    "ignore_above": 256,
+                    "type": "keyword"
+                  }
+                },
+                "type": "text"
+              },
+              "Subject": {
+                "type": "semantic_text"
+              },
+              "TextBody": {
+                "type": "semantic_text",
+                "meta": {
+                  "description": "The body of the email message."
+                }
+              },
+              "ToAddress": {
+                "type": "text"
+              },
+              "attributes": {
+                "properties": {
+                  "type": {
+                    "type": "keyword"
+                  },
+                  "url": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          },
+          "totalSize": {
+            "type": "long"
+          }
+        }
+      },
+      "Feeds": {
+        "properties": {
+          "Body": {
+            "type": "text"
+          },
+          "CommentCount": {
+            "type": "long",
+            "meta": {
+              "description": "The number of comments in the feed."
+            }
+          },
+          "CreatedBy": {
+            "properties": {
+              "Email": {
+                "type": "text"
+              },
+              "Id": {
+                "type": "keyword"
+              },
+              "Name": {
+                "type": "text",
+                "meta": {
+                  "description": "The name of the user who created the feed."
+                }
+              },
+              "attributes": {
+                "properties": {
+                  "type": {
+                    "type": "keyword"
+                  },
+                  "url": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          },
+          "CreatedDate": {
+            "type": "date"
+          },
+          "FeedComments": {
+            "properties": {
+              "done": {
+                "type": "boolean"
+              },
+              "records": {
+                "properties": {
+                  "CommentBody": {
+                    "type": "text",
+                    "meta": {
+                      "description": "The body of the feed comment."
+                    }
+                  },
+                  "CreatedBy": {
+                    "properties": {
+                      "Email": {
+                        "type": "text"
+                      },
+                      "Id": {
+                        "type": "keyword"
+                      },
+                      "Name": {
+                        "type": "text",
+                        "meta": {
+                          "description": "The name of the user who created the feed comment."
+                        }
+                      },
+                      "attributes": {
+                        "properties": {
+                          "type": {
+                            "type": "keyword"
+                          },
+                          "url": {
+                            "type": "text"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "Id": {
+                    "type": "keyword"
+                  },
+                  "IsDeleted": {
+                    "type": "boolean"
+                  },
+                  "ParentId": {
+                    "type": "keyword"
+                  },
+                  "attributes": {
+                    "properties": {
+                      "type": {
+                        "type": "keyword"
+                      },
+                      "url": {
+                        "type": "text"
+                      }
+                    }
+                  }
+                }
+              },
+              "totalSize": {
+                "type": "long"
+              }
+            }
+          },
+          "Id": {
+            "type": "keyword"
+          },
+          "IsDeleted": {
+            "type": "boolean"
+          },
+          "LastModifiedDate": {
+            "type": "date"
+          },
+          "ParentId": {
+            "type": "keyword"
+          },
+          "Type": {
+            "fields": {
+              "keyword": {
+                "ignore_above": 256,
+                "type": "keyword"
+              }
+            },
+            "type": "text"
+          },
+          "attributes": {
+            "properties": {
+              "type": {
+                "type": "keyword"
+              },
+              "url": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      },
+      "Id": {
+        "type": "keyword"
+      },
+      "IsActive": {
+        "type": "boolean"
+      },
+      "IsClosed": {
+        "type": "boolean"
+      },
+      "IsDeleted": {
+        "type": "boolean"
+      },
+      "LastModifiedDate": {
+        "type": "date"
+      },
+      "LeadSource": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "Name": {
+        "type": "text",
+        "meta": {
+          "description": "The name of the user who created this record."
+        }
+      },
+      "Opportunities": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "records": {
+            "properties": {
+              "Id": {
+                "type": "keyword"
+              },
+              "Name": {
+                "type": "text",
+                "meta": {
+                  "description": "The name of the opportunity."
+                }
+              },
+              "StageName": {
+                "type": "text"
+              },
+              "attributes": {
+                "properties": {
+                  "type": {
+                    "type": "keyword"
+                  },
+                  "url": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          },
+          "totalSize": {
+            "type": "long"
+          }
+        }
+      },
+      "Owner": {
+        "properties": {
+          "Email": {
+            "type": "text"
+          },
+          "Id": {
+            "type": "keyword"
+          },
+          "Name": {
+            "type": "text",
+            "meta": {
+              "description": "The name of the user who owns this record."
+            }
+          },
+          "attributes": {
+            "properties": {
+              "type": {
+                "type": "keyword"
+              },
+              "url": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      },
+      "OwnerId": {
+        "type": "keyword"
+      },
+      "PhotoUrl": {
+        "type": "text"
+      },
+      "StageName": {
+        "type": "text"
+      },
+      "StartDate": {
+        "type": "date"
+      },
+      "Status": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "Subject": {
+        "type": "semantic_text"
+      },
+      "Type": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "_timestamp": {
+        "type": "date"
+      },
+      "attributes": {
+        "properties": {
+          "type": {
+            "type": "keyword"
+          },
+          "url": {
+            "type": "text"
+          }
+        }
+      },
+      "body": {
+        "type": "semantic_text"
+      },
+      "content_size": {
+        "type": "long"
+      },
+      "created_at": {
+        "type": "date"
+      },
+      "created_by": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "created_by_email": {
+        "type": "text"
+      },
+      "file_extension": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "id": {
+        "type": "keyword"
+      },
+      "last_updated": {
+        "type": "date"
+      },
+      "linked_ids": {
+        "type": "keyword"
+      },
+      "owner": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text"
+      },
+      "owner_email": {
+        "type": "text"
+      },
+      "title": {
+        "type": "semantic_text"
+      },
+      "type": {
+        "type": "keyword"
+      },
+      "url": {
+        "type": "text"
+      },
+      "version_number": {
+        "type": "keyword"
+      },
+      "version_url": {
+        "type": "text"
+      }
+    }
+  }
+}
