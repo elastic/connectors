@@ -35,7 +35,7 @@ IMAGE_FAMILY = "ubuntu-2204-lts"
 
 # VMs metadata
 DIVISION = "engineering"
-ORG = "entsearch"
+ORG = "search"
 TEAM = "ingestion"
 PROJECT = "connectors-testing"
 

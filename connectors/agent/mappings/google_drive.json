@@ -1,0 +1,92 @@
+{
+  "mappings": {
+    "_meta": {
+      "briefing": "This index contains information about files, folders, and their metadata from Google Drive."
+    },
+    "properties": {
+      "_timestamp": {
+        "type": "date"
+      },
+      "body": {
+        "type": "semantic_text",
+        "meta": {
+          "description": "This is the main content of the document."
+        }
+      },
+      "created_at": {
+        "type": "date"
+      },
+      "file_extension": {
+        "type": "keyword",
+        "meta": {
+          "description": "The file extension of a document."
+        }
+      },
+      "id": {
+        "type": "keyword"
+      },
+      "last_updated": {
+        "type": "date",
+        "meta": {
+          "description": "The last time the document was updated."
+        }
+      },
+      "mime_type": {
+        "type": "keyword",
+        "meta": {
+          "description": "The MIME type of the document."
+        }
+      },
+      "name": {
+        "fields": {
+          "text": {
+            "type": "text"
+          }
+        },
+        "type": "semantic_text",
+        "meta": {
+          "description": "This is the name of a document."
+        }
+      },
+      "path": {
+        "type": "text",
+        "meta": {
+          "description": "This is the Google Drive path of the document."
+        }
+      },
+      "shared_drive": {
+        "fields": {
+          "keyword": {
+            "ignore_above": 256,
+            "type": "keyword"
+          }
+        },
+        "type": "text",
+        "meta": {
+          "description": "The shared drive a document is located in."
+        }
+      },
+      "size": {
+        "type": "text",
+        "meta": {
+          "description": "The size of the document, in bytes."
+        }
+      },
+      "trashed": {
+        "type": "boolean",
+        "meta": {
+          "description": "Indicates whether the document was deleted."
+        }
+      },
+      "type": {
+        "type": "keyword"
+      },
+      "url": {
+        "type": "text",
+        "meta": {
+          "description": "The Google Drive URL to the document."
+        }
+      }
+    }
+  }
+}
