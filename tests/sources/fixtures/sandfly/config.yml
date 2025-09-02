@@ -1,0 +1,6 @@
+service.idling: 1
+
+connectors:
+  -
+    connector_id: 'sandfly'
+    service_type: 'sandfly'

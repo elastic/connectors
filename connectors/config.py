@@ -136,6 +136,7 @@ def _default_config():
             "redis": "connectors.sources.redis:RedisDataSource",
             "s3": "connectors.sources.s3:S3DataSource",
             "salesforce": "connectors.sources.salesforce:SalesforceDataSource",
+            "sandfly": "connectors.sources.sandfly:SandflyDataSource",
             "servicenow": "connectors.sources.servicenow:ServiceNowDataSource",
             "sharepoint_online": "connectors.sources.sharepoint_online:SharepointOnlineDataSource",
             "sharepoint_server": "connectors.sources.sharepoint_server:SharepointServerDataSource",
