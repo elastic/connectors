@@ -24,12 +24,12 @@ connectors:
     connector_id: '1'
 
 sources:
-  fake: fake_sources:FakeSource
-  fake_with_incremental: fake_sources:FakeSourceWithIncrementalSync
-  large_fake: fake_sources:LargeFakeSource
-  fail_once: fake_sources:FailsThenWork
-  fake_ts: fake_sources:FakeSourceTS
-  filtering_state_valid: fake_sources:FakeSourceFilteringValid
-  filtering_state_invalid: fake_sources:FakeSourceFilteringStateInvalid
-  filtering_state_edited: fake_sources:FakeSourceFilteringStateEdited
-  filtering_errors_present: fake_sources:FakeSourceFilteringErrorsPresent
+  fake: tests.fake_sources:FakeSource
+  fake_with_incremental: tests.fake_sources:FakeSourceWithIncrementalSync
+  large_fake: tests.fake_sources:LargeFakeSource
+  fail_once: tests.fake_sources:FailsThenWork
+  fake_ts: tests.fake_sources:FakeSourceTS
+  filtering_state_valid: tests.fake_sources:FakeSourceFilteringValid
+  filtering_state_invalid: tests.fake_sources:FakeSourceFilteringStateInvalid
+  filtering_state_edited: tests.fake_sources:FakeSourceFilteringStateEdited
+  filtering_errors_present: tests.fake_sources:FakeSourceFilteringErrorsPresent

@@ -193,12 +193,12 @@ class MyConnector:
 
 
 def test_get_source_klass():
-    assert get_source_klass("test_source:MyConnector") is MyConnector
+    assert get_source_klass("tests.test_source:MyConnector") is MyConnector
 
 
 def test_get_source_klasses():
     settings = {
-        "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
+        "sources": {"yea": "tests.test_source:MyConnector", "yea2": "tests.test_source:MyConnector"}
     }
 
     sources = list(get_source_klasses(settings))
