@@ -6724,8 +6724,8 @@ Apache Software License
 
 
 pyspnego
-0.11.2
-MIT License
+0.12.0
+UNKNOWN
 MIT License
 
 Copyright (c) 2020 Jordan Borean, Red Hat
