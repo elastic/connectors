@@ -2171,3 +2171,71 @@ async def test_get_docs_sync_custom_objects(mock_responses):
 
         async for record, _ in source.get_docs():
             assert record["attributes"]["type"] == "CustomObject"
+
+
+@pytest.mark.asyncio
+async def test_queryable_sobject_fields_performance_optimization(mock_responses):
+    """
+    Test the performance optimization that reduces API calls from O(n*14) to O(14)
+
+    This test demonstrates the specific performance improvement:
+    - Before: 6 objects × 14 RELEVANT_SOBJECTS = 84 total calls
+    - After: 14 API calls total (one per object, cached thereafter)
+    - Performance improvement: ~85% reduction in API calls
+    """
+    async with create_salesforce_source(mock_queryables=False) as source:
+        from connectors.sources.salesforce import RELEVANT_SOBJECTS
+
+        # Mock responses for all RELEVANT_SOBJECTS
+        mock_fields = [{"name": "Id"}, {"name": "Name"}, {"name": "Description"}]
+        for sobject in RELEVANT_SOBJECTS:
+            mock_responses.get(
+                f"{TEST_BASE_URL}/services/data/{API_VERSION}/sobjects/{sobject}/describe",
+                status=200,
+                payload={"fields": mock_fields},
+            )
+
+        # Track API calls
+        api_call_count = 0
+        original_get_json = source.salesforce_client._get_json
+
+        async def mock_get_json(url, **kwargs):
+            nonlocal api_call_count
+            api_call_count += 1
+            return await original_get_json(url, **kwargs)
+
+        source.salesforce_client._get_json = mock_get_json
+
+        # Simulate the scenario: 6 objects being synced, each calling _select_queryable_fields
+        # This represents a typical sync operation
+        objects_to_sync = ["Account", "Contact", "Lead", "Opportunity", "Campaign", "Case"]
+
+        # Test the OPTIMIZED behavior (current implementation)
+        for obj in objects_to_sync:
+            if obj in RELEVANT_SOBJECTS:
+                # This simulates _select_queryable_fields calling queryable_sobject_fields
+                # With optimization: only queries uncached objects
+                await source.salesforce_client.queryable_sobject_fields(
+                    relevant_objects=RELEVANT_SOBJECTS,
+                    relevant_sobject_fields=None
+                )
+
+        optimized_calls = api_call_count
+
+        # Verify the optimization worked
+        expected_optimized_calls = len(RELEVANT_SOBJECTS)  # O(14)
+        assert optimized_calls == expected_optimized_calls, \
+            f"Expected {expected_optimized_calls} API calls (O(14)), got {optimized_calls}"
+
+        # Calculate performance improvement
+        old_behavior_calls = len(objects_to_sync) * len(RELEVANT_SOBJECTS)  # O(n*14)
+        improvement_ratio = old_behavior_calls / optimized_calls
+        improvement_percentage = ((old_behavior_calls - optimized_calls) / old_behavior_calls) * 100
+
+        # Verify the improvement is substantial (should be ~85% as mentioned)
+        assert improvement_percentage >= 80, \
+            f"Expected at least 80% improvement, got {improvement_percentage:.1f}%"
+
+        # Verify cache is properly populated
+        assert len(source.salesforce_client._queryable_sobject_fields) == len(RELEVANT_SOBJECTS), \
+            f"Expected cache to contain {len(RELEVANT_SOBJECTS)} objects"
