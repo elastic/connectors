@@ -2208,7 +2208,14 @@ async def test_queryable_sobject_fields_performance_optimization(mock_responses)
 
         # Simulate the scenario: 6 objects being synced, each calling _select_queryable_fields
         # This represents a typical sync operation
-        objects_to_sync = ["Account", "Contact", "Lead", "Opportunity", "Campaign", "Case"]
+        objects_to_sync = [
+            "Account",
+            "Contact",
+            "Lead",
+            "Opportunity",
+            "Campaign",
+            "Case",
+        ]
 
         # Test the OPTIMIZED behavior (current implementation)
         for obj in objects_to_sync:
@@ -2216,26 +2223,29 @@ async def test_queryable_sobject_fields_performance_optimization(mock_responses)
                 # This simulates _select_queryable_fields calling queryable_sobject_fields
                 # With optimization: only queries uncached objects
                 await source.salesforce_client.queryable_sobject_fields(
-                    relevant_objects=RELEVANT_SOBJECTS,
-                    relevant_sobject_fields=None
+                    relevant_objects=RELEVANT_SOBJECTS, relevant_sobject_fields=None
                 )
 
         optimized_calls = api_call_count
 
         # Verify the optimization worked
         expected_optimized_calls = len(RELEVANT_SOBJECTS)  # O(14)
-        assert optimized_calls == expected_optimized_calls, \
-            f"Expected {expected_optimized_calls} API calls (O(14)), got {optimized_calls}"
+        assert (
+            optimized_calls == expected_optimized_calls
+        ), f"Expected {expected_optimized_calls} API calls (O(14)), got {optimized_calls}"
 
         # Calculate performance improvement
         old_behavior_calls = len(objects_to_sync) * len(RELEVANT_SOBJECTS)  # O(n*14)
-        improvement_ratio = old_behavior_calls / optimized_calls
-        improvement_percentage = ((old_behavior_calls - optimized_calls) / old_behavior_calls) * 100
+        improvement_percentage = (
+            (old_behavior_calls - optimized_calls) / old_behavior_calls
+        ) * 100
 
         # Verify the improvement is substantial (should be ~85% as mentioned)
-        assert improvement_percentage >= 80, \
-            f"Expected at least 80% improvement, got {improvement_percentage:.1f}%"
+        assert (
+            improvement_percentage >= 80
+        ), f"Expected at least 80% improvement, got {improvement_percentage:.1f}%"
 
         # Verify cache is properly populated
-        assert len(source.salesforce_client._queryable_sobject_fields) == len(RELEVANT_SOBJECTS), \
-            f"Expected cache to contain {len(RELEVANT_SOBJECTS)} objects"
+        assert len(source.salesforce_client._queryable_sobject_fields) == len(
+            RELEVANT_SOBJECTS
+        ), f"Expected cache to contain {len(RELEVANT_SOBJECTS)} objects"
