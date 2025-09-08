@@ -457,7 +457,13 @@ class SalesforceClient:
         relevant_sobject_fields,
     ):
         """Cached async property"""
-        for sobject in relevant_objects:
+        objects_to_query = [
+            obj for obj in relevant_objects if obj not in self._queryable_sobject_fields
+        ]
+        if not objects_to_query:
+            return self._queryable_sobject_fields
+
+        for sobject in objects_to_query:
             endpoint = DESCRIBE_SOBJECT_ENDPOINT.replace("<sobject>", sobject)
             response = await self._get_json(f"{self.base_url}{endpoint}")
 
