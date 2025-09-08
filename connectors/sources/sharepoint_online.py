@@ -75,6 +75,19 @@ MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
 DRIVE_ITEMS_FIELDS = "id,content.downloadUrl,lastModifiedDateTime,lastModifiedBy,root,deleted,file,folder,package,name,webUrl,createdBy,createdDateTime,size,parentReference"
 
+# Exclude specific SharePoint paths entirely at the connector level (pre sync-rules)
+EXCLUDED_SHAREPOINT_PATH_SEGMENTS = ["/contentstorage/"]
+
+
+def _is_excluded_sharepoint_url(url: str) -> bool:
+    try:
+        return any(
+            segment in url.lower() for segment in EXCLUDED_SHAREPOINT_PATH_SEGMENTS
+        )
+    except Exception:
+        return False
+
+
 CURSOR_SITE_DRIVE_KEY = "site_drives"
 
 # Microsoft Graph API Delta constants
@@ -685,6 +698,11 @@ class SharepointOnlineClient:
             yield await self._graph_api_client.fetch(url=f"{GRAPH_API_URL}/sites/root")
 
     async def site_role_assignments(self, site_web_url):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping role assignments for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
         expand = "Member/users,RoleDefinitionBindings"
 
@@ -699,6 +717,11 @@ class SharepointOnlineClient:
             return
 
     async def site_admins(self, site_web_url):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping site admins for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
         filter_param = url_encode("isSiteAdmin eq true")
         url = f"{site_web_url}/_api/web/SiteUsers?$filter={filter_param}"
@@ -712,6 +735,11 @@ class SharepointOnlineClient:
             return
 
     async def site_groups_users(self, site_web_url, site_group_id):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping site group users for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         select_ = "Email,Id,UserPrincipalName,LoginName,Title"
@@ -763,6 +791,11 @@ class SharepointOnlineClient:
             return
 
     async def site_users(self, site_web_url):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping site users for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         url = f"{site_web_url}/_api/web/siteusers"
@@ -784,6 +817,11 @@ class SharepointOnlineClient:
         if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
             self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
             async for site in self._all_sites(sharepoint_host, allowed_root_sites):
+                if _is_excluded_sharepoint_url(site.get("webUrl", "")):
+                    self._logger.debug(
+                        f"Skipping excluded SharePoint site: {site.get('webUrl', site.get('id', 'unknown'))}"
+                    )
+                    continue
                 yield site
         else:
             self._logger.debug(f"Looking up individual sites: {allowed_root_sites}")
@@ -793,9 +831,20 @@ class SharepointOnlineClient:
                         async for site in self._fetch_site_and_subsites_by_path(
                             sharepoint_host, allowed_site
                         ):
+                            if _is_excluded_sharepoint_url(site.get("webUrl", "")):
+                                self._logger.debug(
+                                    f"Skipping excluded SharePoint site: {site.get('webUrl', site.get('id', 'unknown'))}"
+                                )
+                                continue
                             yield site
                     else:
-                        yield await self._fetch_site(sharepoint_host, allowed_site)
+                        site_obj = await self._fetch_site(sharepoint_host, allowed_site)
+                        if _is_excluded_sharepoint_url(site_obj.get("webUrl", "")):
+                            self._logger.debug(
+                                f"Skipping excluded SharePoint site: {site_obj.get('webUrl', site_obj.get('id', 'unknown'))}"
+                            )
+                            continue
+                        yield site_obj
 
                 except NotFound:
                     self._logger.warning(
@@ -852,8 +901,17 @@ class SharepointOnlineClient:
     async def _recurse_sites(self, site_with_subsites):
         subsites = site_with_subsites.pop("sites", [])
         site_with_subsites.pop("sites@odata.context", None)  # remove unnecessary field
-        yield site_with_subsites
-        if subsites:
+
+        is_excluded = _is_excluded_sharepoint_url(site_with_subsites.get("webUrl", ""))
+
+        if is_excluded:
+            self._logger.debug(
+                f"Skipping excluded SharePoint site: {site_with_subsites.get('webUrl', site_with_subsites.get('id', 'unknown'))}"
+            )
+        else:
+            yield site_with_subsites
+
+        if subsites and not is_excluded:
             async for site in self._scroll_subsites_by_parent_id(
                 site_with_subsites["id"]
             ):
@@ -928,6 +986,11 @@ class SharepointOnlineClient:
             return
 
     async def site_list_has_unique_role_assignments(self, site_web_url, site_list_name):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping list unique role assignments for excluded site url: {site_web_url}"
+            )
+            return False
         self._validate_sharepoint_rest_url(site_web_url)
 
         url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/HasUniqueRoleAssignments"
@@ -939,6 +1002,11 @@ class SharepointOnlineClient:
             return False
 
     async def site_list_role_assignments(self, site_web_url, site_list_name):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping list role assignments for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         expand = "Member/users,RoleDefinitionBindings"
@@ -955,6 +1023,11 @@ class SharepointOnlineClient:
     async def site_list_item_has_unique_role_assignments(
         self, site_web_url, site_list_name, list_item_id
     ):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping list item unique role assignments for excluded site url: {site_web_url}"
+            )
+            return False
         self._validate_sharepoint_rest_url(site_web_url)
 
         url = f"{site_web_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/HasUniqueRoleAssignments"
@@ -973,6 +1046,11 @@ class SharepointOnlineClient:
     async def site_list_item_role_assignments(
         self, site_web_url, site_list_name, list_item_id
     ):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping list item role assignments for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         expand = "Member/users,RoleDefinitionBindings"
@@ -997,6 +1075,11 @@ class SharepointOnlineClient:
                 yield site_list
 
     async def site_list_item_attachments(self, site_web_url, list_title, list_item_id):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping list item attachments for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         url = f"{site_web_url}/_api/lists/GetByTitle('{list_title}')/items({list_item_id})?$expand=AttachmentFiles"
@@ -1012,6 +1095,11 @@ class SharepointOnlineClient:
             return
 
     async def download_attachment(self, attachment_absolute_path, async_buffer):
+        if _is_excluded_sharepoint_url(attachment_absolute_path):
+            self._logger.debug(
+                f"Skipping attachment download from excluded url: {attachment_absolute_path}"
+            )
+            return
         self._validate_sharepoint_rest_url(attachment_absolute_path)
 
         await self._rest_api_client.pipe(
@@ -1019,6 +1107,11 @@ class SharepointOnlineClient:
         )
 
     async def site_pages(self, site_web_url):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping site pages for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         # select = "Id,Title,LayoutWebpartsContent,CanvasContent1,Description,Created,AuthorId,Modified,EditorId"
@@ -1051,6 +1144,11 @@ class SharepointOnlineClient:
             return
 
     async def site_page_has_unique_role_assignments(self, site_web_url, site_page_id):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping page unique role assignments for excluded site url: {site_web_url}"
+            )
+            return False
         self._validate_sharepoint_rest_url(site_web_url)
 
         url = f"{site_web_url}/_api/web/lists/GetByTitle('Site Pages')/items('{site_page_id}')/HasUniqueRoleAssignments"
@@ -1062,6 +1160,11 @@ class SharepointOnlineClient:
             return False
 
     async def site_page_role_assignments(self, site_web_url, site_page_id):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping page role assignments for excluded site url: {site_web_url}"
+            )
+            return
         self._validate_sharepoint_rest_url(site_web_url)
 
         expand = "Member/users,RoleDefinitionBindings"
@@ -1076,6 +1179,11 @@ class SharepointOnlineClient:
             return
 
     async def users_and_groups_for_role_assignment(self, site_web_url, role_assignment):
+        if _is_excluded_sharepoint_url(site_web_url):
+            self._logger.debug(
+                f"Skipping users/groups for role assignment for excluded site url: {site_web_url}"
+            )
+            return []
         self._validate_sharepoint_rest_url(site_web_url)
 
         if "PrincipalId" not in role_assignment:
@@ -1111,6 +1219,12 @@ class SharepointOnlineClient:
     def _validate_sharepoint_rest_url(self, url):
         # TODO: make it better suitable for ftest
         if "OVERRIDE_URL" in os.environ:
+            return
+
+        # Exclude SharePoint Content Storage endpoints entirely
+        # These URLs are internal and should not be crawled by the connector
+        if _is_excluded_sharepoint_url(url):
+            # Silently return to let callers that explicitly skip excluded URLs proceed
             return
 
         # I haven't found a better way to validate tenant name for now.
@@ -1480,6 +1594,12 @@ class SharepointOnlineDataSource(BaseDataSource):
         """
 
         self._logger.debug(f"Looking at site: {site['id']} with url {site['webUrl']}")
+        # Skip excluded SharePoint paths entirely
+        if _is_excluded_sharepoint_url(site.get("webUrl", "")):
+            self._logger.info(
+                f"Skipping access control discovery for excluded SharePoint site: {site.get('webUrl')}"
+            )
+            return [], []
         if not self._dls_enabled():
             return [], []
 
@@ -2488,6 +2608,12 @@ class SharepointOnlineDataSource(BaseDataSource):
 
     async def get_attachment_content(self, attachment, timestamp=None, doit=False):
         if not doit:
+            return
+
+        if _is_excluded_sharepoint_url(attachment.get("odata.id", "")):
+            self._logger.debug(
+                f"Skipping attachment from excluded url: {attachment.get('odata.id')}"
+            )
             return
 
         if not self.is_supported_format(attachment["_original_filename"]):
