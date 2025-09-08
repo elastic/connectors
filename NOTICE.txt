@@ -2863,7 +2863,7 @@ Agreement.
 
 
 dnspython
-2.7.0
+2.8.0
 ISC License (ISCL)
 ISC License
 
