@@ -3521,7 +3521,7 @@ Apache Software License
 
 
 elasticsearch-connectors
-8.19.0
+8.19.3
 Apache Software License
 Elastic License 2.0
 
@@ -6724,8 +6724,8 @@ Apache Software License
 
 
 pyspnego
-0.11.2
-MIT License
+0.12.0
+UNKNOWN
 MIT License
 
 Copyright (c) 2020 Jordan Borean, Red Hat
@@ -7432,7 +7432,7 @@ made under the terms of *both* these licenses.
 
 
 soupsieve
-2.7
+2.8
 MIT License
 MIT License
 
