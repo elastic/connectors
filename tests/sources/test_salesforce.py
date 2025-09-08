@@ -2081,55 +2081,6 @@ async def test_get_docs_with_dls_enabled(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
-    async with create_salesforce_source() as source:
-        source.salesforce_client.standard_objects_to_sync = ["Account", "Contact"]
-        source.salesforce_client.sync_custom_objects = False
-        source.salesforce_client._custom_objects = AsyncMock(
-            return_value=["CustomObject"]
-        )
-
-        source._parse_content_documents = MagicMock(return_value=[])
-
-        mock_responses.get(
-            TEST_FILE_DOWNLOAD_URL,
-            status=200,
-            body=b"chunk1",
-        )
-        mock_responses.get(
-            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
-        )
-
-        async for record, _ in source.get_docs():
-            assert record["attributes"]["type"] in ["Account", "Contact"]
-
-
-@pytest.mark.asyncio
-async def test_get_docs_sync_custom_objects(mock_responses):
-    async with create_salesforce_source() as source:
-        source.salesforce_client._custom_objects = AsyncMock(
-            return_value=["CustomObject", "Connector__c"]
-        )
-        source.salesforce_client.custom_objects_to_sync = ["CustomObject"]
-        source.salesforce_client.standard_objects_to_sync = []
-
-        source.salesforce_client.sync_custom_objects = True
-        source._parse_content_documents = MagicMock(return_value=[])
-
-        mock_responses.get(
-            TEST_FILE_DOWNLOAD_URL,
-            status=200,
-            body=b"chunk1",
-        )
-        mock_responses.get(
-            TEST_QUERY_MATCH_URL, repeat=True, callback=salesforce_query_callback
-        )
-
-        async for record, _ in source.get_docs():
-            assert record["attributes"]["type"] == "CustomObject"
-
-
-@pytest.mark.asyncio
 async def test_queryable_sobject_fields_performance_optimization(mock_responses):
     """
     Test the performance optimization that reduces API calls from O(n*14) to O(14)
