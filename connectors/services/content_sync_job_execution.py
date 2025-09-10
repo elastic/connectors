@@ -33,8 +33,8 @@ class ContentSyncJobExecutionService(JobExecutionService):
         return self.service_config.get("max_concurrent_content_syncs")
 
     def should_execute(self, connector, sync_job):
-        if connector.last_sync_status == JobStatus.IN_PROGRESS:
-            sync_job.log_debug("Connector is still syncing content, skip the job...")
-            return False
+        # if connector.last_sync_status == JobStatus.IN_PROGRESS:
+        #     sync_job.log_debug("Connector is still syncing content, skip the job...")
+        #     return False
 
         return True
