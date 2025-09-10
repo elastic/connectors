@@ -45,20 +45,15 @@ install: .venv/bin/python .venv/bin/elastic-ingest notice
 install-agent: .venv/bin/elastic-ingest
 
 
-.venv/bin/elastic-ingest: .venv/bin/python requirements/framework.txt requirements/$(ARCH).txt requirements/agent.txt
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/python setup.py develop
+.venv/bin/elastic-ingest: .venv/bin/python | pyproject.toml
+	.venv/bin/pip install .
 
 .venv/bin/ruff: .venv/bin/python
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/tests.txt
+	.venv/bin/pip install .[dev]
 
 .venv/bin/pytest: .venv/bin/python
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/pip install -r requirements/tests.txt
-	.venv/bin/pip install -r requirements/ftest.txt
+	.venv/bin/pip install .[dev]
+	.venv/bin/pip install -e .[ftest]
 
 clean:
 	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
@@ -70,8 +65,8 @@ lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format tests --check
 	.venv/bin/ruff check scripts
 	.venv/bin/ruff format scripts --check
-	.venv/bin/ruff check setup.py
-	.venv/bin/ruff format setup.py --check
+	.venv/bin/ruff check hatch_build.py
+	.venv/bin/ruff format hatch_build.py --check
 	.venv/bin/pyright connectors
 	.venv/bin/pyright tests
 
@@ -82,8 +77,8 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format tests
 	.venv/bin/ruff check scripts --fix
 	.venv/bin/ruff format scripts
-	.venv/bin/ruff check setup.py --fix
-	.venv/bin/ruff format setup.py
+	.venv/bin/ruff check hatch_build.py --fix
+	.venv/bin/ruff format hatch_build.py
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
@@ -98,6 +93,10 @@ ftrace: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
 	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
+	.venv/bin/elastic-ingest
+
+dev: install
+	.venv/bin/pip install --editable .
 	.venv/bin/elastic-ingest
 
 default-config: install
@@ -134,8 +133,8 @@ agent-docker-run:
 agent-docker-all: agent-docker-build agent-docker-run
 ## End Agent Docker Zone
 
-sdist: .venv/bin/python
-	.venv/bin/python setup.py sdist --formats=zip
+sdist: .venv/bin/hatch
+	.venv/bin/hatch build
 
 deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist
