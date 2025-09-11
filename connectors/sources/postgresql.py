@@ -393,6 +393,7 @@ class PostgreSQLDataSource(BaseDataSource):
     name = "PostgreSQL"
     service_type = "postgresql"
     advanced_rules_enabled = True
+    incremental_sync_enabled = True
 
     def __init__(self, configuration):
         """Setup connection to the PostgreSQL database-server configured by user
@@ -403,6 +404,9 @@ class PostgreSQLDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.database = self.configuration["database"]
         self.schema = self.configuration["schema"]
+        # Initialize incremental sync interval with default value
+        # Value will be updated by set_service_config() if available
+        self._incremental_sync_interval_seconds = 120  # 2 minutes default
         self.postgresql_client = PostgreSQLClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
@@ -421,6 +425,21 @@ class PostgreSQLDataSource(BaseDataSource):
     def _set_internal_logger(self):
         self.postgresql_client.set_logger(self._logger)
 
+    def set_service_config(self, service_config):
+        """Configure service parameters for the connector.
+        
+        Args:
+            service_config (dict): Service configuration
+        """
+        self._service_config = service_config
+
+        self._incremental_sync_interval_seconds = service_config.get(
+            'incremental_sync_interval_seconds', 120
+        )
+        self._logger.debug(
+            f"Incremental sync interval set to {self._incremental_sync_interval_seconds} seconds"
+        )
+        
     @classmethod
     def get_default_configuration(cls):
         return {
@@ -556,22 +575,31 @@ class PostgreSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for table '{table}'. Error: {exception}"
             )
 
-    async def fetch_documents_from_query(self, tables, query, id_columns):
+    async def fetch_documents_from_query(self, tables, query, id_columns, is_incremental=False):
         """Fetches all the data from the given query and format them in Elasticsearch documents
 
         Args:
             tables (str): List of tables
             query (str): Database Query
+            id_columns (list): List of ID columns
+            is_incremental (bool): Whether this is an incremental sync
 
         Yields:
             Dict: Document to be indexed
         """
+        
+        final_query = query
+        
+        if is_incremental:
+            final_query = self._add_incremental_condition(query)    
+        
         self._logger.info(
-            f"Fetching records for {tables} tables using custom query: {query}"
+            f"Fetching records for {tables} tables using custom query: {final_query}"
         )
+
         try:
             docs_generator = self._yield_docs_custom_query(
-                tables=tables, query=query, id_columns=id_columns
+                tables=tables, query=final_query, id_columns=id_columns, is_incremental=is_incremental
             )
             async for doc in docs_generator:
                 yield doc
@@ -580,7 +608,8 @@ class PostgreSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for query '{query}' and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query, id_columns):
+    async def _yield_docs_custom_query(self, tables, query, id_columns, is_incremental=False):
+        
         primary_key_columns, _ = await self.get_primary_key(tables=tables)
 
         if id_columns:
@@ -592,21 +621,6 @@ class PostgreSQLDataSource(BaseDataSource):
             )
             return
 
-        last_update_times = []
-        for table in tables:
-            try:
-                last_update_time = (
-                    await self.postgresql_client.get_table_last_update_time(table)
-                )
-                last_update_times.append(last_update_time)
-            except Exception:
-                self._logger.warning("Last update time is not found for Table: {table}")
-                last_update_times.append(iso_utc())
-
-        last_update_time = (
-            max(last_update_times) if len(last_update_times) else iso_utc()
-        )
-
         async for row in self.yield_rows_for_query(
             primary_key_columns=primary_key_columns, tables=tables, query=query
         ):
@@ -617,51 +631,33 @@ class PostgreSQLDataSource(BaseDataSource):
                     row=row,
                     doc_id=doc_id,
                     table=tables,
-                    timestamp=last_update_time or iso_utc(),
+                    timestamp=iso_utc(),
                 )
             )
 
     async def _yield_all_docs_from_tables(self, table):
-        row_count = await self.postgresql_client.get_table_row_count(table=table)
-        if row_count > 0:
-            # Query to get the table's primary key
-            self._logger.debug(f"Total '{row_count}' rows found in table '{table}'")
-            keys, order_by_columns = await self.get_primary_key(tables=[table])
-            if keys:
-                try:
-                    last_update_time = (
-                        await self.postgresql_client.get_table_last_update_time(
-                            table=table
-                        )
+        keys, order_by_columns = await self.get_primary_key(tables=[table])
+        if keys:
+            async for row in self.yield_rows_for_query(
+                primary_key_columns=keys,
+                tables=[table],
+                order_by_columns=order_by_columns,
+            ):
+                doc_id = (
+                    f"{self.database}_{self.schema}_{hash_id([table], row, keys)}"
+                )
+                yield self.serialize(
+                    doc=self.row2doc(
+                        row=row,
+                        doc_id=doc_id,
+                        table=table,
+                        timestamp=iso_utc(),
                     )
-                except Exception:
-                    self._logger.warning(
-                        f"Unable to fetch last_updated_time for table  '{table}'"
-                    )
-                    last_update_time = None
-                async for row in self.yield_rows_for_query(
-                    primary_key_columns=keys,
-                    tables=[table],
-                    row_count=row_count,
-                    order_by_columns=order_by_columns,
-                ):
-                    doc_id = (
-                        f"{self.database}_{self.schema}_{hash_id([table], row, keys)}"
-                    )
-                    yield self.serialize(
-                        doc=self.row2doc(
-                            row=row,
-                            doc_id=doc_id,
-                            table=table,
-                            timestamp=last_update_time or iso_utc(),
-                        )
-                    )
-            else:
-                self._logger.warning(
-                    f"Skipping table '{table}' from database '{self.database}' since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
                 )
         else:
-            self._logger.warning(f"No rows found for table '{table}'")
+            self._logger.warning(
+                f"Skipping table '{table}' from database '{self.database}' since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+            )
 
     async def yield_rows_for_query(
         self,
@@ -713,7 +709,7 @@ class PostgreSQLDataSource(BaseDataSource):
                         for column in id_columns
                     ]
                 async for row in self.fetch_documents_from_query(
-                    tables=tables, query=query, id_columns=id_columns
+                    tables=tables, query=query, id_columns=id_columns, is_incremental=False
                 ):
                     yield row, None
 
@@ -731,3 +727,152 @@ class PostgreSQLDataSource(BaseDataSource):
                 self._logger.warning(
                     f"Fetched 0 tables for schema: {self.schema} and database: {self.database}"
                 )
+
+    def _add_incremental_condition(self, query):
+        """Add the incremental condition to a SQL query.
+        
+        Args:
+            query (str): The original SQL query
+            
+        Returns:
+            str: The modified query with the incremental condition
+        """
+        if not query:
+            return query
+            
+        # Clean the query by removing the semicolons at the end
+        cleaned_query = query.rstrip(';').strip()
+        
+        # Get the configured interval
+        interval_seconds = self._incremental_sync_interval_seconds
+        
+        # Check if the query contains a WHERE clause
+        query_upper = cleaned_query.upper()
+        if "WHERE" in query_upper:
+            # Add the condition with AND
+            return f"{cleaned_query} AND updated_at >= NOW() - INTERVAL '{interval_seconds} seconds'"
+        else:
+            # Add a new WHERE clause
+            return f"{cleaned_query} WHERE updated_at >= NOW() - INTERVAL '{interval_seconds} seconds'"
+
+    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+        """Executes the logic to fetch databases, tables and rows incrementally in async manner.
+
+        Args:
+            sync_cursor (dict): The sync cursor containing the last sync timestamp.
+            filtering (optional): Advanced filtering rules. Defaults to None.
+
+        Yields:
+            tuple: (document, lazy_download, operation) where operation is 'index' for incremental sync.
+        """
+        self._logger.info("Successfully connected to Postgresql for incremental sync.")
+        
+        if filtering and filtering.has_advanced_rules():
+            advanced_rules = filtering.get_advanced_rules()
+            self._logger.info(
+                f"Fetching records from the database using advanced sync rules (incremental): {advanced_rules}"
+            )
+            for rule in advanced_rules:
+                query = rule.get("query")
+                tables = rule.get("tables")
+                id_columns = rule.get("id_columns")
+                
+                
+                if id_columns:
+                    id_columns = [
+                        f"{self.schema}_{'_'.join(sorted(tables))}_{column}"
+                        for column in id_columns
+                    ]
+                
+                # Pass is_incremental=True to automatically add the incremental condition
+                async for row in self.fetch_documents_from_query(
+                    tables=tables, query=query, id_columns=id_columns, is_incremental=True
+                ):
+                    yield row, None, "index"
+        else:
+            table_count = 0
+            async for table in self.postgresql_client.get_tables_to_fetch():
+                table_count += 1
+                async for row in self.fetch_documents_from_table_incremental(
+                    table=table,
+                ):
+                    yield row, None, "index"
+
+            if table_count < 1:
+                self._logger.warning(
+                    f"Fetched 0 tables for schema: {self.schema} and database: {self.database}"
+                )
+
+    async def fetch_documents_from_table_incremental(self, table):
+        """Fetches table entries incrementally and format them in Elasticsearch documents
+
+        Args:
+            table (str): Name of table
+
+        Yields:
+            Dict: Document to be indexed
+        """
+        self._logger.info(f"Fetching records incrementally for table '{table}'")
+        try:
+            docs_generator = self._yield_all_docs_from_tables_incremental(table=table)
+            async for doc in docs_generator:
+                yield doc
+        except (InternalClientError, ProgrammingError) as exception:
+            self._logger.warning(
+                f"Something went wrong while fetching document for table '{table}' (incremental). Error: {exception}"
+            )
+
+    async def _yield_all_docs_from_tables_incremental(self, table):
+        """Yields documents from a table with incremental filtering based on updated_at timestamp."""
+        keys, order_by_columns = await self.get_primary_key(tables=[table])
+        if keys:
+            async for row in self.yield_rows_for_query_incremental(
+                primary_key_columns=keys,
+                tables=[table],
+                order_by_columns=order_by_columns,
+            ):
+                doc_id = (
+                    f"{self.database}_{self.schema}_{hash_id([table], row, keys)}"
+                )
+                yield self.serialize(
+                    doc=self.row2doc(
+                        row=row,
+                        doc_id=doc_id,
+                        table=table,
+                        timestamp=iso_utc(),
+                    )
+                )
+        else:
+            self._logger.warning(
+                f"Skipping table '{table}' from database '{self.database}' since no primary key is associated with it. Assign primary key to the table to index it in the next sync interval."
+            )
+
+    async def yield_rows_for_query_incremental(
+        self,
+        primary_key_columns,
+        tables,
+        row_count=None,
+        order_by_columns=None,
+    ):
+        """Yields rows from a query with incremental filtering for table-based queries."""
+        # Get the configured interval
+        interval_seconds = self._incremental_sync_interval_seconds
+        
+        # Build the query with the incremental condition
+        order_by_clause = ",".join([f'"{column}"' for column in order_by_columns])
+        incremental_query = f'SELECT * FROM "{self.schema}"."{tables[0]}" WHERE updated_at >= NOW() - INTERVAL \'{interval_seconds} seconds\' ORDER BY {order_by_clause} LIMIT {FETCH_LIMIT}'
+        
+        streamer = self.postgresql_client.data_streamer(query=incremental_query)
+        column_names = await anext(streamer)
+        column_names = map_column_names(
+            column_names=column_names, schema=self.schema, tables=tables
+        )
+
+        if not set(primary_key_columns) - set(column_names):
+            async for row in streamer:
+                row = dict(zip(column_names, row, strict=True))
+                yield row
+        else:
+            self._logger.warning(
+                f"Skipping incremental query for table {tables[0]} as primary key column is not present in query."
+            )
