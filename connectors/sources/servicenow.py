@@ -71,6 +71,7 @@ DEFAULT_SERVICE_NAMES = {
     ],
     "incident": ["admin", "sn_incident_read", "ml_report_user", "ml_admin", "itil"],
     "kb_knowledge": ["admin", "knowledge", "knowledge_manager", "knowledge_admin"],
+    "sc_cat_item": ["admin", "catalog_admin", "catalog"],
     "change_request": ["admin", "sn_change_read", "itil"],
 }
 ACLS_QUERY = "sys_security_acl.operation=read^sys_security_acl.name={table_name}"
@@ -169,7 +170,7 @@ class ServiceNowClient:
             raise InvalidResponse(msg)
 
         # Check for extremely large responses that might be truncated
-        if len(fetched_response) > 10 * 1024 * 1024:  # 100MB limit
+        if len(fetched_response) > 10 * 1024 * 1024:  # 10MB limit
             msg = f"Response too large ({len(fetched_response)} bytes), may be truncated"
             self._logger.warning(msg)
 
