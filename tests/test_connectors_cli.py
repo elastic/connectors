@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yaml
 from click.testing import CliRunner
+from commons import AsyncIterator
 from elasticsearch import ApiError
 
 from connectors import __version__  # NOQA
@@ -18,7 +19,6 @@ from connectors.connectors_cli import cli, login
 from connectors.protocol.connectors import Connector as ConnectorObject
 from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
-from commons import AsyncIterator
 
 
 @pytest.fixture(autouse=True)

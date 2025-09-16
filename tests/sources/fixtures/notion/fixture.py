@@ -8,9 +8,8 @@
 
 import os
 
-from flask import Flask, request
-
 from commons import WeightedFakeProvider
+from flask import Flask, request
 
 app = Flask(__name__)
 

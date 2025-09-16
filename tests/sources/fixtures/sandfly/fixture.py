@@ -9,9 +9,8 @@
 import os
 from datetime import datetime, timedelta
 
-from flask import Flask
-
 from commons import WeightedFakeProvider
+from flask import Flask
 
 fake_provider = WeightedFakeProvider()
 

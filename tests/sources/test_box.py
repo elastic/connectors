@@ -11,11 +11,11 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
+from commons import AsyncIterator
+from sources.support import create_source
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.box import FINISHED, BoxDataSource, NotFound, TokenError
-from commons import AsyncIterator
-from sources.support import create_source
 
 MOCK_RESPONSE = {
     "total_count": 2,

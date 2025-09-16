@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import pytest_asyncio
+from commons import AsyncIterator
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.google import (
@@ -17,7 +18,6 @@ from connectors.sources.google import (
     remove_universe_domain,
     validate_service_account_json,
 )
-from commons import AsyncIterator
 
 JSON_CREDENTIALS = {"key": "value"}
 CUSTOMER_ID = "customer_id"

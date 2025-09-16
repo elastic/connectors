@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aioresponses import CallbackResult
+from sources.support import create_source
 
 from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
@@ -33,7 +34,6 @@ from connectors.sources.salesforce import (
     _prefix_user,
     _prefix_user_id,
 )
-from sources.support import create_source
 
 TEST_DOMAIN = "fake"
 CONTENT_VERSION_ID = "content_version_id"

@@ -8,7 +8,6 @@ import os
 import random
 
 import redis.asyncio as redis
-
 from commons import WeightedFakeProvider
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()

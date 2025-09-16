@@ -13,13 +13,13 @@ from uuid import UUID
 import pytest
 from bson import Binary, DBRef, ObjectId
 from bson.decimal128 import Decimal128
+from commons import AsyncIterator
 from pymongo.errors import OperationFailure
+from sources.support import create_source
 
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
-from commons import AsyncIterator
-from sources.support import create_source
 
 DEFAULT_DATABASE = "db"
 DEFAULT_COLLECTION = "col"

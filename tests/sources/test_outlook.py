@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import StreamReader
+from commons import AsyncIterator
+from sources.support import create_source
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.outlook import (
@@ -22,8 +24,6 @@ from connectors.sources.outlook import (
     UnauthorizedException,
     UsersFetchFailed,
 )
-from commons import AsyncIterator
-from sources.support import create_source
 
 RESPONSE_CONTENT = bytes("# This is the dummy file", "utf-8")
 EXPECTED_CONTENT = {

@@ -10,11 +10,10 @@ import random
 import string
 import time
 
+from commons import WeightedFakeProvider
 from flask import Flask, escape, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
-
-from commons import WeightedFakeProvider
 
 seed = 1597463007
 

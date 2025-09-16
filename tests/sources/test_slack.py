@@ -10,11 +10,11 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientError
+from commons import AsyncIterator
+from sources.support import create_source
 
 from connectors.logger import logger
 from connectors.sources.slack import SlackClient, SlackDataSource
-from commons import AsyncIterator
-from sources.support import create_source
 
 configuration = {
     "token": "fake_token",

@@ -18,7 +18,9 @@ from aiohttp.client_exceptions import (
     ServerDisconnectedError,
     ServerTimeoutError,
 )
+from commons import AsyncIterator
 from freezegun import freeze_time
+from sources.support import create_source
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
@@ -32,8 +34,6 @@ from connectors.sources.dropbox import (
     InvalidPathException,
     InvalidRefreshTokenException,
 )
-from commons import AsyncIterator
-from sources.support import create_source
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"

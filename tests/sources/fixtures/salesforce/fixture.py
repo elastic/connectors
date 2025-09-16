@@ -11,9 +11,8 @@ import os
 import random
 import re
 
-from flask import Flask, request
-
 from commons import WeightedFakeProvider
+from flask import Flask, request
 
 fake_provider = WeightedFakeProvider(weights=[0.6, 0.2, 0.15, 0.05])
 fake = fake_provider.fake

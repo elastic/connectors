@@ -12,12 +12,12 @@ import aioboto3
 import aiofiles
 import pytest
 from botocore.exceptions import ClientError
+from sources.support import create_source
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
-from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 

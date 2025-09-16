@@ -9,9 +9,8 @@
 import io
 import os
 
-from flask import Flask, request
-
 from commons import WeightedFakeProvider
+from flask import Flask, request
 
 fake_provider = WeightedFakeProvider()
 

@@ -11,6 +11,7 @@ from unittest.mock import ANY, Mock, patch
 
 import pytest
 from freezegun import freeze_time
+from sources.support import create_source
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio.engine import AsyncEngine
 
@@ -23,7 +24,6 @@ from connectors.sources.postgresql import (
     PostgreSQLQueries,
 )
 from connectors.utils import iso_utc
-from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 POSTGRESQL_CONNECTION_STRING = (

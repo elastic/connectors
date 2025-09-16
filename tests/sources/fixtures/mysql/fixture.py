@@ -7,9 +7,8 @@
 import os
 import random
 
-from mysql.connector import connect
-
 from commons import WeightedFakeProvider
+from mysql.connector import connect
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 

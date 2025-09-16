@@ -9,7 +9,9 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
 import pytest
+from commons import AsyncIterator
 from freezegun import freeze_time
+from sources.support import create_source
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.logger import logger
@@ -23,8 +25,6 @@ from connectors.sources.mysql import (
     row2doc,
 )
 from connectors.utils import iso_utc
-from commons import AsyncIterator
-from sources.support import create_source
 
 
 def immutable_doc(**kwargs):

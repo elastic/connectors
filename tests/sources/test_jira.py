@@ -15,7 +15,9 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
+from commons import AsyncIterator
 from freezegun import freeze_time
+from sources.support import create_source
 
 from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
@@ -32,8 +34,6 @@ from connectors.sources.jira import (
     NotFound,
 )
 from connectors.utils import ssl_context
-from commons import AsyncIterator
-from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 

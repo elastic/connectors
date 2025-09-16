@@ -9,9 +9,8 @@
 import base64
 import os
 
-from flask import Flask, make_response, request
-
 from commons import WeightedFakeProvider
+from flask import Flask, make_response, request
 
 fake_provider = WeightedFakeProvider()
 

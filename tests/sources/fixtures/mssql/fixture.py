@@ -9,9 +9,8 @@ import os
 import random
 
 import pytds
-from faker import Faker
-
 from commons import WeightedFakeProvider
+from faker import Faker
 
 fake_provider = WeightedFakeProvider()
 

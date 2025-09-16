@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientResponseError
+from sources.support import create_source
 
 from connectors.logger import logger
 from connectors.source import (
@@ -26,7 +27,6 @@ from connectors.sources.sandfly import (
     extract_sandfly_date,
     format_sandfly_date,
 )
-from sources.support import create_source
 
 SANDFLY_SERVER_URL = "https://blackbird.sandflysecurity.com/v4"
 URL_SANDFLY_LOGIN = SANDFLY_SERVER_URL + "/auth/login"

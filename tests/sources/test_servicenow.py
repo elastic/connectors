@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from aiohttp.client_exceptions import ServerDisconnectedError
+from commons import AsyncIterator
+from sources.support import create_source
 
 from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -22,8 +24,6 @@ from connectors.sources.servicenow import (
     ServiceNowClient,
     ServiceNowDataSource,
 )
-from commons import AsyncIterator
-from sources.support import create_source
 
 SAMPLE_RESPONSE = b'{"batch_request_id":"1","serviced_requests":[{"id":"1", "body":"eyJyZXN1bHQiOlt7Im5hbWUiOiJzbl9zbV9qb3VybmFsMDAwMiIsImxhYmVsIjoiU2VjcmV0cyBNYW5hZ2VtZW50IEpvdXJuYWwifV19","status_code":200,"status_text":"OK","execution_time":19}],"unserviced_requests":[]}'
 ADVANCED_SNIPPET = "advanced_snippet"

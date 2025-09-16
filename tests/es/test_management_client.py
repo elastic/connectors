@@ -9,12 +9,12 @@ from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
+from commons import AsyncIterator
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
 
 from connectors.es.management_client import ESManagementClient
-from commons import AsyncIterator
 
 
 class TestESManagementClient:

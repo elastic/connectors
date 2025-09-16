@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
+from commons import AsyncIterator
 from elasticsearch import ApiError, ConflictError, NotFoundError
 
 from connectors.config import load_config
@@ -42,7 +43,6 @@ from connectors.protocol import (
 from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
-from commons import AsyncIterator
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))

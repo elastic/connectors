@@ -8,7 +8,9 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from commons import AsyncIterator
 from elasticsearch import ConflictError
+from services.test_base import create_and_run_service
 
 from connectors.es.client import License
 from connectors.es.index import DocumentNotFoundError
@@ -22,8 +24,6 @@ from connectors.protocol import (
 )
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from commons import AsyncIterator
-from services.test_base import create_and_run_service
 
 JOB_TYPES = [JobType.FULL, JobType.ACCESS_CONTROL]
 

@@ -9,9 +9,8 @@
 import os
 import time
 
-from flask import Flask, request
-
 from commons import WeightedFakeProvider
+from flask import Flask, request
 
 fake_provider = WeightedFakeProvider()
 

@@ -10,7 +10,9 @@ from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 import redis
+from commons import AsyncIterator
 from freezegun import freeze_time
+from sources.support import create_source
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
@@ -19,8 +21,6 @@ from connectors.sources.redis import (
     RedisAdvancedRulesValidator,
     RedisDataSource,
 )
-from commons import AsyncIterator
-from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 

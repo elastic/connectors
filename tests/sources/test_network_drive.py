@@ -13,12 +13,14 @@ from unittest.mock import ANY, MagicMock
 
 import pytest
 import smbclient
+from commons import AsyncIterator
 from smbprotocol.exceptions import (
     SMBConnectionClosed,
     SMBOSError,
     SMBResponseException,
     Unsuccessful,
 )
+from sources.support import create_source
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -35,8 +37,6 @@ from connectors.sources.network_drive import (
     SMBSession,
     UserAccountDisabledException,
 )
-from commons import AsyncIterator
-from sources.support import create_source
 
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536

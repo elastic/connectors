@@ -15,6 +15,8 @@ import pytest
 from aiogoogle import Aiogoogle, HTTPError
 from aiogoogle.auth.managers import ServiceAccountManager
 from aiogoogle.models import Request, Response
+from commons import AsyncIterator
+from sources.support import create_source
 
 from connectors.access_control import DLS_QUERY
 from connectors.source import (
@@ -28,8 +30,6 @@ from connectors.sources.google_drive import (
     GoogleDriveDataSource,
     SyncCursorEmpty,
 )
-from commons import AsyncIterator
-from sources.support import create_source
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 
