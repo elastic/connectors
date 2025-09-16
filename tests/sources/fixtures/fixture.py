@@ -9,6 +9,7 @@ import asyncio
 import functools
 import importlib
 import importlib.util
+import json
 import logging
 import os
 import pprint
@@ -167,11 +168,20 @@ async def _monitor_service(pid):
 
 async def _exec_shell(cmd):
     # Create subprocess
-    proc = await asyncio.create_subprocess_shell(cmd)
+    proc = await asyncio.create_subprocess_shell(
+        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
 
     logger.debug(f"Executing cmd: {cmd}")
-    await proc.wait()
-    logger.debug(f"Successfully executed cmd: {cmd}")
+    stdout, stderr = await proc.communicate()
+    logger.debug(f"{cmd} returned code {proc.returncode}")
+
+    if stdout:
+        logger.debug(f"[stdout]\n{stdout.decode()}")
+    if stderr:
+        logger.error(f"[stderr]\n{stderr.decode()}")
+
+    return stdout.decode() if stdout else "", stderr.decode() if stderr else ""
 
 
 async def main(args=None):
@@ -205,7 +215,26 @@ async def main(args=None):
     if hasattr(module, args.action):
         func = getattr(module, args.action)
         if args.action in ("setup", "load", "teardown", "remove", "wait"):
-            return await func()
+            try:
+                return await func()
+            except Exception as ex:
+                logger.critical(f"Test suite failed: {ex}")
+                docker_ps_table_stdout, _ = await _exec_shell("docker ps")
+                logger.info(docker_ps_table_stdout)
+                docker_ps_json_stdout, _ = await _exec_shell("docker ps --format json")
+                for line in filter(None, docker_ps_json_stdout.split("\n")):
+                    json_container_info = json.loads(line)
+                    container_id = json_container_info["ID"]
+                    container_image = json_container_info["Image"]
+
+                    last_logs_stdout, _ = await _exec_shell(
+                        f"docker logs -n 20 {container_id}"
+                    )
+                    logger.info(
+                        f"Outputting last 20 log lines for container image {container_image}"
+                    )
+                    logger.info(last_logs_stdout)
+                raise
         return func()
     else:
         if action == "get_num_docs":
