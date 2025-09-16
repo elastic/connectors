@@ -1880,7 +1880,7 @@ SOFTWARE.
 
 
 azure-core
-1.35.0
+1.35.1
 MIT License
 Copyright (c) Microsoft Corporation.
 
@@ -3617,6 +3617,11 @@ these terms.
 
 **trademark** means trademarks, service marks, and similar rights.
 
+
+elasticsearch-connectors
+9.2.0
+Apache Software License
+UNKNOWN
 
 envyaml
 1.10.211231
@@ -6486,7 +6491,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 pycparser
-2.22
+2.23
 BSD License
 pycparser -- A C parser in Python
 
@@ -8410,7 +8415,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 xmltodict
-0.15.0
+1.0.0
 MIT License
 Copyright (C) 2012 Martin Blech and individual contributors.
 
