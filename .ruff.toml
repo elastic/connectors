@@ -21,7 +21,6 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 [lint.per-file-ignores]
 "connectors/*" = ["S608"]
 "scripts/verify.py" = [ "EM" ]
-"setup.py" = [ "EM" ]
 "tests/*" = ["B017", "S101", "S", "ASYNC110"]
 "tests/conftest.py" = [ "EM" ]
 

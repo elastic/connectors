@@ -5,8 +5,6 @@
 #
 import logging
 
-import connectors.agent.logger
-import connectors.logger
 from connectors.agent.logger import get_logger
 from connectors.services.base import (
     ServiceAlreadyRunningError,
@@ -68,9 +66,9 @@ class ConnectorServiceManager:
                     log_level = config.get("service", {}).get(
                         "log_level", logging.INFO
                     )  # Log Level for connectors is managed like this
-                    connectors.logger.set_logger(log_level, filebeat=True)
+                    src.connectors.logger.set_logger(log_level, filebeat=True)
                     # Log Level for agent connectors component itself
-                    connectors.agent.logger.update_logger_level(log_level)
+                    src.connectors.agent.logger.update_logger_level(log_level)
 
                     await self._multi_service.run()
                 except Exception as e:

@@ -32,7 +32,6 @@ config.yml:
 .venv/bin/python: | config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install setuptools==79.0.1
 
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
@@ -48,7 +47,7 @@ install-agent: .venv/bin/elastic-ingest
 .venv/bin/elastic-ingest: .venv/bin/python requirements/framework.txt requirements/$(ARCH).txt requirements/agent.txt
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/python setup.py develop
+	.venv/bin/pip install -e .
 
 .venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
@@ -70,8 +69,6 @@ lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format tests --check
 	.venv/bin/ruff check scripts
 	.venv/bin/ruff format scripts --check
-	.venv/bin/ruff check setup.py
-	.venv/bin/ruff format setup.py --check
 	.venv/bin/pyright connectors
 	.venv/bin/pyright tests
 
@@ -82,8 +79,6 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format tests
 	.venv/bin/ruff check scripts --fix
 	.venv/bin/ruff format scripts
-	.venv/bin/ruff check setup.py --fix
-	.venv/bin/ruff format setup.py
 
 test: .venv/bin/pytest .venv/bin/elastic-ingest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
@@ -135,7 +130,8 @@ agent-docker-all: agent-docker-build agent-docker-run
 ## End Agent Docker Zone
 
 sdist: .venv/bin/python
-	.venv/bin/python setup.py sdist --formats=zip
+	.venv/bin/python -m pip install build
+	.venv/bin/python -m build --sdist
 
 deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist

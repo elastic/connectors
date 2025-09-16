@@ -38,7 +38,7 @@ Alternatively, if you do not wish to use a different set of credentials, or an A
 copy of the default [config.yml.example](../../config.yml.example) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
 
 By default, these Connector scripts will use a `SNAPSHOT` version of the Docker image.
-The version is defined in the [VERSION file](../../connectors/VERSION).
+The version is defined in the [VERSION file](../../VERSION).
 If you do not wish to use a `SNAPSHOT` version, add the `--no-snapshot` flag when you run the script.
 You can also specify an alternative base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
 
@@ -66,7 +66,7 @@ docker-compose -f ./scripts/stack/docker/docker-compose.yml logs -f elastic-conn
 If you run the `run-stack.sh` command without any flags, by default the script will
 ask if you want to set up the connectors configuration. If you enter "y" to run
 the configurator, it will take you through a set of prompts using the
-[Connectors CLI](../../connectors/connectors_cli.py) to create a new index and connector.
+[Connectors CLI](../../src/connectors/connectors_cli.py) to create a new index and connector.
 
 The resulting configuration will be saved to the `scripts/stack/connectors-config/config.yml`
 file that is used to start the Connectors container. Note that using the configurator,

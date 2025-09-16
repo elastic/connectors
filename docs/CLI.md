@@ -86,7 +86,7 @@ Examples:
 This will create a new SharePoint Online connector with an Elasticsearch index `my-index` and configuration from `sharepoint-online-config.json`.
 
 **Note**
-See the connectors' [source code](../connectors/sources) to get more information about their configuration fields.
+See the connectors' [source code](../src/connectors/sources) to get more information about their configuration fields.
 
 #### `connectors connector list`
 
