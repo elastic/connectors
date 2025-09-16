@@ -12,8 +12,8 @@ import pytest
 from sqlalchemy.engine import Engine
 
 from connectors.sources.oracle import OracleClient, OracleDataSource, OracleQueries
-from tests.sources.support import create_source
-from tests.sources.test_generic_database import ConnectionSync
+from sources.support import create_source
+from sources.test_generic_database import ConnectionSync
 
 DSN_SID = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
 DSN_SERVICE_NAME = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(service_name=xe)))"

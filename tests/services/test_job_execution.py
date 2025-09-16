@@ -17,8 +17,8 @@ from connectors.services.access_control_sync_job_execution import (
 from connectors.services.content_sync_job_execution import (
     ContentSyncJobExecutionService,
 )
-from tests.commons import AsyncIterator
-from tests.services.test_base import create_and_run_service
+from commons import AsyncIterator
+from services.test_base import create_and_run_service
 
 
 @pytest.fixture(autouse=True)

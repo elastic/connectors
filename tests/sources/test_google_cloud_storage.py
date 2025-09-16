@@ -17,7 +17,7 @@ from aiogoogle.models import Request, Response
 
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
-from tests.sources.support import create_source
+from sources.support import create_source
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 API_NAME = "storage"

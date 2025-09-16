@@ -15,8 +15,8 @@ from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 
 @asynccontextmanager

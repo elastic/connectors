@@ -14,8 +14,8 @@ from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.box import FINISHED, BoxDataSource, NotFound, TokenError
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 MOCK_RESPONSE = {
     "total_count": 2,

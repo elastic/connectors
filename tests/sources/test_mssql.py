@@ -19,8 +19,8 @@ from connectors.sources.mssql import (
     MSSQLDataSource,
     MSSQLQueries,
 )
-from tests.sources.support import create_source
-from tests.sources.test_generic_database import ConnectionSync
+from sources.support import create_source
+from sources.test_generic_database import ConnectionSync
 
 ADVANCED_SNIPPET = "advanced_snippet"
 

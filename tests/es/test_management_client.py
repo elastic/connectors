@@ -14,7 +14,7 @@ from elasticsearch import (
 )
 
 from connectors.es.management_client import ESManagementClient
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 
 class TestESManagementClient:

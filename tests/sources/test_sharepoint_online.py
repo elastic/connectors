@@ -50,8 +50,8 @@ from connectors.sources.sharepoint_online import (
     _prefix_user_id,
 )
 from connectors.utils import iso_utc
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 SITE_LIST_ONE_NAME = "site-list-one-name"
 

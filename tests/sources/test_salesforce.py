@@ -33,7 +33,7 @@ from connectors.sources.salesforce import (
     _prefix_user,
     _prefix_user_id,
 )
-from tests.sources.support import create_source
+from sources.support import create_source
 
 TEST_DOMAIN = "fake"
 CONTENT_VERSION_ID = "content_version_id"

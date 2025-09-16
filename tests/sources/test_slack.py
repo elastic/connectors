@@ -13,8 +13,8 @@ from aiohttp.client_exceptions import ClientError
 
 from connectors.logger import logger
 from connectors.sources.slack import SlackClient, SlackDataSource
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 configuration = {
     "token": "fake_token",

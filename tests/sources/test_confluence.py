@@ -34,8 +34,8 @@ from connectors.sources.confluence import (
     Unauthorized,
 )
 from connectors.utils import ssl_context
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 HOST_URL = "http://127.0.0.1:9696"

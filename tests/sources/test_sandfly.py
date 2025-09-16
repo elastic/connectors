@@ -26,7 +26,7 @@ from connectors.sources.sandfly import (
     extract_sandfly_date,
     format_sandfly_date,
 )
-from tests.sources.support import create_source
+from sources.support import create_source
 
 SANDFLY_SERVER_URL = "https://blackbird.sandflysecurity.com/v4"
 URL_SANDFLY_LOGIN = SANDFLY_SERVER_URL + "/auth/login"

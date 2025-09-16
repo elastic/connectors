@@ -42,7 +42,7 @@ from connectors.protocol import (
 from connectors.protocol.connectors import ProtocolError
 from connectors.source import BaseDataSource
 from connectors.utils import ACCESS_CONTROL_INDEX_PREFIX, iso_utc
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))

@@ -32,8 +32,8 @@ from connectors.sources.dropbox import (
     InvalidPathException,
     InvalidRefreshTokenException,
 )
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"

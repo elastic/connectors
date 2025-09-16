@@ -19,8 +19,8 @@ from connectors.sources.notion import (
     NotionClient,
     NotionDataSource,
 )
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 DATABASE = {

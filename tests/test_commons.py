@@ -5,7 +5,7 @@
 #
 import pytest
 
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 
 @pytest.mark.asyncio

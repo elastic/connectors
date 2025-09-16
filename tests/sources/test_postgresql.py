@@ -23,7 +23,7 @@ from connectors.sources.postgresql import (
     PostgreSQLQueries,
 )
 from connectors.utils import iso_utc
-from tests.sources.support import create_source
+from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 POSTGRESQL_CONNECTION_STRING = (

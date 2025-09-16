@@ -17,7 +17,7 @@ from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
-from tests.sources.support import create_source
+from sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 

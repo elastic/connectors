@@ -22,8 +22,8 @@ from connectors.sources.outlook import (
     UnauthorizedException,
     UsersFetchFailed,
 )
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 RESPONSE_CONTENT = bytes("# This is the dummy file", "utf-8")
 EXPECTED_CONTENT = {

@@ -10,7 +10,7 @@ import os
 
 from flask import Flask, request
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 app = Flask(__name__)
 

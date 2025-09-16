@@ -16,8 +16,8 @@ from graphql import parse
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.graphql import GraphQLDataSource, UnauthorizedException
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 
 class JSONAsyncMock(AsyncMock):

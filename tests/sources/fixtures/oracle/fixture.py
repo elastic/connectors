@@ -11,7 +11,7 @@ import random
 
 import oracledb
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 

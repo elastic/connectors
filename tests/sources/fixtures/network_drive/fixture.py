@@ -10,7 +10,7 @@ import os
 
 import smbclient
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

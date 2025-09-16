@@ -22,8 +22,8 @@ from connectors.sources.gmail import (
 )
 from connectors.sources.google import MessageFields, UserFields
 from connectors.utils import iso_utc
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 TIME = "2023-01-24T04:07:19"
 

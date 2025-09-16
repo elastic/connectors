@@ -11,7 +11,7 @@ import random
 import pytds
 from faker import Faker
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

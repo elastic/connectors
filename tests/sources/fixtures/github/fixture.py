@@ -11,7 +11,7 @@ import os
 
 from flask import Flask, make_response, request
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

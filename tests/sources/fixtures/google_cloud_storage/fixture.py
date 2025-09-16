@@ -11,7 +11,7 @@ import os
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import storage
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 client_connection = None
 HERE = os.path.dirname(__file__)

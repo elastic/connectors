@@ -23,8 +23,8 @@ from connectors.sources.mysql import (
     row2doc,
 )
 from connectors.utils import iso_utc
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 
 def immutable_doc(**kwargs):

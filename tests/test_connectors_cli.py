@@ -18,7 +18,7 @@ from connectors.connectors_cli import cli, login
 from connectors.protocol.connectors import Connector as ConnectorObject
 from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 
 @pytest.fixture(autouse=True)

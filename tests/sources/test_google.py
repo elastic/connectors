@@ -17,7 +17,7 @@ from connectors.sources.google import (
     remove_universe_domain,
     validate_service_account_json,
 )
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 JSON_CREDENTIALS = {"key": "value"}
 CUSTOMER_ID = "customer_id"

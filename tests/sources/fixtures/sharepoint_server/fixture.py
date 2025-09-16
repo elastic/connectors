@@ -13,7 +13,7 @@ from flask import Flask, request
 from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

@@ -21,7 +21,7 @@ from connectors.sync_job_runner import (
     SyncJobRunner,
     SyncJobStartError,
 )
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 SEARCH_INDEX_NAME = "search-mysql"
 ACCESS_CONTROL_INDEX_NAME = ".search-acl-filter-search-mysql"

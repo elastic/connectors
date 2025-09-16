@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from flask import Flask
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

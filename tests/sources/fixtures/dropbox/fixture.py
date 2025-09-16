@@ -12,7 +12,7 @@ import os
 
 from flask import Flask, jsonify, make_response, request
 
-from tests.commons import WeightedFakeProvider
+from commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

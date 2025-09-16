@@ -28,8 +28,8 @@ from connectors.sources.google_drive import (
     GoogleDriveDataSource,
     SyncCursorEmpty,
 )
-from tests.commons import AsyncIterator
-from tests.sources.support import create_source
+from commons import AsyncIterator
+from sources.support import create_source
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 

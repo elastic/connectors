@@ -22,8 +22,8 @@ from connectors.protocol import (
 )
 from connectors.services.job_scheduling import JobSchedulingService
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
-from tests.commons import AsyncIterator
-from tests.services.test_base import create_and_run_service
+from commons import AsyncIterator
+from services.test_base import create_and_run_service
 
 JOB_TYPES = [JobType.FULL, JobType.ACCESS_CONTROL]
 

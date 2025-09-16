@@ -41,7 +41,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.utils import ErrorMonitor, TooManyErrors
-from tests.commons import AsyncIterator
+from commons import AsyncIterator
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)

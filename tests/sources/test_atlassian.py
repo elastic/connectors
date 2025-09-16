@@ -18,7 +18,7 @@ from connectors.sources.atlassian import (
     AtlassianAdvancedRulesValidator,
 )
 from connectors.sources.jira import JiraClient, JiraDataSource
-from tests.sources.support import create_source
+from sources.support import create_source
 
 
 @pytest.mark.parametrize(
