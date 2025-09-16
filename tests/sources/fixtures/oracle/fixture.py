@@ -63,7 +63,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
-@retryable(retries=6, interval=2, strategy=RetryStrategy.EXPONENTIAL_BACKOFF)
+@retryable(retries=7, interval=2, strategy=RetryStrategy.EXPONENTIAL_BACKOFF)
 async def wait():
     print("Pinging OracleDB")
     connection = oracledb.connect(user="system", password=PASSWORD, dsn=DSN)
