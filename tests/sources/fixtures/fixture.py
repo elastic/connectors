@@ -63,7 +63,7 @@ def _parser():
             "monitor",
             "get_num_docs",
             "description",
-            "wait"
+            "wait",
         ],
     )
 
