@@ -12,6 +12,7 @@ import random
 import oracledb
 
 from tests.commons import WeightedFakeProvider
+from connectors.utils import RetryStrategy, retryable
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
@@ -60,6 +61,14 @@ def inject_lines(table, cursor, lines):
         cursor.executemany(sql_query, rows)
         inserted += batch_size
         print(f"Inserted batch #{batch} of {batch_size} documents.")
+
+
+@retryable(retries=6, interval=2, strategy=RetryStrategy.EXPONENTIAL_BACKOFF)
+async def wait():
+    print("Pinging OracleDB")
+    connection = oracledb.connect(user="system", password=PASSWORD, dsn=DSN)
+    cursor = connection.cursor()
+    cursor.execute("SELECT 1+1 FROM DUAL")
 
 
 async def load():

@@ -63,6 +63,7 @@ def _parser():
             "monitor",
             "get_num_docs",
             "description",
+            "wait"
         ],
     )
 
@@ -203,7 +204,7 @@ async def main(args=None):
     spec.loader.exec_module(module)
     if hasattr(module, args.action):
         func = getattr(module, args.action)
-        if args.action in ("setup", "load", "teardown", "remove"):
+        if args.action in ("setup", "load", "teardown", "remove", "wait"):
             return await func()
         return func()
     else:

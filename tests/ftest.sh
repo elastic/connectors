@@ -258,6 +258,7 @@ fi
 $PYTHON fixture.py --name $NAME --action setup
 $PYTHON fixture.py --name $NAME --action start_stack
 $PYTHON fixture.py --name $NAME --action check_stack
+$PYTHON fixture.py --name $NAME --action wait
 $VIRTUAL_ENV/bin/fake-kibana --index-name $INDEX_NAME --service-type $SERVICE_TYPE --config-file $NAME/config.yml --connector-definition $NAME/connector.json --debug
 $PYTHON fixture.py --name $NAME --action load
 
