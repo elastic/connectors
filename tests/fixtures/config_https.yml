@@ -20,5 +20,5 @@ connectors:
     connector_id: '1'
 
 sources:
-  fake: fake_sources:FakeSource
-  large_fake: fake_sources:LargeFakeSource
+  fake: tests.fake_sources:FakeSource
+  large_fake: tests.fake_sources:LargeFakeSource
