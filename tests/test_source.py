@@ -198,7 +198,10 @@ def test_get_source_klass():
 
 def test_get_source_klasses():
     settings = {
-        "sources": {"yea": "tests.test_source:MyConnector", "yea2": "tests.test_source:MyConnector"}
+        "sources": {
+            "yea": "tests.test_source:MyConnector",
+            "yea2": "tests.test_source:MyConnector",
+        }
     }
 
     sources = list(get_source_klasses(settings))
