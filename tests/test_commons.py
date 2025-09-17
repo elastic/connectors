@@ -4,7 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 import pytest
-from commons import AsyncIterator
+
+from tests.commons import AsyncIterator
 
 
 @pytest.mark.asyncio

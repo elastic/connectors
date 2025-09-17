@@ -12,7 +12,6 @@ from unittest import mock
 from unittest.mock import ANY, AsyncMock, Mock, call, patch
 
 import pytest
-from commons import AsyncIterator
 from elasticsearch import ApiError, BadRequestError
 
 from connectors.es.management_client import ESManagementClient
@@ -42,6 +41,7 @@ from connectors.protocol.connectors import (
     INDEXED_DOCUMENT_VOLUME,
 )
 from connectors.utils import ErrorMonitor, TooManyErrors
+from tests.commons import AsyncIterator
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)

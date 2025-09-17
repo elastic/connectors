@@ -8,7 +8,6 @@ from unittest.mock import ANY
 from urllib import parse
 
 import pytest
-from sources.support import create_source
 
 from connectors.filtering.validation import (
     AdvancedRulesValidator,
@@ -19,6 +18,7 @@ from connectors.sources.atlassian import (
     AtlassianAdvancedRulesValidator,
 )
 from connectors.sources.jira import JiraClient, JiraDataSource
+from tests.sources.support import create_source
 
 
 @pytest.mark.parametrize(

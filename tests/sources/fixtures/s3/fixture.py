@@ -7,7 +7,8 @@
 import os
 
 import boto3
-from commons import WeightedFakeProvider
+
+from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

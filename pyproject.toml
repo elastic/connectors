@@ -113,6 +113,5 @@ fake-kibana = "connectors.kibana:main"
 connectors = "connectors.connectors_cli:main"
 test-connectors = "scripts.testing.cli:main"
 
-
 [tool.setuptools.dynamic]
-version = {file = "VERSION"}
+version = {attr = "connectors.__version__"}

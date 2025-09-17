@@ -12,9 +12,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import gidgethub
 import pytest
-from commons import AsyncIterator
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
-from sources.support import create_source
 
 from connectors.access_control import DLS_QUERY
 from connectors.filtering.validation import SyncRuleValidationResult
@@ -30,6 +28,8 @@ from connectors.sources.github import (
     GitHubDataSource,
     UnauthorizedException,
 )
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 

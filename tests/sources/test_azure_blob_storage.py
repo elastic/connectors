@@ -12,11 +12,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
-from commons import AsyncIterator
-from sources.support import create_source
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.azure_blob_storage import AzureBlobStorageDataSource
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 
 @asynccontextmanager

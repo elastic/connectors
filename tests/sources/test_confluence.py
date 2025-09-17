@@ -15,9 +15,7 @@ import aiohttp
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientResponseError
-from commons import AsyncIterator
 from freezegun import freeze_time
-from sources.support import create_source
 
 from connectors.access_control import DLS_QUERY
 from connectors.protocol import Filter
@@ -36,6 +34,8 @@ from connectors.sources.confluence import (
     Unauthorized,
 )
 from connectors.utils import ssl_context
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 HOST_URL = "http://127.0.0.1:9696"

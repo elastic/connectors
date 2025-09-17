@@ -11,13 +11,13 @@ from unittest.mock import AsyncMock, Mock, patch
 import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
-from commons import AsyncIterator
 from freezegun import freeze_time
 from graphql import parse
-from sources.support import create_source
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.graphql import GraphQLDataSource, UnauthorizedException
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 
 class JSONAsyncMock(AsyncMock):

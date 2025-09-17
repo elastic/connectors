@@ -7,10 +7,10 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from commons import AsyncIterator
-from services.test_base import create_and_run_service
 
 from connectors.services.job_cleanup import IDLE_JOB_ERROR, JobCleanUpService
+from tests.commons import AsyncIterator
+from tests.services.test_base import create_and_run_service
 
 CONFIG = {
     "elasticsearch": {

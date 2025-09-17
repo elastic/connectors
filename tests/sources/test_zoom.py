@@ -13,10 +13,10 @@ import aiohttp
 import pytest
 from aiohttp.client_exceptions import ClientResponseError
 from freezegun import freeze_time
-from sources.support import create_source
 
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.zoom import TokenError, ZoomDataSource
+from tests.sources.support import create_source
 
 # Access token document
 SAMPLE_ACCESS_TOKEN_RESPONSE = {"access_token": "token#123", "expires_in": 3599}

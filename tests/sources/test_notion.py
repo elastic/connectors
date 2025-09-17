@@ -7,10 +7,8 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
-from commons import AsyncIterator
 from httpx import Response
 from notion_client import APIResponseError
-from sources.support import create_source
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
@@ -21,6 +19,8 @@ from connectors.sources.notion import (
     NotionClient,
     NotionDataSource,
 )
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 DATABASE = {

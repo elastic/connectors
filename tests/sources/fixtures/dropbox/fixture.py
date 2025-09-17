@@ -10,8 +10,9 @@ import io
 import json
 import os
 
-from commons import WeightedFakeProvider
 from flask import Flask, jsonify, make_response, request
+
+from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 

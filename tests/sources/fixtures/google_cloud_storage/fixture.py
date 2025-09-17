@@ -8,9 +8,10 @@
 
 import os
 
-from commons import WeightedFakeProvider
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import storage
+
+from tests.commons import WeightedFakeProvider
 
 client_connection = None
 HERE = os.path.dirname(__file__)

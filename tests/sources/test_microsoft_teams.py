@@ -10,8 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 from aiohttp.client_exceptions import ClientOSError, ClientResponseError
-from commons import AsyncIterator
-from sources.support import create_source
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
@@ -23,6 +21,8 @@ from connectors.sources.microsoft_teams import (
     NotFound,
     PermissionsMissing,
 )
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 USER_CHATS = [
     {

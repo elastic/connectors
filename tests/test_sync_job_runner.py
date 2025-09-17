@@ -7,7 +7,6 @@ import asyncio
 from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
-from commons import AsyncIterator
 from elasticsearch import (
     ConflictError,
 )
@@ -22,6 +21,7 @@ from connectors.sync_job_runner import (
     SyncJobRunner,
     SyncJobStartError,
 )
+from tests.commons import AsyncIterator
 
 SEARCH_INDEX_NAME = "search-mysql"
 ACCESS_CONTROL_INDEX_NAME = ".search-acl-filter-search-mysql"

@@ -11,8 +11,6 @@ from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
 import pytest
 from aiohttp import StreamReader
 from aiohttp.client_exceptions import ClientPayloadError, ClientResponseError
-from commons import AsyncIterator
-from sources.support import create_source
 
 from connectors.filtering.validation import SyncRuleValidationResult
 from connectors.protocol import Filter
@@ -26,6 +24,8 @@ from connectors.sources.onedrive import (
     OneDriveDataSource,
     TokenRetrievalError,
 )
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 ADVANCED_SNIPPET = "advanced_snippet"
 EXPECTED_USERS = [

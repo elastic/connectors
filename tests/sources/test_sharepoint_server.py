@@ -12,13 +12,13 @@ from unittest.mock import Mock, patch
 
 import httpx
 import pytest
-from commons import AsyncIterator
 from httpx import ByteStream
-from sources.support import create_source
 
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_server import SharepointServerDataSource
+from tests.commons import AsyncIterator
+from tests.sources.support import create_source
 
 EXCEPTION_MESSAGE = "Something went wrong"
 HOST_URL = "http://127.0.0.1:8491"
