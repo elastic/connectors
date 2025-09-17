@@ -246,6 +246,9 @@ fi
 
 cd $ROOT_DIR/tests/sources/fixtures
 
+# Add project root to PYTHONPATH so tests module can be imported
+export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
 if [ -f "$NAME/.env" ]; then
   echo "Loading env for $NAME"
   export $(grep -v '^#' $NAME/.env | xargs)
