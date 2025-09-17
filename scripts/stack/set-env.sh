@@ -15,7 +15,7 @@ if [[ "${CURDIR:-}" != "" && "${PROJECT_ROOT:-}" == "" ]]; then
 fi
 
 if [[ "${CONNECTORS_VERSION:-}" == "" ]]; then
-  SET_CONNECTORS_VERSION=`head -1 $PROJECT_ROOT/src/connectors/VERSION`
+  SET_CONNECTORS_VERSION=`head -1 $PROJECT_ROOT/connectors/VERSION`
 else
   SET_CONNECTORS_VERSION="$CONNECTORS_VERSION"
 fi

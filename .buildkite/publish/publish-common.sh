@@ -15,7 +15,7 @@ export PROJECT_ROOT=$(realpath "$(dirname "$BUILDKITE_DIR")")
 
 source $SCRIPT_DIR/git-setup.sh
 
-VERSION_PATH="$PROJECT_ROOT/src/connectors/VERSION"
+VERSION_PATH="$PROJECT_ROOT/connectors/VERSION"
 export VERSION=$(cat $VERSION_PATH)
 
 # Variables for build.yaml

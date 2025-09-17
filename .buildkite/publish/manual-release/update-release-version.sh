@@ -7,10 +7,10 @@ CURDIR="$(dirname "$REL_DIR")"
 
 source $CURDIR/publish-common.sh
 
-echo $VERSION > $PROJECT_ROOT/src/connectors/VERSION # adds the timestamp suffix
-UPDATED_VERSION=`cat $PROJECT_ROOT/src/connectors/VERSION`
+echo $VERSION > $PROJECT_ROOT/connectors/VERSION # adds the timestamp suffix
+UPDATED_VERSION=`cat $PROJECT_ROOT/connectors/VERSION`
 
-git add $PROJECT_ROOT/src/connectors/VERSION
+git add $PROJECT_ROOT/connectors/VERSION
 git commit -m "Bumping version from ${ORIG_VERSION} to ${UPDATED_VERSION}"
 git push origin ${GIT_BRANCH}
 

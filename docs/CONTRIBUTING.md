@@ -66,14 +66,14 @@ Enhancements that can be done after your initial contribution:
 
 To make sure we're building great connectors, we will be pretty strict on this checklist, and we will not allow connectors to change the framework code itself.
 
-Any patch with changes outside [connectors/sources](../src/connectors/sources) or [config.yml.example](../config.yml.example) and [requirements.txt](../requirements.txt) will be rejected.
+Any patch with changes outside [connectors/sources](../connectors/sources) or [config.yml.example](../config.yml.example) and [requirements.txt](../requirements.txt) will be rejected.
 
 If you need changes in the framework, or you are not sure about how to do something, reach out to the [Ingestion team](https://github.com/orgs/elastic/teams/search-extract-and-transform/members) and/or file an issue.
 
 ### Correct code/file organization
 
 Any contribution should follow established patterns of code organization within the repository.
-For example, a new concrete extension of `BaseDataSource` should live in [connectors/sources](../src/connectors/sources), and its tests should live in [tests/sources](../tests/sources).
+For example, a new concrete extension of `BaseDataSource` should live in [connectors/sources](../connectors/sources), and its tests should live in [tests/sources](../tests/sources).
 If that new data source is named `FooDataSource` the files should be `foo.py` and `test_foo.py`, respectively.
 Clients should live in the same module as the data sources that they support.
 
