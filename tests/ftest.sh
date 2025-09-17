@@ -14,7 +14,7 @@ VIRTUAL_ENV="$ROOT_DIR/.venv"
 PLATFORM='unknown'
 MAX_RSS="200M"
 MAX_DURATION=600
-CONNECTORS_VERSION=$(cat "$ROOT_DIR/connectors/VERSION")
+CONNECTORS_VERSION=$(cat "$ROOT_DIR/src/connectors/VERSION")
 ARTIFACT_BASE_URL="https://artifacts-snapshot.elastic.co"
 # Retry configuration
 CURL_MAX_RETRIES=3

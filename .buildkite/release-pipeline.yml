@@ -20,7 +20,7 @@ steps:
     - label: "Set build metadata"
       commands:
         - buildkite-agent meta-data set timestamp "$(date -u +'%Y%m%d%H%M')"
-        - buildkite-agent meta-data set orig_version "$(cat connectors/VERSION)"
+        - buildkite-agent meta-data set orig_version "$(cat src/connectors/VERSION)"
       key: set_timestamp
     - wait
     - label: ":github: update version and tag"

@@ -114,4 +114,4 @@ connectors = "connectors.connectors_cli:main"
 test-connectors = "scripts.testing.cli:main"
 
 [tool.setuptools.dynamic]
-version = {attr = "connectors.__version__"}
+version = {file = "src/connectors/VERSION"}

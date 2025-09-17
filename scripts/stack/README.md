@@ -38,7 +38,7 @@ Alternatively, if you do not wish to use a different set of credentials, or an A
 copy of the default [config.yml.example](../../config.yml.example) file, and edit the resulting file that will be created in the `scripts/stack/connectors-config` folder.
 
 By default, these Connector scripts will use a `SNAPSHOT` version of the Docker image.
-The version is defined in the [VERSION file](../../VERSION).
+The version is defined in the [VERSION file](../../src/connectors/VERSION).
 If you do not wish to use a `SNAPSHOT` version, add the `--no-snapshot` flag when you run the script.
 You can also specify an alternative base version by setting the environment variable `CONNECTORS_VERSION` before running the script. e.g.:
 

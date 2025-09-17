@@ -20,7 +20,7 @@ $(info Using $(PYTHON) (version $(shell $(PYTHON) -c "import sys; print(f'{sys.v
 ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
-VERSION=$(shell cat connectors/VERSION)
+VERSION=$(shell cat src/connectors/VERSION)
 
 DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
