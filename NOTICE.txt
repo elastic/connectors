@@ -3618,11 +3618,6 @@ these terms.
 **trademark** means trademarks, service marks, and similar rights.
 
 
-elasticsearch-connectors
-9.2.0
-Apache Software License
-UNKNOWN
-
 envyaml
 1.10.211231
 MIT License
