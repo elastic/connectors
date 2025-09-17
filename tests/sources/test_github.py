@@ -5,7 +5,6 @@
 #
 """Tests the Github source class methods"""
 
-from aioresponses import aioresponses
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from http import HTTPStatus
@@ -13,6 +12,7 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import gidgethub
 import pytest
+from aioresponses import aioresponses
 from gidgethub.abc import BadGraphQLRequest, GraphQLAuthorizationFailure, QueryError
 
 from connectors.access_control import DLS_QUERY
@@ -870,9 +870,13 @@ async def test_validate_config_missing_fields_then_raise(field):
 @pytest.mark.parametrize(
     "host_url,should_raise",
     [
-        pytest.param("http://github.example.com", True, id="HTTP URL should be rejected"),
-        pytest.param("https://github.example.com", False, id="HTTPS URL should be accepted"),
-    ]
+        pytest.param(
+            "http://github.example.com", True, id="HTTP URL should be rejected"
+        ),
+        pytest.param(
+            "https://github.example.com", False, id="HTTPS URL should be accepted"
+        ),
+    ],
 )
 async def test_validate_config_https_url_validation(host_url, should_raise):
     """Test that only HTTPS URLs are considered valid for GitHub Server host field"""
@@ -880,12 +884,14 @@ async def test_validate_config_https_url_validation(host_url, should_raise):
         source.configuration.get_field("data_source").value = "github_server"
 
         with aioresponses() as m:
-            m.head("https://github.example.com/api/graphql", headers={
-                'X-OAuth-Scopes': 'repo, user, read:org'
-            })
-            m.post("https://github.example.com/api/graphql", payload={
-                'data': {'viewer': {'login': 'testuser'}}
-            })
+            m.head(
+                "https://github.example.com/api/graphql",
+                headers={"X-OAuth-Scopes": "repo, user, read:org"},
+            )
+            m.post(
+                "https://github.example.com/api/graphql",
+                payload={"data": {"viewer": {"login": "testuser"}}},
+            )
 
             if should_raise:
                 with pytest.raises(ConfigurableFieldValueError):

@@ -33,8 +33,8 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
-    CancellableSleeps,
     HTTPS_URL_PATTERN,
+    CancellableSleeps,
     RetryStrategy,
     decode_base64_value,
     nested_get_from_dict,
@@ -1174,12 +1174,7 @@ class GitHubDataSource(BaseDataSource):
                 "label": "Server URL",
                 "order": 2,
                 "type": "str",
-                "validations": [
-                    {
-                        "type": "regex",
-                        "constraint": HTTPS_URL_PATTERN
-                    }
-                ],
+                "validations": [{"type": "regex", "constraint": HTTPS_URL_PATTERN}],
             },
             "auth_method": {
                 "display": "dropdown",
