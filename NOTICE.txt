@@ -8415,7 +8415,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 xmltodict
-1.0.0
+1.0.1
 MIT License
 Copyright (C) 2012 Martin Blech and individual contributors.
 
