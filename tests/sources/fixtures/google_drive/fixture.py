@@ -5,6 +5,7 @@
 #
 # ruff: noqa: T201
 """Module to handle api calls received from connector."""
+
 import logging
 import os
 import time
@@ -108,6 +109,7 @@ def post_auth_token():
 if __name__ == "__main__":
     logger.info("Starting Google Drive mock server")
     from tests.commons import WeightedFakeProvider
+
     fake_provider = fake_provider or WeightedFakeProvider()
     try:
         app.run(host="0.0.0.0", port=10339)
