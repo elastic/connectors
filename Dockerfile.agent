@@ -6,7 +6,7 @@ FROM docker.elastic.co/elastic-agent/elastic-agent:9.0.0-SNAPSHOT
 USER root
 
 # Install basic dependencies
-RUN microdnf update && microdnf install -y \
+RUN microdnf update -y && microdnf install -y \
   vim \
   wget \
   git \
