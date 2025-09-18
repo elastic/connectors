@@ -201,6 +201,7 @@ async def main(args=None):
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
+
     if hasattr(module, args.action):
         func = getattr(module, args.action)
         if args.action in ("setup", "load", "teardown", "remove"):
