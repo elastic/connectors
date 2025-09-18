@@ -32,6 +32,7 @@ config.yml:
 .venv/bin/python: | config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
+	.venv/bin/python -m pip install build
 
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
@@ -130,7 +131,6 @@ agent-docker-all: agent-docker-build agent-docker-run
 ## End Agent Docker Zone
 
 sdist: .venv/bin/python
-	.venv/bin/python -m pip install build
 	.venv/bin/python -m build --sdist
 
 deps-csv: .venv/bin/pip-licenses
