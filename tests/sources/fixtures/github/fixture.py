@@ -306,7 +306,7 @@ class GitHubAPI:
                         "type": "blob",
                         "sha": file_number,
                         "size": len(file.encode("utf-8")),
-                        "url": f"http://127.0.0.1:9091/api/v3/repos/demo_user/demo_repo/git/blobs/{file_number}",
+                        "url": f"https://127.0.0.1:9091/api/v3/repos/demo_user/demo_repo/git/blobs/{file_number}",
                     }
                 )
         self.file_count = 2000
