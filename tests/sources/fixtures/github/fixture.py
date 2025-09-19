@@ -345,4 +345,4 @@ class GitHubAPI:
 
 
 if __name__ == "__main__":
-    GitHubAPI().app.run(host="0.0.0.0", port=9091)
+    GitHubAPI().app.run(host="0.0.0.0", port=9091, ssl_context='adhoc')
