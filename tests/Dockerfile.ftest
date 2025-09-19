@@ -1,5 +1,3 @@
 FROM connectors-base
 
-RUN echo "PYTHONPATH: $PYTHONPATH"
-
 RUN .venv/bin/pip install -r requirements/ftest.txt

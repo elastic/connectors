@@ -15,7 +15,6 @@ from tests.commons import WeightedFakeProvider
 
 fake_provider = WeightedFakeProvider()
 
-
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
