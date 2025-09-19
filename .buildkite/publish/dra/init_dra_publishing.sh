@@ -15,7 +15,7 @@ export RELEASE_DIR="${PROJECT_ROOT}"
 
 # Create and stage the artifact
 cd $PROJECT_ROOT
-make clean sdist
+make clean zip
 export DRA_ARTIFACTS_DIR=$RELEASE_DIR/dist/dra-artifacts
 mkdir -p $DRA_ARTIFACTS_DIR
 

@@ -28,7 +28,7 @@ services:
     build:
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
-    command: .venv/bin/python tests/sources/fixtures/zoom/fixture.py
+    command: .venv/bin/python -m tests.sources.fixtures.zoom.fixture
     ports:
       - 10971:10971
     volumes:

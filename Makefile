@@ -21,6 +21,7 @@ ARCH=$(shell uname -m)
 PERF8?=no
 SLOW_TEST_THRESHOLD=1 # seconds
 VERSION=$(shell cat connectors/VERSION)
+PACKAGE_NAME_VERSION="elasticsearch_connectors-$(VERSION)"
 
 DOCKER_IMAGE_NAME?=docker.elastic.co/integrations/elastic-connectors
 DOCKERFILE_PATH?=Dockerfile
@@ -32,7 +33,7 @@ config.yml:
 .venv/bin/python: | config.yml
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install setuptools==79.0.1
+	.venv/bin/python -m pip install build
 
 .venv/bin/pip-licenses: .venv/bin/python
 	.venv/bin/pip install pip-licenses
@@ -45,20 +46,15 @@ install: .venv/bin/python .venv/bin/elastic-ingest notice
 install-agent: .venv/bin/elastic-ingest
 
 
-.venv/bin/elastic-ingest: .venv/bin/python requirements/framework.txt requirements/$(ARCH).txt requirements/agent.txt
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/python setup.py develop
+.venv/bin/elastic-ingest: .venv/bin/python
+	.venv/bin/pip install -e .
 
 .venv/bin/ruff: .venv/bin/python
 	.venv/bin/pip install -r requirements/$(ARCH).txt
 	.venv/bin/pip install -r requirements/tests.txt
 
 .venv/bin/pytest: .venv/bin/python
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/pip install -r requirements/tests.txt
-	.venv/bin/pip install -r requirements/ftest.txt
+	.venv/bin/pip install -e ".[tests,ftest]"
 
 clean:
 	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
@@ -70,8 +66,6 @@ lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format tests --check
 	.venv/bin/ruff check scripts
 	.venv/bin/ruff format scripts --check
-	.venv/bin/ruff check setup.py
-	.venv/bin/ruff format setup.py --check
 	.venv/bin/pyright connectors
 	.venv/bin/pyright tests
 
@@ -82,19 +76,17 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff format tests
 	.venv/bin/ruff check scripts --fix
 	.venv/bin/ruff format scripts
-	.venv/bin/ruff check setup.py --fix
-	.venv/bin/ruff format setup.py
 
-test: .venv/bin/pytest .venv/bin/elastic-ingest
+test: .venv/bin/pytest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 build-connectors-base-image:
 	docker build . -f ${DOCKERFILE_PATH} -t connectors-base
 
-ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
+ftest: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
 	tests/ftest.sh $(NAME) $(PERF8)
 
-ftrace: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
+ftrace: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH)
 	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
 
 run: install
@@ -135,7 +127,13 @@ agent-docker-all: agent-docker-build agent-docker-run
 ## End Agent Docker Zone
 
 sdist: .venv/bin/python
-	.venv/bin/python setup.py sdist --formats=zip
+	.venv/bin/python -m build --sdist
+
+zip: sdist
+	cd dist && \
+	tar -xzf $(PACKAGE_NAME_VERSION).tar.gz && \
+	zip -r $(PACKAGE_NAME_VERSION).zip $(PACKAGE_NAME_VERSION)/ && \
+	rm -rf $(PACKAGE_NAME_VERSION)/
 
 deps-csv: .venv/bin/pip-licenses
 	mkdir -p dist
