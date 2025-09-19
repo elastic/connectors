@@ -5,10 +5,8 @@
 #
 """GitHub source module responsible to fetch documents from GitHub Cloud and Server."""
 
-from datetime import datetime, timedelta
 import json
 import time
-from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property, partial
 
@@ -36,7 +34,7 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
-    HTTPS_URL_PATTERN,
+    ValidationCache,
     RetryStrategy,
     decode_base64_value,
     nested_get_from_dict,
@@ -61,15 +59,8 @@ UNAUTHORIZED = 401
 NODE_SIZE = 100
 REVIEWS_COUNT = 45
 
-@dataclass
-class ConfigValidationRun:
-    """Tracks validation run time and any error that occurred."""
-    validation_time: datetime
-    error: Exception | None = None
-
-
-_CONFIG_VALIDATION_RUNS = {}
-CONFIG_VALIDATION_EXPIRY_SECONDS = 60
+# Validation cache with 300 second expiry for remote validations
+_validation_cache = ValidationCache(expiry_seconds=300)
 
 SUPPORTED_EXTENSION = [".markdown", ".md", ".rst"]
 
@@ -1521,45 +1512,13 @@ class GitHubDataSource(BaseDataSource):
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
         await super().validate_config()
-        
-        # only run remote validation if config hasn't been encountered yet or
-        # we think the validation is stale - this is to avoid hitting rate limits
-        config_hash = self.configuration.hash_digest()
-        last_validation_run = _CONFIG_VALIDATION_RUNS.get(config_hash)
 
-        #clean up old entries
-        for key in list(_CONFIG_VALIDATION_RUNS.keys()):
-            if key == config_hash:
-                continue
-            if (
-                datetime.now() - _CONFIG_VALIDATION_RUNS[key].validation_time
-            ) > timedelta(seconds=CONFIG_VALIDATION_EXPIRY_SECONDS):
-                del _CONFIG_VALIDATION_RUNS[key]
-
-    
-        if last_validation_run and (
-            datetime.now() - last_validation_run.validation_time
-        ) < timedelta(seconds=CONFIG_VALIDATION_EXPIRY_SECONDS):
-            self._logger.error(
-                "Skipping remote validation of config as it was validated recently"
-            )
-            # Re-raise the cached error if one occurred during the last validation
-            if last_validation_run.error:
-                raise last_validation_run.error
-        else:
-            # Run remote validation and cache the result
-            validation_error = None
-            try:
-                await self._remote_validation()
-            except Exception as e:
-                validation_error = e
-                raise
-            finally:
-                # Always update the validation run info, whether successful or not
-                _CONFIG_VALIDATION_RUNS[config_hash] = ConfigValidationRun(
-                    validation_time=datetime.now(),
-                    error=validation_error
-                )
+        # Run remote validation with caching to avoid excessive API calls
+        await _validation_cache.run_validation(
+            configuration=self.configuration,
+            validation_func=self._remote_validation,
+            logger_instance=self._logger
+        )
 
     async def close(self):
         await self.github_client.close()

@@ -19,6 +19,7 @@ import subprocess  # noqa S404
 import time
 import urllib.parse
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from time import strftime
@@ -1114,3 +1115,104 @@ def generate_random_id(length=4):
     return "".join(
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )
+
+@dataclass
+class ConfigValidationRun:
+    """Tracks validation run time and any error that occurred."""
+    validation_time: datetime
+    error: Exception | None = None
+
+
+class ValidationCache:
+    """Encapsulates validation caching behavior with automatic expiry and cleanup."""
+
+    def __init__(self, expiry_seconds: int = 300):
+        """
+        Initialize validation cache.
+
+        Args:
+            expiry_seconds: How long to cache validation results (default: 300 seconds)
+        """
+        self.expiry_seconds = expiry_seconds
+        self._cache: dict[str, ConfigValidationRun] = {}
+
+    async def run_validation(self, configuration, validation_func, logger_instance=None):
+        """
+        Run validation with caching support. Re-uses recent validation results within expiry period.
+
+        Args:
+            configuration: Configuration object with hash_digest() method
+            validation_func: Async function to call for validation (should raise on errors)
+            logger_instance: Logger for debug messages (optional)
+
+        Raises:
+            Any exception raised by validation_func (either fresh or cached)
+        """
+        # Generate config hash internally
+        config_hash = str(configuration.hash_digest())
+
+        if logger_instance:
+            logger_instance.debug(f"ValidationCache.run_validation called with config_hash={config_hash}")
+
+        # Always clean up expired entries
+        if logger_instance:
+            logger_instance.debug(f"Cleaning up expired entries, cache size={len(self._cache)}")
+        self._cleanup_expired_entries()
+
+        last_validation_run = self._cache.get(config_hash)
+
+        if logger_instance:
+            if last_validation_run:
+                time_since_last = datetime.now() - last_validation_run.validation_time
+                logger_instance.debug(f"Found cached validation run, time_since_last={time_since_last.total_seconds()}s, expiry={self.expiry_seconds}s, has_error={last_validation_run.error is not None}")
+            else:
+                logger_instance.debug(f"No cached validation run found for config_hash={config_hash}")
+
+        if last_validation_run and (
+            datetime.now() - last_validation_run.validation_time
+        ) < timedelta(seconds=self.expiry_seconds):
+            if logger_instance:
+                logger_instance.debug(f"Using cached validation result")
+                logger_instance.debug(
+                    "Skipping remote validation of config as it was validated recently"
+                )
+            # Re-raise the cached error if one occurred during the last validation
+            if last_validation_run.error:
+                if logger_instance:
+                    logger_instance.debug(f"Re-raising cached error: {last_validation_run.error}")
+                raise last_validation_run.error
+            if logger_instance:
+                logger_instance.debug(f"Cached validation was successful, returning")
+            return
+
+        if logger_instance:
+            logger_instance.debug(f"Running fresh validation")
+        validation_error = None
+        try:
+            await validation_func()
+            if logger_instance:
+                logger_instance.debug(f"Fresh validation completed successfully")
+        except Exception as e:
+            validation_error = e
+            if logger_instance:
+                logger_instance.debug(f"Fresh validation failed with error: {e}")
+            raise
+        finally:
+            # Always update the validation run info, whether successful or not
+            self._cache[config_hash] = ConfigValidationRun(
+                validation_time=datetime.now(),
+                error=validation_error
+            )
+            if logger_instance:
+                logger_instance.debug(f"Cached validation result, error={validation_error is not None}")
+
+    def _cleanup_expired_entries(self):
+        """Remove expired entries from validation cache."""
+        now = datetime.now()
+        expired_keys = [
+            config_hash for config_hash, run in self._cache.items()
+            if (now - run.validation_time) >= timedelta(seconds=self.expiry_seconds)
+        ]
+
+        for key in expired_keys:
+            del self._cache[key]
