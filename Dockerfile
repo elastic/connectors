@@ -8,7 +8,9 @@ COPY --chown=nonroot:nonroot . /app
 
 USER nonroot
 WORKDIR /app
+RUN echo "PYTHONPATH from base: $PYTHONPATH"
 RUN make clean install
+RUN echo "PYTHONPATH from base after make clean install: $PYTHONPATH"
 RUN ln -s .venv/bin /app/bin
 
 USER root
