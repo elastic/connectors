@@ -380,12 +380,6 @@ class DataSourceConfiguration:
                 raise ConfigurableFieldDependencyError(msg)
 
             if self._config[dependency["field"]].value != dependency["value"]:
-                logger.debug("CONFIG IS:")
-                logger.debug(self._config[dependency["field"]].value)
-                logger.debug(repr(self._config[dependency["field"]]))
-                logger.debug(str(self._config[dependency["field"]]))
-                logger.debug("DEPENDENCY IS:")
-                logger.debug(dependency)
                 return False
 
         return True

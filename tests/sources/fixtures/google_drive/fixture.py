@@ -6,16 +6,14 @@
 # ruff: noqa: T201
 """Module to handle api calls received from connector."""
 
-import logging
 import os
 import time
 
 from flask import Flask, request
 
-logger = logging.getLogger(__name__)
-logger.info("HELLO FROM GOOGLE DRIVE FIXTURE")
+from tests.commons import WeightedFakeProvider
 
-fake_provider = None
+fake_provider = WeightedFakeProvider()
 
 
 DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
@@ -107,10 +105,4 @@ def post_auth_token():
 
 
 if __name__ == "__main__":
-    from tests.commons import WeightedFakeProvider
-
-    fake_provider = fake_provider or WeightedFakeProvider()
-    try:
-        app.run(host="0.0.0.0", port=10339)
-    except Exception as exception:
-        logger.error("Exception in Google Drive mock server", exc_info=exception)
+    app.run(host="0.0.0.0", port=10339)
