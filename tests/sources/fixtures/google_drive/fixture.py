@@ -107,10 +107,6 @@ def post_auth_token():
 
 
 if __name__ == "__main__":
-    logger.info("Starting Google Drive mock server")
-    print("STARTING GOOGLE DRIVE FIXTURE SERVER")
-    import sys; print(sys.path)
-
     from tests.commons import WeightedFakeProvider
 
     fake_provider = fake_provider or WeightedFakeProvider()
