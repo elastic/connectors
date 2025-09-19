@@ -27,7 +27,7 @@
             "label": "Server URL",
             "order": 2,
             "type": "str",
-            "value": "http://127.0.0.1:9091"
+            "value": "https://127.0.0.1:9091"
         },
         "auth_method": {
             "display": "dropdown",
