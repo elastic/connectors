@@ -1516,8 +1516,7 @@ class GitHubDataSource(BaseDataSource):
         # Run remote validation with caching to avoid excessive API calls
         await _validation_cache.run_validation(
             configuration=self.configuration,
-            validation_func=self._remote_validation,
-            logger_instance=self._logger
+            validation_func=self._remote_validation
         )
 
     async def close(self):
