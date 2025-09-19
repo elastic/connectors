@@ -384,6 +384,20 @@ class DataSourceConfiguration:
 
         return True
 
+    def hash_digest(self):
+        """Returns a hash digest of the configuration."""
+        # Hash the field names and their values, not the mutable Field objects
+        # Convert unhashable types (like lists) to hashable equivalents
+        def make_hashable(value):
+            if isinstance(value, list):
+                return tuple(value)
+            elif isinstance(value, dict):
+                return tuple(sorted(value.items()))
+            return value
+
+        config_items = [(name, make_hashable(field.value)) for name, field in self._config.items()]
+        return hash(frozenset(config_items))
+
 
 class BaseDataSource:
     """Base class, defines a loose contract."""
@@ -403,7 +417,7 @@ class BaseDataSource:
             msg = f"Configuration expected type is {DataSourceConfiguration.__name__}, actual: {type(configuration).__name__}."
             raise TypeError(msg)
 
-        self.configuration = configuration
+        self.configuration: DataSourceConfiguration = configuration
         self.configuration.set_defaults(self.get_default_configuration())
         self._features = None
         # A dictionary, the structure of which is connector dependent, to indicate a point where the sync is at
