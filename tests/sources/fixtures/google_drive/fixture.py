@@ -5,6 +5,7 @@
 #
 # ruff: noqa: T201
 """Module to handle api calls received from connector."""
+
 import logging
 import os
 import time
@@ -111,6 +112,7 @@ if __name__ == "__main__":
     import sys; print(sys.path)
 
     from tests.commons import WeightedFakeProvider
+
     fake_provider = fake_provider or WeightedFakeProvider()
     try:
         app.run(host="0.0.0.0", port=10339)
