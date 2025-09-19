@@ -1116,9 +1116,11 @@ def generate_random_id(length=4):
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )
 
+
 @dataclass
 class ConfigValidationRun:
     """Tracks validation run time and any error that occurred."""
+
     validation_time: datetime
     error: Exception | None = None
 
@@ -1173,15 +1175,15 @@ class ValidationCache:
         finally:
             # Always update the validation run info, whether successful or not
             self._cache[config_hash] = ConfigValidationRun(
-                validation_time=datetime.now(),
-                error=validation_error
+                validation_time=datetime.now(), error=validation_error
             )
 
     def _cleanup_expired_entries(self):
         """Remove expired entries from validation cache."""
         now = datetime.now()
         expired_keys = [
-            config_hash for config_hash, run in self._cache.items()
+            config_hash
+            for config_hash, run in self._cache.items()
             if (now - run.validation_time) >= timedelta(seconds=self.expiry_seconds)
         ]
 

@@ -34,8 +34,8 @@ from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
-    ValidationCache,
     RetryStrategy,
+    ValidationCache,
     decode_base64_value,
     nested_get_from_dict,
     retryable,
@@ -1515,8 +1515,7 @@ class GitHubDataSource(BaseDataSource):
 
         # Run remote validation with caching to avoid excessive API calls
         await _validation_cache.run_validation(
-            configuration=self.configuration,
-            validation_func=self._remote_validation
+            configuration=self.configuration, validation_func=self._remote_validation
         )
 
     async def close(self):

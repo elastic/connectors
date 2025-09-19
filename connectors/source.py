@@ -386,6 +386,7 @@ class DataSourceConfiguration:
 
     def hash_digest(self):
         """Returns a hash digest of the configuration."""
+
         # Hash the field names and their values, not the mutable Field objects
         # Convert unhashable types (like lists) to hashable equivalents
         def make_hashable(value):
@@ -395,7 +396,9 @@ class DataSourceConfiguration:
                 return tuple(sorted(value.items()))
             return value
 
-        config_items = [(name, make_hashable(field.value)) for name, field in self._config.items()]
+        config_items = [
+            (name, make_hashable(field.value)) for name, field in self._config.items()
+        ]
         return hash(frozenset(config_items))
 
 
