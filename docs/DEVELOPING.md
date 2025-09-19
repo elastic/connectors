@@ -180,7 +180,7 @@ If you want to add a new connector source, the following requirements are mandat
 2. Create a class that implements the required methods described in `connectors.source.BaseDataSource`
 3. Add a unit test in [connectors/sources/tests](../connectors/sources/tests) with **+92% coverage**. Test coverage is run as part of [unit tests](https://github.com/elastic/connectors/blob/main/docs/DEVELOPING.md#testing-the-connector). Look for your file at the end of the console output.
 4. **Declare your connector** in [config.py](../connectors/config.py) in the `sources` section of `_default_config()`
-5. **Declare your dependencies** in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
+5. **Declare your dependencies** in [pyproject.toml](../pyproject.toml). Make sure you pin these dependencies.
 6. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
 7. Make sure you use an **async lib** for your source. See our [async guidelines](DEVELOPING.md). If not possible, make sure you don't block the loop.
 8. When possible, provide a **docker image** that runs the backend service, so we can test the connector. If you can't provide a docker image, provide the credentials needed to run against an online service.
@@ -619,6 +619,6 @@ This will configure the connector in Elasticsearch to run a full sync. The scrip
 To customize an _existing_ connector, follow these steps:
 
 1. Customize the source file for your data source from [connectors/sources](../connectors/sources)
-3. Declare your dependencies in [requirements.txt](../requirements/framework.txt). Make sure you pin these dependencies.
+3. Declare your dependencies in [pyproject.toml](../pyproject.toml). Make sure you pin these dependencies.
 4. For each dependency you add (including indirect dependencies) list all licences and provide the list in your patch.
 5. Your test backend needs to return more than 10k documents as this is the default size limit for Elasticsearch pagination. Having more than 10k documents returned from the test backend will help test the connector more thoroughly. 

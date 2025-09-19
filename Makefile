@@ -46,9 +46,7 @@ install: .venv/bin/python .venv/bin/elastic-ingest notice
 install-agent: .venv/bin/elastic-ingest
 
 
-.venv/bin/elastic-ingest: .venv/bin/python requirements/framework.txt requirements/$(ARCH).txt requirements/agent.txt
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/agent.txt
+.venv/bin/elastic-ingest: .venv/bin/python
 	.venv/bin/pip install -e .
 
 .venv/bin/ruff: .venv/bin/python
@@ -56,10 +54,7 @@ install-agent: .venv/bin/elastic-ingest
 	.venv/bin/pip install -r requirements/tests.txt
 
 .venv/bin/pytest: .venv/bin/python
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/agent.txt
-	.venv/bin/pip install -r requirements/tests.txt
-	.venv/bin/pip install -r requirements/ftest.txt
+	.venv/bin/pip install -e ".[tests,ftest]"
 
 clean:
 	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
@@ -82,16 +77,16 @@ autoformat: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff check scripts --fix
 	.venv/bin/ruff format scripts
 
-test: .venv/bin/pytest .venv/bin/elastic-ingest
+test: .venv/bin/pytest
 	.venv/bin/pytest --cov-report term-missing --cov-fail-under 92 --cov-report html --cov=connectors --fail-slow=$(SLOW_TEST_THRESHOLD) -sv tests
 
 build-connectors-base-image:
 	docker build . -f ${DOCKERFILE_PATH} -t connectors-base
 
-ftest: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
+ftest: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH) build-connectors-base-image
 	tests/ftest.sh $(NAME) $(PERF8)
 
-ftrace: .venv/bin/pytest .venv/bin/elastic-ingest $(DOCKERFILE_FTEST_PATH)
+ftrace: .venv/bin/pytest $(DOCKERFILE_FTEST_PATH)
 	PERF8_TRACE=true tests/ftest.sh $(NAME) $(PERF8)
 
 run: install

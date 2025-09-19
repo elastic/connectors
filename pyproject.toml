@@ -77,7 +77,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+tests = [
     "aioresponses==0.7.6",
     "faker==18.11.2",
     "freezegun==1.2.2",
