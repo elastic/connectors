@@ -66,7 +66,7 @@ URLS = {
     PING: "rest/api/2/myself",
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
-    ISSUES: "rest/api/2/search?jql={jql}&maxResults={max_results}&startAt={start_at}",
+    ISSUES: "rest/api/3/search/jql?jql={jql}&maxResults={max_results}&nextPageToken={next_page_token}",
     ISSUE_DATA: "rest/api/2/issue/{id}",
     ATTACHMENT_CLOUD: "rest/api/2/attachment/content/{attachment_id}",
     ATTACHMENT_SERVER: "secure/attachment/{attachment_id}/{attachment_name}",
@@ -270,10 +270,10 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        start_at = 0
+        next_page_token = "null"
 
         self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> startAt: 0, maxResults: {FETCH_SIZE} and jql query: {jql}"
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> nextPageToken: null, maxResults: {FETCH_SIZE} and jql query: {jql}"
         )
         while True:
             try:
@@ -283,26 +283,25 @@ class JiraClient:
                         self.host_url,
                         URLS[url_name].format(
                             max_results=FETCH_SIZE,
-                            start_at=start_at,
+                            next_page_token=next_page_token,
                             level_id=kwargs.get("level_id"),
                         ),  # pyright: ignore
                     )
                 async for response in self.api_call(
                     url_name=url_name,
-                    start_at=start_at,
+                    next_page_token=next_page_token,
                     max_results=FETCH_SIZE,
                     jql=jql,
                     url=url,
                 ):
                     response_json = await response.json()
-                    total = response_json["total"]
                     yield response_json
-                    if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
+                    next_page_token = response_json.get("nextPageToken")
+                    if not next_page_token:
                         return
-                    start_at += FETCH_SIZE
             except Exception as exception:
                 self._logger.warning(
-                    f"Skipping data for type: {url_name}, query params: jql={jql}, startAt={start_at}, maxResults={FETCH_SIZE}. Error: {exception}."
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, nextPageToken={next_page_token}, maxResults={FETCH_SIZE}. Error: {exception}."
                 )
                 break
 
@@ -890,10 +889,10 @@ class JiraDataSource(BaseDataSource):
             )
 
     async def _put_issue(self, issue):
-        """Put specific issue as per the given issue_key in a queue
+        """Put a specific issue as per the given issue_key in a queue
 
         Args:
-            issue (str): Issue key to fetch an issue
+            issue (dict): Issue key to fetch an issue
         """
         async for issue_metadata in self.jira_client.get_issues_for_issue_key(
             key=issue.get("key")
