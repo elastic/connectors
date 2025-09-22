@@ -23,6 +23,7 @@ from connectors.filtering.validation import (
 )
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format
+from typing import Dict, List, Optional, Union
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
@@ -75,7 +76,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
 
@@ -97,7 +98,7 @@ class MongoDataSource(BaseDataSource):
     service_type = "mongodb"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         super().__init__(configuration=configuration)
 
         self.client = None
@@ -110,7 +111,7 @@ class MongoDataSource(BaseDataSource):
         self.collection = None
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], List[str], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[int, str]]]]:
         return {
             "host": {
                 "label": "Server hostname",
@@ -209,14 +210,14 @@ class MongoDataSource(BaseDataSource):
                         exc_info=True,
                     )
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[MongoAdvancedRulesValidator]:
         return [MongoAdvancedRulesValidator()]
 
-    async def ping(self):
+    async def ping(self) -> None:
         with self.get_client() as client:
             await client.admin.command("ping")
 
-    def remove_temp_file(self, temp_file):
+    def remove_temp_file(self, temp_file: Union[os.PathLike[bytes], os.PathLike[str], os.PathLike[Union[bytes, str]], bytes, int, str]) -> None:
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
@@ -285,7 +286,7 @@ class MongoDataSource(BaseDataSource):
                 async for doc in collection.find():
                     yield self.serialize(doc), None
 
-    def check_conflicting_values(self, value):
+    def check_conflicting_values(self, value: Optional[bool]) -> None:
         if value == "true":
             value = True
         elif value == "false":
@@ -297,7 +298,7 @@ class MongoDataSource(BaseDataSource):
             msg = "The value of SSL/TLS must be the same in the hostname and configuration field."
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         await super().validate_config()
         parsed_url = urllib.parse.urlparse(self.host)
         query_params = urllib.parse.parse_qs(parsed_url.query)

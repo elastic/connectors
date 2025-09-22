@@ -19,6 +19,7 @@ from connectors.protocol.connectors import Connector as ConnectorObject
 from connectors.protocol.connectors import JobStatus
 from connectors.protocol.connectors import SyncJob as SyncJobObject
 from tests.commons import AsyncIterator
+from typing import Sequence, Union
 
 
 @pytest.fixture(autouse=True)
@@ -43,7 +44,7 @@ def mock_job_es_client():
 
 
 @pytest.mark.parametrize("commands", [["-v"], ["--version"]])
-def test_version(commands):
+def test_version(commands: Union[None, Sequence[str], str]) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, commands)
     assert result.exit_code == 0
@@ -51,7 +52,7 @@ def test_version(commands):
 
 
 @pytest.mark.parametrize("commands", [["-h"], ["--help"], []])
-def test_help_page(commands):
+def test_help_page(commands: Union[None, Sequence[str], str]) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, commands)
     assert "Usage:" in result.output
@@ -60,7 +61,7 @@ def test_help_page(commands):
 
 
 @patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=False))
-def test_login_unsuccessful(tmp_path):
+def test_login_unsuccessful(tmp_path: Union[None, os.PathLike[str], str]) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
         result = runner.invoke(
@@ -72,7 +73,7 @@ def test_login_unsuccessful(tmp_path):
 
 
 @patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
-def test_login_successful(tmp_path):
+def test_login_successful(tmp_path: Union[None, os.PathLike[str], str]) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
         result = runner.invoke(
@@ -84,7 +85,7 @@ def test_login_successful(tmp_path):
 
 
 @patch("connectors.cli.auth.Auth._Auth__ping_es_client", AsyncMock(return_value=True))
-def test_login_successful_with_apikey_method(tmp_path):
+def test_login_successful_with_apikey_method(tmp_path: Union[None, os.PathLike[str], str]) -> None:
     runner = CliRunner()
     api_key = "testapikey"
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
@@ -102,7 +103,7 @@ def test_login_successful_with_apikey_method(tmp_path):
 
 
 @patch("click.confirm")
-def test_login_when_credentials_file_exists(mocked_confirm, tmp_path):
+def test_login_when_credentials_file_exists(mocked_confirm, tmp_path: Union[None, os.PathLike[str], str]) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as temp_dir:
         mocked_confirm.return_value = True
@@ -119,7 +120,7 @@ def test_login_when_credentials_file_exists(mocked_confirm, tmp_path):
         assert mocked_confirm.called_once()
 
 
-def test_connector_help_page():
+def test_connector_help_page() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["connector", "--help"])
     assert result.exit_code == 0
@@ -129,14 +130,14 @@ def test_connector_help_page():
 
 
 @patch("connectors.cli.connector.Connector.list_connectors", AsyncMock(return_value=[]))
-def test_connector_list_no_connectors():
+def test_connector_list_no_connectors() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["connector", "list"])
     assert result.exit_code == 0
     assert "No connectors found" in result.output
 
 
-def test_connector_list_one_connector():
+def test_connector_list_one_connector() -> None:
     runner = CliRunner()
     connector_index = MagicMock()
 
@@ -169,7 +170,7 @@ def test_connector_list_one_connector():
     "connectors.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
-def test_connector_create(patch_click_confirm):
+def test_connector_create(patch_click_confirm) -> None:
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -217,8 +218,8 @@ def test_connector_create(patch_click_confirm):
     MagicMock(return_value=[False, False]),
 )
 def test_connector_create_with_native_flags(
-    patch_click_confirm, native_flag, input_index_name, expected_index_name
-):
+    patch_click_confirm, native_flag: str, input_index_name, expected_index_name
+) -> None:
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -261,7 +262,7 @@ def test_connector_create_with_native_flags(
     "connectors.cli.connector.Connector._Connector__create_api_key",
     AsyncMock(return_value={"id": "new_api_key_id", "encoded": "encoded_api_key"}),
 )
-def test_connector_create_from_index(patch_click_confirm):
+def test_connector_create_from_index(patch_click_confirm) -> None:
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -311,7 +312,7 @@ def test_connector_create_from_index(patch_click_confirm):
 @patch("click.confirm")
 def test_connector_create_fails_when_index_or_connector_exists(
     patch_click_confirm, index_exists, connector_exists, from_index_flag, expected_error
-):
+) -> None:
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -356,7 +357,7 @@ def test_connector_create_fails_when_index_or_connector_exists(
     "connectors.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
-def test_connector_create_from_file():
+def test_connector_create_from_file() -> None:
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -414,7 +415,7 @@ def test_connector_create_from_file():
     "connectors.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[False, False]),
 )
-def test_connector_create_and_update_the_service_config():
+def test_connector_create_and_update_the_service_config() -> None:
     runner = CliRunner()
     connector_id = "new_connector_id"
     service_type = "mongodb"
@@ -472,7 +473,7 @@ def test_connector_create_and_update_the_service_config():
     "connectors.cli.index.Index.index_or_connector_exists",
     MagicMock(return_value=[True, False]),
 )
-def test_connector_create_native_connector(patched_confirm):
+def test_connector_create_native_connector(patched_confirm) -> None:
     runner = CliRunner()
 
     # configuration for the MongoDB connector
@@ -528,7 +529,7 @@ def test_connector_create_native_connector(patched_confirm):
                 assert "has been created" in result.output
 
 
-def test_index_help_page():
+def test_index_help_page() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["index", "--help"])
     assert result.exit_code == 0
@@ -538,14 +539,14 @@ def test_index_help_page():
 
 
 @patch("connectors.cli.index.Index.list_indices", MagicMock(return_value=[]))
-def test_index_list_no_indexes():
+def test_index_list_no_indexes() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["index", "list"])
     assert result.exit_code == 0
     assert "No indices found" in result.output
 
 
-def test_index_list_one_index():
+def test_index_list_one_index() -> None:
     runner = CliRunner()
     indices = {"test_index": {"docs_count": 10}}
 
@@ -559,7 +560,7 @@ def test_index_list_one_index():
     assert "test_index" in result.output
 
 
-def test_index_list_one_index_in_serverless():
+def test_index_list_one_index_in_serverless() -> None:
     runner = CliRunner()
     indices = {"test_index": {"docs_count": 10}}
 
@@ -580,7 +581,7 @@ def test_index_list_one_index_in_serverless():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_index_clean():
+def test_index_clean() -> None:
     runner = CliRunner()
     index_name = "test_index"
     with patch(
@@ -595,7 +596,7 @@ def test_index_clean():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_index_clean_error():
+def test_index_clean_error() -> None:
     runner = CliRunner()
     index_name = "test_index"
     with patch(
@@ -609,7 +610,7 @@ def test_index_clean_error():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_index_delete():
+def test_index_delete() -> None:
     runner = CliRunner()
     index_name = "test_index"
     with patch(
@@ -624,7 +625,7 @@ def test_index_delete():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_delete_index_error():
+def test_delete_index_error() -> None:
     runner = CliRunner()
     index_name = "test_index"
     with patch(
@@ -637,7 +638,7 @@ def test_delete_index_error():
         assert result.exit_code == 0
 
 
-def test_job_help_page():
+def test_job_help_page() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["job", "--help"])
     assert result.exit_code == 0
@@ -646,7 +647,7 @@ def test_job_help_page():
     assert "Commands:" in result.output
 
 
-def test_job_help_page_without_subcommands():
+def test_job_help_page_without_subcommands() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["job"])
     assert result.exit_code == 0
@@ -656,7 +657,7 @@ def test_job_help_page_without_subcommands():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_job_cancel():
+def test_job_cancel() -> None:
     runner = CliRunner()
     job_id = "test_job_id"
 
@@ -688,7 +689,7 @@ def test_job_cancel():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_job_cancel_error():
+def test_job_cancel_error() -> None:
     runner = CliRunner()
     job_id = "test_job_id"
     with patch(
@@ -701,7 +702,7 @@ def test_job_cancel_error():
         assert result.exit_code == 0
 
 
-def test_job_list_no_jobs():
+def test_job_list_no_jobs() -> None:
     runner = CliRunner()
     connector_id = "test_connector_id"
 
@@ -715,7 +716,7 @@ def test_job_list_no_jobs():
 
 
 @patch("click.confirm", MagicMock(return_value=True))
-def test_job_list_one_job():
+def test_job_list_one_job() -> None:
     runner = CliRunner()
     job_id = "test_job_id"
     connector_id = "test_connector_id"
@@ -766,7 +767,7 @@ def test_job_list_one_job():
     "connectors.protocol.connectors.ConnectorIndex.fetch_by_id",
     AsyncMock(return_value=MagicMock()),
 )
-def test_job_start():
+def test_job_start() -> None:
     runner = CliRunner()
     connector_id = "test_connector_id"
     job_id = "test_job_id"
@@ -782,7 +783,7 @@ def test_job_start():
         assert result.exit_code == 0
 
 
-def test_job_view():
+def test_job_view() -> None:
     runner = CliRunner()
     job_id = "test_job_id"
     connector_id = "test_connector_id"

@@ -37,17 +37,19 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from aiohttp.client import ClientSession
+from typing import Optional, Any, Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
+QUEUE_MEM_SIZE: int = 25 * 1024 * 1024  # Size in Megabytes
 CONCURRENT_TASKS = 1000  # Depends on total number of services and size of each service
 MAX_CONCURRENT_CLIENT_SUPPORT = 10
 TABLE_FETCH_SIZE = 50
 TABLE_BATCH_SIZE = 5
 ATTACHMENT_BATCH_SIZE = 10
 
-RUNNING_FTEST = (
+RUNNING_FTEST: bool = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 
@@ -74,15 +76,15 @@ DEFAULT_SERVICE_NAMES = {
 ACLS_QUERY = "sys_security_acl.operation=read^sys_security_acl.name={table_name}"
 
 
-def _prefix_email(email):
+def _prefix_email(email) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_username(user):
+def _prefix_username(user) -> Optional[str]:
     return prefix_identity("username", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
@@ -99,7 +101,7 @@ class InvalidResponse(Exception):
 class ServiceNowClient:
     """ServiceNow Client"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the ServiceNow client.
 
         Args:
@@ -112,11 +114,11 @@ class ServiceNowClient:
         self.retry_count = self.configuration["retry_count"]
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @cached_property
-    def _get_session(self):
+    def _get_session(self) -> ClientSession:
         """Generate aiohttp client session with configuration fields.
 
         Returns:
@@ -162,7 +164,7 @@ class ServiceNowClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_table_length(self, table_name):
+    async def get_table_length(self, table_name) -> int:
         try:
             url = ENDPOINTS["TABLE"].format(table=table_name)
             params = {"sysparm_limit": 1}
@@ -177,7 +179,7 @@ class ServiceNowClient:
             )
             raise
 
-    def _prepare_url(self, url, params, offset):
+    def _prepare_url(self, url: str, params, offset) -> str:
         if not url.endswith("/file"):
             query = ORDER_BY_CREATION_DATE_QUERY
             if "sysparm_query" in params.keys():
@@ -209,7 +211,7 @@ class ServiceNowClient:
             apis.extend(paginated_apis)
         return apis
 
-    def get_record_apis(self, url, params, total_count):
+    def get_record_apis(self, url, params, total_count) -> List[Dict[str, Any]]:
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -230,7 +232,7 @@ class ServiceNowClient:
             )
         return apis
 
-    def get_attachment_apis(self, url, ids):
+    def get_attachment_apis(self, url, ids) -> List[Dict[str, Any]]:
         headers = [
             {"name": "Content-Type", "value": "application/json"},
             {"name": "Accept", "value": "application/json"},
@@ -259,7 +261,7 @@ class ServiceNowClient:
             )
             raise
 
-    def _prepare_batch(self, requests):
+    def _prepare_batch(self, requests) -> Dict[str, str]:
         return {"batch_request_id": str(uuid.uuid4()), "rest_requests": requests}
 
     @retryable(
@@ -342,14 +344,14 @@ class ServiceNowClient:
             )
             raise
 
-    def _log_missing_sysparm_field(self, sys_id, field):
+    def _log_missing_sysparm_field(self, sys_id, field) -> None:
         msg = f"Entry in sys_db_object with sys_id '{sys_id}' is missing sysparm_field '{field}'. This is a non-issue if no invalid services are flagged."
         self._logger.debug(msg)
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self.get_table_length(table_name="sys_db_object")
 
-    async def close_session(self):
+    async def close_session(self) -> None:
         """Closes unclosed client session"""
         self._sleeps.cancel()
         await self._get_session.close()
@@ -371,10 +373,10 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -382,7 +384,7 @@ class ServiceNowAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             ServiceNowAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -424,7 +426,7 @@ class ServiceNowDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the ServiceNow instance.
 
         Args:
@@ -442,10 +444,10 @@ class ServiceNowDataSource(BaseDataSource):
         self.queue = MemQueue(maxmemsize=QUEUE_MEM_SIZE, refresh_timeout=120)
         self.fetchers = ConcurrentTasks(max_concurrency=CONCURRENT_TASKS)
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[ServiceNowAdvancedRulesValidator]:
         return [ServiceNowAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Tweak bulk options as per concurrent downloads support by ServiceNow
 
         Args:
@@ -455,7 +457,7 @@ class ServiceNowDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         return {
             "url": {
                 "label": "Service URL",
@@ -532,7 +534,7 @@ class ServiceNowDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
         user_id = user.get("_id", "")
         user_name = user.get("user_name", "")
         user_email = user.get("email", "")
@@ -582,7 +584,7 @@ class ServiceNowDataSource(BaseDataSource):
             )
         return document
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         """Validate configured services
 
         Raises:
@@ -600,17 +602,17 @@ class ServiceNowDataSource(BaseDataSource):
             msg = f"Services '{', '.join(self.invalid_services)}' are not available. Available services are: '{', '.join(set(self.servicenow_client.services) - set(self.invalid_services))}'"
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured services are available in ServiceNow."""
 
         await super().validate_config()
         await self._remote_validation()
 
-    async def close(self):
+    async def close(self) -> None:
         await self.servicenow_client.close_session()
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with ServiceNow."""
 
         try:
@@ -640,7 +642,7 @@ class ServiceNowDataSource(BaseDataSource):
         )
         return data
 
-    async def _fetch_attachment_metadata(self, batched_apis, table_access_control):
+    async def _fetch_attachment_metadata(self, batched_apis, table_access_control) -> None:
         try:
             async for attachments_metadata in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -670,7 +672,7 @@ class ServiceNowDataSource(BaseDataSource):
         finally:
             await self.queue.put(EndSignal.ATTACHMENT)
 
-    async def _attachment_metadata_producer(self, record_ids, table_access_control):
+    async def _attachment_metadata_producer(self, record_ids, table_access_control) -> None:
         attachment_apis = None
         try:
             attachment_apis = self.servicenow_client.get_attachment_apis(
@@ -716,7 +718,7 @@ class ServiceNowDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _fetch_table_data(self, batched_apis, table_access_control):
+    async def _fetch_table_data(self, batched_apis, table_access_control) -> None:
         try:
             async for table_data in self.servicenow_client.get_data(
                 batched_apis=batched_apis
@@ -828,7 +830,7 @@ class ServiceNowDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _table_data_producer(self, service_name, params, table_access_control):
+    async def _table_data_producer(self, service_name, params, table_access_control) -> None:
         self._logger.debug(f"Fetching {service_name} data")
         try:
             async for batched_apis in self._get_batched_apis(service_name, params):
@@ -929,7 +931,7 @@ class ServiceNowDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
-    async def get_content(self, metadata, timestamp=None, doit=False):
+    async def get_content(self, metadata, timestamp=None, doit: bool=False):
         file_size = int(metadata["size_bytes"])
         if not (doit and file_size > 0):
             return

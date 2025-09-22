@@ -23,6 +23,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.protocol import Filter
+from typing import Dict, Union
 
 RULE_ONE_ID = 1
 RULE_ONE_VALIDATION_MESSAGE = "rule 1 is valid"
@@ -42,7 +43,7 @@ ADVANCED_RULE_ONE_VALIDATION_MESSAGE = "rule 5 is valid"
 ADVANCED_RULE_TWO_ID = 6
 ADVANCED_RULE_TWO_VALIDATION_MESSAGE = "rule 6 is invalid"
 
-RULE_ONE = {
+RULE_ONE: Dict[str, Union[int, str]] = {
     "id": RULE_ONE_ID,
     "order": 1,
     "policy": "include",
@@ -51,7 +52,7 @@ RULE_ONE = {
     "value": "value",
 }
 
-RULE_TWO = {
+RULE_TWO: Dict[str, Union[int, str]] = {
     "id": RULE_TWO_ID,
     "order": 2,
     "policy": "include",
@@ -100,11 +101,11 @@ FILTERING_TWO_BASIC_RULES_WITHOUT_ADVANCED_RULE = Filter(
         ),
     ],
 )
-def test_sync_rule_validation_result_eq(result_one, result_two, should_be_equal):
+def test_sync_rule_validation_result_eq(result_one, result_two, should_be_equal) -> None:
     assert result_one == result_two if should_be_equal else result_one != result_two
 
 
-def test_sync_rule_validation_result_eq_wrong_type():
+def test_sync_rule_validation_result_eq_wrong_type() -> None:
     with pytest.raises(TypeError):
         assert (
             SyncRuleValidationResult(RULE_ONE_ID, True, RULE_ONE_VALIDATION_MESSAGE)
@@ -219,7 +220,7 @@ def test_sync_rule_validation_result_eq_wrong_type():
         ),
     ],
 )
-def test_filtering_validation_result_eq(result_one, result_two, should_be_equal):
+def test_filtering_validation_result_eq(result_one, result_two, should_be_equal) -> None:
     assert result_one == result_two if should_be_equal else result_one != result_two
 
 
@@ -280,11 +281,11 @@ def test_filtering_validation_result_eq(result_one, result_two, should_be_equal)
         ),
     ],
 )
-def test_filter_validation_error_eq(error_one, error_two, should_be_equal):
+def test_filter_validation_error_eq(error_one, error_two, should_be_equal) -> None:
     assert error_one == error_two if should_be_equal else error_one != error_two
 
 
-def test_valid_result_sync_rule():
+def test_valid_result_sync_rule() -> None:
     result = SyncRuleValidationResult.valid_result(RULE_ONE_ID)
 
     assert result.rule_id == RULE_ONE_ID
@@ -391,7 +392,7 @@ def test_valid_result_sync_rule():
 )
 def test_filtering_validation_result(
     sync_rule_validation_results, expected_filtering_validation_result
-):
+) -> None:
     filtering_validation_result = FilteringValidationResult()
 
     for result in sync_rule_validation_results:
@@ -676,7 +677,7 @@ def test_filtering_validation_result(
 @pytest.mark.asyncio
 async def test_filtering_validator(
     basic_rule_validation_results, advanced_rule_validation_results, expected_result
-):
+) -> None:
     basic_rule_validators = validator_fakes(basic_rule_validation_results)
     advanced_rule_validators = validator_fakes(
         advanced_rule_validation_results, is_basic_rule_validator=False
@@ -702,7 +703,7 @@ async def test_filtering_validator(
 
 
 @pytest.mark.asyncio
-async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_validation():
+async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_validation() -> None:
     invalid_validation_result = SyncRuleValidationResult(
         rule_id=RULE_TWO_ID,
         is_valid=False,
@@ -723,7 +724,7 @@ async def test_filtering_validator_validate_when_advanced_rules_empty_then_skip_
     assert validation_result.state == FilteringValidationState.VALID
 
 
-def validator_fakes(results, is_basic_rule_validator=True):
+def validator_fakes(results, is_basic_rule_validator: bool=True):
     validators = []
 
     # validator 1 returns result 1, validator 2 returns result 2 ...
@@ -755,7 +756,7 @@ def validator_fakes(results, is_basic_rule_validator=True):
     return validators
 
 
-def assert_validators_called_with(validators, payload):
+def assert_validators_called_with(validators, payload) -> None:
     for validator in validators:
         if issubclass(validator, BasicRulesSetValidator):
             validator.validate.assert_called_with(payload)
@@ -834,7 +835,7 @@ def assert_validators_called_with(validators, payload):
 @pytest.mark.asyncio
 async def test_filtering_validator_multiple_basic_rules(
     basic_rules_validation_results, expected_result
-):
+) -> None:
     basic_rule_validator = BasicRulesSetValidator
     # side_effect: return result 1 on first call, result 2 on second call ...
     basic_rule_validator.validate = Mock(side_effect=[basic_rules_validation_results])
@@ -848,7 +849,7 @@ async def test_filtering_validator_multiple_basic_rules(
     assert validation_result == expected_result
 
 
-def basic_rule_json(merge_with=None, delete_keys=None):
+def basic_rule_json(merge_with=None, delete_keys=None) -> Dict[str, Union[int, str]]:
     # Default arguments are mutable
     if delete_keys is None:
         delete_keys = []
@@ -890,7 +891,7 @@ def basic_rule_json(merge_with=None, delete_keys=None):
         (basic_rule_json(merge_with={"rule": "regex", "value": "(.*)"}), False),
     ],
 )
-def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
+def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid) -> None:
     if should_be_valid:
         assert BasicRuleNoMatchAllRegexValidator.validate(basic_rule).is_valid
     else:
@@ -947,7 +948,7 @@ def test_basic_rule_validate_no_match_all_regex(basic_rule, should_be_valid):
         ),
     ],
 )
-def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
+def test_basic_rule_against_schema_validation(basic_rule, should_be_valid) -> None:
     if should_be_valid:
         assert BasicRuleAgainstSchemaValidator.validate(basic_rule).is_valid
     else:
@@ -1001,7 +1002,7 @@ def test_basic_rule_against_schema_validation(basic_rule, should_be_valid):
 )
 def test_basic_rules_set_no_conflicting_policies_validation(
     basic_rules, should_be_valid
-):
+) -> None:
     validation_results = BasicRulesSetSemanticValidator.validate(basic_rules)
 
     if should_be_valid:
@@ -1023,12 +1024,12 @@ def test_basic_rules_set_no_conflicting_policies_validation(
         ("edited", FilteringValidationState.EDITED),
     ],
 )
-def test_filtering_validation_state_from_string(string, expected_state):
+def test_filtering_validation_state_from_string(string, expected_state) -> None:
     assert FilteringValidationState(string) == expected_state
 
 
 @pytest.mark.asyncio
-async def test_filtering_validator_validate_single_advanced_rules_validator():
+async def test_filtering_validator_validate_single_advanced_rules_validator() -> None:
     invalid_validation_result = SyncRuleValidationResult(
         rule_id=RULE_TWO_ID,
         is_valid=False,

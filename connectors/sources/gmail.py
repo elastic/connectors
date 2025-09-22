@@ -29,6 +29,7 @@ from connectors.utils import (
     iso_utc,
     validate_email_address,
 )
+from typing import Any, Dict, List, Union
 
 CUSTOMER_ID_LABEL = "Google customer id"
 
@@ -54,7 +55,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
         definition=SCHEMA_DEFINITION,
     )
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -74,7 +75,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _message_doc(message):
+def _message_doc(message) -> Dict[str, Any]:
     timestamp_field = "_timestamp"
 
     # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
@@ -111,11 +112,11 @@ class GMailDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         super().__init__(configuration=configuration)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for the GMail connector.
         Returns:
             dict: Default configuration.
@@ -165,7 +166,7 @@ class GMailDataSource(BaseDataSource):
             },
         }
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user inputs are valid or not for configuration fields.
 
         Raises:
@@ -187,7 +188,7 @@ class GMailDataSource(BaseDataSource):
         await self._validate_google_directory_auth()
         await self._validate_gmail_auth()
 
-    async def _validate_gmail_auth(self):
+    async def _validate_gmail_auth(self) -> None:
         """
         Validates, whether the provided configuration values allow the connector to authenticate against GMail API.
         Failed authentication indicates, that either the provided credentials are incorrect or mandatory GMail API
@@ -203,7 +204,7 @@ class GMailDataSource(BaseDataSource):
             msg = f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
             raise ConfigurableFieldValueError(msg) from e
 
-    async def _validate_google_directory_auth(self):
+    async def _validate_google_directory_auth(self) -> None:
         """
         Validates, whether the provided configuration values allow the connector to authenticate against Google
         Directory API. Failed authentication indicates, that either the provided credentials are incorrect or mandatory
@@ -220,10 +221,10 @@ class GMailDataSource(BaseDataSource):
             msg = f"Google Directory authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for Google Directory are setup correctly."
             raise ConfigurableFieldValueError(msg) from e
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[GMailAdvancedRulesValidator]:
         return [GMailAdvancedRulesValidator()]
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self._google_directory_client.set_logger(self._logger)
 
     @cached_property
@@ -234,14 +235,14 @@ class GMailDataSource(BaseDataSource):
         return service_account_credentials
 
     @cached_property
-    def _google_directory_client(self):
+    def _google_directory_client(self) -> GoogleDirectoryClient:
         return GoogleDirectoryClient(
             json_credentials=self._service_account_credentials,
             customer_id=self.configuration["customer_id"],
             subject=self.configuration["subject"],
         )
 
-    def _gmail_client(self, subject):
+    def _gmail_client(self, subject) -> GMailClient:
         """Instantiates a GMail client for a corresponding subject.
         Args:
             subject (str): Email address for the subject.
@@ -257,7 +258,7 @@ class GMailDataSource(BaseDataSource):
         gmail_client.set_logger(self._logger)
         return gmail_client
 
-    async def ping(self):
+    async def ping(self) -> None:
         for service_name, client in [
             ("GMail", self._gmail_client(self.configuration["subject"])),
             ("Google directory", self._google_directory_client),
@@ -279,7 +280,7 @@ class GMailDataSource(BaseDataSource):
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
 
-    def _user_access_control_doc(self, user, access_control):
+    def _user_access_control_doc(self, user, access_control) -> Dict[str, Any]:
         email = user.get(UserFields.EMAIL.value)
         created_at = user.get(UserFields.CREATION_DATE.value)
 

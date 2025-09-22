@@ -16,6 +16,7 @@ from connectors.protocol import (
 )
 from connectors.source import get_source_klass
 from connectors.utils import iso_utc
+from typing import Any, Dict, Union
 
 EVERYDAY_AT_MIDNIGHT = "0 0 0 * * ?"
 
@@ -25,7 +26,7 @@ class IndexAlreadyExists(Exception):
 
 
 class Connector:
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self.config = config
 
         # initialize ES client
@@ -62,8 +63,8 @@ class Connector:
         configuration,
         is_native,
         name,
-        language=DEFAULT_LANGUAGE,
-        from_index=False,
+        language: str=DEFAULT_LANGUAGE,
+        from_index: bool=False,
     ):
         return asyncio.run(
             self.__create(
@@ -186,7 +187,7 @@ class Connector:
             await self.cli_client.close()
             await self.connector_index.close()
 
-    def default_scheduling(self):
+    def default_scheduling(self) -> Dict[str, Dict[str, Union[bool, str]]]:
         return {
             "access_control": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},
             "full": {"enabled": False, "interval": EVERYDAY_AT_MIDNIGHT},

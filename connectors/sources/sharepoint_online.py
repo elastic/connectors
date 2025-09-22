@@ -45,6 +45,7 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
+from typing import Tuple, Any, Dict, List, Optional, Union
 
 SPO_API_MAX_BATCH_SIZE = 20
 
@@ -57,20 +58,20 @@ if "OVERRIDE_URL" in os.environ:
     )
     logger.warning("IT'S SUPPOSED TO BE USED ONLY FOR TESTING")
     logger.warning("x" * 50)
-    override_url = os.environ["OVERRIDE_URL"]
-    GRAPH_API_URL = override_url
-    GRAPH_API_AUTH_URL = override_url
-    REST_API_AUTH_URL = override_url
+    override_url: str = os.environ["OVERRIDE_URL"]
+    GRAPH_API_URL: str = override_url
+    GRAPH_API_AUTH_URL: str = override_url
+    REST_API_AUTH_URL: str = override_url
 else:
-    GRAPH_API_URL = "https://graph.microsoft.com/v1.0"
-    GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
-    REST_API_AUTH_URL = "https://accounts.accesscontrol.windows.net"
+    GRAPH_API_URL: str = "https://graph.microsoft.com/v1.0"
+    GRAPH_API_AUTH_URL: str = "https://login.microsoftonline.com"
+    REST_API_AUTH_URL: str = "https://accounts.accesscontrol.windows.net"
 
 DEFAULT_RETRY_COUNT = 5
 DEFAULT_RETRY_SECONDS = 30
 DEFAULT_PARALLEL_CONNECTION_COUNT = 10
 DEFAULT_BACKOFF_MULTIPLIER = 5
-FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
+FILE_WRITE_CHUNK_SIZE: int = 1024 * 64  # 64KB default SSD page size
 MAX_DOCUMENT_SIZE = 10485760
 WILDCARD = "*"
 DRIVE_ITEMS_FIELDS = "id,content.downloadUrl,lastModifiedDateTime,lastModifiedBy,root,deleted,file,folder,package,name,webUrl,createdBy,createdDateTime,size,parentReference"
@@ -98,7 +99,7 @@ EDITOR = 6
 REVIEWER = 7
 SYSTEM = 0xFF
 # Note the exclusion of NONE(0), GUEST(1), RESTRICTED_READER(8), and RESTRICTED_GUEST(9)
-VIEW_ROLE_TYPES = [
+VIEW_ROLE_TYPES: List[int] = [
     READER,
     CONTRIBUTOR,
     WEB_DESIGNER,
@@ -193,7 +194,7 @@ class MicrosoftSecurityToken:
         - https://learn.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app
     """
 
-    def __init__(self, http_session, tenant_id, tenant_name, client_id):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id) -> None:
         """Initializer.
 
         Args:
@@ -258,7 +259,7 @@ class MicrosoftSecurityToken:
 
 
 class SecretAPIToken(MicrosoftSecurityToken):
-    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret):
+    def __init__(self, http_session, tenant_id, tenant_name, client_id, client_secret) -> None:
         super().__init__(http_session, tenant_id, tenant_name, client_id)
         self._client_secret = client_secret
 
@@ -334,14 +335,14 @@ class EntraAPIToken(MicrosoftSecurityToken):
         certificate,
         private_key,
         scope,
-    ):
+    ) -> None:
         super().__init__(http_session, tenant_id, tenant_name, client_id)
         self._certificate = certificate
         self._private_key = private_key
         self._scope = scope
 
     @retryable(retries=3)
-    async def _fetch_token(self):
+    async def _fetch_token(self) -> Tuple[str, datetime]:
         """Fetch API token for usage with Graph API
 
         Returns:
@@ -386,7 +387,7 @@ def retryable_aiohttp_call(retries):
 
 
 class MicrosoftAPISession:
-    def __init__(self, http_session, api_token, scroll_field, logger_):
+    def __init__(self, http_session, api_token, scroll_field, logger_) -> None:
         self._http_session = http_session
         self._api_token = api_token
 
@@ -399,10 +400,10 @@ class MicrosoftAPISession:
         self._sleeps = CancellableSleeps()
         self._logger = logger_
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         self._sleeps.cancel()
 
     async def fetch(self, url):
@@ -413,7 +414,7 @@ class MicrosoftAPISession:
         async with self._post(url, payload) as resp:
             return await resp.json()
 
-    async def pipe(self, url, stream):
+    async def pipe(self, url, stream) -> None:
         async with self._get(url) as resp:
             async for data in resp.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
                 await stream.write(data)
@@ -451,7 +452,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _post(self, absolute_url, payload=None, retry_count=0):
+    async def _post(self, absolute_url, payload=None, retry_count: int=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -473,7 +474,7 @@ class MicrosoftAPISession:
         except ClientPayloadError as e:
             await self._handle_client_payload_error(e, retry_count)
 
-    async def _check_batch_items_for_errors(self, url, batch_resp):
+    async def _check_batch_items_for_errors(self, url, batch_resp) -> None:
         body = await batch_resp.json()
         responses = body.get("responses", [])
         for response in responses:
@@ -494,7 +495,7 @@ class MicrosoftAPISession:
 
     @asynccontextmanager
     @retryable_aiohttp_call(retries=DEFAULT_RETRY_COUNT)
-    async def _get(self, absolute_url, retry_count=0):
+    async def _get(self, absolute_url, retry_count: int=0):
         try:
             token = await self._api_token.get()
             headers = {"authorization": f"Bearer {token}"}
@@ -579,7 +580,7 @@ class SharepointOnlineClient:
         client_secret=None,
         certificate=None,
         private_key=None,
-    ):
+    ) -> None:
         # Sharepoint / Graph API has quite strict throttling policies
         # If connector is overzealous, it can be banned for not respecting throttling policies
         # However if connector has a low setting for the tcp_connector limit, then it'll just be slow.
@@ -640,7 +641,7 @@ class SharepointOnlineClient:
             self._http_session, self.rest_api_token, "odata.nextLink", self._logger
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
         self._graph_api_client.set_logger(self._logger)
         self._rest_api_client.set_logger(self._logger)
@@ -778,8 +779,8 @@ class SharepointOnlineClient:
         self,
         sharepoint_host,
         allowed_root_sites,
-        enumerate_all_sites=True,
-        fetch_subsites=False,
+        enumerate_all_sites: bool=True,
+        fetch_subsites: bool=False,
     ):
         if allowed_root_sites == [WILDCARD] or enumerate_all_sites:
             self._logger.debug(f"Looking up all sites to fetch: {allowed_root_sites}")
@@ -876,7 +877,7 @@ class SharepointOnlineClient:
             if "value" in response and len(response["value"]) > 0:
                 yield DriveItemsPage(response["value"], delta_link)
 
-    async def drive_items(self, drive_id, url=None):
+    async def drive_items(self, drive_id, url: Optional[str]=None):
         url = (
             (
                 f"{GRAPH_API_URL}/drives/{drive_id}/root/delta?$select={DRIVE_ITEMS_FIELDS}"
@@ -910,7 +911,7 @@ class SharepointOnlineClient:
         except NotFound:
             return
 
-    async def download_drive_item(self, drive_id, item_id, async_buffer):
+    async def download_drive_item(self, drive_id, item_id, async_buffer) -> None:
         await self._graph_api_client.pipe(
             f"{GRAPH_API_URL}/drives/{drive_id}/items/{item_id}/content", async_buffer
         )
@@ -1011,7 +1012,7 @@ class SharepointOnlineClient:
             # Yes, makes no sense to me either.
             return
 
-    async def download_attachment(self, attachment_absolute_path, async_buffer):
+    async def download_attachment(self, attachment_absolute_path, async_buffer) -> None:
         self._validate_sharepoint_rest_url(attachment_absolute_path)
 
         await self._rest_api_client.pipe(
@@ -1108,7 +1109,7 @@ class SharepointOnlineClient:
 
         return await self._rest_api_client.fetch(url)
 
-    def _validate_sharepoint_rest_url(self, url):
+    def _validate_sharepoint_rest_url(self, url) -> None:
         # TODO: make it better suitable for ftest
         if "OVERRIDE_URL" in os.environ:
             return
@@ -1120,7 +1121,7 @@ class SharepointOnlineClient:
             msg = f"Unable to call Sharepoint REST API - tenant name is invalid. Authenticated for tenant name: {self._tenant_name}, actual tenant name for the service: {actual_tenant_name}. For url: {url}"
             raise InvalidSharepointTenant(msg)
 
-    async def close(self):
+    async def close(self) -> None:
         await self._http_session.close()
         self._graph_api_client.close()
         self._rest_api_client.close()
@@ -1135,7 +1136,7 @@ class DriveItemsPage(Iterable, Sized):
         delta_link (str): Microsoft API deltaLink
     """
 
-    def __init__(self, items, delta_link):
+    def __init__(self, items, delta_link) -> None:
         if items:
             self.items = items
         else:
@@ -1146,7 +1147,7 @@ class DriveItemsPage(Iterable, Sized):
         else:
             self._delta_link = None
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.items)
 
     def __iter__(self):
@@ -1168,7 +1169,7 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             SharepointOnlineAdvancedRulesValidator.SCHEMA(advanced_rules)
 
@@ -1183,19 +1184,19 @@ class SharepointOnlineAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _prefix_group(group):
+def _prefix_group(group) -> Optional[str]:
     return prefix_identity("group", group)
 
 
-def _prefix_user(user):
+def _prefix_user(user) -> Optional[str]:
     return prefix_identity("user", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
-def _prefix_email(email):
+def _prefix_email(email) -> Optional[str]:
     return prefix_identity("email", email)
 
 
@@ -1213,7 +1214,7 @@ def _get_login_name(raw_login_name):
     return None
 
 
-def _parse_created_date_time(created_date_time):
+def _parse_created_date_time(created_date_time: str) -> Optional[datetime]:
     if created_date_time is None:
         return None
     return datetime.strptime(created_date_time, TIMESTAMP_FORMAT)
@@ -1228,13 +1229,13 @@ class SharepointOnlineDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         super().__init__(configuration=configuration)
 
         self._client = None
         self.site_group_cache = {}
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.client.set_logger(self._logger)
 
     @property
@@ -1268,7 +1269,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         return self._client
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         return {
             "tenant_id": {
                 "label": "Tenant ID",
@@ -1399,7 +1400,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             },
         }
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         await super().validate_config()
 
         # Check that we can log in into Graph API
@@ -1444,7 +1445,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             msg = f"The specified SharePoint sites [{', '.join(missing)}] could not be retrieved during sync. Examples of sites available on the tenant:[{', '.join(retrieved_sites[:5])}]."
             raise Exception(msg)
 
-    def _site_path_from_web_url(self, web_url):
+    def _site_path_from_web_url(self, web_url) -> str:
         url_parts = web_url.split("/sites/")
         site_path_parts = url_parts[1:]
         return "/sites/".join(
@@ -1523,7 +1524,7 @@ class SharepointOnlineDataSource(BaseDataSource):
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user) -> Optional[Dict[str, Any]]:
         """Constructs a user access control document, which will be synced to the corresponding access control index.
         The `_id` of the user access control document will either be the username (can also be the email sometimes) or the email itself.
         Note: the `_id` field won't be prefixed with the corresponding identity prefix ("user" or "email").
@@ -1959,7 +1960,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
             yield site_collection
 
-    async def sites(self, hostname, collections, check_timestamp=False):
+    async def sites(self, hostname, collections, check_timestamp: bool=False):
         async for site in self.client.sites(
             hostname,
             collections,
@@ -1975,7 +1976,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield site
 
-    async def site_drives(self, site, check_timestamp=False):
+    async def site_drives(self, site, check_timestamp: bool=False):
         async for site_drive in self.client.site_drives(site["id"]):
             if not check_timestamp or (
                 check_timestamp
@@ -2108,7 +2109,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         site_list_id,
         site_list_name,
         site_access_control,
-        check_timestamp=False,
+        check_timestamp: bool=False,
     ):
         site_id = site.get("id")
         site_web_url = site.get("webUrl")
@@ -2216,7 +2217,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
                 yield list_item, None
 
-    async def site_lists(self, site, site_access_control, check_timestamp=False):
+    async def site_lists(self, site, site_access_control, check_timestamp: bool=False):
         async for site_list in self.client.site_lists(site["id"]):
             if not check_timestamp or (
                 check_timestamp
@@ -2335,7 +2336,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return access_control
 
-    async def site_pages(self, site, site_access_control, check_timestamp=False):
+    async def site_pages(self, site, site_access_control, check_timestamp: bool=False):
         site_id = site["id"]
         url = site["webUrl"]
         async for site_page in self.client.site_pages(url):
@@ -2412,7 +2413,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return self._sync_cursor
 
-    def update_drive_delta_link(self, drive_id, link):
+    def update_drive_delta_link(self, drive_id, link) -> None:
         if not link:
             return
 
@@ -2423,7 +2424,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             self._sync_cursor, [CURSOR_SITE_DRIVE_KEY, drive_id]
         )
 
-    def drive_item_operation(self, item):
+    def drive_item_operation(self, item) -> str:
         if "deleted" in item:
             return OP_DELETE
         else:
@@ -2486,7 +2487,7 @@ class SharepointOnlineDataSource(BaseDataSource):
             drive_item["_original_filename"] = drive_item.get("name", "")
             return partial(self.get_drive_item_content, drive_item)
 
-    async def get_attachment_content(self, attachment, timestamp=None, doit=False):
+    async def get_attachment_content(self, attachment, timestamp=None, doit: bool=False) -> Optional[Dict[str, Any]]:
         if not doit:
             return
 
@@ -2528,7 +2529,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return doc
 
-    async def get_drive_item_content(self, drive_item, timestamp=None, doit=False):
+    async def get_drive_item_content(self, drive_item, timestamp=None, doit: bool=False) -> Optional[Dict[str, Any]]:
         document_size = int(drive_item["size"])
 
         if not (doit and document_size):
@@ -2601,18 +2602,18 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return attachment, body
 
-    async def ping(self):
+    async def ping(self) -> None:
         pass
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client.close()
         if self.extraction_service is not None:
             await self.extraction_service._end_session()
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[SharepointOnlineAdvancedRulesValidator]:
         return [SharepointOnlineAdvancedRulesValidator()]
 
-    def is_supported_format(self, filename):
+    def is_supported_format(self, filename) -> bool:
         if "." not in filename:
             return False
 
@@ -2660,7 +2661,7 @@ class SharepointOnlineDataSource(BaseDataSource):
         else:
             return self._access_control_for_user(member)
 
-    def _access_control_for_user(self, user):
+    def _access_control_for_user(self, user) -> List[Optional[str]]:
         user_access_control = []
 
         user_principal_name = user.get(
@@ -2686,7 +2687,7 @@ class SharepointOnlineDataSource(BaseDataSource):
 
         return user_access_control
 
-    async def _access_control_for_group_id(self, group_id):
+    async def _access_control_for_group_id(self, group_id) -> List[Optional[str]]:
         def is_group_owners_reference(potential_group_id):
             """
             Some group ids aren't actually group IDs, but are references to the _owners_ of a group.

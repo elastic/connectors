@@ -14,11 +14,14 @@ import re
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
+from _io import BytesIO
+from typing import Any, Dict, List, Union
+from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider(weights=[0.6, 0.2, 0.15, 0.05])
-fake = fake_provider.fake
+fake: Faker = fake_provider.fake
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -118,7 +121,7 @@ def generate_string(size):
 CONTENT_DOCUMENT_IDS = [generate_string(18) for _ in range(50)]
 
 
-def generate_records(table_name):
+def generate_records(table_name) -> List[Dict[str, Dict[str, Any]]]:
     records = []
     for _ in range(RECORD_COUNT):
         record = {"Id": generate_string(18)}
@@ -131,7 +134,7 @@ def generate_records(table_name):
     return records
 
 
-def generate_content_document_records():
+def generate_content_document_records() -> List[Dict[str, Dict[str, Any]]]:
     return [
         {
             "ContentDocument": {
@@ -148,7 +151,7 @@ app = Flask(__name__)
 
 
 @app.route("/services/oauth2/token", methods=["POST"])
-def token():
+def token() -> Dict[str, str]:
     return {
         "access_token": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
         "signature": "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY",
@@ -160,7 +163,7 @@ def token():
 
 
 @app.route("/services/data/<version>/query", methods=["GET"])
-def query(version):
+def query(version) -> Dict[str, Any]:
     query = request.args.get("q")
     table_name = re.findall(r"\bFROM\s+(\w+)", query)[-1]
 
@@ -172,7 +175,7 @@ def query(version):
 
 
 @app.route("/services/data/<_version>/query/<table_name>", methods=["GET"])
-def query_next(_version, table_name):
+def query_next(_version, table_name) -> Dict[str, Any]:
     # table_name is supposed to be a followup query id.
     # We co-opt the value in ftests so we can track what table the queries are being run against,
     # as the table is not included in follow-up query params
@@ -183,17 +186,17 @@ def query_next(_version, table_name):
 
 
 @app.route("/services/data/<_version>/sobjects", methods=["GET"])
-def describe(_version):
+def describe(_version) -> Dict[str, List[Dict[str, Union[bool, str]]]]:
     return {"sobjects": [{"name": x, "queryable": True} for x in SOBJECTS]}
 
 
 @app.route("/services/data/<_version>/sobjects/<_sobject>/describe", methods=["GET"])
-def describe_sobject(_version, _sobject):
+def describe_sobject(_version, _sobject) -> Dict[str, List[Dict[str, str]]]:
     return {"fields": [{"name": x} for x in SOBJECT_FIELDS]}
 
 
 @app.route("/sfc/servlet.shepherd/version/download/<_download_id>", methods=["GET"])
-def download(_download_id):
+def download(_download_id) -> BytesIO:
     return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 

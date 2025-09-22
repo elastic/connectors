@@ -33,7 +33,7 @@ from tests.sources.support import create_source
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 
-MORE_THAN_DEFAULT_FILE_SIZE_LIMIT = 10485760 + 1
+MORE_THAN_DEFAULT_FILE_SIZE_LIMIT: int = 10485760 + 1
 
 
 @asynccontextmanager
@@ -48,7 +48,7 @@ async def create_gdrive_source(**kwargs):
 
 
 @pytest.mark.asyncio
-async def test_empty_configuration():
+async def test_empty_configuration() -> None:
     """Tests the validity of the configurations passed to the Google Drive source class."""
 
     configuration = DataSourceConfiguration({"service_account_credentials": ""})
@@ -62,7 +62,7 @@ async def test_empty_configuration():
 
 
 @pytest.mark.asyncio
-async def test_raise_on_invalid_configuration():
+async def test_raise_on_invalid_configuration() -> None:
     """Test if invalid configuration raises an expected Exception"""
 
     configuration = DataSourceConfiguration(
@@ -78,7 +78,7 @@ async def test_raise_on_invalid_configuration():
 
 
 @pytest.mark.asyncio
-async def test_raise_on_invalid_email_configuration_misformatted_email():
+async def test_raise_on_invalid_email_configuration_misformatted_email() -> None:
     """Test if invalid configuration raises an expected Exception"""
 
     configuration = DataSourceConfiguration(
@@ -98,7 +98,7 @@ async def test_raise_on_invalid_email_configuration_misformatted_email():
 
 
 @pytest.mark.asyncio
-async def test_raise_on_invalid_email_configuration_empty_email():
+async def test_raise_on_invalid_email_configuration_empty_email() -> None:
     """Test if invalid configuration raises an expected Exception"""
 
     configuration = DataSourceConfiguration(
@@ -118,7 +118,7 @@ async def test_raise_on_invalid_email_configuration_empty_email():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> None:
     """Tests the ping functionality for ensuring connection to Google Drive."""
 
     expected_response = {
@@ -136,7 +136,7 @@ async def test_ping_for_successful_connection():
 
 @patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection():
+async def test_ping_for_failed_connection() -> None:
     """Tests the ping functionality when connection can not be established to Google Drive."""
 
     async with create_gdrive_source() as source:
@@ -191,7 +191,7 @@ async def test_ping_for_failed_connection():
     ],
 )
 @pytest.mark.asyncio
-async def test_prepare_files(files, expected_files):
+async def test_prepare_files(files, expected_files) -> None:
     """Tests the function which modifies the fetched files and maps the values to keys."""
 
     async with create_gdrive_source() as source:
@@ -389,7 +389,7 @@ async def test_prepare_files(files, expected_files):
     ],
 )
 @pytest.mark.asyncio
-async def test_prepare_file(file, expected_file):
+async def test_prepare_file(file, expected_file) -> None:
     """Test the method that formats the file metadata from Google Drive API"""
 
     async with create_gdrive_source() as source:
@@ -413,7 +413,7 @@ async def test_prepare_file(file, expected_file):
 
 
 @pytest.mark.asyncio
-async def test_list_drives():
+async def test_list_drives() -> None:
     """Tests the method which lists the shared drives from Google Drive."""
 
     async with create_gdrive_source() as source:
@@ -460,7 +460,7 @@ async def test_list_drives():
 
 
 @pytest.mark.asyncio
-async def test_list_folders():
+async def test_list_folders() -> None:
     """Tests the method which lists the folders from Google Drive."""
 
     async with create_gdrive_source() as source:
@@ -509,7 +509,7 @@ async def test_list_folders():
 
 
 @pytest.mark.asyncio
-async def test_resolve_paths():
+async def test_resolve_paths() -> None:
     """Test the method that builds a lookup between a folder id and its absolute path in Google Drive structure"""
     drives = {
         "driveId1": "Drive1",
@@ -572,7 +572,7 @@ async def test_resolve_paths():
 
 
 @pytest.mark.asyncio
-async def test_fetch_files():
+async def test_fetch_files() -> None:
     """Tests the method responsible to yield files from Google Drive."""
 
     async with create_gdrive_source() as source:
@@ -621,7 +621,7 @@ async def test_fetch_files():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_domain_wide_delegation():
+async def test_get_docs_with_domain_wide_delegation() -> None:
     """Tests the method responsible to yield files from Google Drive."""
 
     async with create_gdrive_source(
@@ -686,7 +686,7 @@ async def test_get_docs_with_domain_wide_delegation():
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> None:
     """Tests the module responsible to fetch and yield files documents from Google Drive."""
 
     async with create_gdrive_source() as source:
@@ -736,7 +736,7 @@ async def test_get_docs():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> None:
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     async with create_gdrive_source() as source:
@@ -778,7 +778,7 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_content_doit_false():
+async def test_get_content_doit_false() -> None:
     """Test the module responsible for fetching the content of the file with `doit` set to False"""
 
     async with create_gdrive_source() as source:
@@ -804,7 +804,7 @@ async def test_get_content_doit_false():
 
 
 @pytest.mark.asyncio
-async def test_get_content_google_workspace_called():
+async def test_get_content_google_workspace_called() -> None:
     """Test the method responsible for selecting right extraction method depending on MIME type"""
 
     async with create_gdrive_source() as source:
@@ -850,7 +850,7 @@ async def test_get_content_google_workspace_called():
 
 
 @pytest.mark.asyncio
-async def test_get_content_generic_files_called():
+async def test_get_content_generic_files_called() -> None:
     """Test the method responsible for selecting right extraction method depending on MIME type"""
 
     async with create_gdrive_source() as source:
@@ -896,7 +896,7 @@ async def test_get_content_generic_files_called():
 
 
 @pytest.mark.asyncio
-async def test_get_google_workspace_content():
+async def test_get_google_workspace_content() -> None:
     """Test the module responsible for fetching the content of the Google Suite document."""
 
     async with create_gdrive_source() as source:
@@ -937,7 +937,7 @@ async def test_get_google_workspace_content():
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body():
+async def test_get_google_workspace_content_with_text_extraction_enabled_adds_body() -> None:
     """Test the module responsible for fetching the content of the Google Suite document."""
     with (
         patch(
@@ -983,7 +983,7 @@ async def test_get_google_workspace_content_with_text_extraction_enabled_adds_bo
 
 
 @pytest.mark.asyncio
-async def test_get_google_workspace_content_size_limit():
+async def test_get_google_workspace_content_size_limit() -> None:
     """Test the module responsible for fetching the content of the Google Suite document if its size
     is above the limit."""
 
@@ -1021,7 +1021,7 @@ async def test_get_google_workspace_content_size_limit():
 
 
 @pytest.mark.asyncio
-async def test_get_generic_file_content():
+async def test_get_generic_file_content() -> None:
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     async with create_gdrive_source() as source:
@@ -1062,7 +1062,7 @@ async def test_get_generic_file_content():
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_generic_file_content_with_text_extraction_enabled_adds_body():
+async def test_get_generic_file_content_with_text_extraction_enabled_adds_body() -> None:
     """Test the module responsible for fetching the content of the file if it is extractable."""
     with (
         patch(
@@ -1108,7 +1108,7 @@ async def test_get_generic_file_content_with_text_extraction_enabled_adds_body()
 
 
 @pytest.mark.asyncio
-async def test_get_generic_file_content_size_limit():
+async def test_get_generic_file_content_size_limit() -> None:
     """Test the module responsible for fetching the content of the file size is above the limit."""
 
     async with create_gdrive_source() as source:
@@ -1135,7 +1135,7 @@ async def test_get_generic_file_content_size_limit():
 
 
 @pytest.mark.asyncio
-async def test_get_generic_file_content_empty_file():
+async def test_get_generic_file_content_empty_file() -> None:
     """Test the module responsible for fetching the content of the file if the file size is 0."""
 
     async with create_gdrive_source() as source:
@@ -1162,7 +1162,7 @@ async def test_get_generic_file_content_empty_file():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_type_not_supported():
+async def test_get_content_when_type_not_supported() -> None:
     """Test the module responsible for fetching the content of the file if it is not extractable."""
 
     async with create_gdrive_source() as source:
@@ -1196,7 +1196,7 @@ async def test_get_content_when_type_not_supported():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", 0)
-async def test_api_call_for_attribute_error():
+async def test_api_call_for_attribute_error() -> None:
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     async with create_gdrive_source() as source:
@@ -1208,7 +1208,7 @@ async def test_api_call_for_attribute_error():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", 0)
-async def test_api_call_http_error():
+async def test_api_call_http_error() -> None:
     """Test handling retries for HTTPError exception in api_call() method."""
     async with create_gdrive_source() as source:
         with mock.patch.object(
@@ -1222,7 +1222,7 @@ async def test_api_call_http_error():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", 0)
-async def test_api_call_other_exception():
+async def test_api_call_other_exception() -> None:
     """Test handling retries for generic Exception in api_call() method."""
     async with create_gdrive_source() as source:
         with mock.patch.object(
@@ -1236,7 +1236,7 @@ async def test_api_call_other_exception():
 @patch("connectors.utils.time_to_sleep_between_retries")
 async def test_api_call_ping_retries(
     mock_time_to_sleep_between_retries, mock_responses
-):
+) -> None:
     """Test handling retries for generic Exception in api_call() method."""
     mock_time_to_sleep_between_retries.return_value = 0
 
@@ -1256,7 +1256,7 @@ async def test_api_call_ping_retries(
 @mock.patch("connectors.utils.time_to_sleep_between_retries")
 async def test_api_call_list_drives_retries(
     mock_time_to_sleep_between_retries, mock_responses
-):
+) -> None:
     """Test handling retries for generic Exception in api_call() method."""
     mock_time_to_sleep_between_retries.return_value = 0
 
@@ -1365,7 +1365,7 @@ async def test_api_call_list_drives_retries(
 @pytest.mark.asyncio
 async def test_prepare_file_on_shared_drive_with_dls_enabled(
     file, permissions, expected_file
-):
+) -> None:
     """Test the method that formats the file metadata from Google Drive API"""
 
     async with create_gdrive_source() as source:
@@ -1482,7 +1482,7 @@ async def test_prepare_file_on_shared_drive_with_dls_enabled(
     ],
 )
 @pytest.mark.asyncio
-async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
+async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file) -> None:
     """Test the method that formats the file metadata from Google Drive API"""
 
     async with create_gdrive_source() as source:
@@ -1537,7 +1537,7 @@ async def test_prepare_file_on_my_drive_with_dls_enabled(file, expected_file):
     ],
 )
 @pytest.mark.asyncio
-async def test_prepare_access_control_doc(user, groups, access_control_doc):
+async def test_prepare_access_control_doc(user, groups, access_control_doc) -> None:
     """Test the method that formats the users data from Google Drive API"""
 
     async with create_gdrive_source(
@@ -1604,7 +1604,7 @@ async def test_prepare_access_control_doc(user, groups, access_control_doc):
 @pytest.mark.asyncio
 async def test_prepare_access_control_documents(
     users_page, groups, access_control_docs
-):
+) -> None:
     """Test the method that formats the users data from Google Drive API"""
 
     async with create_gdrive_source(
@@ -1630,7 +1630,7 @@ async def test_prepare_access_control_documents(
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> None:
     async with create_gdrive_source() as source:
         source._dls_enabled = mock.MagicMock(return_value=False)
 
@@ -1642,7 +1642,7 @@ async def test_get_access_control_dls_disabled():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_enabled():
+async def test_get_access_control_dls_enabled() -> None:
     """Tests the module responsible to fetch users data from Google Drive."""
 
     async with create_gdrive_source(
@@ -1684,14 +1684,14 @@ async def test_get_access_control_dls_enabled():
 
 
 @pytest.mark.asyncio
-async def test_get_google_workspace_admin_email_no_dls_no_delegation():
+async def test_get_google_workspace_admin_email_no_dls_no_delegation() -> None:
     async with create_gdrive_source() as source:
         email = source._get_google_workspace_admin_email()
         assert email is None
 
 
 @pytest.mark.asyncio
-async def test_get_google_workspace_admin_email_with_delegation_no_dls():
+async def test_get_google_workspace_admin_email_with_delegation_no_dls() -> None:
     test_email = "email@test.com"
     async with create_gdrive_source(
         google_workspace_admin_email_for_data_sync=test_email
@@ -1702,7 +1702,7 @@ async def test_get_google_workspace_admin_email_with_delegation_no_dls():
 
 
 @pytest.mark.asyncio
-async def test_get_google_workspace_admin_email_with_dls_no_delegation():
+async def test_get_google_workspace_admin_email_with_dls_no_delegation() -> None:
     test_email = "email@test.com"
     dls_admin_email = "email1@test.com"
     async with create_gdrive_source(
@@ -1716,7 +1716,7 @@ async def test_get_google_workspace_admin_email_with_dls_no_delegation():
 
 
 @pytest.mark.asyncio
-async def test_get_google_workspace_admin_email_with_dls_delegation():
+async def test_get_google_workspace_admin_email_with_dls_delegation() -> None:
     test_email = "email@test.com"
     dls_admin_email = "email1@test.com"
     async with create_gdrive_source(
@@ -1731,14 +1731,14 @@ async def test_get_google_workspace_admin_email_with_dls_delegation():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_cursor", [None, {}])
-async def test_get_docs_incrementally_with_empty_sync_cursor(sync_cursor):
+async def test_get_docs_incrementally_with_empty_sync_cursor(sync_cursor) -> None:
     async with create_gdrive_source() as source:
         with pytest.raises(SyncCursorEmpty):
             await anext(source.get_docs_incrementally(sync_cursor=sync_cursor))
 
 
 @pytest.mark.asyncio
-async def test_get_docs_incrementally():
+async def test_get_docs_incrementally() -> None:
     """Tests the module responsible to fetch and yield files documents from Google Drive."""
 
     async with create_gdrive_source() as source:
@@ -1832,7 +1832,7 @@ async def test_get_docs_incrementally():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_incrementally_with_domain_wide_delegation():
+async def test_get_docs_incrementally_with_domain_wide_delegation() -> None:
     """Tests the method responsible to yield files from Google Drive."""
 
     async with create_gdrive_source(
@@ -1938,7 +1938,7 @@ async def test_get_docs_incrementally_with_domain_wide_delegation():
 
 
 @pytest.mark.asyncio
-async def test_users():
+async def test_users() -> None:
     async with create_gdrive_source(
         google_workspace_admin_email_for_data_sync="admin@email.com"
     ) as source:
@@ -2215,7 +2215,7 @@ async def test_users():
 )
 async def test_list_files_from_my_drive(
     fetch_permissions, last_sync_time, api_response, expected_response
-):
+) -> None:
     async with create_gdrive_source() as source:
         with mock.patch.object(
             GoogleServiceAccountClient,

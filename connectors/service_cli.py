@@ -29,13 +29,15 @@ from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.source import get_source_klass, get_source_klasses
+from asyncio.events import AbstractEventLoop
+from typing import Optional
 
 __all__ = ["main"]
 
 from connectors.utils import sleeps_for_retryable
 
 
-async def _start_service(actions, config, loop):
+async def _start_service(actions, config, loop) -> Optional[int]:
     """Starts the service.
 
     Steps:
@@ -80,7 +82,7 @@ def _get_uvloop():
     return uvloop
 
 
-def get_event_loop(uvloop=False):
+def get_event_loop(uvloop: bool=False) -> AbstractEventLoop:
     if uvloop:
         # activate uvloop if lib is present
         try:
@@ -102,7 +104,7 @@ def get_event_loop(uvloop=False):
     return loop
 
 
-def run(action, config_file, log_level, filebeat, service_type, uvloop):
+def run(action, config_file, log_level, filebeat: bool, service_type, uvloop: bool) -> Optional[int]:
     """Loads the config file, sets the logger and executes an action.
 
     Actions:
@@ -225,7 +227,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     help="Service type to get default configuration for if action is config.",
 )
 @click.option("--uvloop", is_flag=True, default=False, help="Use uvloop if possible.")
-def main(action, config_file, log_level, filebeat, service_type, uvloop):
+def main(action, config_file, log_level, filebeat: bool, service_type, uvloop: bool):
     """Entry point to the service, responsible for all operations.
 
     Parses the arguments and calls `run` with them.

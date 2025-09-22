@@ -15,6 +15,7 @@ from connectors.filtering.validation import (
     FilteringValidationState,
 )
 from connectors.source import BaseDataSource
+from typing import Dict, Optional
 
 
 class FakeSource(BaseDataSource):
@@ -23,7 +24,7 @@ class FakeSource(BaseDataSource):
     name = "Fakey"
     service_type = "fake"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self.configuration = configuration
         if configuration.has_field("raise"):
             msg = "I break on init"
@@ -31,16 +32,16 @@ class FakeSource(BaseDataSource):
         self.fail = configuration.has_field("fail")
         self.configuration_invalid = configuration.has_field("configuration_invalid")
 
-    async def changed(self):
+    async def changed(self) -> bool:
         return True
 
-    async def ping(self):
+    async def ping(self) -> None:
         pass
 
-    async def close(self):
+    async def close(self) -> None:
         pass
 
-    async def _dl(self, doc_id, timestamp=None, doit=None):
+    async def _dl(self, doc_id, timestamp=None, doit=None) -> Optional[Dict[str, str]]:
         if not doit:
             return
         return {"_id": doc_id, "_timestamp": timestamp, "text": "xx"}
@@ -56,18 +57,18 @@ class FakeSource(BaseDataSource):
         return {}
 
     @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(cls, filtering) -> FilteringValidationResult:
         # being explicit about that this result should always be valid
         return FilteringValidationResult(
             state=FilteringValidationState.VALID, errors=[]
         )
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         if self.configuration_invalid:
             msg = "I fail when validating configuration"
             raise ValueError(msg)
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         pass
 
 
@@ -82,7 +83,7 @@ class FakeSourceFilteringValid(FakeSource):
     service_type = "filtering_state_valid"
 
     @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(cls, filtering) -> FilteringValidationResult:
         # use separate fake source to not rely on the behaviour in FakeSource which is used in many tests
         return FilteringValidationResult(
             state=FilteringValidationState.VALID, errors=[]
@@ -96,7 +97,7 @@ class FakeSourceFilteringStateInvalid(FakeSource):
     service_type = "filtering_state_invalid"
 
     @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(cls, filtering) -> FilteringValidationResult:
         return FilteringValidationResult(state=FilteringValidationState.INVALID)
 
 
@@ -107,7 +108,7 @@ class FakeSourceFilteringStateEdited(FakeSource):
     service_type = "filtering_state_edited"
 
     @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(cls, filtering) -> FilteringValidationResult:
         return FilteringValidationResult(state=FilteringValidationState.EDITED)
 
 
@@ -118,7 +119,7 @@ class FakeSourceFilteringErrorsPresent(FakeSource):
     service_type = "filtering_errors_present"
 
     @classmethod
-    async def validate_filtering(cls, filtering):
+    async def validate_filtering(cls, filtering) -> FilteringValidationResult:
         return FilteringValidationResult(errors=[Mock()])
 
 
@@ -167,5 +168,5 @@ class PremiumFake(FakeSource):
     service_type = "premium_fake"
 
     @classmethod
-    def is_premium():
+    def is_premium() -> bool:
         return True

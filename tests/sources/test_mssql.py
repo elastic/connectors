@@ -32,7 +32,7 @@ ID_THREE = "id3"
 class MockEngine:
     """This Class create mock engine for mssql dialect"""
 
-    def connect(self):
+    def connect(self) -> ConnectionSync:
         """Make a connection
 
         Returns:
@@ -42,7 +42,7 @@ class MockEngine:
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> None:
     async with create_source(MSSQLDataSource) as source:
         source.engine = MockEngine()
         with patch.object(
@@ -53,7 +53,7 @@ async def test_ping():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_ping_negative():
+async def test_ping_negative() -> None:
     with pytest.raises(Exception):
         async with create_source(MSSQLDataSource) as source:
             with patch.object(Engine, "connect", side_effect=Exception()):
@@ -62,7 +62,7 @@ async def test_ping_negative():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_documents_from_table_negative():
+async def test_fetch_documents_from_table_negative() -> None:
     async with create_source(MSSQLDataSource) as source:
         with patch.object(
             source.mssql_client,
@@ -75,7 +75,7 @@ async def test_fetch_documents_from_table_negative():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_documents_from_query_negative():
+async def test_fetch_documents_from_query_negative() -> None:
     async with create_source(MSSQLDataSource) as source:
         with patch.object(
             source,
@@ -89,7 +89,7 @@ async def test_fetch_documents_from_query_negative():
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> None:
     # Setup
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
@@ -210,7 +210,7 @@ async def test_get_docs():
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
@@ -352,7 +352,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 @pytest.mark.asyncio
 async def test_advanced_rules_validation_when_id_in_source_available(
     advanced_rules, id_in_source, expected_validation_result
-):
+) -> None:
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
@@ -461,7 +461,7 @@ async def test_advanced_rules_validation_when_id_in_source_available(
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering, expected_response):
+async def test_get_docs_with_advanced_rules(filtering, expected_response) -> None:
     async with create_source(
         MSSQLDataSource, database="xe", tables="*", schema="dbo"
     ) as source:
@@ -477,7 +477,7 @@ async def test_get_docs_with_advanced_rules(filtering, expected_response):
 
 
 @pytest.mark.asyncio
-async def test_create_pem_file():
+async def test_create_pem_file() -> None:
     async with create_source(MSSQLDataSource) as source:
         source.mssql_client.create_pem_file()
         assert ".pem" in source.mssql_client.certfile
@@ -488,7 +488,7 @@ async def test_create_pem_file():
 
 
 @pytest.mark.asyncio
-async def test_get_tables_to_fetch():
+async def test_get_tables_to_fetch() -> None:
     actual_response = []
     expected_response = ["table1", "table2"]
     async with create_source(MSSQLDataSource) as source:
@@ -499,7 +499,7 @@ async def test_get_tables_to_fetch():
 
 
 @pytest.mark.asyncio
-async def test_yield_docs_custom_query():
+async def test_yield_docs_custom_query() -> None:
     async with create_source(MSSQLDataSource) as source:
         source.mssql_client.get_table_primary_key = AsyncMock(return_value=[])
         async for _ in source._yield_docs_custom_query(

@@ -17,25 +17,25 @@ from aioresponses import aioresponses
 
 
 class Logger:
-    def __init__(self, silent=True):
+    def __init__(self, silent: bool=True) -> None:
         self.logs = []
         self.silent = silent
 
-    def debug(self, msg, exc_info=False):
+    def debug(self, msg, exc_info: bool=False) -> None:
         if not self.silent:
             print(msg)  # noqa: T201
         self.logs.append(msg)
         if exc_info:
             self.logs.append(traceback.format_exc())
 
-    def assert_instance(self, instance):
+    def assert_instance(self, instance) -> None:
         for log in self.logs:
             if isinstance(log, instance):
                 return
         msg = f"Could not find an instance of {instance}"
         raise AssertionError(msg)
 
-    def assert_not_present(self, lines):
+    def assert_not_present(self, lines) -> None:
         if isinstance(lines, str):
             lines = [lines]
         for msg in lines:
@@ -43,7 +43,7 @@ class Logger:
                 if isinstance(log, str) and msg in log:
                     raise AssertionError(f"'{msg}' found in {self.logs}")
 
-    def assert_present(self, lines):
+    def assert_present(self, lines) -> None:
         if isinstance(lines, str):
             lines = [lines]
         for msg in lines:
@@ -80,7 +80,7 @@ def catch_stdout():
 
 
 @pytest.fixture
-def patch_logger(silent=True):
+def patch_logger(silent: bool=True):
     class PatchedLogger(Logger):
         def info(self, msg, *args, prefix=None, extra=None, exc_info=None):
             super(PatchedLogger, self).info(msg, *args)
@@ -153,7 +153,7 @@ def mock_aws():
             os.environ["AWS_ACCESS_KEY_ID"] = old_key
 
 
-def assert_re(expr, items):
+def assert_re(expr: re.Pattern[str], items) -> None:
     expr = re.compile(expr)
 
     for item in reversed(items):

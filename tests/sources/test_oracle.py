@@ -53,7 +53,7 @@ def oracle_client(**extras):
         (SERVICE_NAME, DSN_SERVICE_NAME),
     ],
 )
-def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
+def test_engine_in_thin_mode(mock_fun, connection_source, DSN) -> None:
     """Test engine method of OracleClient class in thin mode"""
     # Setup
     with oracle_client() as client:
@@ -73,7 +73,7 @@ def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
         (SERVICE_NAME, DSN_SERVICE_NAME),
     ],
 )
-def test_engine_in_thick_mode(mock_fun, connection_source, DSN):
+def test_engine_in_thick_mode(mock_fun, connection_source, DSN) -> None:
     """Test engine method of OracleClient class in thick mode"""
     oracle_home = "/home/devuser"
     config_file_path = {"lib_dir": f"{oracle_home}/lib", "config_dir": ""}
@@ -91,7 +91,7 @@ def test_engine_in_thick_mode(mock_fun, connection_source, DSN):
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> None:
     async with create_source(OracleDataSource) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(OracleQueries())
@@ -100,7 +100,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> None:
     # Setup
     async with create_source(
         OracleDataSource,

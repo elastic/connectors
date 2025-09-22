@@ -34,7 +34,7 @@ from connectors.filtering.basic_rule import BasicRuleEngine, parse
 from connectors.logger import logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.protocol.connectors import (
-    DELETED_DOCUMENT_COUNT,
+    Filter, DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
@@ -56,6 +56,8 @@ from connectors.utils import (
     retryable,
     sanitize,
 )
+from typing import Tuple, Any, Dict, Optional
+from connectors.es.client import License
 
 __all__ = ["SyncOrchestrator"]
 EXTRACTOR_ERROR = "EXTRACTOR_ERROR"
@@ -107,7 +109,7 @@ class ContentIndexDoesNotExistError(Exception):
 
 
 class ElasticsearchOverloadedError(Exception):
-    def __init__(self, cause=None):
+    def __init__(self, cause=None) -> None:
         msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
         super().__init__(msg)
         self.__cause__ = cause
@@ -145,8 +147,8 @@ class Sink:
         retry_interval,
         error_monitor,
         logger_=None,
-        enable_bulk_operations_logging=False,
-    ):
+        enable_bulk_operations_logging: bool=False,
+    ) -> None:
         self.client = client
         self.queue = queue
         self.chunk_size = chunk_size
@@ -162,7 +164,7 @@ class Sink:
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
         self.counters = Counters()
 
-    def _bulk_op(self, doc, operation=OP_INDEX):
+    def _bulk_op(self, doc, operation: str=OP_INDEX):
         doc_id = doc["_id"]
         index = doc["_index"]
 
@@ -231,7 +233,7 @@ class Sink:
                         result[doc["_id"]] = op
         return result
 
-    async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
+    async def _process_bulk_response(self, res, ids_to_ops, do_log: bool=False) -> None:
         for item in res.get("items", []):
             if OP_INDEX in item:
                 action_item = OP_INDEX
@@ -302,7 +304,7 @@ class Sink:
                     )
                 self.counters.increment(RESULT_SUCCESS)
 
-    def _populate_stats(self, stats, res):
+    def _populate_stats(self, stats, res) -> None:
         for item in res["items"]:
             for op, data in item.items():
                 # "result" is only present in successful operations
@@ -327,7 +329,7 @@ class Sink:
             f"Sink stats - no. of docs indexed: {self.counters.get(INDEXED_DOCUMENT_COUNT)}, volume of docs indexed: {round(self.counters.get(INDEXED_DOCUMENT_VOLUME))} bytes, no. of docs deleted: {self.counters.get(DELETED_DOCUMENT_COUNT)}"
         )
 
-    def force_cancel(self):
+    def force_cancel(self) -> None:
         self._canceled = True
 
     async def fetch_doc(self):
@@ -336,7 +338,7 @@ class Sink:
 
         return await self.queue.get()
 
-    async def run(self):
+    async def run(self) -> None:
         try:
             await self._run()
         except asyncio.CancelledError:
@@ -352,7 +354,7 @@ class Sink:
                 return
             raise
 
-    async def _run(self):
+    async def _run(self) -> None:
         """Creates batches of bulk calls given a queue of items.
 
         An item is a (size, object) tuple. Exits when the
@@ -441,14 +443,14 @@ class Extractor:
         client,
         queue,
         index,
-        filter_=None,
-        sync_rules_enabled=False,
-        content_extraction_enabled=True,
-        display_every=DEFAULT_DISPLAY_EVERY,
-        concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
+        filter_: Optional[Filter]=None,
+        sync_rules_enabled: bool=False,
+        content_extraction_enabled: bool=True,
+        display_every: int=DEFAULT_DISPLAY_EVERY,
+        concurrent_downloads: int=DEFAULT_CONCURRENT_DOWNLOADS,
         logger_=None,
-        skip_unchanged_documents=False,
-    ):
+        skip_unchanged_documents: bool=False,
+    ) -> None:
         if filter_ is None:
             filter_ = Filter()
         self.client = client
@@ -468,7 +470,7 @@ class Extractor:
         self._canceled = False
         self.skip_unchanged_documents = skip_unchanged_documents
 
-    async def _deferred_index(self, lazy_download, doc_id, doc, operation):
+    async def _deferred_index(self, lazy_download, doc_id, doc, operation) -> None:
         try:
             data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
@@ -495,16 +497,16 @@ class Extractor:
                 f"Failed to do deferred index operation for doc {doc_id}: {ex}"
             )
 
-    def force_cancel(self):
+    def force_cancel(self) -> None:
         self._canceled = True
 
-    async def put_doc(self, doc):
+    async def put_doc(self, doc) -> None:
         if self._canceled:
             raise ForceCanceledError
 
         await self.queue.put(doc)
 
-    async def run(self, generator, job_type):
+    async def run(self, generator, job_type) -> None:
         sanitized_generator = (
             (sanitize(doc), *other) async for doc, *other in generator
         )
@@ -550,7 +552,7 @@ class Extractor:
         async for doc in generator:
             yield doc
 
-    async def get_docs(self, generator, skip_unchanged_documents=False):
+    async def get_docs(self, generator, skip_unchanged_documents: bool=False) -> None:
         """Iterate on a generator of documents to fill a queue of bulk operations for the `Sink` to consume.
         Extraction happens in a separate task, when a document contains files.
 
@@ -671,7 +673,7 @@ class Extractor:
 
         return existing_ids
 
-    async def get_docs_incrementally(self, generator):
+    async def get_docs_incrementally(self, generator) -> None:
         """Iterate on a generator of documents to fill a queue with bulk operations for the `Sink` to consume.
 
         A document might be discarded if its timestamp has not changed.
@@ -738,7 +740,7 @@ class Extractor:
 
         await self.put_doc(END_DOCS)
 
-    async def get_access_control_docs(self, generator):
+    async def get_access_control_docs(self, generator) -> None:
         """Iterate on a generator of access control documents to fill a queue with bulk operations for the `Sink` to consume.
 
         A document might be discarded if its timestamp has not changed.
@@ -798,7 +800,7 @@ class Extractor:
         await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc(END_DOCS)
 
-    async def enqueue_docs_to_delete(self, existing_ids):
+    async def enqueue_docs_to_delete(self, existing_ids) -> None:
         self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
         for doc_id in existing_ids.keys():
             await self.put_doc(
@@ -812,7 +814,7 @@ class Extractor:
 
     def _log_progress(
         self,
-    ):
+    ) -> None:
         self._logger.info(
             "Sync progress -- "
             f"created: {self.counters.get(CREATES_QUEUED)} | "
@@ -840,7 +842,7 @@ class SyncOrchestrator:
     - once they are both over, returns totals
     """
 
-    def __init__(self, elastic_config, logger_=None):
+    def __init__(self, elastic_config, logger_=None) -> None:
         self._logger = logger_ or logger
         self._logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
         self.es_management_client = ESManagementClient(elastic_config)
@@ -854,18 +856,18 @@ class SyncOrchestrator:
         error_monitor_config = elastic_config.get("bulk", {}).get("error_monitor", {})
         self.error_monitor = ErrorMonitor(error_monitor_config)
 
-    async def close(self):
+    async def close(self) -> None:
         await self.es_management_client.close()
         await self.cancel()
 
-    async def has_active_license_enabled(self, license_):
+    async def has_active_license_enabled(self, license_) -> Tuple[bool, License]:
         # TODO: think how to make it not a proxy method to the client
         return await self.es_management_client.has_active_license_enabled(license_)
 
-    def extract_index_or_alias(self, get_index_response, expected_index_name):
+    def extract_index_or_alias(self, get_index_response, expected_index_name) -> None:
         return None
 
-    async def prepare_content_index(self, index_name, language_code=None):
+    async def prepare_content_index(self, index_name, language_code=None) -> None:
         """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
 
@@ -884,7 +886,7 @@ class SyncOrchestrator:
             )
             self._logger.info(f"Content index successfully created:  {index_name}")
 
-    def done(self):
+    def done(self) -> bool:
         """
         An async task (which this mimics) should be "done" if:
          - it was canceled
@@ -903,13 +905,13 @@ class SyncOrchestrator:
         sink_done = True if self._sink_task is None or self._sink_task.done() else False
         return extractor_done and sink_done
 
-    def _sink_task_running(self):
+    def _sink_task_running(self) -> bool:
         return self._sink_task is not None and not self._sink_task.done()
 
-    def _extractor_task_running(self):
+    def _extractor_task_running(self) -> bool:
         return self._extractor_task is not None and not self._extractor_task.done()
 
-    async def cancel(self):
+    async def cancel(self) -> None:
         if self._sink_task_running():
             self._logger.info(
                 f"Canceling the Sink task: {self._sink_task.get_name()}"  # pyright: ignore
@@ -955,7 +957,7 @@ class SyncOrchestrator:
         self._sink.force_cancel()
         self._extractor.force_cancel()
 
-    def ingestion_stats(self):
+    def ingestion_stats(self) -> Dict[str, Any]:
         stats = {}
         if self._extractor is not None:
             stats.update(self._extractor.counters.to_dict())
@@ -979,13 +981,13 @@ class SyncOrchestrator:
         generator,
         pipeline,
         job_type,
-        filter_=None,
-        sync_rules_enabled=False,
-        content_extraction_enabled=True,
+        filter_: Optional[Filter]=None,
+        sync_rules_enabled: bool=False,
+        content_extraction_enabled: bool=True,
         options=None,
-        skip_unchanged_documents=False,
-        enable_bulk_operations_logging=False,
-    ):
+        skip_unchanged_documents: bool=False,
+        enable_bulk_operations_logging: bool=False,
+    ) -> None:
         """Performs a batch of `_bulk` calls, given a generator of documents
 
         Arguments:
@@ -1068,7 +1070,7 @@ class SyncOrchestrator:
         )
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
-    def sink_task_callback(self, task):
+    def sink_task_callback(self, task) -> None:
         if task.cancelled():
             self._logger.warning(
                 f"{type(self._sink).__name__}: {task.get_name()} was cancelled before completion"
@@ -1080,7 +1082,7 @@ class SyncOrchestrator:
             )
             self.error = task.exception()
 
-    def extractor_task_callback(self, task):
+    def extractor_task_callback(self, task) -> None:
         if task.cancelled():
             self._logger.warning(
                 f"{type(self._extractor).__name__}: {task.get_name()} was cancelled before completion"

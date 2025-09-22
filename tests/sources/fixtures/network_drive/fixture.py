@@ -21,7 +21,7 @@ NUMBER_OF_FILES_TO_BE_DELETED = 10
 USERNAME = "admin"
 PASSWORD = "abc@123"
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
     case "small":
@@ -35,7 +35,7 @@ match DATA_SIZE:
         FOLDER_COUNT = 250
 
 
-def generate_folder():
+def generate_folder() -> None:
     """Method for generating folder on Network Drive server"""
     try:
         print("Started loading folder on network drive server....")
@@ -51,7 +51,7 @@ def generate_folder():
         )
 
 
-def generate_files():
+def generate_files() -> None:
     """Method for generating files on Network Drive server"""
     try:
         smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)
@@ -74,12 +74,12 @@ def generate_files():
         raise
 
 
-async def load():
+async def load() -> None:
     generate_folder()
     generate_files()
 
 
-async def remove():
+async def remove() -> None:
     """Method for deleting 10 random files from Network Drive server"""
     try:
         smbclient.register_session(server=SERVER, username=USERNAME, password=PASSWORD)

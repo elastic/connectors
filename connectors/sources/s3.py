@@ -21,6 +21,7 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource
 from connectors.utils import hash_id
+from typing import Dict, List, Union
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
@@ -36,7 +37,7 @@ else:
 class S3Client:
     """Amazon S3 client to handle method calls made to S3"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self.configuration = configuration
         self._logger = logger
         self.session = aioboto3.Session(
@@ -51,7 +52,7 @@ class S3Client:
         self.clients = {}
         self.client_context = []
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     async def client(self, region=None):
@@ -83,12 +84,12 @@ class S3Client:
         self.clients[region_name] = s3_client
         return self.clients[region_name]
 
-    async def close_client(self):
+    async def close_client(self) -> None:
         """Closes unclosed client session"""
         for context in self.client_context:
             await context.aclose()
 
-    async def fetch_buckets(self):
+    async def fetch_buckets(self) -> None:
         """This method used to list all the buckets from Amazon S3"""
         s3 = await self.client()
         await s3.list_buckets()
@@ -178,10 +179,10 @@ class S3AdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -206,7 +207,7 @@ class S3DataSource(BaseDataSource):
     service_type = "s3"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Set up the connection to the Amazon S3.
 
         Args:
@@ -215,13 +216,13 @@ class S3DataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.s3_client = S3Client(configuration=configuration)
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.s3_client.set_logger(self._logger)
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[S3AdvancedRulesValidator]:
         return [S3AdvancedRulesValidator(self)]
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
@@ -335,12 +336,12 @@ class S3DataSource(BaseDataSource):
 
         return document
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes unclosed client session"""
         await self.s3_client.close_client()
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Amazon S3.
 
         Returns:

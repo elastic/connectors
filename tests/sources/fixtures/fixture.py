@@ -15,7 +15,7 @@ import pprint
 import signal
 import sys
 import time
-from argparse import ArgumentParser
+from argparse import Namespace, ArgumentParser
 
 from elastic_transport import ConnectionTimeout
 from elasticsearch import ApiError
@@ -26,14 +26,16 @@ from connectors.utils import (
     RetryStrategy,
     time_to_sleep_between_retries,
 )
+from asyncio.events import AbstractEventLoop
+from typing import Optional
 
 CONNECTORS_INDEX = ".elastic-connectors"
 
-logger = logging.getLogger("ftest")
+logger: logging.Logger = logging.getLogger("ftest")
 set_extra_logger(logger, log_level=logging.DEBUG, prefix="FTEST")
 
 
-async def wait_for_es():
+async def wait_for_es() -> None:
     try:
         es_client = _es_client()
         await es_client.wait()
@@ -45,7 +47,7 @@ async def wait_for_es():
         await es_client.close()
 
 
-def _parser():
+def _parser() -> ArgumentParser:
     parser = ArgumentParser(prog="fixture")
 
     parser.add_argument(
@@ -73,7 +75,7 @@ def _parser():
     return parser
 
 
-def retrying_transient_errors(retries=5):
+def retrying_transient_errors(retries: int=5):
     def wrapper(func):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):
@@ -104,7 +106,7 @@ def retrying_transient_errors(retries=5):
     return wrapper
 
 
-def _es_client():
+def _es_client() -> ESManagementClient:
     options = {
         "host": "http://127.0.0.1:9200",
         "username": "elastic",
@@ -133,7 +135,7 @@ async def _fetch_connector_metadata(es_client):
     return (connector_id, last_synced)
 
 
-async def _monitor_service(pid):
+async def _monitor_service(pid: int) -> None:
     es_client = _es_client()
     sync_job_timeout = 20 * 60  # 20 minutes timeout
 
@@ -164,7 +166,7 @@ async def _monitor_service(pid):
         await es_client.close()
 
 
-async def _exec_shell(cmd):
+async def _exec_shell(cmd) -> None:
     # Create subprocess
     proc = await asyncio.create_subprocess_shell(cmd)
 
@@ -173,7 +175,7 @@ async def _exec_shell(cmd):
     logger.debug(f"Successfully executed cmd: {cmd}")
 
 
-async def main(args=None):
+async def main(args: Optional[Namespace]=None):
     parser = _parser()
     args = parser.parse_args(args=args)
     action = args.action
@@ -230,5 +232,5 @@ async def main(args=None):
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    loop: AbstractEventLoop = asyncio.get_event_loop()
     loop.run_until_complete(main())

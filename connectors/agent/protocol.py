@@ -10,8 +10,10 @@ from elastic_agent_client.handler.checkin import BaseCheckinHandler
 
 from connectors.agent.connector_record_manager import ConnectorRecordManager
 from connectors.agent.logger import get_logger
+from elastic_agent_client.client import V2
+from logging import Logger
 
-logger = get_logger("protocol")
+logger: Logger = get_logger("protocol")
 
 
 CONNECTORS_INPUT_TYPE = "connectors-py"
@@ -49,10 +51,10 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
 
     def __init__(
         self,
-        client,
+        client: V2,
         agent_connectors_config_wrapper,
         service_manager,
-    ):
+    ) -> None:
         """Inits the class.
 
         Initing this class should not produce side-effects.
@@ -62,7 +64,7 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         self.service_manager = service_manager
         self.connector_record_manager = ConnectorRecordManager()
 
-    async def apply_from_client(self):
+    async def apply_from_client(self) -> None:
         """Implementation of BaseCheckinHandler.apply_from_client
 
         This method is called by the Agent Protocol handlers when there's a check-in event

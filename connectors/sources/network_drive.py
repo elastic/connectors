@@ -50,6 +50,7 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from typing import Optional, Any, Dict, List, Union
 
 ACCESS_ALLOWED_TYPE = 0
 ACCESS_DENIED_TYPE = 1
@@ -93,11 +94,11 @@ class NoLogonServerException(Exception):
     pass
 
 
-def _prefix_user(user):
+def _prefix_user(user) -> Optional[str]:
     return prefix_identity("user", user)
 
 
-def _prefix_rid(rid):
+def _prefix_rid(rid) -> Optional[str]:
     return prefix_identity("rid", rid)
 
 
@@ -118,10 +119,10 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -129,7 +130,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self.validate_pattern(advanced_rules)
 
-    async def validate_pattern(self, advanced_rules):
+    async def validate_pattern(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             NetworkDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -159,12 +160,12 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
 
 
 class SecurityInfo:
-    def __init__(self, user, password, server):
+    def __init__(self, user, password, server) -> None:
         self.username = user
         self.server_ip = server
         self.password = password
 
-    def get_descriptor(self, file_descriptor, info):
+    def get_descriptor(self, file_descriptor, info) -> SMB2CreateSDBuffer:
         """Get the Security Descriptor for the opened file."""
         query_request = SMB2QueryInfoRequest()
         query_request["info_type"] = InfoType.SMB2_0_INFO_SECURITY
@@ -187,7 +188,7 @@ class SecurityInfo:
         return security_descriptor
 
     @cached_property
-    def session(self):
+    def session(self) -> winrm.Session:
         return winrm.Session(
             self.server_ip,
             auth=(self.username, self.password),
@@ -261,7 +262,7 @@ class SecurityInfo:
 class SMBSession:
     _connection = None
 
-    def __init__(self, server_ip, username, password, port):
+    def __init__(self, server_ip, username, password, port) -> None:
         self.server_ip = server_ip
         self.username = username
         self.password = password
@@ -269,7 +270,7 @@ class SMBSession:
         self.session = None
         self._logger = logger
 
-    def create_connection(self):
+    def create_connection(self) -> None:
         """Creates an SMB session to the shared drive."""
         try:
             self.session = smbclient.register_session(
@@ -321,7 +322,7 @@ class NASDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Set up the connection to the Network Drive
 
         Args:
@@ -337,15 +338,15 @@ class NASDataSource(BaseDataSource):
         self.identity_mappings = self.configuration["identity_mappings"]
         self.security_info = SecurityInfo(self.username, self.password, self.server_ip)
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[NetworkDriveAdvancedRulesValidator]:
         return [NetworkDriveAdvancedRulesValidator(self)]
 
     @cached_property
-    def smb_connection(self):
+    def smb_connection(self) -> SMBSession:
         return SMBSession(self.server_ip, self.username, self.password, self.port)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], List[Dict[str, Union[bool, str]]], List[str], int, str]], Dict[str, Union[List[str], List[Union[Dict[str, str], Dict[str, Union[bool, str]]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Network Drive.
 
         Returns:
@@ -484,8 +485,8 @@ class NASDataSource(BaseDataSource):
                 continue
 
     def is_match_with_previous_rules(
-        self, file_path, indexed_rules, match_with_previous_rules
-    ):
+        self, file_path, indexed_rules, match_with_previous_rules: bool
+    ) -> bool:
         # Check if the file is matched with any of the previous indexed rules
         for indexed_rule in indexed_rules:
             if not match_with_previous_rules:
@@ -546,7 +547,7 @@ class NASDataSource(BaseDataSource):
                 )
                 continue
 
-    def get_base_path(self, pattern):
+    def get_base_path(self, pattern) -> str:
         wildcards = ["*", "?", "[", "{", "!", "^"]
         for i, char in enumerate(pattern):
             if char in wildcards:
@@ -589,21 +590,21 @@ class NASDataSource(BaseDataSource):
                 f"Following advanced rules do not match with any path present in network drive or the rule is similar to another rule: {unmatched_rules}"
             )
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         await super().validate_config()
         path = self.configuration["drive_path"]
         if path.startswith("/") or path.startswith("\\"):
             message = f"SMB Path:{path} should not start with '/' in the beginning."
             raise ConfigurableFieldValueError(message)
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Network Drive"""
 
         await asyncio.to_thread(self.smb_connection.create_connection)
         await self.close()
         self._logger.info("Successfully connected to the Network Drive")
 
-    async def close(self):
+    async def close(self) -> None:
         """Close all the open smb sessions"""
         if self.smb_connection.session is None:
             return
@@ -717,7 +718,7 @@ class NASDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_access_control_doc(self, user, sid, groups_info=None):
+    async def _user_access_control_doc(self, user, sid, groups_info=None) -> Dict[str, Any]:
         rid = str(sid).split("-")[-1]
         prefixed_username = _prefix_user(user)
         rid_user = _prefix_rid(rid)

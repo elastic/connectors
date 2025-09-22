@@ -35,6 +35,8 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from aiohttp.client import ClientSession
+from typing import Optional, Any, Dict, List, Union
 
 RETRY_COUNT = 3
 DEFAULT_RETRY_AFTER = 300  # seconds
@@ -61,13 +63,13 @@ if "RUNNING_FTEST" in os.environ:
     )
     logger.warning("IT'S SUPPOSED TO BE USED ONLY FOR TESTING")
     logger.warning("x" * 100)
-    BASE_URLS = {
+    BASE_URLS: Dict[str, str] = {
         "ACCESS_TOKEN_BASE_URL": os.environ["DROPBOX_API_URL"],
         "FILES_FOLDERS_BASE_URL": os.environ["DROPBOX_API_URL_V2"],
         "DOWNLOAD_BASE_URL": os.environ["DROPBOX_API_URL_V2"],
     }
 else:
-    BASE_URLS = {
+    BASE_URLS: Dict[str, str] = {
         "ACCESS_TOKEN_BASE_URL": "https://api.dropboxapi.com/",
         "FILES_FOLDERS_BASE_URL": f"https://api.dropboxapi.com/{API_VERSION}/",
         "DOWNLOAD_BASE_URL": f"https://content.dropboxapi.com/{API_VERSION}/",
@@ -144,26 +146,26 @@ class BreakingField(Enum):
     HAS_MORE = "has_more"
 
 
-def _prefix_user(user):
+def _prefix_user(user) -> Optional[str]:
     if not user:
         return
     return prefix_identity("user", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
-def _prefix_email(email):
+def _prefix_email(email) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_group(group):
+def _prefix_group(group) -> Optional[str]:
     return prefix_identity("group", group)
 
 
 class DropboxClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self.path = (
@@ -181,7 +183,7 @@ class DropboxClient:
         self.root_namespace_id = None
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @retryable(
@@ -189,7 +191,7 @@ class DropboxClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _set_access_token(self):
+    async def _set_access_token(self) -> None:
         if self.token_expiration_time and (
             not isinstance(self.token_expiration_time, datetime)
         ):
@@ -231,13 +233,13 @@ class DropboxClient:
             raise Exception(msg)
 
     @cached_property
-    def _get_session(self):
+    def _get_session(self) -> ClientSession:
         self._logger.debug("Generating aiohttp client session")
         timeout = aiohttp.ClientTimeout(total=None)
 
         return aiohttp.ClientSession(timeout=timeout, raise_for_status=True)
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
@@ -283,7 +285,7 @@ class DropboxClient:
             )
         return request_headers
 
-    def _get_retry_after(self, retry, exception):
+    def _get_retry_after(self, retry: int, exception):
         self._logger.warning(
             f"Retry count: {retry} out of {self.retry_count}. Exception: {exception}"
         )
@@ -292,7 +294,7 @@ class DropboxClient:
         retry += 1
         return retry, RETRY_INTERVAL**retry
 
-    async def _handle_client_errors(self, retry, exception):
+    async def _handle_client_errors(self, retry: int, exception):
         retry, retry_seconds = self._get_retry_after(retry=retry, exception=exception)
         match exception.status:
             case 401:
@@ -611,7 +613,7 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
     async def validate(self, advanced_rules):
@@ -627,7 +629,7 @@ class DropBoxAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             DropBoxAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -666,7 +668,7 @@ class DropboxDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the Dropbox
 
         Args:
@@ -679,11 +681,11 @@ class DropboxDataSource(BaseDataSource):
             "include_inherited_users_and_groups"
         ]
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.dropbox_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Dropbox
 
         Returns:
@@ -781,7 +783,7 @@ class DropboxDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
         profile = user.get("profile", {})
         email = profile.get("email")
         username = profile.get("name", {}).get("display_name")
@@ -818,14 +820,14 @@ class DropboxDataSource(BaseDataSource):
             for user in users.get("members", []):
                 yield await self._user_access_control_doc(user=user)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured path is available in Dropbox."""
 
         await super().validate_config()
         await self._remote_validation()
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         try:
             if self.dropbox_client.path not in ["", None]:
                 await self.set_user_info()
@@ -842,10 +844,10 @@ class DropboxDataSource(BaseDataSource):
             msg = f"Error while validating path: {self.dropbox_client.path}. Error: {exception}"
             raise Exception(msg) from exception
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[DropBoxAdvancedRulesValidator]:
         return [DropBoxAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Tweak bulk options as per concurrent downloads support by dropbox
 
         Args:
@@ -853,10 +855,10 @@ class DropboxDataSource(BaseDataSource):
         """
         options["concurrent_downloads"] = self.concurrent_downloads
 
-    async def close(self):
+    async def close(self) -> None:
         await self.dropbox_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             endpoint = EndpointName.AUTHENTICATED_ADMIN.value
             await self.dropbox_client.ping(endpoint=endpoint)
@@ -869,7 +871,7 @@ class DropboxDataSource(BaseDataSource):
             else:
                 raise
 
-    async def set_user_info(self):
+    async def set_user_info(self) -> None:
         try:
             endpoint = EndpointName.AUTHENTICATED_ADMIN.value
             response = await self.dropbox_client.ping(endpoint=endpoint)
@@ -890,7 +892,7 @@ class DropboxDataSource(BaseDataSource):
         ) or root_info.get("root_namespace_id")
 
     async def get_content(
-        self, attachment, is_shared=False, folder_id=None, timestamp=None, doit=False
+        self, attachment, is_shared: bool=False, folder_id=None, timestamp=None, doit: bool=False
     ):
         """Extracts the content for allowed file types.
 
@@ -957,7 +959,7 @@ class DropboxDataSource(BaseDataSource):
         else:
             return
 
-    def _adapt_dropbox_doc_to_es_doc(self, response):
+    def _adapt_dropbox_doc_to_es_doc(self, response) -> Dict[str, Any]:
         is_file = response.get(".tag") == "file"
         if is_file and response.get("name").split(".")[-1] == PAPER:
             timestamp = response.get("client_modified")
@@ -972,7 +974,7 @@ class DropboxDataSource(BaseDataSource):
             "_timestamp": timestamp,
         }
 
-    def _adapt_dropbox_shared_file_doc_to_es_doc(self, response):
+    def _adapt_dropbox_shared_file_doc_to_es_doc(self, response) -> Dict[str, Any]:
         return {
             "_id": response.get("id"),
             "type": FILE,
@@ -1031,7 +1033,7 @@ class DropboxDataSource(BaseDataSource):
         if identity in permission:
             return permission.get(identity).get("email")
 
-    async def get_permission(self, permission, account_id):
+    async def get_permission(self, permission, account_id) -> List[Optional[str]]:
         permissions = []
         if identities := permission.get("users"):
             for identity in identities:
@@ -1144,7 +1146,7 @@ class DropboxDataSource(BaseDataSource):
         else:
             return document, None
 
-    async def add_document_to_list(self, func, account_id, is_shared=False):
+    async def add_document_to_list(self, func, account_id, is_shared: bool=False):
         batched_document = {}
         calling_func = func() if is_shared else func(path=self.dropbox_client.path)
 

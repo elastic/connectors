@@ -12,15 +12,15 @@ from connectors.services.job_execution import JobExecutionService
 class AccessControlSyncJobExecutionService(JobExecutionService):
     name = "sync_access_control"
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         super().__init__(config, "access_control_sync_job_execution_service")
 
     @cached_property
-    def display_name(self):
+    def display_name(self) -> str:
         return "access control sync job execution"
 
     @cached_property
-    def max_concurrency_config(self):
+    def max_concurrency_config(self) -> str:
         return "service.max_concurrent_access_control_syncs"
 
     @cached_property
@@ -31,7 +31,7 @@ class AccessControlSyncJobExecutionService(JobExecutionService):
     def max_concurrency(self):
         return self.service_config.get("max_concurrent_access_control_syncs")
 
-    def should_execute(self, connector, sync_job):
+    def should_execute(self, connector, sync_job) -> bool:
         if not connector.features.document_level_security_enabled():
             sync_job.log_debug("DLS is not enabled for the connector, skip the job...")
             return False

@@ -38,6 +38,7 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from typing import Any, Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -63,7 +64,7 @@ SEARCH_QUERY = "limit=100&expand=content.history,content.extensions,content.cont
 USER_QUERY = "expand=groups,applicationRoles"
 LABEL = "label"
 
-URLS = {
+URLS: Dict[str, str] = {
     SPACE: "rest/api/space?{api_query}",
     SPACE_PERMISSION: "rest/extender/1.0/permission/space/{space_key}/getSpacePermissionActors/VIEWSPACE",
     CONTENT: "rest/api/content/search?{api_query}",
@@ -79,7 +80,7 @@ PING_URL = "rest/api/space?limit=1"
 MAX_CONCURRENT_DOWNLOADS = 50  # Max concurrent download supported by confluence
 MAX_CONCURRENCY = 50
 QUEUE_SIZE = 1024
-QUEUE_MEM_SIZE = 25 * 1024 * 1024  # Size in Megabytes
+QUEUE_MEM_SIZE: int = 25 * 1024 * 1024  # Size in Megabytes
 SERVER_USER_BATCH = 1000
 DATACENTER_USER_BATCH = 200
 END_SIGNAL = "FINISHED_TASK"
@@ -123,7 +124,7 @@ class Forbidden(Exception):
 class ConfluenceClient:
     """Confluence client to handle API calls made to Confluence"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -142,7 +143,7 @@ class ConfluenceClient:
             self.ssl_ctx = False
         self.session = None
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     def _get_session(self):
@@ -189,7 +190,7 @@ class ConfluenceClient:
         )
         return self.session
 
-    async def close_session(self):
+    async def close_session(self) -> None:
         """Closes unclosed client session"""
         self._sleeps.cancel()
         if self.session is None:
@@ -197,7 +198,7 @@ class ConfluenceClient:
         await self.session.close()
         self.session = None
 
-    async def _handle_client_errors(self, url, exception):
+    async def _handle_client_errors(self, url, exception: Union[TypeError, ValueError]):
         if exception.status == 429:
             response_headers = exception.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -408,7 +409,7 @@ class ConfluenceClient:
             for attachment in response.get("results", []):
                 yield attachment
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self.api_call(
             url=os.path.join(self.host_url, PING_URL),
         )
@@ -449,7 +450,7 @@ class ConfluenceDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to Confluence
 
         Args:
@@ -472,11 +473,11 @@ class ConfluenceDataSource(BaseDataSource):
             else "publicName"
         )
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.confluence_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Confluence
 
         Returns:
@@ -636,7 +637,7 @@ class ConfluenceDataSource(BaseDataSource):
 
         return document
 
-    async def user_access_control_confluence_server(self, user):
+    async def user_access_control_confluence_server(self, user) -> Dict[str, Any]:
         """Generate a user access control document for confluence server.
 
         This method generates a user access control document based on the provided user information.
@@ -685,7 +686,7 @@ class ConfluenceDataSource(BaseDataSource):
             access_control=access_control
         )
 
-    async def user_access_control_data_center(self, user):
+    async def user_access_control_data_center(self, user) -> Dict[str, Any]:
         """Generate a user access control document for confluence data enter.
 
         This method generates a user access control document based on the provided user information.
@@ -844,14 +845,14 @@ class ConfluenceDataSource(BaseDataSource):
 
         return identities
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes unclosed client session"""
         await self.confluence_client.close_session()
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[AtlassianAdvancedRulesValidator]:
         return [AtlassianAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Tweak bulk options as per concurrent downloads support by Confluence
 
         Args:
@@ -859,7 +860,7 @@ class ConfluenceDataSource(BaseDataSource):
         """
         options["concurrent_downloads"] = self.concurrent_downloads
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields.
         Also validate, if user configured spaces are available in Confluence.
 
@@ -869,7 +870,7 @@ class ConfluenceDataSource(BaseDataSource):
         await super().validate_config()
         await self._remote_validation()
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         await self.confluence_client.ping()
         if self.spaces == [WILDCARD]:
             return
@@ -883,7 +884,7 @@ class ConfluenceDataSource(BaseDataSource):
             msg = f"Spaces '{', '.join(unavailable_spaces)}' are not available. Available spaces are: '{', '.join(space_keys)}'"
             raise ConfigurableFieldValueError(msg)
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Confluence"""
         try:
             await self.confluence_client.ping()
@@ -1072,7 +1073,7 @@ class ConfluenceDataSource(BaseDataSource):
 
             yield document, download_url
 
-    async def download_attachment(self, url, attachment, timestamp=None, doit=False):
+    async def download_attachment(self, url, attachment, timestamp=None, doit: bool=False):
         """Downloads the content of the given attachment in chunks using REST API call
 
         Args:
@@ -1108,7 +1109,7 @@ class ConfluenceDataSource(BaseDataSource):
             ),
         )
 
-    async def _attachment_coro(self, document, access_control):
+    async def _attachment_coro(self, document, access_control) -> None:
         """Coroutine to add attachments to Queue and download content
 
         Args:
@@ -1143,7 +1144,7 @@ class ConfluenceDataSource(BaseDataSource):
         finally:
             await self.queue.put(END_SIGNAL)  # pyright: ignore
 
-    def format_space(self, space):
+    def format_space(self, space) -> Dict[str, Any]:
         space_url = os.path.join(
             self.confluence_client.host_url,
             space.get("_links", {}).get("webui", "")[1:],
@@ -1197,7 +1198,7 @@ class ConfluenceDataSource(BaseDataSource):
             self._logger.exception(f"Error while fetching spaces: {exception}")
             raise
 
-    async def _page_blog_coro(self, api_query, target_type):
+    async def _page_blog_coro(self, api_query, target_type) -> None:
         """Coroutine to add pages/blogposts to Queue
 
         Args:

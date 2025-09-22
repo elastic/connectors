@@ -27,8 +27,9 @@ from connectors.source import (
     get_source_klass,
     get_source_klasses,
 )
+from typing import Dict, List, Union
 
-CONFIG = {
+CONFIG: Dict[str, Union[Dict[str, str], Dict[str, Union[None, int, str]], Dict[str, Union[List[str], str]]]] = {
     "host": {
         "label": "MongoDB Host",
         "type": "str",
@@ -67,14 +68,14 @@ CONFIG = {
 DATE_STRING_ISO_FORMAT = "2023-01-01T13:37:42+02:00"
 
 
-def test_field():
+def test_field() -> None:
     # stupid holder
     f = Field("name")
     assert f.label == "name"
     assert f.field_type == "str"
 
 
-def test_field_convert():
+def test_field_convert() -> None:
     assert Field("name", field_type="str").value == ""
     assert Field("name", value="", field_type="str").value == ""
     assert Field("name", value="1", field_type="str").value == "1"
@@ -124,7 +125,7 @@ def test_field_convert():
     assert Field("name", value="not a dict", field_type="dict").value == "not a dict"
 
 
-def test_data_source_configuration():
+def test_data_source_configuration() -> None:
     c = DataSourceConfiguration(CONFIG)
     assert c["database"] == "sample_airbnb"
     assert c.get_field("database").label == "MongoDB Database"
@@ -133,7 +134,7 @@ def test_data_source_configuration():
     assert c["new"] == "one"
 
 
-def test_default():
+def test_default() -> None:
     c = DataSourceConfiguration(CONFIG)
     assert c.get("database") == "sample_airbnb"
     assert c.get("dd", 1) == 1
@@ -171,7 +172,7 @@ def test_default():
 )
 def test_value_returns_correct_value(
     field_type, required, default_value, value, expected_value
-):
+) -> None:
     assert (
         Field(
             "name",
@@ -188,15 +189,15 @@ class MyConnector:
     id = "1"  # noqa A003
     service_type = "yea"
 
-    def __init__(self, *args):
+    def __init__(self, *args) -> None:
         pass
 
 
-def test_get_source_klass():
+def test_get_source_klass() -> None:
     assert get_source_klass("test_source:MyConnector") is MyConnector
 
 
-def test_get_source_klasses():
+def test_get_source_klasses() -> None:
     settings = {
         "sources": {"yea": "test_source:MyConnector", "yea2": "test_source:MyConnector"}
     }
@@ -432,7 +433,7 @@ def test_get_source_klasses():
         ),
     ],
 )
-async def test_check_valid_when_validations_succeed_no_errors_raised(config):
+async def test_check_valid_when_validations_succeed_no_errors_raised(config) -> None:
     c = DataSourceConfiguration(config)
     c.check_valid()
 
@@ -644,14 +645,14 @@ async def test_check_valid_when_validations_succeed_no_errors_raised(config):
         ),
     ],
 )
-async def test_check_valid_when_validations_fail_raises_error(config):
+async def test_check_valid_when_validations_fail_raises_error(config) -> None:
     c = DataSourceConfiguration(config)
     with pytest.raises(ConfigurableFieldValueError):
         c.check_valid()
 
 
 @pytest.mark.asyncio
-async def test_check_valid_when_dependencies_are_invalid_raises_error():
+async def test_check_valid_when_dependencies_are_invalid_raises_error() -> None:
     config = {
         "port": {
             "type": "int",
@@ -671,7 +672,7 @@ async def test_check_valid_when_dependencies_are_invalid_raises_error():
 # ABCs
 class DataSource(BaseDataSource):
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, str], Dict[str, Union[bool, str]], Dict[str, Union[int, str]]]]:
         return {
             "host": {
                 "value": "127.0.0.1",
@@ -700,7 +701,7 @@ class DataSource(BaseDataSource):
 
 @pytest.mark.asyncio
 @mock.patch("connectors.filtering.validation.FilteringValidator.validate")
-async def test_validate_filter(validator_mock):
+async def test_validate_filter(validator_mock) -> None:
     validator_mock.return_value = "valid"
 
     assert (
@@ -712,7 +713,7 @@ async def test_validate_filter(validator_mock):
 
 
 @pytest.mark.asyncio
-async def test_invalid_configuration_raises_error():
+async def test_invalid_configuration_raises_error() -> None:
     configuration = {}
 
     with pytest.raises(TypeError) as e:
@@ -723,7 +724,7 @@ async def test_invalid_configuration_raises_error():
 
 
 @pytest.mark.asyncio
-async def test_base_class():
+async def test_base_class() -> None:
     configuration = DataSourceConfiguration({})
 
     with pytest.raises(NotImplementedError):
@@ -872,7 +873,7 @@ async def test_base_class():
     ],
 )
 @pytest.mark.asyncio
-async def test_serialize(raw_doc, expected_doc):
+async def test_serialize(raw_doc, expected_doc) -> None:
     with mock.patch.object(
         BaseDataSource, "get_default_configuration", return_value={}
     ):
@@ -888,7 +889,7 @@ async def test_serialize(raw_doc, expected_doc):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_fields_when_valid_no_errors_raised():
+async def test_validate_config_fields_when_valid_no_errors_raised() -> None:
     configuration = {
         "host": {
             "value": "127.0.0.1",
@@ -912,7 +913,7 @@ async def test_validate_config_fields_when_valid_no_errors_raised():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_fields_when_invalid_raises_error():
+async def test_validate_config_fields_when_invalid_raises_error() -> None:
     configuration = {
         "host": {
             "value": "127.0.0.1",

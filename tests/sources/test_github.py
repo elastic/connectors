@@ -30,11 +30,12 @@ from connectors.sources.github import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from typing import Dict, List, Tuple, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
 
-def public_repo():
+def public_repo() -> Dict[str, Union[Dict[str, int], Dict[str, str], int, str]]:
     return {
         "name": "demo_repo",
         "nameWithOwner": "demo_user/demo_repo",
@@ -55,7 +56,7 @@ def public_repo():
     }
 
 
-def pull_request():
+def pull_request() -> Dict[str, Dict[str, Dict[str, Dict[str, List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Dict[str, str]]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], str]]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], str]]]]], int, str]]]]]]]:
     return {
         "data": {
             "repository": {
@@ -134,7 +135,7 @@ def pull_request():
     }
 
 
-def issue():
+def issue() -> Dict[str, Dict[str, Dict[str, Dict[str, List[Dict[str, Union[None, Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], str]]]]], int, str]]]]]]]:
     return {
         "data": {
             "repository": {
@@ -190,7 +191,7 @@ def issue():
     }
 
 
-def attachments():
+def attachments() -> Tuple[Dict[str, Union[int, str]], Dict[str, Union[int, str]]]:
     return (
         {
             "_id": "demo_repo/source/source.md",
@@ -280,7 +281,7 @@ MOCK_RESPONSE_REPO = [
     },
 ]
 
-MOCK_RESPONSE_ISSUE = {
+MOCK_RESPONSE_ISSUE: Dict[str, Dict[str, Dict[str, List[Dict[str, Union[None, Dict[str, str], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, str]]]], Dict[str, Union[Dict[str, Union[bool, str]], List[Dict[str, Union[Dict[str, str], str]]]]], int, str]]]]]] = {
     "repository": {
         "issues": {
             "nodes": [
@@ -325,7 +326,7 @@ MOCK_RESPONSE_ISSUE = {
         }
     }
 }
-EXPECTED_ISSUE = {
+EXPECTED_ISSUE: Dict[str, Union[None, Dict[str, str], List[Dict[str, str]], List[Dict[str, Union[Dict[str, str], str]]], int, str]] = {
     "number": 1,
     "url": "https://github.com/demo_user/demo_repo/issues/1",
     "createdAt": "2023-04-18T10:12:21Z",
@@ -636,7 +637,7 @@ MOCK_RESPONSE_MEMBERS = {
         }
     }
 }
-EXPECTED_ACCESS_CONTROL = [
+EXPECTED_ACCESS_CONTROL: List[Dict[str, Union[Dict[str, Dict[str, Union[Dict[str, List[str]], str]]], Dict[str, str], str]]] = [
     {
         "_id": "#123",
         "identity": {
@@ -659,7 +660,7 @@ EXPECTED_ACCESS_CONTROL = [
         },
     }
 ]
-EXPECTED_ACCESS_CONTROL_GITHUB_APP = [
+EXPECTED_ACCESS_CONTROL_GITHUB_APP: List[Dict[str, Union[Dict[str, Dict[str, Union[Dict[str, List[str]], str]]], Dict[str, str], str]]] = [
     {
         "_id": "#1",
         "identity": {
@@ -811,12 +812,12 @@ MOCK_REPO_4_DOC = {
 
 @asynccontextmanager
 async def create_github_source(
-    auth_method=PERSONAL_ACCESS_TOKEN,
-    repo_type="other",
-    org_name="",
-    repos="*",
-    use_document_level_security=False,
-    use_text_extraction_service=False,
+    auth_method: str=PERSONAL_ACCESS_TOKEN,
+    repo_type: str="other",
+    org_name: str="",
+    repos: str="*",
+    use_document_level_security: bool=False,
+    use_text_extraction_service: bool=False,
 ):
     async with create_source(
         GitHubDataSource,
@@ -836,7 +837,7 @@ async def create_github_source(
 
 
 class JSONAsyncMock(AsyncMock):
-    def __init__(self, json, status, *args, **kwargs):
+    def __init__(self, json, status, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._json = json
         self.status = status
@@ -845,7 +846,7 @@ class JSONAsyncMock(AsyncMock):
         return self._json
 
 
-def get_json_mock(mock_response, status):
+def get_json_mock(mock_response, status) -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(json=mock_response, status=status)
@@ -855,7 +856,7 @@ def get_json_mock(mock_response, status):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["repositories", "token"])
-async def test_validate_config_missing_fields_then_raise(field):
+async def test_validate_config_missing_fields_then_raise(field) -> None:
     async with create_github_source() as source:
         source.configuration.get_field(field).value = ""
 
@@ -864,7 +865,7 @@ async def test_validate_config_missing_fields_then_raise(field):
 
 
 @pytest.mark.asyncio
-async def test_ping_with_successful_connection():
+async def test_ping_with_successful_connection() -> None:
     async with create_github_source() as source:
         source.github_client._get_client.graphql = AsyncMock(
             return_value={"user": "username"}
@@ -873,7 +874,7 @@ async def test_ping_with_successful_connection():
 
 
 @pytest.mark.asyncio
-async def test_get_user_repos():
+async def test_get_user_repos() -> None:
     actual_response = []
     async with create_github_source() as source:
         source.github_client.paginated_api_call = Mock(
@@ -889,7 +890,7 @@ async def test_get_user_repos():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_ping_with_unsuccessful_connection():
+async def test_ping_with_unsuccessful_connection() -> None:
     async with create_github_source() as source:
         with patch.object(
             source.github_client,
@@ -905,7 +906,7 @@ async def test_ping_with_unsuccessful_connection():
     "scopes",
     [{}, {"repo"}, {"manage_runner:org, delete:packages, admin:public_key"}],
 )
-async def test_validate_config_with_insufficient_scope(scopes):
+async def test_validate_config_with_insufficient_scope(scopes) -> None:
     async with create_github_source() as source:
         source.github_client.get_personal_access_token_scopes = AsyncMock(
             return_value=scopes
@@ -918,7 +919,7 @@ async def test_validate_config_with_insufficient_scope(scopes):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_extra_scopes_token(patch_logger):
+async def test_validate_config_with_extra_scopes_token(patch_logger) -> None:
     async with create_github_source() as source:
         source.github_client.get_personal_access_token_scopes = AsyncMock(
             return_value={"user", "repo", "admin:org"}
@@ -931,7 +932,7 @@ async def test_validate_config_with_extra_scopes_token(patch_logger):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_validate_config_with_inaccessible_repositories_then_raise():
+async def test_validate_config_with_inaccessible_repositories_then_raise() -> None:
     async with create_github_source(
         repos="repo1m owner1/repo1, repo2, owner2/repo2"
     ) as source:
@@ -945,7 +946,7 @@ async def test_validate_config_with_inaccessible_repositories_then_raise():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_invalid_repos_with_max_retries():
+async def test_get_invalid_repos_with_max_retries() -> None:
     async with create_github_source() as source:
         with pytest.raises(Exception):
             source.github_client.graphql = AsyncMock(side_effect=Exception())
@@ -954,7 +955,7 @@ async def test_get_invalid_repos_with_max_retries():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_response_with_rate_limit_exceeded():
+async def test_get_response_with_rate_limit_exceeded() -> None:
     async with create_github_source() as source:
         with patch.object(
             source.github_client._get_client,
@@ -967,7 +968,7 @@ async def test_get_response_with_rate_limit_exceeded():
 
 
 @pytest.mark.asyncio
-async def test_put_to_sleep():
+async def test_put_to_sleep() -> None:
     async with create_github_source() as source:
         source.github_client._get_retry_after = AsyncMock(return_value=0)
         with pytest.raises(Exception, match="Rate limit exceeded."):
@@ -975,7 +976,7 @@ async def test_put_to_sleep():
 
 
 @pytest.mark.asyncio
-async def test_get_retry_after():
+async def test_get_retry_after() -> None:
     async with create_github_source() as source:
         source.github_client._get_client.getitem = AsyncMock(
             return_value={
@@ -1008,7 +1009,7 @@ async def test_get_retry_after():
         ),
     ],
 )
-async def test_graphql_with_BadGraphQLRequest(exceptions, raises):
+async def test_graphql_with_BadGraphQLRequest(exceptions, raises) -> None:
     async with create_github_source() as source:
         source.github_client._get_client.graphql = Mock(side_effect=exceptions)
         with pytest.raises(raises):
@@ -1049,7 +1050,7 @@ async def test_graphql_with_BadGraphQLRequest(exceptions, raises):
         ),
     ],
 )
-async def test_graphql_with_QueryError(exceptions, raises, is_raised):
+async def test_graphql_with_QueryError(exceptions, raises, is_raised) -> None:
     async with create_github_source() as source:
         source.github_client._get_client.graphql = Mock(side_effect=exceptions)
         if is_raised:
@@ -1069,7 +1070,7 @@ async def test_graphql_with_QueryError(exceptions, raises, is_raised):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_graphql_with_unauthorized():
+async def test_graphql_with_unauthorized() -> None:
     async with create_github_source() as source:
         source.github_client._get_client.graphql = Mock(
             side_effect=GraphQLAuthorizationFailure(
@@ -1083,7 +1084,7 @@ async def test_graphql_with_unauthorized():
 
 
 @pytest.mark.asyncio
-async def test_paginated_api_call():
+async def test_paginated_api_call() -> None:
     expected_response = MOCK_RESPONSE_REPO
     async with create_github_source() as source:
         actual_response = []
@@ -1098,7 +1099,7 @@ async def test_paginated_api_call():
 
 
 @pytest.mark.asyncio
-async def test_get_invalid_repos():
+async def test_get_invalid_repos() -> None:
     expected_response = ["owner1/repo2", "owner2/repo2"]
     async with create_github_source(
         repos="repo1, owner1/repo2, repo2, owner2/repo2"
@@ -1133,7 +1134,7 @@ async def test_get_invalid_repos():
 
 
 @pytest.mark.asyncio
-async def test_get_invalid_repos_organization():
+async def test_get_invalid_repos_organization() -> None:
     expected_response = ["owner1/repo2", "org1/repo3"]
     async with create_github_source(
         repos="repo1, owner1/repo2, repo3", repo_type="organization", org_name="org1"
@@ -1167,7 +1168,7 @@ async def test_get_invalid_repos_organization():
 )
 async def test_get_invalid_repos_organization_for_github_app(
     repo_type, configured_repos, expected_invalid_repos
-):
+) -> None:
     async with create_github_source(
         auth_method=GITHUB_APP, repos=configured_repos, repo_type=repo_type
     ) as source:
@@ -1216,7 +1217,7 @@ async def test_get_invalid_repos_organization_for_github_app(
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_md_file():
+async def test_get_content_with_md_file() -> None:
     expected_response = {
         "_id": "demo_repo/source.md",
         "_timestamp": "2023-04-17T12:55:01Z",
@@ -1235,7 +1236,7 @@ async def test_get_content_with_md_file():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_md_file_with_extraction_service():
+async def test_get_content_with_md_file_with_extraction_service() -> None:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -1271,7 +1272,7 @@ async def test_get_content_with_md_file_with_extraction_service():
         (23000000, None),
     ],
 )
-async def test_get_content_with_differernt_size(size, expected_content):
+async def test_get_content_with_differernt_size(size, expected_content) -> None:
     async with create_github_source() as source:
         attachment_with_size_zero = MOCK_ATTACHMENT.copy()
         attachment_with_size_zero["size"] = size
@@ -1282,7 +1283,7 @@ async def test_get_content_with_differernt_size(size, expected_content):
 
 
 @pytest.mark.asyncio
-async def test_fetch_repos():
+async def test_fetch_repos() -> None:
     async with create_github_source() as source:
         source.github_client.graphql = AsyncMock(
             return_value={"data": {"viewer": {"login": "owner1"}}}
@@ -1308,7 +1309,7 @@ async def test_fetch_repos():
 
 
 @pytest.mark.asyncio
-async def test_fetch_repos_organization():
+async def test_fetch_repos_organization() -> None:
     async with create_github_source(
         repo_type="organization", org_name="org_1"
     ) as source:
@@ -1323,7 +1324,7 @@ async def test_fetch_repos_organization():
 
 
 @pytest.mark.asyncio
-async def test_fetch_repos_when_user_repos_is_available():
+async def test_fetch_repos_when_user_repos_is_available() -> None:
     async with create_github_source(repos="demo_user/demo_repo, , demo_repo") as source:
         source.github_client.graphql = AsyncMock(
             side_effect=[
@@ -1351,7 +1352,7 @@ async def test_fetch_repos_when_user_repos_is_available():
     "exception",
     [UnauthorizedException, ForbiddenException],
 )
-async def test_fetch_repos_with_client_exception(exception):
+async def test_fetch_repos_with_client_exception(exception) -> None:
     async with create_github_source() as source:
         source.github_client.graphql = Mock(side_effect=exception())
         with pytest.raises(exception):
@@ -1375,7 +1376,7 @@ async def test_fetch_repos_with_client_exception(exception):
         ("other", "user_1/repo_3, user_2/repo_4", [MOCK_REPO_3_DOC, MOCK_REPO_4_DOC]),
     ],
 )
-async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
+async def test_fetch_repos_github_app(repo_type, repos, expected_repos) -> None:
     async with create_github_source(
         auth_method=GITHUB_APP, repo_type=repo_type, repos=repos
     ) as source:
@@ -1402,7 +1403,7 @@ async def test_fetch_repos_github_app(repo_type, repos, expected_repos):
 
 
 @pytest.mark.asyncio
-async def test_fetch_issues():
+async def test_fetch_issues() -> None:
     async with create_github_source() as source:
         source.fetch_extra_fields = AsyncMock()
         with patch.object(
@@ -1424,7 +1425,7 @@ async def test_fetch_issues():
     "exception",
     [UnauthorizedException, ForbiddenException],
 )
-async def test_fetch_issues_with_client_exception(exception):
+async def test_fetch_issues_with_client_exception(exception) -> None:
     async with create_github_source() as source:
         source.github_client.graphql = Mock(side_effect=exception())
         with pytest.raises(exception):
@@ -1436,7 +1437,7 @@ async def test_fetch_issues_with_client_exception(exception):
 
 
 @pytest.mark.asyncio
-async def test_fetch_pull_requests():
+async def test_fetch_pull_requests() -> None:
     async with create_github_source() as source:
         with patch.object(
             source.github_client,
@@ -1462,7 +1463,7 @@ async def test_fetch_pull_requests():
     "exception",
     [UnauthorizedException, ForbiddenException],
 )
-async def test_fetch_pull_requests_with_client_exception(exception):
+async def test_fetch_pull_requests_with_client_exception(exception) -> None:
     async with create_github_source() as source:
         source.github_client.graphql = Mock(side_effect=exception())
         with pytest.raises(exception):
@@ -1474,7 +1475,7 @@ async def test_fetch_pull_requests_with_client_exception(exception):
 
 
 @pytest.mark.asyncio
-async def test_fetch_pull_requests_with_deleted_users():
+async def test_fetch_pull_requests_with_deleted_users() -> None:
     async with create_github_source() as source:
         mock_review_deleted_user = {
             "repository": {
@@ -1536,7 +1537,7 @@ async def test_fetch_pull_requests_with_deleted_users():
 
 
 @pytest.mark.asyncio
-async def test_fetch_path():
+async def test_fetch_path() -> None:
     async with create_github_source() as source:
         with patch.object(
             source.github_client,
@@ -1550,7 +1551,7 @@ async def test_fetch_path():
 
 
 @pytest.mark.asyncio
-async def test_fetch_files():
+async def test_fetch_files() -> None:
     expected_response = (
         {
             "name": "source.md",
@@ -1590,7 +1591,7 @@ async def test_fetch_files():
     "exception",
     [UnauthorizedException, ForbiddenException],
 )
-async def test_fetch_files_when_error_occurs(exception):
+async def test_fetch_files_when_error_occurs(exception) -> None:
     async with create_github_source() as source:
         source.github_client.get_github_item = Mock(side_effect=exception())
         with pytest.raises(exception):
@@ -1599,7 +1600,7 @@ async def test_fetch_files_when_error_occurs(exception):
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> None:
     expected_response = [
         PUBLIC_REPO,
         MOCK_RESPONSE_PULL,
@@ -1624,7 +1625,7 @@ async def test_get_docs():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo():
+async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo() -> None:
     public_repo_ = public_repo()
     pull_request_ = pull_request()
     issue_ = issue()
@@ -1651,7 +1652,7 @@ async def test_get_docs_with_access_control_should_not_add_acl_for_public_repo()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo():
+async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo() -> None:
     expected_response = [
         PRIVATE_REPO,
         MOCK_RESPONSE_PULL,
@@ -1825,7 +1826,7 @@ async def test_get_docs_with_access_control_should_add_acl_for_non_public_repo()
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
     async with create_github_source() as source:
         source.get_invalid_repos = AsyncMock(return_value=[])
 
@@ -1858,7 +1859,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 @pytest.mark.asyncio
 async def test_advanced_rules_validation_with_invalid_repos(
     advanced_rules, expected_validation_result
-):
+) -> None:
     async with create_github_source() as source:
         source.get_invalid_repos = AsyncMock(return_value=["repo_name"])
 
@@ -1938,7 +1939,7 @@ async def test_advanced_rules_validation_with_invalid_repos(
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering, expected_response):
+async def test_get_docs_with_advanced_rules(filtering, expected_response) -> None:
     actual_response = []
     async with create_github_source() as source:
         source._get_configured_repos = Mock(return_value=AsyncIterator([PUBLIC_REPO]))
@@ -1955,14 +1956,14 @@ async def test_get_docs_with_advanced_rules(filtering, expected_response):
 
 
 @pytest.mark.asyncio
-async def test_is_previous_repo():
+async def test_is_previous_repo() -> None:
     async with create_github_source() as source:
         assert source.is_previous_repo("demo_user/demo_repo") is False
         assert source.is_previous_repo("demo_user/demo_repo") is True
 
 
 @pytest.mark.asyncio
-async def test_get_access_control():
+async def test_get_access_control() -> None:
     async with create_github_source(repo_type="organization") as source:
         actual_response = []
         source._dls_enabled = Mock(return_value=True)
@@ -1983,7 +1984,7 @@ async def test_get_access_control():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_github_app():
+async def test_get_access_control_github_app() -> None:
     async with create_github_source(
         auth_method=GITHUB_APP, repo_type="organization"
     ) as source:
@@ -2030,7 +2031,7 @@ async def test_get_access_control_github_app():
 
 
 @pytest.mark.asyncio
-async def test_fetch_access_control():
+async def test_fetch_access_control() -> None:
     async with create_github_source() as source:
         source.github_client.paginated_api_call = Mock(
             side_effect=[
@@ -2054,7 +2055,7 @@ async def test_fetch_access_control():
         ("other", True, False),
     ],
 )
-async def test_dls_enabled(repo_type, use_document_level_security, dls_enabled):
+async def test_dls_enabled(repo_type, use_document_level_security, dls_enabled) -> None:
     async with create_github_source(
         repo_type=repo_type, use_document_level_security=use_document_level_security
     ) as source:
@@ -2072,7 +2073,7 @@ async def test_dls_enabled(repo_type, use_document_level_security, dls_enabled):
         ("repo, read:org", {"repo", "read:org"}),
     ],
 )
-async def test_get_personal_access_token_scopes(scopes, expected_scopes):
+async def test_get_personal_access_token_scopes(scopes, expected_scopes) -> None:
     async with create_github_source() as source:
         source.github_client._get_client._request = AsyncMock(
             return_value=(200, {"X-OAuth-Scopes": scopes}, None)
@@ -2104,7 +2105,7 @@ async def test_get_personal_access_token_scopes(scopes, expected_scopes):
         ),
     ],
 )
-async def test_get_personal_access_token_scopes_when_error_occurs(exception, raises):
+async def test_get_personal_access_token_scopes_when_error_occurs(exception, raises) -> None:
     async with create_github_source() as source:
         source.github_client._get_client._request = AsyncMock(side_effect=exception)
         with pytest.raises(raises):
@@ -2112,7 +2113,7 @@ async def test_get_personal_access_token_scopes_when_error_occurs(exception, rai
 
 
 @pytest.mark.asyncio
-async def test_github_client_get_installations():
+async def test_github_client_get_installations() -> None:
     async with create_github_source(auth_method=GITHUB_APP) as source:
         mock_response = [
             {
@@ -2140,7 +2141,7 @@ async def test_github_client_get_installations():
 
 
 @pytest.mark.asyncio
-async def test_github_app_paginated_get():
+async def test_github_app_paginated_get() -> None:
     async with create_github_source(auth_method=GITHUB_APP) as source:
         item_1 = {"id": 1}
         item_2 = {"id": 2}
@@ -2161,7 +2162,7 @@ async def test_github_app_paginated_get():
 
 
 @pytest.mark.asyncio
-async def test_update_installation_id():
+async def test_update_installation_id() -> None:
     async with create_github_source(auth_method=GITHUB_APP) as source:
         jwt_response = {"token": "changeme"}
         installation_id = 123
@@ -2187,7 +2188,7 @@ async def test_update_installation_id():
         (PERSONAL_ACCESS_TOKEN, 1, "foo"),
     ],
 )
-async def test_logged_in_user(auth_method, expected_await_count, expected_user):
+async def test_logged_in_user(auth_method, expected_await_count, expected_user) -> None:
     async with create_github_source(auth_method=auth_method) as source:
         source.github_client.get_logged_in_user = AsyncMock(return_value="foo")
         user = await source._logged_in_user()
@@ -2200,7 +2201,7 @@ async def test_logged_in_user(auth_method, expected_await_count, expected_user):
 
 
 @pytest.mark.asyncio
-async def test_fetch_installations_personal_access_token():
+async def test_fetch_installations_personal_access_token() -> None:
     async with create_github_source() as source:
         source.github_client.get_installations = AsyncMock()
         await source._fetch_installations()
@@ -2209,7 +2210,7 @@ async def test_fetch_installations_personal_access_token():
 
 
 @pytest.mark.asyncio
-async def test_fetch_installations_withp_prepopulated_installations():
+async def test_fetch_installations_withp_prepopulated_installations() -> None:
     prepopulated_installations = {"fake_org": {"installation_id": 1}}
     async with create_github_source(auth_method=GITHUB_APP) as source:
         source.github_client.get_installations = AsyncMock()
@@ -2230,7 +2231,7 @@ async def test_fetch_installations_withp_prepopulated_installations():
         ("other", {"user_1": 3, "user_2": 4}),
     ],
 )
-async def test_fetch_installations(repo_type, expected_installations):
+async def test_fetch_installations(repo_type, expected_installations) -> None:
     async with create_github_source(
         auth_method=GITHUB_APP, repo_type=repo_type
     ) as source:
@@ -2252,7 +2253,7 @@ async def test_fetch_installations(repo_type, expected_installations):
         (GITHUB_APP, "other", ["user_1", "user_2"]),
     ],
 )
-async def test_get_owners(auth_method, repo_type, expected_owners):
+async def test_get_owners(auth_method, repo_type, expected_owners) -> None:
     async with create_github_source(
         auth_method=auth_method, repo_type=repo_type, org_name="demo_org"
     ) as source:
@@ -2271,7 +2272,7 @@ async def test_get_owners(auth_method, repo_type, expected_owners):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_update_installation_access_token_when_error_occurs():
+async def test_update_installation_access_token_when_error_occurs() -> None:
     async with create_github_source() as source:
         source.github_client.get_installation_access_token = AsyncMock(
             side_effect=Exception()
@@ -2304,7 +2305,7 @@ async def test_update_installation_access_token_when_error_occurs():
         (Exception(), Exception),
     ],
 )
-async def test_get_github_item_when_error_occurs(exceptions, raises):
+async def test_get_github_item_when_error_occurs(exceptions, raises) -> None:
     async with create_github_source() as source:
         source.github_client._get_client.getitem = Mock(side_effect=exceptions)
         with pytest.raises(raises):

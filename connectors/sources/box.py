@@ -29,6 +29,7 @@ from connectors.utils import (
     convert_to_b64,
     retryable,
 )
+from typing import Dict, List, Optional, Union
 
 FINISHED = "FINISHED"
 
@@ -43,7 +44,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 CHUNK_SIZE = 1024
 FETCH_LIMIT = 1000
-QUEUE_MEM_SIZE = 5 * 1024 * 1024  # ~ 5 MB
+QUEUE_MEM_SIZE: int = 5 * 1024 * 1024  # ~ 5 MB
 MAX_CONCURRENCY = 2000
 MAX_CONCURRENT_DOWNLOADS = 15
 FIELDS = "name,modified_at,size,type,sequence_id,etag,created_at,modified_at,content_created_at,content_modified_at,description,created_by,modified_by,owned_by,parent,item_status"
@@ -54,9 +55,9 @@ BOX_ENTERPRISE = "box_enterprise"
 refresh_token = None
 
 if "BOX_BASE_URL" in os.environ:
-    BASE_URL = os.environ.get("BOX_BASE_URL")
+    BASE_URL: Optional[str] = os.environ.get("BOX_BASE_URL")
 else:
-    BASE_URL = "https://api.box.com"
+    BASE_URL: Optional[str] = "https://api.box.com"
 
 
 class TokenError(Exception):
@@ -68,7 +69,7 @@ class NotFound(Exception):
 
 
 class AccessToken:
-    def __init__(self, configuration, http_session):
+    def __init__(self, configuration, http_session) -> None:
         global refresh_token
         self.client_id = configuration["client_id"]
         self.client_secret = configuration["client_secret"]
@@ -86,7 +87,7 @@ class AccessToken:
         await self._set_access_token()
         return self.access_token
 
-    async def _set_access_token(self):
+    async def _set_access_token(self) -> None:
         logger.debug("Generating an access token")
         try:
             if self.is_enterprise == BOX_FREE:
@@ -136,7 +137,7 @@ class AccessToken:
 
 
 class BoxClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -148,7 +149,7 @@ class BoxClient:
             configuration=configuration, http_session=self._http_session
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     async def _put_to_sleep(self, retry_after):
@@ -159,7 +160,7 @@ class BoxClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
-    def debug_query_string(self, params):
+    def debug_query_string(self, params) -> Optional[str]:
         if self._logger.isEnabledFor(logging.DEBUG):
             return (
                 "&".join(f"{key}={value}" for key, value in params.items())
@@ -167,7 +168,7 @@ class BoxClient:
                 else ""
             )
 
-    async def _handle_client_errors(self, exception):
+    async def _handle_client_errors(self, exception) -> None:
         match exception.status:
             case 401:
                 await self.token._set_access_token()
@@ -216,10 +217,10 @@ class BoxClient:
         except Exception:
             raise
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self.get(url=ENDPOINTS["PING"], headers={})
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         await self._http_session.close()
 
@@ -229,7 +230,7 @@ class BoxDataSource(BaseDataSource):
     service_type = "box"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         super().__init__(configuration=configuration)
         self.configuration = configuration
         self.tasks = 0
@@ -238,14 +239,14 @@ class BoxDataSource(BaseDataSource):
         self.fetchers = ConcurrentTasks(max_concurrency=MAX_CONCURRENCY)
         self.concurrent_downloads = configuration["concurrent_downloads"]
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.client.set_logger(logger_=self._logger)
 
     @cached_property
-    def client(self):
+    def client(self) -> BoxClient:
         return BoxClient(configuration=self.configuration)
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Tweak bulk options as per concurrent downloads support by Box
 
         Args:
@@ -254,7 +255,7 @@ class BoxDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Box.
 
         Returns:
@@ -310,12 +311,12 @@ class BoxDataSource(BaseDataSource):
             },
         }
 
-    async def close(self):
+    async def close(self) -> None:
         while not self.queue.empty():
             await self.queue.get()
         await self.client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.client.ping()
             self._logger.debug("Successfully connected to Box")
@@ -330,7 +331,7 @@ class BoxDataSource(BaseDataSource):
         ):
             yield user.get("id")
 
-    async def _fetch(self, doc_id, user_id=None):
+    async def _fetch(self, doc_id, user_id=None) -> None:
         self._logger.info(
             f"Fetching files and folders recursively for folder ID: {doc_id}"
         )
@@ -401,7 +402,7 @@ class BoxDataSource(BaseDataSource):
 
     def _pre_checks_for_get_content(
         self, attachment_extension, attachment_name, attachment_size
-    ):
+    ) -> bool:
         if attachment_extension == "":
             self._logger.debug(
                 f"Files without extension are not supported, skipping {attachment_name}."
@@ -421,7 +422,7 @@ class BoxDataSource(BaseDataSource):
             return False
         return True
 
-    async def get_content(self, attachment, user_id=None, timestamp=None, doit=False):
+    async def get_content(self, attachment, user_id=None, timestamp=None, doit: bool=False):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:

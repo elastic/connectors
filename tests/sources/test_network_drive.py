@@ -9,7 +9,7 @@ import asyncio
 import csv
 import datetime
 from unittest import mock
-from unittest.mock import ANY, MagicMock
+from unittest.mock import Mock, ANY, MagicMock
 
 import pytest
 import smbclient
@@ -37,6 +37,7 @@ from connectors.sources.network_drive import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from typing import Dict, Optional
 
 READ_COUNT = 0
 MAX_CHUNK_SIZE = 65536
@@ -66,7 +67,7 @@ class PasswordMustChange(SMBResponseException):
     _STATUS_CODE = 3221226020
 
 
-def mock_file(name):
+def mock_file(name) -> Mock:
     """Generates the smbprotocol object for a file
 
     Args:
@@ -95,7 +96,7 @@ def mock_file(name):
     return mock_response
 
 
-def mock_folder(name):
+def mock_folder(name) -> Mock:
     """Generates the smbprotocol object for a folder
 
     Args:
@@ -122,7 +123,7 @@ def mock_folder(name):
     return mock_response
 
 
-def side_effect_function(MAX_CHUNK_SIZE):
+def side_effect_function(MAX_CHUNK_SIZE) -> Optional[bytes]:
     """Dynamically changing return values during reading a file in chunks
     Args:
         MAX_CHUNK_SIZE: Maximum bytes allowed to be read at a given time
@@ -134,7 +135,7 @@ def side_effect_function(MAX_CHUNK_SIZE):
     return b"Mock...."
 
 
-def mock_permission(sid, ace):
+def mock_permission(sid, ace) -> Dict[str, "MockSID"]:
     mock_response = {}
 
     class MockSID:
@@ -153,7 +154,7 @@ def mock_permission(sid, ace):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> None:
     """Tests the ping functionality for ensuring connection to the Network Drive."""
     # Setup
     expected_response = True
@@ -168,7 +169,7 @@ async def test_ping_for_successful_connection():
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.register_session")
-async def test_ping_for_failed_connection(session_mock):
+async def test_ping_for_failed_connection(session_mock) -> None:
     """Tests the ping functionality when connection can not be established to Network Drive.
 
     Args:
@@ -216,7 +217,7 @@ async def test_ping_for_failed_connection(session_mock):
         },
     ],
 )
-async def test_create_connection_when_error_occurs(session_mock, side_effect):
+async def test_create_connection_when_error_occurs(session_mock, side_effect) -> None:
     """Tests the create_connection function when an error occurs
 
     Args:
@@ -235,7 +236,7 @@ async def test_create_connection_when_error_occurs(session_mock, side_effect):
 
 @mock.patch("smbclient.scandir")
 @pytest.mark.asyncio
-async def test_traverse_diretory_with_invalid_path(dir_mock):
+async def test_traverse_diretory_with_invalid_path(dir_mock) -> None:
     """Tests the scandir method of smbclient throws error on invalid path
 
     Args:
@@ -254,7 +255,7 @@ async def test_traverse_diretory_with_invalid_path(dir_mock):
 @mock.patch("smbclient.scandir")
 @mock.patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_traverse_diretory_retried_on_smb_timeout(dir_mock):
+async def test_traverse_diretory_retried_on_smb_timeout(dir_mock) -> None:
     """Tests the scandir method of smbclient is retried on SMBConnectionClosed error
 
     Args:
@@ -284,7 +285,7 @@ async def test_traverse_diretory_retried_on_smb_timeout(dir_mock):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-async def test_fetch_file_when_file_is_inaccessible(file_mock, caplog):
+async def test_fetch_file_when_file_is_inaccessible(file_mock, caplog) -> None:
     """Tests the open_file method of smbclient throws error when file cannot be accessed
 
     Args:
@@ -311,7 +312,7 @@ async def create_fake_coroutine(data):
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> None:
     """Test get_content method of Network Drive"""
     # Setup
     async with create_source(NASDataSource) as source:
@@ -340,7 +341,7 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_upper_extension():
+async def test_get_content_with_upper_extension() -> None:
     """Test get_content method of Network Drive"""
     # Setup
     async with create_source(NASDataSource) as source:
@@ -369,7 +370,7 @@ async def test_get_content_with_upper_extension():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_doit_false():
+async def test_get_content_when_doit_false() -> None:
     """Test get_content method when doit is false."""
     # Setup
     async with create_source(NASDataSource) as source:
@@ -387,7 +388,7 @@ async def test_get_content_when_doit_false():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_file_size_is_large():
+async def test_get_content_when_file_size_is_large() -> None:
     """Test the module responsible for fetching the content of the file if it is not extractable"""
     # Setup
     async with create_source(NASDataSource) as source:
@@ -406,7 +407,7 @@ async def test_get_content_when_file_size_is_large():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_file_type_not_supported():
+async def test_get_content_when_file_type_not_supported() -> None:
     """Test get_content method when the file content type is not supported"""
     # Setup
     async with create_source(NASDataSource) as source:
@@ -428,7 +429,7 @@ async def test_get_content_when_file_type_not_supported():
 @mock.patch.object(NASDataSource, "traverse_diretory", return_value=mock.MagicMock())
 @mock.patch.object(NASDataSource, "fetch_groups_info", return_value=mock.AsyncMock())
 @mock.patch("smbclient.register_session")
-async def test_get_doc(mock_traverse_diretory, mock_fetch_groups, session):
+async def test_get_doc(mock_traverse_diretory, mock_fetch_groups, session) -> None:
     # Setup
     async with create_source(NASDataSource) as source:
         # Execute
@@ -439,7 +440,7 @@ async def test_get_doc(mock_traverse_diretory, mock_fetch_groups, session):
 
 @pytest.mark.asyncio
 @mock.patch("smbclient.open_file")
-async def test_fetch_file_when_file_is_accessible(file_mock):
+async def test_fetch_file_when_file_is_accessible(file_mock) -> None:
     """Tests the open_file method of smbclient when file can be accessed
 
     Args:
@@ -460,7 +461,7 @@ async def test_fetch_file_when_file_is_accessible(file_mock):
 
 
 @pytest.mark.asyncio
-async def test_close_without_session():
+async def test_close_without_session() -> None:
     async with create_source(NASDataSource) as source:
         await source.close()
 
@@ -588,7 +589,7 @@ async def test_close_without_session():
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(
     advanced_rules, expected_validation_result, mocked_document
-):
+) -> None:
     async with create_source(NASDataSource) as source:
         validation_result = await NetworkDriveAdvancedRulesValidator(source).validate(
             advanced_rules
@@ -598,7 +599,7 @@ async def test_advanced_rules_validation(
 
 
 @pytest.mark.asyncio
-async def test_pattern_start_with_slash():
+async def test_pattern_start_with_slash() -> None:
     async with create_source(NASDataSource) as source:
         expected_result = await NetworkDriveAdvancedRulesValidator(source).validate(
             advanced_rules=[{"pattern": "/[abc"}]
@@ -611,10 +612,10 @@ async def test_pattern_start_with_slash():
 
 
 class MockFile:
-    def __init__(self, path):
+    def __init__(self, path) -> None:
         self.path = path
 
-    def is_dir(self):
+    def is_dir(self) -> bool:
         return False
 
     def path(self):
@@ -638,7 +639,7 @@ class MockFile:
     ],
 )
 @mock.patch("smbclient.register_session")
-async def test_get_docs_for_syncrule(session, filtering):
+async def test_get_docs_for_syncrule(session, filtering) -> None:
     async with create_source(NASDataSource) as source:
         with mock.patch(
             "smbclient.scandir",
@@ -667,7 +668,7 @@ async def test_get_docs_for_syncrule(session, filtering):
     ],
 )
 @mock.patch("smbclient.register_session")
-async def test_get_docs_for_syncrule_negative(session, filtering):
+async def test_get_docs_for_syncrule_negative(session, filtering) -> None:
     async with create_source(NASDataSource) as source:
         with mock.patch(
             "smbclient.scandir",
@@ -677,7 +678,7 @@ async def test_get_docs_for_syncrule_negative(session, filtering):
                 assert document is not None
 
 
-def test_parse_output():
+def test_parse_output() -> None:
     security_object = SecurityInfo("user", "password", "0.0.0.0")
 
     raw_output = mock.Mock()
@@ -696,7 +697,7 @@ def test_parse_output():
     assert formatted_result == expected_result
 
 
-def test_fetch_users():
+def test_fetch_users() -> None:
     security_object = SecurityInfo("user", "password", "0.0.0.0")
 
     sample_data = mock.Mock()
@@ -719,7 +720,7 @@ def test_fetch_users():
     assert users == expected_result
 
 
-def test_fetch_groups():
+def test_fetch_groups() -> None:
     security_object = SecurityInfo("user", "password", "0.0.0.0")
 
     sample_data = mock.Mock()
@@ -742,7 +743,7 @@ def test_fetch_groups():
     assert users == expected_result
 
 
-def test_fetch_members():
+def test_fetch_members() -> None:
     security_object = SecurityInfo("user", "password", "0.0.0.0")
 
     sample_data = mock.Mock()
@@ -766,7 +767,7 @@ def test_fetch_members():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> None:
     async with create_source(NASDataSource) as source:
         source._features = mock.Mock()
         source._features.document_level_security_enabled = MagicMock(return_value=False)
@@ -779,7 +780,7 @@ async def test_get_access_control_dls_disabled():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_linux_empty_csv_file_path():
+async def test_get_access_control_linux_empty_csv_file_path() -> None:
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.drive_type = LINUX
@@ -789,7 +790,7 @@ async def test_get_access_control_linux_empty_csv_file_path():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_linux():
+async def test_get_access_control_linux() -> None:
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.drive_type = LINUX
@@ -805,7 +806,7 @@ async def test_get_access_control_linux():
 
 
 @pytest.mark.asyncio
-async def test_fetch_groups_info():
+async def test_fetch_groups_info() -> None:
     mock_groups = {"Admins": "S-1-5-32-546"}
     mock_group_members = {
         "Administrator": "S-1-5-21-227823342-1368486282-703244805-500"
@@ -823,7 +824,7 @@ async def test_fetch_groups_info():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_enabled():
+async def test_get_access_control_dls_enabled() -> None:
     expected_user_access_control = [
         [
             "rid:500",
@@ -856,7 +857,7 @@ async def test_get_access_control_dls_enabled():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_without_duplicate_ids():
+async def test_get_access_control_without_duplicate_ids() -> None:
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.drive_type = LINUX
@@ -908,7 +909,7 @@ async def test_get_access_control_without_duplicate_ids():
 @mock.patch.object(NASDataSource, "fetch_groups_info", return_value=mock.AsyncMock())
 @mock.patch("smbclient.register_session")
 @pytest.mark.asyncio
-async def test_get_docs_without_dls_enabled(mock_get_files, mock_fetch_groups, session):
+async def test_get_docs_without_dls_enabled(mock_get_files, mock_fetch_groups, session) -> None:
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -989,7 +990,7 @@ async def test_get_docs_with_dls_enabled(
     mock_groups,
     mock_members,
     mock_users,
-):
+) -> None:
     async with create_source(NASDataSource) as source:
         source._dls_enabled = MagicMock(return_value=True)
 
@@ -1007,7 +1008,7 @@ async def test_get_docs_with_dls_enabled(
 
 
 @pytest.mark.asyncio
-async def test_read_csv_with_valid_data():
+async def test_read_csv_with_valid_data() -> None:
     async with create_source(NASDataSource) as source:
         with mock.patch(
             "builtins.open",
@@ -1022,7 +1023,7 @@ async def test_read_csv_with_valid_data():
 
 
 @pytest.mark.asyncio
-async def test_read_csv_file_erroneous():
+async def test_read_csv_file_erroneous() -> None:
     async with create_source(NASDataSource) as source:
         with mock.patch("builtins.open", mock.mock_open(read_data="0I`00�^")):
             with mock.patch("csv.reader", side_effect=csv.Error):
@@ -1031,7 +1032,7 @@ async def test_read_csv_file_erroneous():
 
 
 @pytest.mark.asyncio
-async def test_read_csv_with_empty_groups():
+async def test_read_csv_with_empty_groups() -> None:
     async with create_source(NASDataSource) as source:
         with mock.patch(
             "builtins.open", mock.mock_open(read_data="user1;1;\nuser2;2;")
@@ -1046,7 +1047,7 @@ async def test_read_csv_with_empty_groups():
 
 @pytest.mark.asyncio
 @mock.patch.object(SecurityInfo, "get_descriptor")
-async def test_list_file_permissions(mock_get_descriptor):
+async def test_list_file_permissions(mock_get_descriptor) -> None:
     with mock.patch("smbclient.open_file", return_value=MagicMock()) as mock_file:
         mock_file.fd.return_value = 2
         mock_descriptor = mock.Mock()
@@ -1066,7 +1067,7 @@ async def test_list_file_permissions(mock_get_descriptor):
 
 
 @pytest.mark.asyncio
-async def test_list_file_permissions_with_inaccessible_file():
+async def test_list_file_permissions_with_inaccessible_file() -> None:
     with mock.patch("smbclient.open_file", return_value=MagicMock()) as mock_file:
         mock_file.side_effect = SMBOSError(ntstatus=0xC0000043, filename="file1.txt")
 
@@ -1090,7 +1091,7 @@ async def test_list_file_permissions_with_inaccessible_file():
         mock_permission(sid="S-1-11-10", ace=1),  # Group with Deny permission
     ],
 )
-async def test_deny_permission_has_precedence_over_allow(mock_list_file_permission):
+async def test_deny_permission_has_precedence_over_allow(mock_list_file_permission) -> None:
     mock_groups_info = {"10": {"admin": "S-2-21-211-411"}}
     expected_result = []
     async with create_source(NASDataSource) as source:
@@ -1116,7 +1117,7 @@ async def test_deny_permission_has_precedence_over_allow(mock_list_file_permissi
 )
 async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_access(
     mock_list_file_permission,
-):
+) -> None:
     mock_groups_info = {"11": {"user-1": "S-2-21-211-411", "user-2": "S-3-23-222-221"}}
     expected_result = ["rid:411"]  # Only User-1 should have access
     async with create_source(NASDataSource) as source:
@@ -1130,7 +1131,7 @@ async def test_group_allow_ace_member1_allow_member2_deny_ace_then_member1_has_a
         assert document_permissions[ACCESS_CONTROL] == expected_result
 
 
-async def test_validate_drive_path():
+async def test_validate_drive_path() -> None:
     async with create_source(NASDataSource) as source:
         source.configuration.get_field("drive_path").value = "/abc/bcd"
         source.configuration.get_field("username").value = "user"
@@ -1144,7 +1145,7 @@ async def test_validate_drive_path():
 @mock.patch("smbclient.scandir")
 @mock.patch("connectors.utils.time_to_sleep_between_retries", mock.Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_traverse_diretory_smb_timeout_for_sync_rule(dir_mock):
+async def test_traverse_diretory_smb_timeout_for_sync_rule(dir_mock) -> None:
     with mock.patch.object(SMBSession, "create_connection"):
         async with create_source(NASDataSource) as source:
             path = "some_path"
@@ -1171,7 +1172,7 @@ async def test_traverse_diretory_smb_timeout_for_sync_rule(dir_mock):
 
 @mock.patch("smbclient.scandir")
 @pytest.mark.asyncio
-async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock):
+async def test_traverse_diretory_with_invalid_path_for_syncrule(dir_mock) -> None:
     # Setup
     async with create_source(NASDataSource) as source:
         path = "unknown_path"

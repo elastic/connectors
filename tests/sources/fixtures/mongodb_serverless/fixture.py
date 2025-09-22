@@ -11,7 +11,7 @@ import bson
 from faker import Faker
 from pymongo import MongoClient
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 750, "medium": 1500, "large": 3000}
 NUMBER_OF_RECORDS_TO_DELETE = 50
 
@@ -20,7 +20,7 @@ client = MongoClient("mongodb://admin:justtesting@127.0.0.1:27021")
 OB_STORE = "/tmp/objectstore"
 
 
-async def setup():
+async def setup() -> None:
     print(f"preparing {OB_STORE}")
     # creating the file storage for es
     if os.path.exists(OB_STORE):
@@ -32,7 +32,7 @@ async def setup():
     print(f"{OB_STORE} ready")
 
 
-async def load():
+async def load() -> None:
     def _random_record():
         return {
             "id": bson.ObjectId(),
@@ -55,7 +55,7 @@ async def load():
     collection.insert_many(data)
 
 
-async def remove():
+async def remove() -> None:
     db = client.sample_database
     collection = db.sample_collection
 

@@ -13,10 +13,13 @@ import os
 from flask import Flask, jsonify, make_response, request
 
 from tests.commons import WeightedFakeProvider
+from _io import BytesIO
+from flask.wrappers import Response
+from typing import Dict, Union
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
     case "small":
@@ -33,7 +36,7 @@ FILE_FOLDERS_TO_DELETE = 100
 
 
 class DropboxAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.first_sync = True
 
@@ -63,13 +66,13 @@ class DropboxAPI:
         self.app.route("/2/files/download", methods=["POST"])(self.download_file)
         self.app.route("/2/files/export", methods=["POST"])(self.download_paper_file)
 
-    def get_dropbox_token(self):
+    def get_dropbox_token(self) -> Response:
         res = {"access_token": "fake-access-token", "expires_in": 3699}
         response = make_response(res)
         response.headers["status_code"] = 200
         return response
 
-    def get_current_account(self):
+    def get_current_account(self) -> Dict[str, Union[Dict[str, str], bool, str]]:
         return {
             "account_id": "dbid:1122aabb2AogwKjDAG8RkrnCee-8Zex-e94",
             "name": {
@@ -118,7 +121,7 @@ class DropboxAPI:
             }
         }
 
-    def files_list_folder(self):
+    def files_list_folder(self) -> Response:
         response = {"entries": [], "cursor": "fake-cursor", "has_more": True}
         if self.first_sync:
             end_files_folders = FILE_FOLDERS
@@ -158,7 +161,7 @@ class DropboxAPI:
             response["entries"].append(file_entry)
         return jsonify(response)
 
-    def files_list_folder_continue(self):
+    def files_list_folder_continue(self) -> Response:
         response = {"entries": [], "cursor": "fake-cursor", "has_more": False}
         for entry in range(FILE_FOLDERS, FILE_FOLDERS * 2):
             folder_entry = {
@@ -193,7 +196,7 @@ class DropboxAPI:
             response["entries"].append(file_entry)
         return jsonify(response)
 
-    def get_received_files(self):
+    def get_received_files(self) -> Response:
         response = {"entries": [], "cursor": "fake-cursor"}
         for entry in range(RECEIVED_FILES_PAGE):
             response["entries"].append(
@@ -212,7 +215,7 @@ class DropboxAPI:
             )
         return jsonify(response)
 
-    def get_received_files_continue(self):
+    def get_received_files_continue(self) -> Response:
         response = {"entries": [], "cursor": None}
         for entry in range(RECEIVED_FILES_PAGE, RECEIVED_FILES_PAGE * 2):
             response["entries"].append(
@@ -231,7 +234,7 @@ class DropboxAPI:
             )
         return jsonify(response)
 
-    def get_shared_file_metadata(self):
+    def get_shared_file_metadata(self) -> Response:
         data = request.get_data().decode("utf-8")
         url = json.loads(data)["url"]
         res = {
@@ -294,13 +297,13 @@ class DropboxAPI:
         }
         return jsonify(res)
 
-    def download_file(self):
+    def download_file(self) -> BytesIO:
         return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
-    def download_paper_file(self):
+    def download_paper_file(self) -> BytesIO:
         return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
-    def download_shared_file(self):
+    def download_shared_file(self) -> BytesIO:
         return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 

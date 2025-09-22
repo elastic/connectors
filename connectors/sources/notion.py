@@ -11,7 +11,7 @@ import os
 import re
 from copy import copy
 from functools import cached_property, partial
-from typing import Any, Awaitable, Callable
+from typing import Dict, List, Union, Any, Awaitable, Callable
 from urllib.parse import unquote
 
 import aiohttp
@@ -26,6 +26,8 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from aiohttp.client import ClientSession
+from notion_client.client import AsyncClient
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -45,24 +47,24 @@ class NotFound(Exception):
 class NotionClient:
     """Notion API client"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
         self.notion_secret_key = self.configuration["notion_secret_key"]
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @cached_property
-    def _get_client(self):
+    def _get_client(self) -> AsyncClient:
         return AsyncClient(
             auth=self.notion_secret_key,
             base_url=BASE_URL,
         )
 
     @cached_property
-    def session(self):
+    def session(self) -> ClientSession:
         """Generate aiohttp client session.
 
         Returns:
@@ -139,11 +141,11 @@ class NotionClient:
                 if not response["has_more"] or next_cursor is None:
                     return
 
-    async def fetch_owner(self):
+    async def fetch_owner(self) -> None:
         """Fetch integration authorized owner"""
         await self._get_client.users.me()
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         await self._get_client.aclose()
         await self.session.close()
@@ -278,11 +280,11 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=RULES_OBJECT_SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
         self._logger = logger
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -291,7 +293,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
         self._logger.info("Remote validation started")
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             NotionAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -358,7 +360,7 @@ class NotionDataSource(BaseDataSource):
     advanced_rules_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the Notion instance.
 
         Args:
@@ -375,10 +377,10 @@ class NotionDataSource(BaseDataSource):
         self._sleeps = CancellableSleeps()
         self.concurrent_downloads = self.configuration["concurrent_downloads"]
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.notion_client.set_logger(self._logger)
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.notion_client.fetch_owner()
             self._logger.info("Successfully connected to Notion.")
@@ -386,7 +388,7 @@ class NotionDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Notion.")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         await self.notion_client.close()
 
     async def get_entities(self, entity_type, entity_titles):
@@ -435,7 +437,7 @@ class NotionDataSource(BaseDataSource):
                 raise ConfigurableFieldValueError(msg)
         return exact_match_results
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates if user configured databases and pages are available in notion."""
         await super().validate_config()
         await asyncio.gather(
@@ -444,7 +446,7 @@ class NotionDataSource(BaseDataSource):
         )
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Notion.
         Returns:
             dict: Default configuration.
@@ -491,10 +493,10 @@ class NotionDataSource(BaseDataSource):
             },
         }
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[NotionAdvancedRulesValidator]:
         return [NotionAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Tweak bulk options as per concurrent downloads support by Notion
 
         Args:
@@ -510,7 +512,7 @@ class NotionDataSource(BaseDataSource):
         attachment_metadata["name"] = unquote(response.url.path.split("/")[-1])
         return attachment_metadata
 
-    async def get_content(self, attachment, file_url, timestamp=None, doit=False):
+    async def get_content(self, attachment, file_url, timestamp=None, doit: bool=False):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
@@ -551,7 +553,7 @@ class NotionDataSource(BaseDataSource):
             ),
         )
 
-    def _format_doc(self, data):
+    def _format_doc(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Format document for handling empty values & type casting.
 
         Args:
@@ -585,7 +587,7 @@ class NotionDataSource(BaseDataSource):
                     "filter": {"value": "database", "property": "object"},
                 }
 
-    def is_connected_property_block(self, page_database):
+    def is_connected_property_block(self, page_database) -> bool:
         properties = page_database.get("properties")
         if properties is None:
             return False

@@ -27,6 +27,7 @@ from connectors.utils import (
     iso_utc,
     ssl_context,
 )
+from typing import Optional, Any, Dict, List, Union
 
 BASIC_AUTH = "Basic"
 NTLM_AUTH = "NTLM"
@@ -62,7 +63,7 @@ ADMINISTRATOR = 5
 EDITOR = 6
 REVIEWER = 7
 SYSTEM = 0xFF
-VIEW_ROLE_TYPES = [
+VIEW_ROLE_TYPES: List[int] = [
     READER,
     CONTRIBUTOR,
     WEB_DESIGNER,
@@ -73,7 +74,7 @@ VIEW_ROLE_TYPES = [
 ]
 
 
-URLS = {
+URLS: Dict[str, str] = {
     PING: "{site_url}/_api/web/webs",
     SITE: "{parent_site_url}/_api/web",
     SITES: "{parent_site_url}/_api/web/webs?$skip={skip}&$top={top}",
@@ -90,7 +91,7 @@ URLS = {
     UNIQUE_ROLES_FOR_ITEM: "{parent_site_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/HasUniqueRoleAssignments",
     ROLES_BY_TITLE_FOR_ITEM: "{parent_site_url}/_api/lists/GetByTitle('{site_list_name}')/items({list_item_id})/roleassignments?$expand=Member/users,RoleDefinitionBindings&$skip={skip}&$top={top}",
 }
-SCHEMA = {
+SCHEMA: Dict[str, Dict[str, str]] = {
     SITES: {
         "title": "Title",
         "url": "Url",
@@ -128,7 +129,7 @@ SCHEMA = {
 class SharepointServerClient:
     """SharePoint client to handle API calls made to SharePoint"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -151,7 +152,7 @@ class SharepointServerClient:
         else:
             self.ssl_ctx = False
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     def _get_session(self):
@@ -194,7 +195,7 @@ class SharepointServerClient:
         relative_url,
         list_item_id=None,
         content_type_id=None,
-        is_list_item_has_attachment=False,
+        is_list_item_has_attachment: bool=False,
     ):
         if is_list_item_has_attachment:
             return (
@@ -211,7 +212,7 @@ class SharepointServerClient:
         else:
             return site_url + quote(relative_url)
 
-    async def close_session(self):
+    async def close_session(self) -> None:
         """Closes unclosed client session"""
         self._sleeps.cancel()
         if self.session is None:
@@ -219,7 +220,7 @@ class SharepointServerClient:
         await self.session.aclose()  # pyright: ignore
         self.session = None
 
-    async def _api_call(self, url_name, url="", **url_kwargs):
+    async def _api_call(self, url_name, url: str="", **url_kwargs):
         """Make an API call to the SharePoint Server
 
         Args:
@@ -269,7 +270,7 @@ class SharepointServerClient:
                 await self._sleeps.sleep(RETRY_INTERVAL**retry)
 
     async def _fetch_data_with_next_url(
-        self, site_url, list_id, param_name, selected_field=""
+        self, site_url, list_id, param_name, selected_field: str=""
     ):
         """Invokes a GET call to the SharePoint Server for calling list and drive item API.
 
@@ -398,7 +399,7 @@ class SharepointServerClient:
             )
         )
 
-    def verify_filename_for_extraction(self, filename, relative_url):
+    def verify_filename_for_extraction(self, filename, relative_url) -> None:
         attachment_extension = list(os.path.splitext(filename))
         if "" in attachment_extension:
             attachment_extension.remove("")
@@ -506,7 +507,7 @@ class SharepointServerClient:
 
                 yield result, file_relative_url
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Executes the ping call in async manner"""
         site_url = ""
         if len(self.site_collections) > 0:
@@ -607,7 +608,7 @@ class SharepointServerDataSource(BaseDataSource):
     incremental_sync_enabled = True
     dls_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the SharePoint
 
         Args:
@@ -617,25 +618,25 @@ class SharepointServerDataSource(BaseDataSource):
         self.sharepoint_client = SharepointServerClient(configuration=configuration)
         self.invalid_collections = []
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.sharepoint_client.set_logger(self._logger)
 
-    def _prefix_user(self, user):
+    def _prefix_user(self, user) -> Optional[str]:
         return prefix_identity("user", user)
 
-    def _prefix_user_id(self, user_id):
+    def _prefix_user_id(self, user_id) -> Optional[str]:
         return prefix_identity("user_id", user_id)
 
-    def _prefix_email(self, email):
+    def _prefix_email(self, email) -> Optional[str]:
         return prefix_identity("email", email)
 
-    def _prefix_login_name(self, name):
+    def _prefix_login_name(self, name) -> Optional[str]:
         return prefix_identity("login_name", name)
 
-    def _prefix_group(self, group):
+    def _prefix_group(self, group) -> Optional[str]:
         return prefix_identity("group", group)
 
-    def _prefix_group_name(self, group_name):
+    def _prefix_group_name(self, group_name) -> Optional[str]:
         return prefix_identity("group_name", group_name)
 
     def _get_login_name(self, raw_login_name):
@@ -645,7 +646,7 @@ class SharepointServerDataSource(BaseDataSource):
         return None
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for SharePoint
 
         Returns:
@@ -765,7 +766,7 @@ class SharepointServerDataSource(BaseDataSource):
     def access_control_query(self, access_control):
         return es_access_control_query(access_control)
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
         login_name = user.get("LoginName")
         prefixed_mail = self._prefix_email(user.get("Email"))
         prefixed_title = self._prefix_user(user.get("Title"))
@@ -790,7 +791,7 @@ class SharepointServerDataSource(BaseDataSource):
             "created_at": iso_utc(),
         } | self.access_control_query(access_control)
 
-    async def _access_control_for_member(self, member):
+    async def _access_control_for_member(self, member) -> List[Optional[str]]:
         principal_type = member.get("PrincipalType")
         is_group = principal_type != IS_USER if principal_type else False
         user_access_control = []
@@ -967,11 +968,11 @@ class SharepointServerDataSource(BaseDataSource):
 
         return list(access_control), list(site_admins_access_control)
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes unclosed client session"""
         await self.sharepoint_client.close_session()
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         """Validate configured collections
         Raises:
             ConfigurableFieldValueError: Unavailable services error.
@@ -994,13 +995,13 @@ class SharepointServerDataSource(BaseDataSource):
             )
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured collections are available in SharePoint."""
         await super().validate_config()
         await self._remote_validation()
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with SharePoint"""
         try:
             await self.sharepoint_client.ping()
@@ -1018,7 +1019,7 @@ class SharepointServerDataSource(BaseDataSource):
         document,
         item,
         document_type,
-    ):
+    ) -> None:
         """Prepare key mappings for documents
 
         Args:
@@ -1068,7 +1069,7 @@ class SharepointServerDataSource(BaseDataSource):
         admin_access_control.extend(site_list_access_control)
         return self._decorate_with_access_control(document, admin_access_control)
 
-    def format_sites(self, item):
+    def format_sites(self, item) -> Dict[str, Any]:
         """Prepare key mappings for site
 
         Args:
@@ -1092,7 +1093,7 @@ class SharepointServerDataSource(BaseDataSource):
         site_url,
         server_relative_url,
         item,
-    ):
+    ) -> Dict[str, str]:
         """Prepare key mappings for drive items
 
         Args:
@@ -1135,7 +1136,7 @@ class SharepointServerDataSource(BaseDataSource):
         item,
         site_url=None,
         server_relative_url=None,
-    ):
+    ) -> Dict[str, Any]:
         """Prepare key mappings for list items
 
         Args:
@@ -1368,7 +1369,7 @@ class SharepointServerDataSource(BaseDataSource):
                             )
 
     async def get_content(
-        self, document, file_relative_url, site_url, timestamp=None, doit=False
+        self, document, file_relative_url, site_url, timestamp=None, doit: bool=False
     ):
         """Get content of list items and drive items
 
@@ -1414,7 +1415,7 @@ class SharepointServerDataSource(BaseDataSource):
         )
 
     async def get_site_pages_content(
-        self, document, list_response, timestamp=None, doit=False
+        self, document, list_response, timestamp=None, doit: bool=False
     ):
         """Get content of site pages for SharePoint
 

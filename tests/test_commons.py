@@ -9,7 +9,7 @@ from tests.commons import AsyncIterator
 
 
 @pytest.mark.asyncio
-async def test_async_generation():
+async def test_async_generation() -> None:
     items = [1, 2, 3]
 
     async_generator = AsyncIterator(items)
@@ -22,7 +22,7 @@ async def test_async_generation():
 
 
 @pytest.mark.asyncio
-async def test_call_args():
+async def test_call_args() -> None:
     items = [1]
 
     async_generator = AsyncIterator(items)
@@ -54,7 +54,7 @@ async def test_call_args():
 
 
 @pytest.mark.asyncio
-async def test_call_kwargs():
+async def test_call_kwargs() -> None:
     items = [1]
 
     async_generator = AsyncIterator(items)
@@ -90,7 +90,7 @@ async def test_call_kwargs():
 
 
 @pytest.mark.asyncio
-async def test_assert_not_called():
+async def test_assert_not_called() -> None:
     items = []
 
     async_generator = AsyncIterator(items)
@@ -98,7 +98,7 @@ async def test_assert_not_called():
 
 
 @pytest.mark.asyncio
-async def test_assert_not_called_with_one_call():
+async def test_assert_not_called_with_one_call() -> None:
     items = []
 
     async_generator = AsyncIterator(items)
@@ -111,7 +111,7 @@ async def test_assert_not_called_with_one_call():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once():
+async def test_assert_called_once() -> None:
     items = []
 
     async_generator = AsyncIterator(items)
@@ -127,7 +127,7 @@ async def test_assert_called_once():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_two_calls():
+async def test_assert_called_once_with_two_calls() -> None:
     items = []
 
     async_generator = AsyncIterator(items)
@@ -145,7 +145,7 @@ async def test_assert_called_once_with_two_calls():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_one_arg():
+async def test_assert_called_once_with_one_arg() -> None:
     items = [1]
 
     argument = "some argument"
@@ -159,7 +159,7 @@ async def test_assert_called_once_with_one_arg():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_wrong_arg():
+async def test_assert_called_once_with_wrong_arg() -> None:
     items = [1]
 
     argument = "some argument"
@@ -175,7 +175,7 @@ async def test_assert_called_once_with_wrong_arg():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_one_arg_and_two_calls():
+async def test_assert_called_once_with_one_arg_and_two_calls() -> None:
     items = [1]
 
     argument = "some argument"
@@ -195,7 +195,7 @@ async def test_assert_called_once_with_one_arg_and_two_calls():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_three_args():
+async def test_assert_called_once_with_three_args() -> None:
     items = [1]
 
     argument_one = "some argument one"
@@ -211,7 +211,7 @@ async def test_assert_called_once_with_three_args():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_one_kwarg():
+async def test_assert_called_once_with_one_kwarg() -> None:
     items = [1]
 
     argument = "some argument"
@@ -225,7 +225,7 @@ async def test_assert_called_once_with_one_kwarg():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_one_kwarg_and_two_calls():
+async def test_assert_called_once_with_one_kwarg_and_two_calls() -> None:
     items = [1]
 
     argument = "some argument"
@@ -245,7 +245,7 @@ async def test_assert_called_once_with_one_kwarg_and_two_calls():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_wrong_kwarg():
+async def test_assert_called_once_with_wrong_kwarg() -> None:
     items = [1]
 
     argument = "some argument"
@@ -261,7 +261,7 @@ async def test_assert_called_once_with_wrong_kwarg():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_three_kwargs():
+async def test_assert_called_once_with_three_kwargs() -> None:
     items = [1]
 
     argument_one = "some argument one"
@@ -285,7 +285,7 @@ async def test_assert_called_once_with_three_kwargs():
 
 
 @pytest.mark.asyncio
-async def test_assert_called_once_with_args_and_kwargs():
+async def test_assert_called_once_with_args_and_kwargs() -> None:
     items = [1]
 
     argument_one = "some argument one"

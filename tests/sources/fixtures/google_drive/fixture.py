@@ -12,10 +12,11 @@ import time
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
+from typing import Any, Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -31,22 +32,22 @@ app = Flask(__name__)
 PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.1"))
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(DOCS_COUNT)
 
 
 @app.before_request
-def before_request():
+def before_request() -> None:
     time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/drive/v3/about", methods=["GET"])
-def about_get():
+def about_get() -> Dict[str, str]:
     return {"kind": "drive#about"}
 
 
 @app.route("/drive/v3/drives", methods=["GET"])
-def drives_list():
+def drives_list() -> Dict[str, Union[List[Dict[str, str]], str]]:
     return {
         "nextPageToken": "dummyToken",
         "kind": "drive#driveList",
@@ -58,7 +59,7 @@ def drives_list():
 
 
 @app.route("/drive/v3/files", methods=["GET"])
-def files_list():
+def files_list() -> Dict[str, Union[List[Dict[str, Any]], str]]:
     files_list = [
         {
             "kind": "drive#file",
@@ -76,7 +77,7 @@ def files_list():
 
 
 @app.route("/drive/v3/files/<string:file_id>", methods=["GET"])
-def files_get(file_id):
+def files_get(file_id) -> Union[Dict[str, str], str]:
     req_params = request.args.to_dict()
 
     # response includes the file contents in the response body
@@ -93,7 +94,7 @@ def files_get(file_id):
 
 
 @app.route("/token", methods=["POST"])
-def post_auth_token():
+def post_auth_token() -> Dict[str, Union[int, str]]:
     """Function to load"""
     return {
         "access_token": "XXXXXXStBkRnGyZ2mUYOLgls7QVBxOg82XhBCFo8UIT5gM",

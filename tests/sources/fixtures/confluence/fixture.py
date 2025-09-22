@@ -14,10 +14,12 @@ import time
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
+from _io import BytesIO
+from typing import Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -37,7 +39,7 @@ match DATA_SIZE:
         raise Exception(msg)
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     # 2 is multiplier cause SPACE_OBJECTs will be delivered twice:
     # Test returns SPACE_OBJECT_COUNT objects for each type of content
     # There are 2 types of content:
@@ -47,7 +49,7 @@ def get_num_docs():
 
 
 class ConfluenceAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.first_sync = True
         self.space_start_at = 0
@@ -109,7 +111,7 @@ class ConfluenceAPI:
             )
         return spaces
 
-    def get_label(self, label_id):
+    def get_label(self, label_id) -> Dict[str, Union[List[Dict[str, str]], int]]:
         return {
             "results": [
                 {
@@ -197,7 +199,7 @@ class ConfluenceAPI:
             attachments["results"].append(attachment)
         return attachments
 
-    def download(self, content_id, attachment_id):
+    def download(self, content_id, attachment_id) -> BytesIO:
         """Function to handle download calls for attachments
 
         Args:

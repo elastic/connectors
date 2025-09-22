@@ -15,17 +15,19 @@ from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
+from typing import Any, Dict, List, Optional, Union
+from faker.proxy import Faker
 
 seed = 1597463007
 
 fake_provider = WeightedFakeProvider()
-fake = fake_provider.fake
+fake: Faker = fake_provider.fake
 
 random.seed(seed)
 
 app = Flask(__name__)
 
-THROTTLING = os.environ.get("THROTTLING", False)
+THROTTLING: Union[bool, str] = os.environ.get("THROTTLING", False)
 PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
 
 if THROTTLING:
@@ -49,13 +51,13 @@ if THROTTLING:
 
 TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
 
-ROOT = os.environ.get(
+ROOT: str = os.environ.get(
     "ROOT_HOST_URL", "http://127.0.0.1:10337"
 )  # possible to override if hosting somewhere else
 
 TENANT = "functionaltest.sharepoint.fake"
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
     case "extra_small":
@@ -88,22 +90,22 @@ match DATA_SIZE:
         NUMBER_OF_LIST_ITEM_ATTACHMENTS = 5
 
 
-TOTAL_RECORD_COUNT = NUMBER_OF_SITES * (
+TOTAL_RECORD_COUNT: int = NUMBER_OF_SITES * (
     1 * NUMBER_OF_DRIVE_ITEMS
     + NUMBER_OF_PAGES
     + NUMBER_OF_LISTS * NUMBER_OF_LIST_ITEMS * NUMBER_OF_LIST_ITEM_ATTACHMENTS
 )
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(TOTAL_RECORD_COUNT)  # noqa: T201
 
 
 class AutoIncrement:
-    def __init__(self):
+    def __init__(self) -> None:
         self.val = 1
 
-    def get(self):
+    def get(self) -> int:
         value = self.val
         self.val += 1
         return value
@@ -124,7 +126,7 @@ class RandomDataStorage:
 
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.autoinc = AutoIncrement()
 
         self.tenants = []
@@ -142,7 +144,7 @@ class RandomDataStorage:
         self.site_lists_by_list_name = {}
         self.list_item_attachment_content = {}
 
-    def generate(self):
+    def generate(self) -> None:
         self.tenants = [TENANT]
 
         for _ in range(NUMBER_OF_SITES):
@@ -237,7 +239,7 @@ class RandomDataStorage:
 
                     self.site_list_items[site_list["id"]].append(list_item)
 
-    def get_site_collections(self):
+    def get_site_collections(self) -> List[Dict[str, Union[Dict[str, Any], str]]]:
         results = []
 
         for tenant in self.tenants:
@@ -253,7 +255,7 @@ class RandomDataStorage:
 
         return results
 
-    def get_tenant_root_site_collections(self):
+    def get_tenant_root_site_collections(self) -> Dict[str, Any]:
         return {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites/$entity",
             "createdDateTime": "2023-12-12T12:00:00.000Z",
@@ -267,7 +269,7 @@ class RandomDataStorage:
             "siteCollection": {"hostname": "example.sharepoint.com"},
         }
 
-    def get_sites(self, skip=0, take=10):
+    def get_sites(self, skip: int=0, take: int=10) -> List[Dict[str, Any]]:
         results = []
 
         for site in self.sites[skip:][:take]:
@@ -286,7 +288,7 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_drives(self, site_id):
+    def get_site_drives(self, site_id) -> List[Dict[str, Any]]:
         results = []
 
         site = self.sites_by_site_id[site_id]
@@ -327,7 +329,7 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_pages(self, site_name, skip=0, take=10):
+    def get_site_pages(self, site_name, skip: int=0, take: int=10) -> List[Dict[str, Any]]:
         results = []
 
         site = self.sites_by_site_name[site_name]
@@ -379,10 +381,10 @@ class RandomDataStorage:
 
         return results
 
-    def generate_sharepoint_id(self):
+    def generate_sharepoint_id(self) -> str:
         return "".join(random.choices(string.ascii_uppercase + string.digits, k=32))
 
-    def get_drive_items(self, drive_id, skip=0, take=100):
+    def get_drive_items(self, drive_id, skip: int=0, take: int=100) -> List[Union[Dict[str, int], Dict[str, str]]]:
         results = []
 
         site = self.sites_by_drive_id[drive_id]
@@ -420,7 +422,7 @@ class RandomDataStorage:
     def get_drive_item_content(self, drive_item_id):
         return self.drive_item_content[drive_item_id]
 
-    def get_site_lists(self, site_id, skip=0, take=100):
+    def get_site_lists(self, site_id, skip: int=0, take: int=100) -> List[Dict[str, Any]]:
         results = []
 
         site = self.sites_by_site_id[site_id]
@@ -455,7 +457,7 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_list_items(self, site_id, list_id, skip=0, take=100):
+    def get_site_list_items(self, site_id, list_id, skip: int=0, take: int=100) -> List[Dict[str, Any]]:
         results = []
 
         list_ = self.site_lists_by_list_id[list_id]
@@ -519,7 +521,7 @@ class RandomDataStorage:
 
         return results
 
-    def get_site_list_item_attachments(self, site_name, list_name, list_item_id):
+    def get_site_list_item_attachments(self, site_name, list_name, list_item_id) -> Dict[str, Any]:
         list_ = self.site_lists_by_list_name[list_name]
         site = self.sites_by_site_name[site_name]
         list_items = self.site_list_items[list_["id"]]
@@ -578,12 +580,12 @@ data_storage.generate()
 
 
 @app.before_request
-def before_request():
+def before_request() -> None:
     time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/<string:tenant_id>/oauth2/v2.0/token", methods=["POST"])
-def get_graph_token(tenant_id):
+def get_graph_token(tenant_id) -> Dict[str, Union[int, str]]:
     return {
         "access_token": f"fake-graph-api-token-{tenant_id}",
         "expires_in": TOKEN_EXPIRATION_TIMEOUT,
@@ -591,7 +593,7 @@ def get_graph_token(tenant_id):
 
 
 @app.route("/<string:tenant_id>/tokens/OAuth/2", methods=["POST"])
-def get_rest_token(tenant_id):
+def get_rest_token(tenant_id) -> Dict[str, Union[int, str]]:
     return {
         "access_token": f"fake-rest-api-token-{tenant_id}",
         "expires_in": TOKEN_EXPIRATION_TIMEOUT,
@@ -599,7 +601,7 @@ def get_rest_token(tenant_id):
 
 
 @app.route("/common/userrealm/", methods=["GET"])
-def get_tenant():
+def get_tenant() -> Dict[str, Optional[str]]:
     return {
         "NameSpaceType": "Managed",
         "Login": "cj@something.onmicrosoft.com",
@@ -611,7 +613,7 @@ def get_tenant():
 
 
 @app.route("/sites/", methods=["GET"])
-def get_site_collections():
+def get_site_collections() -> Dict[str, Any]:
     # No paging as there's always one site collection
     return {
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites(siteCollection,webUrl)",
@@ -620,13 +622,13 @@ def get_site_collections():
 
 
 @app.route("/sites/root", methods=["GET"])
-def get_tenant_root_site_collections():
+def get_tenant_root_site_collections() -> Dict[str, Any]:
     # No paging as there's always one site collection
     return data_storage.get_tenant_root_site_collections()
 
 
 @app.route("/sites/<string:site_id>/sites", methods=["GET"])
-def get_sites(site_id):
+def get_sites(site_id) -> Dict[str, Any]:
     # Sharepoint Online does not use skip/take, but we do it here just for lazy implementation
     skip = int(request.args.get("$skip", 0))
     take = int(request.args.get("$take", 10))
@@ -647,7 +649,7 @@ def get_sites(site_id):
 
 
 @app.route("/sites/<string:site_id>/drives", methods=["GET"])
-def get_site_drives(site_id):
+def get_site_drives(site_id) -> Dict[str, Any]:
     # I don't bother to page cause it's mostly 1-2 drives
     return {
         "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives",
@@ -656,7 +658,7 @@ def get_site_drives(site_id):
 
 
 @app.route("/drives/<string:drive_id>/root/delta", methods=["GET"])
-def get_drive_root_delta(drive_id):
+def get_drive_root_delta(drive_id) -> Dict[str, Any]:
     skip = int(request.args.get("$skip", 0))
     take = int(request.args.get("$take", 100))
 
@@ -682,7 +684,7 @@ def download_drive_item(drive_id, item_id):
 
 
 @app.route("/sites/<string:site_id>/lists", methods=["GET"])
-def get_site_lists(site_id):
+def get_site_lists(site_id) -> Dict[str, Any]:
     skip = int(request.args.get("$skip", 0))
     take = int(request.args.get("$take", 100))
 
@@ -701,7 +703,7 @@ def get_site_lists(site_id):
 
 
 @app.route("/sites/<string:site_id>/lists/<string:list_id>/items", methods=["GET"])
-def get_site_list_items(site_id, list_id):
+def get_site_list_items(site_id, list_id) -> Dict[str, Any]:
     skip = int(request.args.get("$skip", 0))
     take = int(request.args.get("$take", 100))
 
@@ -723,7 +725,7 @@ def get_site_list_items(site_id, list_id):
 @app.route(
     "/sites/<string:site_name>/_api/lists/GetByTitle('<string:list_title>')/items(<string:list_item_id>)"
 )
-def get_list_item_attachments(site_name, list_title, list_item_id):
+def get_list_item_attachments(site_name, list_title, list_item_id) -> Dict[str, Any]:
     expand = request.args.get(escape("$expand"))
     if expand and "AttachmentFiles" in expand:
         return data_storage.get_site_list_item_attachments(
@@ -735,7 +737,7 @@ def get_list_item_attachments(site_name, list_title, list_item_id):
 
 
 @app.route("/sites/<string:site_name>/_api/web/lists/GetByTitle('Site Pages')/items")
-def get_site_pages(site_name):
+def get_site_pages(site_name) -> Dict[str, Any]:
     skip = int(request.args.get("$skip", 0))
     take = int(request.args.get("$take", 100))
 

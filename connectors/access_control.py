@@ -4,6 +4,8 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
+from typing import Optional
+
 ACCESS_CONTROL = "_allow_access_control"
 DLS_QUERY = """{
                     "bool": {
@@ -27,7 +29,7 @@ DLS_QUERY = """{
                 }"""
 
 
-def prefix_identity(prefix, identity):
+def prefix_identity(prefix, identity) -> Optional[str]:
     if prefix is None or identity is None:
         return None
 

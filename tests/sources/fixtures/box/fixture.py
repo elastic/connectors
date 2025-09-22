@@ -13,23 +13,26 @@ import string
 
 from faker import Faker
 from flask import Flask, make_response, request
+from _io import BytesIO
+from flask.wrappers import Response
+from typing import Any, Dict
 
 app = Flask(__name__)
 
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 _SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+FILE_SIZE: int = _SIZES[DATA_SIZE]
+LARGE_DATA: str = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
 fake = Faker()
 
 
-def _create_data(size):
+def _create_data(size) -> str:
     return "".join([random.choice(string.ascii_letters) for _ in range(size)])
 
 
 class BoxAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.first_sync = True
         match DATA_SIZE:
@@ -50,7 +53,7 @@ class BoxAPI:
             self.get_content
         )
 
-    def get_token(self):
+    def get_token(self) -> Response:
         fake_res = {
             "access_token": "FAKE-ACCESS-TOKEN",
             "refresh_token": "FAKE-REFRESH-TOKEN",
@@ -60,7 +63,7 @@ class BoxAPI:
         response.headers["status_code"] = 200
         return response
 
-    def get_user(self):
+    def get_user(self) -> Dict[str, str]:
         return {"username": "demo_user"}
 
     def get_folders_entries(self, offset, limit):
@@ -94,7 +97,7 @@ class BoxAPI:
         ]
         return files_entries
 
-    def get_folder_items(self, folder_id):
+    def get_folder_items(self, folder_id) -> Dict[str, Any]:
         offset = int(request.args.get("offset"))
         limit = int(request.args.get("limit"))
         if folder_id == "0":
@@ -128,7 +131,7 @@ class BoxAPI:
             }
             return response
 
-    def get_content(self, file_id):
+    def get_content(self, file_id) -> BytesIO:
         return io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
 
 

@@ -163,14 +163,14 @@ from connectors.utils import (
         ),
     ],
 )
-def test_next_run(cron_statement, now, expected_next_run):
+def test_next_run(cron_statement, now, expected_next_run) -> None:
     # can run within two minutes
     assert next_run(cron_statement, now).isoformat(
         " ", "seconds"
     ) == expected_next_run.isoformat(" ", "seconds")
 
 
-def test_with_utc_tz_naive_timestamp():
+def test_with_utc_tz_naive_timestamp() -> None:
     ts_naive = datetime(2024, 5, 27, 12, 0, 0)
     ts_utc = with_utc_tz(ts_naive)
     assert ts_utc.tzinfo == timezone.utc
@@ -182,7 +182,7 @@ def test_with_utc_tz_naive_timestamp():
     assert ts_utc.second == 0
 
 
-def test_with_utc_tz_aware_timestamp():
+def test_with_utc_tz_aware_timestamp() -> None:
     ts_aware = datetime(
         2024, 5, 27, 12, 0, 0, tzinfo=timezone(timedelta(hours=5))
     )  # Timezone aware timestamp with +5 offset
@@ -196,7 +196,7 @@ def test_with_utc_tz_aware_timestamp():
     assert ts_utc.second == 0
 
 
-def test_with_utc_tz_timestamp_in_utc():
+def test_with_utc_tz_timestamp_in_utc() -> None:
     ts_aware = datetime(2024, 5, 27, 12, 0, 0, tzinfo=timezone.utc)
     ts_utc = with_utc_tz(ts_aware)
     assert ts_utc.tzinfo == timezone.utc
@@ -208,7 +208,7 @@ def test_with_utc_tz_timestamp_in_utc():
     assert ts_utc.second == 0
 
 
-def test_invalid_names():
+def test_invalid_names() -> None:
     for name in (
         "index?name",
         "index#name",
@@ -223,7 +223,7 @@ def test_invalid_names():
             validate_index_name(name)
 
 
-def test_mem_queue_speed():
+def test_mem_queue_speed() -> None:
     def mem_queue():
         import asyncio
 
@@ -260,7 +260,7 @@ def test_mem_queue_speed():
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_race():
+async def test_mem_queue_race() -> None:
     item = "small stuff"
     queue = MemQueue(
         maxmemsize=get_size(item) * 2 + 1, refresh_interval=0.01, refresh_timeout=1
@@ -291,7 +291,7 @@ async def test_mem_queue_race():
 
 
 @pytest.mark.asyncio
-async def test_mem_queue():
+async def test_mem_queue() -> None:
     # Initial timeout is really small so that the test is fast.
     # The part of the test before timeout increase will take at least refresh_timeout
     # seconds to execute, so if timeout is 60 seconds, then it'll take 60+ seconds.
@@ -331,7 +331,7 @@ async def test_mem_queue():
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_too_large_item():
+async def test_mem_queue_too_large_item() -> None:
     """
     When an item is added to the queue that is larger than the queue capacity then the item is discarded
 
@@ -353,7 +353,7 @@ async def test_mem_queue_too_large_item():
 
 
 @pytest.mark.asyncio
-async def test_mem_queue_put_nowait():
+async def test_mem_queue_put_nowait() -> None:
     queue = MemQueue(
         maxsize=5, maxmemsize=1000, refresh_interval=0.1, refresh_timeout=0.5
     )
@@ -367,19 +367,19 @@ async def test_mem_queue_put_nowait():
     assert e is not None
 
 
-def test_get_base64_value():
+def test_get_base64_value() -> None:
     """This test verify get_base64_value method and convert encoded data into base64"""
     expected_result = get_base64_value("dummy".encode("utf-8"))
     assert expected_result == "ZHVtbXk="
 
 
-def test_decode_base64_value():
+def test_decode_base64_value() -> None:
     """This test verify decode_base64_value and decodes base64 encoded data"""
     expected_result = decode_base64_value("ZHVtbXk=".encode("utf-8"))
     assert expected_result == b"dummy"
 
 
-def test_try_acquire():
+def test_try_acquire() -> None:
     bound_value = 5
     sem = NonBlockingBoundedSemaphore(bound_value)
 
@@ -393,7 +393,7 @@ def test_try_acquire():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner():
+async def test_concurrent_runner() -> None:
     results = []
 
     def _results_callback(task):
@@ -413,7 +413,7 @@ async def test_concurrent_runner():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_canceled():
+async def test_concurrent_runner_canceled() -> None:
     results = []
     tasks = []
 
@@ -439,7 +439,7 @@ async def test_concurrent_runner_canceled():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_canceled_with_waiting_task():
+async def test_concurrent_runner_canceled_with_waiting_task() -> None:
     results = []
 
     def _results_callback(task):
@@ -467,7 +467,7 @@ async def test_concurrent_runner_canceled_with_waiting_task():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_fails():
+async def test_concurrent_runner_fails() -> None:
     results = []
 
     def _results_callback(task):
@@ -490,7 +490,7 @@ async def test_concurrent_runner_fails():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_high_concurrency():
+async def test_concurrent_runner_high_concurrency() -> None:
     results = []
 
     def _results_callback(task):
@@ -528,7 +528,7 @@ async def test_concurrent_runner_high_concurrency():
     ],
 )
 @pytest.mark.asyncio
-async def test_concurrent_runner_try_put(initial_capacity, expected_result):
+async def test_concurrent_runner_try_put(initial_capacity, expected_result) -> None:
     results = []
 
     def _results_callback(task):
@@ -560,7 +560,7 @@ async def test_concurrent_runner_try_put(initial_capacity, expected_result):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_runner_join():
+async def test_concurrent_runner_join() -> None:
     results = []
 
     def _results_callback(task):
@@ -597,7 +597,7 @@ async def test_concurrent_runner_join():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_tasks_raise_any_exception():
+async def test_concurrent_tasks_raise_any_exception() -> None:
     async def return_1():
         return 1
 
@@ -623,7 +623,7 @@ async def test_concurrent_tasks_raise_any_exception():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_tasks_join_raise_on_error():
+async def test_concurrent_tasks_join_raise_on_error() -> None:
     results = []
 
     def _results_callback(task):
@@ -677,7 +677,7 @@ def temp_file(converter):
 
 
 @pytest.mark.parametrize("converter", ["system", "py"])
-def test_convert_to_b64_inplace(converter):
+def test_convert_to_b64_inplace(converter) -> None:
     with temp_file(converter) as (source, content):
         # convert in-place
         result = convert_to_b64(source)
@@ -688,7 +688,7 @@ def test_convert_to_b64_inplace(converter):
 
 
 @pytest.mark.parametrize("converter", ["system", "py"])
-def test_convert_to_b64_target(converter):
+def test_convert_to_b64_target(converter) -> None:
     with temp_file(converter) as (source, content):
         # convert to a specific file
         try:
@@ -702,7 +702,7 @@ def test_convert_to_b64_target(converter):
 
 
 @pytest.mark.parametrize("converter", ["system", "py"])
-def test_convert_to_b64_no_overwrite(converter):
+def test_convert_to_b64_no_overwrite(converter) -> None:
     with temp_file(converter) as (source, content):
         # check overwrite
         try:
@@ -739,7 +739,7 @@ def patch_file_ops():
         ("Ubuntu", None, "/usr/bin/base64 -w 0 {source} > {target}"),
     ],
 )
-def test_convert_to_b64_newer_macos(system, mac_ver, cmd_template, patch_file_ops):
+def test_convert_to_b64_newer_macos(system, mac_ver, cmd_template, patch_file_ops) -> None:
     with (
         patch("platform.system", return_value=system),
         patch("platform.mac_ver", return_value=[mac_ver]),
@@ -838,7 +838,7 @@ def test_exponential_backoff_retry_sync_function():
 
 @pytest.mark.fail_slow(1)
 @pytest.mark.asyncio
-async def test_exponential_backoff_retry_async_function():
+async def test_exponential_backoff_retry_async_function() -> None:
     mock_func = Mock()
     num_retries = 10
 
@@ -896,7 +896,7 @@ async def test_skipped_exceptions_retry_async_generator(skipped_exceptions):
     "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
 )
 @pytest.mark.asyncio
-async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
+async def test_skipped_exceptions_retry_async_function(skipped_exceptions) -> None:
     mock_func = Mock()
     num_retries = 10
 
@@ -918,7 +918,7 @@ async def test_skipped_exceptions_retry_async_function(skipped_exceptions):
     "skipped_exceptions", [CustomException, [CustomException, RuntimeError]]
 )
 @pytest.mark.asyncio
-async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
+async def test_skipped_exceptions_retry_sync_function(skipped_exceptions) -> None:
     mock_func = Mock()
     num_retries = 10
 
@@ -936,7 +936,7 @@ async def test_skipped_exceptions_retry_sync_function(skipped_exceptions):
         assert mock_func.call_count == 1
 
 
-def test_retryable_not_implemented_error():
+def test_retryable_not_implemented_error() -> None:
     with pytest.raises(NotImplementedError):
 
         @retryable()
@@ -947,12 +947,12 @@ def test_retryable_not_implemented_error():
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
-    def load_verify_locations(self, cadata):
+    def load_verify_locations(self, cadata) -> None:
         """This method verify locations"""
         pass
 
 
-def test_ssl_context():
+def test_ssl_context() -> None:
     """This function test ssl_context with dummy certificate"""
     # Setup
     certificate = "-----BEGIN CERTIFICATE----- Certificate -----END CERTIFICATE-----"
@@ -962,7 +962,7 @@ def test_ssl_context():
         ssl_context(certificate=certificate)
 
 
-def test_url_encode():
+def test_url_encode() -> None:
     """Test the url_encode method by passing a string"""
     # Execute
     encode_response = url_encode("http://ascii.cl?parameter='Click on URL Decode!'")
@@ -973,7 +973,7 @@ def test_url_encode():
     )
 
 
-def test_is_expired():
+def test_is_expired() -> None:
     """This method checks whether token expires or not"""
     # Execute
     expires_at = datetime.fromisoformat("2023-02-10T09:02:23.629821")
@@ -983,7 +983,7 @@ def test_is_expired():
 
 
 @freeze_time("2023-02-18 14:25:26.158843", tz_offset=-4)
-def test_evaluate_timedelta():
+def test_evaluate_timedelta() -> None:
     """This method tests adding seconds to the current utc time"""
     # Execute
     expected_response = evaluate_timedelta(seconds=86399, time_skew=20)
@@ -992,7 +992,7 @@ def test_evaluate_timedelta():
     assert expected_response == "2023-02-19T14:25:05.158843"
 
 
-def test_get_pem_format_with_postfix():
+def test_get_pem_format_with_postfix() -> None:
     expected_formatted_pem_key = """-----BEGIN PRIVATE KEY-----
 PrivateKey
 -----END PRIVATE KEY-----"""
@@ -1004,7 +1004,7 @@ PrivateKey
     assert formatted_private_key == expected_formatted_pem_key
 
 
-def test_get_pem_format_multiline():
+def test_get_pem_format_multiline() -> None:
     expected_formatted_certificate = """-----BEGIN CERTIFICATE-----
 Certificate1
 Certificate2
@@ -1015,7 +1015,7 @@ Certificate2
     assert formatted_certificate == expected_formatted_certificate
 
 
-def test_get_pem_format_multiple_certificates():
+def test_get_pem_format_multiple_certificates() -> None:
     expected_formatted_multiple_certificates = """-----BEGIN CERTIFICATE-----
 Certificate1
 -----END CERTIFICATE-----
@@ -1029,7 +1029,7 @@ Certificate2
     assert formatted_multi_certificate == expected_formatted_multiple_certificates
 
 
-def test_hash_id():
+def test_hash_id() -> None:
     limit = 512
     random_id_too_long = "".join(
         random.choices(string.ascii_letters + string.digits, k=1000)
@@ -1038,7 +1038,7 @@ def test_hash_id():
     assert len(hash_id(random_id_too_long).encode("UTF-8")) < limit
 
 
-def test_truncate_id():
+def test_truncate_id() -> None:
     long_id = "something-12341361361-21905128510263"
     truncated_id = truncate_id(long_id)
 
@@ -1049,7 +1049,7 @@ def test_truncate_id():
     "_list, should_have_duplicate",
     [([], False), (["abc"], False), (["abc", "def"], False), (["abc", "abc"], True)],
 )
-def test_has_duplicates(_list, should_have_duplicate):
+def test_has_duplicates(_list, should_have_duplicate) -> None:
     assert has_duplicates(_list) == should_have_duplicate
 
 
@@ -1074,7 +1074,7 @@ def test_has_duplicates(_list, should_have_duplicate):
         ),
     ],
 )
-def test_filter_nested_dict_by_keys(key_list, source_dict, expected_dict):
+def test_filter_nested_dict_by_keys(key_list, source_dict, expected_dict) -> None:
     assert filter_nested_dict_by_keys(key_list, source_dict) == expected_dict
 
 
@@ -1107,23 +1107,23 @@ def test_filter_nested_dict_by_keys(key_list, source_dict, expected_dict):
         ),
     ],
 )
-def test_deep_merge_dicts(base_dict, new_dict, expected_dict):
+def test_deep_merge_dicts(base_dict, new_dict, expected_dict) -> None:
     assert deep_merge_dicts(base_dict, new_dict) == expected_dict
 
 
-def test_html_to_text_with_html_with_unclosed_tag():
+def test_html_to_text_with_html_with_unclosed_tag() -> None:
     invalid_html = "<div>Hello, world!</div><div>Next Line"
 
     assert html_to_text(invalid_html) == "Hello, world!\nNext Line"
 
 
-def test_html_to_text_without_html():
+def test_html_to_text_without_html() -> None:
     invalid_html = "just text"
 
     assert html_to_text(invalid_html) == "just text"
 
 
-def test_html_to_text_with_weird_html():
+def test_html_to_text_with_weird_html() -> None:
     invalid_html = "<div/>just</div> text"
 
     text = html_to_text(invalid_html)
@@ -1132,11 +1132,11 @@ def test_html_to_text_with_weird_html():
     assert "text" in text
 
 
-def test_html_to_text_with_none():
+def test_html_to_text_with_none() -> None:
     assert html_to_text(None) is None
 
 
-def test_html_to_text_with_lxml_exception():
+def test_html_to_text_with_lxml_exception() -> None:
     # Here we're just mocking it in such a way, that
     # using BeautifulSoup(html, "lxml") raises an error to emulate the fact
     # that lxml is not available.
@@ -1187,7 +1187,7 @@ def batch_size(value):
         ([[]], batch_size(20), [[[]]]),
     ],
 )
-def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
+def test_iterable_batches_generator(iterable, batch_size_, expected_batches) -> None:
     actual_batches = []
 
     for batch in iterable_batches_generator(iterable, batch_size_):
@@ -1200,7 +1200,7 @@ def test_iterable_batches_generator(iterable, batch_size_, expected_batches):
     "base64url_encoded_value, base64_expected_value",
     [("YQ-_", "YQ+/"), ("", ""), (None, None)],
 )
-def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
+def test_base64url_to_base64(base64url_encoded_value, base64_expected_value) -> None:
     assert base64url_to_base64(base64url_encoded_value) == base64_expected_value
 
 
@@ -1215,7 +1215,7 @@ def test_base64url_to_base64(base64url_encoded_value, base64_expected_value):
         ("subject@email_address", False),
     ],
 )
-def test_validate_email_address(email_address, is_valid):
+def test_validate_email_address(email_address, is_valid) -> None:
     assert validate_email_address(email_address) == is_valid
 
 
@@ -1239,7 +1239,7 @@ def test_validate_email_address(email_address, is_valid):
         ("abcdefgh", 1000, "a...h"),
     ],
 )
-def test_shorten_str(original, shorten_by, shortened):
+def test_shorten_str(original, shorten_by: int, shortened) -> None:
     assert shorten_str(original, shorten_by) == shortened
 
 
@@ -1255,11 +1255,11 @@ def test_shorten_str(original, shorten_by, shortened):
         (RetryStrategy.EXPONENTIAL_BACKOFF, 10, 2, 100),  # 10 ^ 2 = 100
     ],
 )
-async def test_time_to_sleep_between_retries(strategy, interval, retry, expected_sleep):
+async def test_time_to_sleep_between_retries(strategy, interval, retry, expected_sleep) -> None:
     assert time_to_sleep_between_retries(strategy, interval, retry) == expected_sleep
 
 
-async def test_time_to_sleep_between_retries_invalid_strategy():
+async def test_time_to_sleep_between_retries_invalid_strategy() -> None:
     with pytest.raises(UnknownRetryStrategyError) as e:
         time_to_sleep_between_retries("lalala", 1, 1)
 
@@ -1277,7 +1277,7 @@ async def test_time_to_sleep_between_retries_invalid_strategy():
         ({"foo": {"bar": {"baz": "result"}}}, None, "result"),
     ],
 )
-def test_nested_get_from_dict(dictionary, default, expected):
+def test_nested_get_from_dict(dictionary, default, expected) -> None:
     keys = ["foo", "bar", "baz"]
 
     assert nested_get_from_dict(dictionary, keys, default=default) == expected
@@ -1296,11 +1296,11 @@ def test_nested_get_from_dict(dictionary, default, expected):
         ),
     ],
 )
-def test_parse_datetime_string_compatibility(string, parsed_datetime):
+def test_parse_datetime_string_compatibility(string, parsed_datetime) -> None:
     assert parse_datetime_string(string) == parsed_datetime
 
 
-def test_error_monitor_raises_after_too_many_errors_in_window():
+def test_error_monitor_raises_after_too_many_errors_in_window() -> None:
     error_monitor = ErrorMonitor(max_error_rate=0.15, error_window_size=100)
 
     for _ in range(10):
@@ -1316,7 +1316,7 @@ def test_error_monitor_raises_after_too_many_errors_in_window():
         error_monitor.track_error(InvalidIndexNameError("Can't use this name"))
 
 
-def test_error_monitor_raises_when_errors_were_reported_before():
+def test_error_monitor_raises_when_errors_were_reported_before() -> None:
     # Regression test.
     # Problem fixed was that monitor incorrectly calculates max_error_ratio - it never
     # actually considered either ratio or window size - it was always raising an error if
@@ -1369,7 +1369,7 @@ def test_error_monitor_raises_when_errors_were_reported_before():
         error_monitor.track_error(InvalidIndexNameError("Can't use this name"))
 
 
-def test_error_monitor_when_reports_too_many_consecutive_errors():
+def test_error_monitor_when_reports_too_many_consecutive_errors() -> None:
     error_monitor = ErrorMonitor(max_consecutive_errors=3)
 
     error_monitor.track_error(Exception("first"))
@@ -1380,7 +1380,7 @@ def test_error_monitor_when_reports_too_many_consecutive_errors():
         error_monitor.track_error(Exception("fourth"))
 
 
-def test_error_monitor_when_reports_too_many_total_errors():
+def test_error_monitor_when_reports_too_many_total_errors() -> None:
     error_monitor = ErrorMonitor(
         max_total_errors=100, max_consecutive_errors=999, max_error_rate=1
     )
@@ -1398,7 +1398,7 @@ def test_error_monitor_when_reports_too_many_total_errors():
         error_monitor.track_error(Exception("third"))
 
 
-def test_error_monitor_when_reports_too_many_errors_in_window():
+def test_error_monitor_when_reports_too_many_errors_in_window() -> None:
     error_monitor = ErrorMonitor(error_window_size=100, max_error_rate=0.05)
 
     # rate is 0.04
@@ -1420,7 +1420,7 @@ def test_error_monitor_when_reports_too_many_errors_in_window():
         error_monitor.track_error(Exception("last"))
 
 
-def test_error_monitor_when_errors_are_tracked_last_x_errors_are_stored():
+def test_error_monitor_when_errors_are_tracked_last_x_errors_are_stored() -> None:
     error_monitor = ErrorMonitor(error_queue_size=5)
 
     for _ in range(5):
@@ -1441,7 +1441,7 @@ def test_error_monitor_when_errors_are_tracked_last_x_errors_are_stored():
     assert str(errors[4]) == "second_part"
 
 
-def test_error_monitor_when_disabled():
+def test_error_monitor_when_disabled() -> None:
     error_monitor = ErrorMonitor(
         enabled=False, max_total_errors=1, max_consecutive_errors=1, max_error_rate=0.01
     )

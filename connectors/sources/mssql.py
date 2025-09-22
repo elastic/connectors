@@ -39,6 +39,8 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from typing import Sized, Optional, List
+from pyre_extensions import PyreReadOnly
 
 # Connector will skip the below tables if it gets from the input
 TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
@@ -47,31 +49,31 @@ TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
 class MSSQLQueries(Queries):
     """Class contains methods which return query"""
 
-    def ping(self):
+    def ping(self) -> str:
         """Query to ping source"""
         return "SELECT 1+1"
 
-    def all_tables(self, **kwargs):
+    def all_tables(self, **kwargs) -> str:
         """Query to get all tables"""
         return f"SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = '{ kwargs['schema'] }'"
 
-    def table_primary_key(self, **kwargs):
+    def table_primary_key(self, **kwargs) -> str:
         """Query to get the primary key"""
         return f"SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='{kwargs['table']}' and C.TABLE_SCHEMA='{kwargs['schema']}' and T.CONSTRAINT_TYPE='PRIMARY KEY'"
 
-    def table_data(self, **kwargs):
+    def table_data(self, **kwargs) -> str:
         """Query to get the table data"""
         return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}"'
 
-    def table_last_update_time(self, **kwargs):
+    def table_last_update_time(self, **kwargs) -> str:
         """Query to get the last update time of the table"""
         return f"SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
 
-    def table_data_count(self, **kwargs):
+    def table_data_count(self, **kwargs) -> str:
         """Query to get the number of rows in the table"""
         return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
 
-    def all_schemas(self):
+    def all_schemas(self) -> None:
         """Query to get all schemas of database"""
         pass
 
@@ -92,7 +94,7 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
     async def validate(self, advanced_rules):
@@ -108,7 +110,7 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=DEFAULT_WAIT_MULTIPLIER,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             MSSQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -157,9 +159,9 @@ class MSSQLClient:
         ssl_ca,
         validate_host,
         logger_,
-        retry_count=DEFAULT_RETRY_COUNT,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        retry_count: int=DEFAULT_RETRY_COUNT,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -178,10 +180,10 @@ class MSSQLClient:
         self.queries = MSSQLQueries()
         self._logger = logger_
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         if os.path.exists(self.certfile):
             try:
                 os.remove(self.certfile)
@@ -212,14 +214,14 @@ class MSSQLClient:
             }
         return create_engine(connection_string, connect_args=connect_args)
 
-    def create_pem_file(self):
+    def create_pem_file(self) -> None:
         """Create pem file for SSL Verification"""
         pem_certificates = get_pem_format(key=self.ssl_ca)
         with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
             cert.write(pem_certificates)
             self.certfile = cert.name
 
-    async def get_cursor(self, query):
+    async def get_cursor(self, query: str):
         """Executes the passed query on the Non-Async supported Database server and return cursor.
 
         Args:
@@ -255,7 +257,7 @@ class MSSQLClient:
             )
         )
 
-    async def get_tables_to_fetch(self, is_filtering=False):
+    async def get_tables_to_fetch(self, is_filtering: bool=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
             if is_filtering:
@@ -329,7 +331,7 @@ class MSSQLClient:
         ):
             return last_update_time
 
-    async def data_streamer(self, table=None, query=None):
+    async def data_streamer(self, table=None, query: Optional[str]=None):
         """Streaming data from a table
 
         Args:
@@ -372,7 +374,7 @@ class MSSQLDataSource(BaseDataSource):
     service_type = "mssql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:
@@ -397,7 +399,7 @@ class MSSQLDataSource(BaseDataSource):
             logger_=self._logger,
         )
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.mssql_client.set_logger(self._logger)
 
     @classmethod
@@ -484,13 +486,13 @@ class MSSQLDataSource(BaseDataSource):
             },
         }
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[MSSQLAdvancedRulesValidator]:
         return [MSSQLAdvancedRulesValidator(self)]
 
-    async def close(self):
+    async def close(self) -> None:
         self.mssql_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with the database-server configured by user"""
         self._logger.debug("Validating the Connector Configuration...")
         try:
@@ -511,7 +513,7 @@ class MSSQLDataSource(BaseDataSource):
         )
         return row
 
-    async def get_primary_key(self, tables):
+    async def get_primary_key(self, tables: Optional[PyreReadOnly[Sized]]) -> List[str]:
         self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
@@ -523,7 +525,7 @@ class MSSQLDataSource(BaseDataSource):
             column_names=primary_key_columns, schema=self.schema, tables=tables
         )
 
-    async def yield_rows_for_query(self, primary_key_columns, tables, query=None):
+    async def yield_rows_for_query(self, primary_key_columns, tables: Optional[PyreReadOnly[Sized]], query: Optional[str]=None):
         if query is None:
             streamer = self.mssql_client.data_streamer(table=tables[0])
         else:
@@ -585,7 +587,7 @@ class MSSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query, id_columns=None):
+    async def _yield_docs_custom_query(self, tables, query, id_columns: Optional[List[str]]=None):
         primary_key_columns = await self.get_primary_key(tables=tables)
 
         if id_columns:

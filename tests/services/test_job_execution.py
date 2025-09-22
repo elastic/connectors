@@ -19,6 +19,7 @@ from connectors.services.content_sync_job_execution import (
 )
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
+from connectors.protocol.connectors import JobStatus, JobType
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +51,7 @@ def sync_job_index_mock():
         yield sync_job_index_mock
 
 
-def concurrent_task_mock():
+def concurrent_task_mock() -> Mock:
     task_mock = Mock()
     task_mock.try_put = Mock()
     task_mock.join = AsyncMock()
@@ -83,10 +84,10 @@ def sync_job_runner_mock():
 
 
 def mock_connector(
-    last_sync_status=JobStatus.COMPLETED,
-    last_access_control_sync_status=JobStatus.COMPLETED,
-    document_level_security_enabled=True,
-):
+    last_sync_status: JobStatus=JobStatus.COMPLETED,
+    last_access_control_sync_status: JobStatus=JobStatus.COMPLETED,
+    document_level_security_enabled: bool=True,
+) -> Mock:
     connector = Mock()
     connector.id = "1"
     connector.last_sync_status = last_sync_status
@@ -99,7 +100,7 @@ def mock_connector(
     return connector
 
 
-def mock_sync_job(service_type="fake", job_type=JobType.FULL):
+def mock_sync_job(service_type: str="fake", job_type: JobType=JobType.FULL) -> Mock:
     sync_job = Mock()
     sync_job.service_type = service_type
     sync_job.connector_id = "1"
@@ -109,7 +110,7 @@ def mock_sync_job(service_type="fake", job_type=JobType.FULL):
 
 
 @pytest.mark.asyncio
-async def test_no_connector(connector_index_mock, concurrent_tasks_mocks, set_env):
+async def test_no_connector(connector_index_mock, concurrent_tasks_mocks, set_env) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector_index_mock.supported_connectors.return_value = AsyncIterator([])
@@ -129,7 +130,7 @@ async def test_no_pending_jobs(
     concurrent_tasks_mocks,
     service_klass,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()
@@ -153,9 +154,9 @@ async def test_job_execution_with_unsupported_source(
     sync_job_index_mock,
     concurrent_tasks_mocks,
     service_klass,
-    job_type,
+    job_type: JobType,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()
@@ -181,9 +182,9 @@ async def test_job_execution_with_connector_not_found(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     service_klass,
-    job_type,
+    job_type: JobType,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()
@@ -203,7 +204,7 @@ async def test_access_control_sync_job_execution_with_premium_connector(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()
@@ -223,7 +224,7 @@ async def test_access_control_sync_job_execution_with_insufficient_license(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()
@@ -247,7 +248,7 @@ async def test_access_control_sync_job_execution_with_dls_feature_flag_disabled(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector(
@@ -279,9 +280,9 @@ async def test_job_execution_with_connector_still_syncing(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     service_klass,
-    job_type,
+    job_type: JobType,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector(
@@ -311,9 +312,9 @@ async def test_job_execution(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     service_klass,
-    job_type,
+    job_type: JobType,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()
@@ -342,9 +343,9 @@ async def test_job_execution_new_sync_job_not_blocked(
     concurrent_tasks_mocks,
     sync_job_runner_mock,
     service_klass,
-    job_type,
+    job_type: JobType,
     set_env,
-):
+) -> None:
     sync_job_pool_mock = concurrent_tasks_mocks
 
     connector = mock_connector()

@@ -31,6 +31,7 @@ from connectors.utils import (
     iso_zulu,
     validate_email_address,
 )
+from typing import Any, Dict, List, Optional, Union
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
 GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME = "Google Admin Directory"
@@ -41,7 +42,7 @@ RETRY_INTERVAL = 2
 
 GOOGLE_API_MAX_CONCURRENCY = 25  # Max open connections to Google API
 
-DRIVE_API_TIMEOUT = 1 * 60  # 1 min
+DRIVE_API_TIMEOUT: int = 1 * 60  # 1 min
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
@@ -66,7 +67,7 @@ class SyncCursorEmpty(Exception):
 class GoogleDriveClient(GoogleServiceAccountClient):
     """A google drive client to handle api calls made to Google Drive API."""
 
-    def __init__(self, json_credentials, subject=None):
+    def __init__(self, json_credentials, subject=None) -> None:
         """Initialize the GoogleApiClient superclass.
 
         Args:
@@ -155,7 +156,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 
         return folders
 
-    async def list_files(self, fetch_permissions=False, last_sync_time=None):
+    async def list_files(self, fetch_permissions: bool=False, last_sync_time=None):
         """Get files from Google Drive. Files can have any type.
 
         Args:
@@ -189,7 +190,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             yield file
 
     async def list_files_from_my_drive(
-        self, fetch_permissions=False, last_sync_time=None
+        self, fetch_permissions: bool=False, last_sync_time=None
     ):
         """Retrieves files from Google Drive, with an option to fetch permissions (DLS).
 
@@ -257,7 +258,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
     """A google admin directory client to handle api calls made to Google Admin API."""
 
-    def __init__(self, json_credentials, subject):
+    def __init__(self, json_credentials, subject) -> None:
         """Initialize the GoogleApiClient superclass.
 
         Args:
@@ -316,15 +317,15 @@ class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
             yield group
 
 
-def _prefix_group(group):
+def _prefix_group(group) -> Optional[str]:
     return prefix_identity("group", group)
 
 
-def _prefix_user(user):
+def _prefix_user(user) -> Optional[str]:
     return prefix_identity("user", user)
 
 
-def _prefix_domain(domain):
+def _prefix_domain(domain) -> Optional[str]:
     return prefix_identity("domain", domain)
 
 
@@ -356,7 +357,7 @@ class GoogleDriveDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Set up the data source.
 
         Args:
@@ -364,12 +365,12 @@ class GoogleDriveDataSource(BaseDataSource):
         """
         super().__init__(configuration=configuration)
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         if self._domain_wide_delegation_sync_enabled() or self._dls_enabled():
             self.google_admin_directory_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Google Drive.
 
         Returns:
@@ -456,7 +457,7 @@ class GoogleDriveDataSource(BaseDataSource):
             },
         }
 
-    def google_drive_client(self, impersonate_email=None):
+    def google_drive_client(self, impersonate_email=None) -> GoogleDriveClient:
         """
         Initialize and return an instance of the GoogleDriveClient.
 
@@ -500,7 +501,7 @@ class GoogleDriveDataSource(BaseDataSource):
         return drive_client
 
     @cached_property
-    def google_admin_directory_client(self):
+    def google_admin_directory_client(self) -> GoogleAdminDirectoryClient:
         """Initialize and return the GoogleAdminDirectoryClient
 
         Returns:
@@ -527,7 +528,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return directory_client
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user inputs are valid or not for configuration field.
 
         Raises:
@@ -541,7 +542,7 @@ class GoogleDriveDataSource(BaseDataSource):
         self._validate_google_workspace_admin_email()
         self._validate_google_workspace_email_for_shared_drives_sync()
 
-    def _validate_google_workspace_admin_email(self):
+    def _validate_google_workspace_admin_email(self) -> None:
         """
         This method is used to validate the Google Workspace admin email address when Document Level Security (DLS) is enabled
         for the current configuration. The email address should not be empty, and it should have a valid email format (no
@@ -569,7 +570,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 msg = "Google Workspace admin email is malformed or contains whitespace characters."
                 raise ConfigurableFieldValueError(msg)
 
-    def _validate_google_workspace_email_for_shared_drives_sync(self):
+    def _validate_google_workspace_email_for_shared_drives_sync(self) -> None:
         """
         Validates the Google Workspace email address specified for shared drives synchronization.
 
@@ -594,7 +595,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 msg = "Google Workspace email for shared drives sync is malformed or contains whitespace characters."
                 raise ConfigurableFieldValueError(msg)
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Google Drive"""
         try:
             if self._domain_wide_delegation_sync_enabled():
@@ -633,7 +634,7 @@ class GoogleDriveDataSource(BaseDataSource):
     def _google_google_workspace_email_for_shared_drives_sync(self):
         return self.configuration.get("google_workspace_email_for_shared_drives_sync")
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if Document Level Security is enabled"""
         if self._features is None:
             return False
@@ -643,7 +644,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return bool(self.configuration.get("use_document_level_security", False))
 
-    def _domain_wide_delegation_sync_enabled(self):
+    def _domain_wide_delegation_sync_enabled(self) -> bool:
         """Check if Domain Wide delegation sync is enabled"""
 
         return bool(
@@ -690,7 +691,7 @@ class GoogleDriveDataSource(BaseDataSource):
         # Gather the results of all tasks concurrently
         return await asyncio.gather(*tasks)
 
-    async def prepare_single_access_control_document(self, user):
+    async def prepare_single_access_control_document(self, user) -> Dict[str, Any]:
         """Generate access control document for a single user. Fetch group memberships for a given user.
         Generate a user_access_control query that includes information about user email, groups and domain.
 
@@ -757,7 +758,7 @@ class GoogleDriveDataSource(BaseDataSource):
             ):
                 yield access_control_doc
 
-    async def resolve_paths(self, google_drive_client=None):
+    async def resolve_paths(self, google_drive_client: Optional[GoogleDriveClient]=None):
         """Builds a lookup between a folder id and its absolute path in Google Drive structure
 
         Returns:
@@ -826,7 +827,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return attachment, body, file_size
 
-    async def get_google_workspace_content(self, client, file, timestamp=None):
+    async def get_google_workspace_content(self, client, file, timestamp=None) -> Optional[Dict[str, Any]]:
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
 
         Shared Google Workspace documents are different than regular files. When shared from
@@ -879,7 +880,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return document
 
-    async def get_generic_file_content(self, client, file, timestamp=None):
+    async def get_generic_file_content(self, client, file, timestamp=None) -> Optional[Dict[str, Any]]:
         """Extracts the content from allowed file types supported by Apache Tika.
 
         Args:
@@ -928,7 +929,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return document
 
-    async def get_content(self, client, file, timestamp=None, doit=None):
+    async def get_content(self, client, file, timestamp=None, doit=None) -> Optional[Dict[str, Any]]:
         """Extracts the content from a file file.
 
         Args:
@@ -973,7 +974,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return permissions
 
-    def _process_permissions(self, permissions):
+    def _process_permissions(self, permissions) -> List[Optional[str]]:
         """Formats the access permission list for Google Drive object.
 
         Args:

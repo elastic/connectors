@@ -14,6 +14,7 @@ from aiogoogle.sessions.aiohttp_session import AiohttpSession
 from connectors.logger import logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
+from typing import Optional
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -22,14 +23,14 @@ SERVICE_ACCOUNT_JSON_ALLOWED_KEYS = set(dict(ServiceAccountCreds()).keys()) | {
     "universe_domain"
 }
 
-GOOGLE_API_FTEST_HOST = os.environ.get("GOOGLE_API_FTEST_HOST")
-RUNNING_FTEST = (
+GOOGLE_API_FTEST_HOST: Optional[str] = os.environ.get("GOOGLE_API_FTEST_HOST")
+RUNNING_FTEST: bool = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 
 RETRIES = 3
 RETRY_INTERVAL = 2
-DEFAULT_TIMEOUT = 1 * 60  # 1 min
+DEFAULT_TIMEOUT: int = 1 * 60  # 1 min
 DEFAULT_PAGE_SIZE = 100
 
 
@@ -101,7 +102,7 @@ def load_service_account_json(service_account_credentials_json, google_service):
         raise ConfigurableFieldValueError(msg)
 
 
-def validate_service_account_json(service_account_credentials, google_service):
+def validate_service_account_json(service_account_credentials, google_service) -> None:
     """Validates whether service account JSON is a valid JSON string and
     checks for unexpected keys.
 
@@ -122,7 +123,7 @@ def validate_service_account_json(service_account_credentials, google_service):
 class GoogleServiceAccountClient:
     """A Google client to handle api calls made to the Google Workspace APIs using a service account."""
 
-    def __init__(self, json_credentials, api, api_version, scopes, api_timeout):
+    def __init__(self, json_credentials, api, api_version, scopes, api_timeout) -> None:
         """Initialize the ServiceAccountCreds class using which api calls will be made.
         Args:
             json_credentials (dict): Service account credentials json.
@@ -136,7 +137,7 @@ class GoogleServiceAccountClient:
         self.api_timeout = api_timeout
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     async def api_call_paged(
@@ -247,13 +248,13 @@ class GoogleServiceAccountClient:
             raise
 
 
-def remove_universe_domain(json_credentials):
+def remove_universe_domain(json_credentials) -> None:
     if "universe_domain" in json_credentials:
         json_credentials.pop("universe_domain")
 
 
 class GoogleDirectoryClient:
-    def __init__(self, json_credentials, customer_id, subject, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, json_credentials, customer_id, subject, timeout: int=DEFAULT_TIMEOUT) -> None:
         remove_universe_domain(json_credentials)
 
         json_credentials["subject"] = subject
@@ -266,10 +267,10 @@ class GoogleDirectoryClient:
             api_timeout=timeout,
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self._client.api_call(
                 resource="users",
@@ -295,7 +296,7 @@ class GoogleDirectoryClient:
 
 
 class GMailClient:
-    def __init__(self, json_credentials, customer_id, subject, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, json_credentials, customer_id, subject, timeout: int=DEFAULT_TIMEOUT) -> None:
         remove_universe_domain(json_credentials)
 
         # This override is needed to be able to fetch the messages for the corresponding user, otherwise we get a 403 Forbidden (see: https://issuetracker.google.com/issues/290567932)
@@ -310,10 +311,10 @@ class GMailClient:
             api_timeout=timeout,
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self._client.api_call(
                 resource="users", method="getProfile", userId=self.user
@@ -322,7 +323,7 @@ class GMailClient:
             raise
 
     async def messages(
-        self, query=None, includeSpamTrash=False, pageSize=DEFAULT_PAGE_SIZE
+        self, query=None, includeSpamTrash: bool=False, pageSize: int=DEFAULT_PAGE_SIZE
     ):
         fields = "id"
 

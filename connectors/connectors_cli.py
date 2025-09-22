@@ -28,11 +28,12 @@ from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
 from connectors.es import DEFAULT_LANGUAGE
+from typing import List, Union, BinaryIO, TextIO
 
 __all__ = ["main"]
 
 
-def load_config(ctx, config):
+def load_config(ctx, config: Union[BinaryIO, TextIO, bytes, str]):
     if config:
         return yaml.safe_load(config)
     elif os.path.isfile(CONFIG_FILE_PATH):
@@ -53,7 +54,7 @@ def load_config(ctx, config):
 @click.version_option(__version__, "-v", "--version", message="%(version)s")
 @click.option("-c", "--config", type=click.File("rb"))
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx, config: Union[BinaryIO, TextIO, bytes, str]) -> None:
     # print help page if no subcommands provided
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
@@ -77,7 +78,7 @@ def cli(ctx, config):
     default="basic",
     help="Authentication method",
 )
-def login(host, method):
+def login(host, method) -> None:
     if method == "basic":
         username = click.prompt("Username")
         password = click.prompt("Password", hide_input=True)
@@ -113,13 +114,13 @@ cli.add_command(login)
 # Connector group
 @click.group(invoke_without_command=False, help="Connectors management")
 @click.pass_context
-def connector(ctx):
+def connector(ctx) -> None:
     pass
 
 
 @click.command(name="list", help="List all existing connectors")
 @click.pass_obj
-def list_connectors(obj):
+def list_connectors(obj) -> None:
     connector = Connector(config=obj["config"]["elasticsearch"])
     coro = connector.list_connectors()
 
@@ -159,11 +160,11 @@ def list_connectors(obj):
         click.echo(e)
 
 
-language_keys = [DEFAULT_LANGUAGE]
+language_keys: List[str] = [DEFAULT_LANGUAGE]
 
 
 # Support blank values for languge
-def validate_language(ctx, param, value):
+def validate_language(ctx, param, value) -> None:
     if value not in language_keys:
         return None
 
@@ -171,7 +172,7 @@ def validate_language(ctx, param, value):
 
 
 # override click's default 'choices' prompt with something a bit nicer
-def interactive_service_type_prompt():
+def interactive_service_type_prompt() -> str:
     options = list(_default_config()["sources"].keys())
     print(f"{Fore.GREEN}?{Style.RESET_ALL} Service type:")  # noqa: T201
     result = TerminalMenu(
@@ -240,14 +241,14 @@ def create(
     obj,
     index_name,
     service_type,
-    index_language,
+    index_language: str,
     is_native,
-    from_index,
+    from_index: bool,
     from_file,
     update_config,
     connector_service_config,
     name,
-):
+) -> None:
     connector_configuration = {}
     if from_file:
         with open(from_file) as fd:
@@ -386,13 +387,13 @@ cli.add_command(connector)
 # Index group
 @click.group(invoke_without_command=False, help="Search indices management")
 @click.pass_obj
-def index(obj):
+def index(obj) -> None:
     pass
 
 
 @click.command(name="list", help="Show all indices")
 @click.pass_obj
-def list_indices(obj):
+def list_indices(obj) -> None:
     index = Index(config=obj["config"]["elasticsearch"])
     indices = index.list_indices()
 
@@ -420,7 +421,7 @@ index.add_command(list_indices)
 @click.command(help="Remove all documents from the index")
 @click.pass_obj
 @click.argument("index", nargs=1)
-def clean(obj, index):
+def clean(obj, index) -> None:
     index_cli = Index(config=obj["config"]["elasticsearch"])
     click.confirm(
         click.style("Are you sure you want to clean " + index + "?", fg="yellow"),
@@ -445,7 +446,7 @@ index.add_command(clean)
 @click.command(help="Delete an index")
 @click.pass_obj
 @click.argument("index", nargs=1)
-def delete(obj, index):
+def delete(obj, index) -> None:
     index_cli = Index(config=obj["config"]["elasticsearch"])
     click.confirm(
         click.style("Are you sure you want to delete " + index + "?", fg="yellow"),
@@ -472,7 +473,7 @@ cli.add_command(index)
 # Job group
 @click.group(invoke_without_command=False, help="Sync jobs management")
 @click.pass_obj
-def job(obj):
+def job(obj) -> None:
     pass
 
 
@@ -493,7 +494,7 @@ def job(obj):
     help="Output format",
     type=click.Choice(["json", "text"]),
 )
-def start(obj, i, t, output_format):
+def start(obj, i, t, output_format) -> None:
     job_cli = Job(config=obj["config"]["elasticsearch"])
     job_id = job_cli.start(connector_id=i, job_type=t)
 
@@ -521,7 +522,7 @@ job.add_command(start)
 @click.command(name="list", help="List of jobs sorted by date.")
 @click.pass_obj
 @click.argument("connector_id", nargs=1)
-def list_jobs(obj, connector_id):
+def list_jobs(obj, connector_id) -> None:
     job_cli = Job(config=obj["config"]["elasticsearch"])
     jobs = job_cli.list_jobs(connector_id=connector_id)
 
@@ -566,7 +567,7 @@ job.add_command(list_jobs)
 @click.command(help="Cancel a job")
 @click.pass_obj
 @click.argument("job_id")
-def cancel(obj, job_id):
+def cancel(obj, job_id) -> None:
     job_cli = Job(config=obj["config"]["elasticsearch"])
     click.confirm(
         click.style("Are you sure you want to cancel jobs?", fg="yellow"), abort=True
@@ -599,7 +600,7 @@ job.add_command(cancel)
     help="Output format",
     type=click.Choice(["json", "text"]),
 )
-def view_job(obj, job_id, output_format):
+def view_job(obj, job_id, output_format) -> None:
     job_cli = Job(config=obj["config"]["elasticsearch"])
     job = job_cli.job(job_id=job_id)
     result = {
@@ -633,7 +634,7 @@ job.add_command(view_job)
 cli.add_command(job)
 
 
-def main(args=None):
+def main(args=None) -> None:
     cli()  # pyright: ignore
 
 

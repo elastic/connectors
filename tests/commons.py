@@ -8,6 +8,9 @@ from functools import cached_property
 from random import choices
 
 from faker import Faker
+from faker.proxy import Faker
+from pyre_extensions import PyreReadOnly
+from typing import List, Optional, Sized, Union
 
 
 class AsyncIterator:
@@ -15,7 +18,7 @@ class AsyncIterator:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, items, reusable=False):
+    def __init__(self, items, reusable: bool=False) -> None:
         """
         AsyncIterator is a test-only abstraction to mock async iterables.
         By default it's usable only once: once iterated over, he iterator will not
@@ -30,7 +33,7 @@ class AsyncIterator:
         self.call_count = 0
         self.reusable = reusable
 
-    def __aiter__(self):
+    def __aiter__(self) -> "AsyncIterator":
         return self
 
     async def __anext__(self):
@@ -43,7 +46,7 @@ class AsyncIterator:
         self.i += 1
         return item
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> "AsyncIterator":
         self.call_count += 1
 
         if args:
@@ -54,17 +57,17 @@ class AsyncIterator:
 
         return self
 
-    def assert_not_called(self):
+    def assert_not_called(self) -> None:
         if self.call_count != 0:
             msg = f"Expected zero calls. Actual number of calls: {self.call_count}."
             raise AssertionError(msg)
 
-    def assert_called_once(self):
+    def assert_called_once(self) -> None:
         if self.call_count != 1:
             msg = f"Expected one call. Actual number of calls: {self.call_count}."
             raise AssertionError(msg)
 
-    def assert_called_once_with(self, *args, **kwargs):
+    def assert_called_once_with(self, *args, **kwargs) -> None:
         self.assert_called_once()
 
         if len(self.call_args) > 0 and self.call_args[0] != args:
@@ -77,7 +80,7 @@ class AsyncIterator:
 
 
 class WeightedFakeProvider:
-    def __init__(self, seed=None, weights=None):
+    def __init__(self, seed=None, weights: Optional[PyreReadOnly[Sized]]=None) -> None:
         self.seed = seed
         if weights and len(weights) != 4:
             msg = f"Exactly 4 weights should be provided. Got {len(weights)}: {weights}"
@@ -99,11 +102,11 @@ class WeightedFakeProvider:
         ]
 
     @cached_property
-    def fake(self):
+    def fake(self) -> Faker:
         return self.fake_provider.fake
 
     @cached_property
-    def _htmls(self):
+    def _htmls(self) -> List[str]:
         return [
             self.fake_provider.small_html(),
             self.fake_provider.medium_html(),
@@ -114,12 +117,12 @@ class WeightedFakeProvider:
     def get_text(self):
         return choices(self._texts, self.weights)[0]
 
-    def get_html(self):
+    def get_html(self) -> str:
         return choices(self._htmls, self.weights)[0]
 
 
 class FakeProvider:
-    def __init__(self, seed=None):
+    def __init__(self, seed: Union[None, bytearray, bytes, float, int, str]=None) -> None:
         self.seed = seed
         self.fake = Faker()
         if seed:
@@ -144,26 +147,26 @@ class FakeProvider:
     def extra_large_text(self):
         return self.generate_text(20 * 1024 * 1024)
 
-    def small_html(self):
+    def small_html(self) -> str:
         # Around 100KB
         return self.generate_html(1)
 
-    def medium_html(self):
+    def medium_html(self) -> str:
         # Around 1MB
         return self.generate_html(1 * 10)
 
-    def large_html(self):
+    def large_html(self) -> str:
         # Around 8MB
         return self.generate_html(8 * 10)
 
-    def extra_large_html(self):
+    def extra_large_html(self) -> str:
         # Around 25MB
         return self.generate_html(25 * 10)
 
     def generate_text(self, max_size):
         return self.fake.text(max_nb_chars=max_size)
 
-    def generate_html(self, images_of_100kb):
+    def generate_html(self, images_of_100kb) -> str:
         img = self._cached_random_str  # 100kb
         text = self.small_text()
 

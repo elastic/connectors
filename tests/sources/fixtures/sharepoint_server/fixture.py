@@ -14,12 +14,13 @@ from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
+from typing import Dict, Union
 
 fake_provider = WeightedFakeProvider()
 
 app = Flask(__name__)
 
-THROTTLING = os.environ.get("THROTTLING", False)
+THROTTLING: Union[bool, str] = os.environ.get("THROTTLING", False)
 
 if THROTTLING:
     limiter = Limiter(
@@ -42,7 +43,7 @@ if THROTTLING:
 DOC_ID_SIZE = 36
 DOC_ID_FILLING_CHAR = "0"  # used to fill in missing symbols for IDs
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -73,7 +74,7 @@ def adjust_document_id_size(document_id):
     return f"{document_id}-{addition}"
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     total_attachments = total_subsites * lists_per_site * attachments_per_list
     total_lists = total_subsites * lists_per_site
     print(total_subsites + total_lists + 2 * total_attachments)
@@ -83,12 +84,12 @@ PRE_REQUEST_SLEEP = 0.1
 
 
 @app.before_request
-def before_request():
+def before_request() -> None:
     time.sleep(PRE_REQUEST_SLEEP)
 
 
 @app.route("/sites/<path:site_collections>/_api/web", methods=["get"])
-def get_site(site_collections):
+def get_site(site_collections) -> Dict[str, Union[int, str]]:
     site = {
         "Created": "2023-10-24T00:24:36",
         "Description": site_collections,
@@ -282,7 +283,7 @@ def get_list_and_items(parent_site_url, list_id):
     "/<path:parent_site_url>/_api/web/getfilebyserverrelativeurl('<string:file_relative_url>')",
     methods=["GET"],
 )
-def get_attachment_data(parent_site_url, file_relative_url):
+def get_attachment_data(parent_site_url, file_relative_url) -> Dict[str, Union[int, str]]:
     """Function to fetch attachment data on the sharepoint
     Args:
         parent_site_url (str): Path of parent site
@@ -307,7 +308,7 @@ def get_attachment_data(parent_site_url, file_relative_url):
     "/<path:site>/_api/web/GetFileByServerRelativeUrl('<string:server_url>')/$value",
     methods=["GET"],
 )
-def download(site, server_url):
+def download(site, server_url) -> bytes:
     """Function to extract content of a attachment on the sharepoint
     Args:
         parent_url (str): Path of parent site

@@ -18,12 +18,13 @@ from connectors.protocol import Filter
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.s3 import S3AdvancedRulesValidator, S3DataSource
 from tests.sources.support import create_source
+from typing import Dict
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
 
 @asynccontextmanager
-async def create_s3_source(use_text_extraction_service=False):
+async def create_s3_source(use_text_extraction_service: bool=False):
     async with create_source(
         S3DataSource,
         buckets="ent-search-ingest-dev",
@@ -37,7 +38,7 @@ async def create_s3_source(use_text_extraction_service=False):
 class Summary:
     """This class is used to initialize file summary"""
 
-    def __init__(self, key):
+    def __init__(self, key) -> None:
         """Setup key of file object
 
         Args:
@@ -46,7 +47,7 @@ class Summary:
         self.key = key
 
     @property
-    async def size(self):
+    async def size(self) -> int:
         """Set size of file
 
         Returns:
@@ -55,7 +56,7 @@ class Summary:
         return 12
 
     @property
-    async def last_modified(self):
+    async def last_modified(self) -> datetime:
         """Set last_modified time
 
         Returns:
@@ -64,7 +65,7 @@ class Summary:
         return datetime.now()
 
     @property
-    async def storage_class(self):
+    async def storage_class(self) -> str:
         """Set storage_class of file
 
         Returns:
@@ -73,7 +74,7 @@ class Summary:
         return "STANDARD"
 
     @property
-    async def owner(self):
+    async def owner(self) -> Dict[str, str]:
         """Set owner of file
 
         Returns:
@@ -85,7 +86,7 @@ class Summary:
 class AIOResourceCollection:
     """Class for mock AIOResourceCollection"""
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, **kw) -> None:
         """Setup AIOResourceCollection"""
         pass
 
@@ -112,7 +113,7 @@ class AIOResourceCollection:
 class S3Object(dict):
     """Class for mock S3 object"""
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, **kw) -> None:
         """Setup document of Mock object"""
         self.meta = mock.MagicMock()
         self["Body"] = self
@@ -123,7 +124,7 @@ class S3Object(dict):
         ]
         self.called = False
 
-    async def read(self, *args):
+    async def read(self, *args) -> bytes:
         """Method returns object content
 
         Returns:
@@ -138,7 +139,7 @@ class S3Object(dict):
         """Make a dummy connection and return it"""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Make sure the dummy connection gets closed"""
         pass
 
@@ -153,7 +154,7 @@ async def create_fake_coroutine(data):
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> None:
     """Test ping method of S3DataSource class"""
     async with create_s3_source() as source:
         with (
@@ -167,7 +168,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
+async def test_ping_negative() -> None:
     """Test ping method of S3DataSource class with negative case"""
     async with create_s3_source() as source:
         with mock.patch.object(
@@ -178,7 +179,7 @@ async def test_ping_negative():
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_region():
+async def test_get_bucket_region() -> None:
     """Test get_bucket_region method of S3DataSource"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
@@ -188,7 +189,7 @@ async def test_get_bucket_region():
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_region_negative():
+async def test_get_bucket_region_negative() -> None:
     """Test get_bucket_region method of S3DataSource for negative case"""
     async with create_s3_source() as source:
         with mock.patch.object(
@@ -199,16 +200,16 @@ async def test_get_bucket_region_negative():
 
 
 class ReadAsyncMock(AsyncMock):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-    async def read():
+    async def read() -> bytes:
         return b"test content"
 
 
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content(s3_client):
+async def test_get_content(s3_client: MagicMock) -> None:
     """Test get_content method of S3Client"""
 
     async with create_s3_source() as source:
@@ -240,7 +241,7 @@ async def test_get_content(s3_client):
 
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content_with_text_extraction_enabled_adds_body(s3_client):
+async def test_get_content_with_text_extraction_enabled_adds_body(s3_client: MagicMock) -> None:
     """Test get_content method of S3Client"""
     with (
         patch(
@@ -278,7 +279,7 @@ async def test_get_content_with_text_extraction_enabled_adds_body(s3_client):
 
 @mock.patch("aiobotocore.client.AioBaseClient")
 @pytest.mark.asyncio
-async def test_get_content_with_upper_extension(s3_client):
+async def test_get_content_with_upper_extension(s3_client: MagicMock) -> None:
     """Test get_content method of S3Client"""
 
     async with create_s3_source() as source:
@@ -309,7 +310,7 @@ async def test_get_content_with_upper_extension(s3_client):
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_unsupported_file(mock_aws):
+async def test_get_content_with_unsupported_file(mock_aws) -> None:
     """Test get_content method of S3Client for unsupported file"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
@@ -322,7 +323,7 @@ async def test_get_content_with_unsupported_file(mock_aws):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_not_doit(mock_aws):
+async def test_get_content_when_not_doit(mock_aws) -> None:
     """Test get_content method of S3Client when doit is none"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
@@ -333,7 +334,7 @@ async def test_get_content_when_not_doit(mock_aws):
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_size_is_large(mock_aws):
+async def test_get_content_when_size_is_large(mock_aws) -> None:
     """Test get_content method of S3Client when size is greater than max size"""
     async with create_s3_source() as source:
         with mock.patch("aiobotocore.client.AioBaseClient", S3Object):
@@ -355,7 +356,7 @@ async def get_roles(*args):
 
 
 @pytest.mark.asyncio
-async def test_get_docs(mock_aws):
+async def test_get_docs(mock_aws) -> None:
     """Test get_docs method of S3DataSource"""
     async with create_s3_source() as source:
         source.s3_client.get_bucket_location = mock.Mock(
@@ -399,7 +400,7 @@ async def test_get_docs(mock_aws):
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering):
+async def test_get_docs_with_advanced_rules(filtering) -> None:
     async with create_s3_source() as source:
         source.s3_client.get_bucket_location = mock.Mock(
             return_value=await create_fake_coroutine("ap-south-1")
@@ -427,7 +428,7 @@ async def test_get_docs_with_advanced_rules(filtering):
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_list():
+async def test_get_bucket_list() -> None:
     """Test get_bucket_list method of S3Client"""
     async with create_s3_source() as source:
         source.s3_client.bucket_list = []
@@ -444,7 +445,7 @@ async def test_get_bucket_list():
 
 
 @pytest.mark.asyncio
-async def test_get_bucket_list_for_wildcard():
+async def test_get_bucket_list_for_wildcard() -> None:
     async with create_s3_source() as source:
         source.configuration.get_field("buckets").value = ["*"]
 
@@ -461,7 +462,7 @@ async def test_get_bucket_list_for_wildcard():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_empty_bucket_string():
+async def test_validate_config_for_empty_bucket_string() -> None:
     """This function test validate_configwhen buckets string is empty"""
     async with create_s3_source() as source:
         source.configuration.get_field("buckets").value = [""]
@@ -472,7 +473,7 @@ async def test_validate_config_for_empty_bucket_string():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_clienterror():
+async def test_get_content_with_clienterror() -> None:
     """Test get_content method of S3Client for client error"""
     async with create_s3_source() as source:
         document = {
@@ -493,7 +494,7 @@ async def test_get_content_with_clienterror():
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session():
+async def test_close_with_client_session() -> None:
     """Test close method of S3DataSource with client session"""
 
     async with create_s3_source() as source:
@@ -557,7 +558,7 @@ async def test_close_with_client_session():
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
     async with create_source(S3DataSource) as source:
         validation_result = await S3AdvancedRulesValidator(source).validate(
             advanced_rules

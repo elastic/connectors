@@ -40,6 +40,8 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from aiohttp.client import ClientSession
+from typing import Optional, Any, Dict, List, Tuple, Union
 
 WILDCARD = "*"
 BLOB = "blob"
@@ -79,15 +81,15 @@ PATH_SCHEMA = {
 }
 
 
-def _prefix_email(email):
+def _prefix_email(email) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_username(user):
+def _prefix_username(user) -> Optional[str]:
     return prefix_identity("username", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
@@ -651,8 +653,8 @@ class ForbiddenException(Exception):
 
 class GitHubClient:
     def __init__(
-        self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca
-    ):
+        self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca: str
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger
         self.auth_method = auth_method
@@ -684,7 +686,7 @@ class GitHubClient:
         # a variable to hold the current installation id, used to refresh the access token
         self._installation_id = None
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     async def _get_retry_after(self, resource_type):
@@ -713,7 +715,7 @@ class GitHubClient:
         return self._installation_access_token
 
     # update the current installation id and re-generate access token
-    async def update_installation_id(self, installation_id):
+    async def update_installation_id(self, installation_id) -> None:
         self._logger.debug(
             f"Updating installation id - new ID: {installation_id}, original ID: {self._installation_id}"
         )
@@ -725,7 +727,7 @@ class GitHubClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _update_installation_access_token(self):
+    async def _update_installation_access_token(self) -> None:
         try:
             access_token_response = await get_installation_access_token(
                 gh=self._get_client,
@@ -744,7 +746,7 @@ class GitHubClient:
             raise
 
     @cached_property
-    def _get_session(self):
+    def _get_session(self) -> ClientSession:
         connector = aiohttp.TCPConnector(ssl=self.ssl_ctx)
         timeout = aiohttp.ClientTimeout(total=None)
         return aiohttp.ClientSession(
@@ -754,7 +756,7 @@ class GitHubClient:
         )
 
     @cached_property
-    def _get_client(self):
+    def _get_client(self) -> GitHubAPI:
         return GitHubAPI(
             session=self._get_session,
             requester="",
@@ -767,7 +769,7 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query, variables=None):
+    async def graphql(self, query: str, variables=None):
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -826,7 +828,7 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def get_github_item(self, resource):
+    async def get_github_item(self, resource: str):
         """Execute request using getitem method of GitHubAPI which is using REST API.
         Using Rest API for fetching files and folder along with content.
 
@@ -926,7 +928,7 @@ class GitHubClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _github_app_get(self, url):
+    async def _github_app_get(self, url: str) -> Optional[Tuple[bytes, Optional[str]]]:
         self._logger.debug(f"Making a get request to GitHub: {url}")
         try:
             return await self._get_client._make_request(
@@ -1022,13 +1024,13 @@ class GitHubClient:
         data = await self.graphql(query=GithubQuery.USER_QUERY.value)
         return nested_get_from_dict(data, ["viewer", "login"])
 
-    async def ping(self):
+    async def ping(self) -> None:
         if self.auth_method == GITHUB_APP:
             await self._github_app_get(url="/app")
         else:
             await self.get_logged_in_user()
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
@@ -1069,10 +1071,10 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -1080,7 +1082,7 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             GitHubAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -1114,7 +1116,7 @@ class GitHubDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the GitHub instance.
 
         Args:
@@ -1143,14 +1145,14 @@ class GitHubDataSource(BaseDataSource):
         # and the value is the installation id
         self._installations = {}
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.github_client.set_logger(self._logger)
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[GitHubAdvancedRulesValidator]:
         return [GitHubAdvancedRulesValidator(self)]
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for GitHub.
 
         Returns:
@@ -1421,7 +1423,7 @@ class GitHubDataSource(BaseDataSource):
             )
             raise
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
         user_id = user.get("id", "")
         user_name = user.get("login", "")
         user_email = user.get("email", "")
@@ -1463,7 +1465,7 @@ class GitHubDataSource(BaseDataSource):
             else:
                 yield await self._logged_in_user()
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         """Validate scope of the configured personal access token and accessibility of repositories
 
         Raises:
@@ -1473,7 +1475,7 @@ class GitHubDataSource(BaseDataSource):
         await self._validate_personal_access_token_scopes()
         await self._validate_configured_repos()
 
-    async def _validate_personal_access_token_scopes(self):
+    async def _validate_personal_access_token_scopes(self) -> None:
         if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
             return
 
@@ -1494,7 +1496,7 @@ class GitHubDataSource(BaseDataSource):
             msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
             raise ConfigurableFieldValueError(msg)
 
-    async def _validate_configured_repos(self):
+    async def _validate_configured_repos(self) -> None:
         if WILDCARD in self.configured_repos:
             return
 
@@ -1503,17 +1505,17 @@ class GitHubDataSource(BaseDataSource):
             msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
         await super().validate_config()
         await self._remote_validation()
 
-    async def close(self):
+    async def close(self) -> None:
         await self.github_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.github_client.ping()
             self._logger.debug("Successfully connected to GitHub.")
@@ -1527,7 +1529,7 @@ class GitHubDataSource(BaseDataSource):
             for es_field, github_field in schema.items()
         }
 
-    def _prepare_pull_request_doc(self, pull_request, reviews):
+    def _prepare_pull_request_doc(self, pull_request, reviews) -> Dict[str, Any]:
         return {
             "_id": pull_request.pop("id"),
             "_timestamp": pull_request.pop("updatedAt"),
@@ -1539,7 +1541,7 @@ class GitHubDataSource(BaseDataSource):
             "requested_reviewers": pull_request.get("reviewRequests", {}).get("nodes"),
         }
 
-    def _prepare_issue_doc(self, issue):
+    def _prepare_issue_doc(self, issue) -> Dict[str, Any]:
         return {
             "_id": issue.pop("id"),
             "type": ObjectType.ISSUE.value,
@@ -1549,7 +1551,7 @@ class GitHubDataSource(BaseDataSource):
             "assignees_list": issue.get("assignees", {}).get("nodes"),
         }
 
-    def _prepare_review_doc(self, review):
+    def _prepare_review_doc(self, review) -> Dict[str, Any]:
         # review.author can be None if the user was deleted, so need to be extra null-safe
         author = review.get("author", {}) or {}
 
@@ -1699,7 +1701,7 @@ class GitHubDataSource(BaseDataSource):
 
     async def _fetch_remaining_fields(
         self, type_obj, object_type, owner, repo, field_type
-    ):
+    ) -> None:
         sample_dict = {
             "reviews": {
                 "query": GithubQuery.REVIEW_QUERY.value,
@@ -1956,7 +1958,7 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def get_content(self, attachment, timestamp=None, doit=False):
+    async def get_content(self, attachment, timestamp=None, doit: bool=False):
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
@@ -1997,7 +1999,7 @@ class GitHubDataSource(BaseDataSource):
         else:
             yield
 
-    def _filter_rule_query(self, repo, query, query_type):
+    def _filter_rule_query(self, repo, query: str, query_type) -> Tuple[bool, str]:
         """
         Filters a query based on the query type.
 
@@ -2024,7 +2026,7 @@ class GitHubDataSource(BaseDataSource):
         else:
             return False, query
 
-    def is_previous_repo(self, repo_name):
+    def is_previous_repo(self, repo_name) -> bool:
         if repo_name in self.prev_repos:
             return True
         self.prev_repos.append(repo_name)
@@ -2037,7 +2039,7 @@ class GitHubDataSource(BaseDataSource):
             )
         return document
 
-    async def _fetch_access_control(self, repo_name):
+    async def _fetch_access_control(self, repo_name) -> List[Optional[str]]:
         owner, repo = self.github_client.get_repo_details(repo_name)
         collaborator_variables = {
             "orgName": owner,

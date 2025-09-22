@@ -10,9 +10,9 @@ from setuptools import find_packages, setup
 from setuptools._vendor.packaging.markers import Marker
 
 try:
-    ARCH = os.uname().machine
+    ARCH: str = os.uname().machine
 except Exception as e:
-    ARCH = "x86_64"
+    ARCH: str = "x86_64"
     print(  # noqa: T201
         f"Defaulting to architecture '{ARCH}'. Unable to determine machine architecture due to error: {e}"
     )
@@ -75,7 +75,7 @@ install_requires = read_reqs(os.path.join("requirements", f"{ARCH}.txt"))
 
 
 with open("README.md") as f:
-    long_description = f.read()
+    long_description: str = f.read()
 
 
 classifiers = [

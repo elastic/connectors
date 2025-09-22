@@ -35,33 +35,33 @@ SERVICE_NAME = "service_name"
 class OracleQueries(Queries):
     """Class contains methods which return query"""
 
-    def ping(self):
+    def ping(self) -> str:
         """Query to ping source"""
         return "SELECT 1+1 FROM DUAL"
 
-    def all_tables(self, **kwargs):
+    def all_tables(self, **kwargs) -> str:
         """Query to get all tables"""
         return (
             f"SELECT TABLE_NAME FROM all_tables where OWNER = UPPER('{kwargs['user']}')"
         )
 
-    def table_primary_key(self, **kwargs):
+    def table_primary_key(self, **kwargs) -> str:
         """Query to get the primary key"""
         return f"SELECT cols.column_name FROM all_constraints cons, all_cons_columns cols WHERE cols.table_name = '{kwargs['table']}' AND cons.constraint_type = 'P' AND cons.constraint_name = cols.constraint_name AND cons.owner = UPPER('{kwargs['user']}') AND cons.owner = cols.owner ORDER BY cols.table_name, cols.position"
 
-    def table_data(self, **kwargs):
+    def table_data(self, **kwargs) -> str:
         """Query to get the table data"""
         return f"SELECT * FROM {kwargs['table']}"
 
-    def table_last_update_time(self, **kwargs):
+    def table_last_update_time(self, **kwargs) -> str:
         """Query to get the last update time of the table"""
         return f"SELECT SCN_TO_TIMESTAMP(MAX(ora_rowscn)) from {kwargs['table']}"
 
-    def table_data_count(self, **kwargs):
+    def table_data_count(self, **kwargs) -> str:
         """Query to get the number of rows in the table"""
         return f"SELECT COUNT(*) FROM {kwargs['table']}"
 
-    def all_schemas(self):
+    def all_schemas(self) -> None:
         """Query to get all schemas of database"""
         pass  # Multiple schemas not supported in Oracle
 
@@ -81,9 +81,9 @@ class OracleClient:
         oracle_home,
         wallet_config,
         logger_,
-        retry_count=DEFAULT_RETRY_COUNT,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        retry_count: int=DEFAULT_RETRY_COUNT,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -102,10 +102,10 @@ class OracleClient:
         self.queries = OracleQueries()
         self._logger = logger_
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         if self.connection is not None:
             self.connection.close()
 
@@ -131,7 +131,7 @@ class OracleClient:
         else:
             return create_engine(connection_string)
 
-    async def get_cursor(self, query):
+    async def get_cursor(self, query: str):
         """Executes the passed query on the Non-Async supported Database server and return cursor.
 
         Args:
@@ -276,7 +276,7 @@ class OracleDataSource(BaseDataSource):
     name = "Oracle Database"
     service_type = "oracle"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup connection to the Oracle database-server configured by user
 
         Args:
@@ -305,7 +305,7 @@ class OracleDataSource(BaseDataSource):
             logger_=self._logger,
         )
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.oracle_client.set_logger(self._logger)
 
     @classmethod
@@ -415,10 +415,10 @@ class OracleDataSource(BaseDataSource):
             },
         }
 
-    async def close(self):
+    async def close(self) -> None:
         self.oracle_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with the database-server configured by user"""
         self._logger.debug("Validating that the Connector can connect to Oracle...")
         try:

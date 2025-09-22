@@ -34,6 +34,7 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from typing import Dict, List, Union
 
 FINISHED = "FINISHED"
 WILDCARD = "*"
@@ -44,7 +45,7 @@ DEFAULT_RETRY_SECONDS = 30
 
 FETCH_SIZE = 100
 MAX_USER_FETCH_LIMIT = 1000
-QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
+QUEUE_MEM_SIZE: int = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 5
 MAX_CONCURRENT_DOWNLOADS = 100  # Max concurrent download supported by jira
 
@@ -62,7 +63,7 @@ ISSUE_SECURITY_LEVEL = "issue_security_level"
 SECURITY_LEVEL_MEMBERS = "issue_security_members"
 PROJECT_ROLE_MEMBERS_BY_ROLE_ID = "project_role_members_by_role_id"
 ALL_FIELDS = "all_fields"
-URLS = {
+URLS: Dict[str, str] = {
     PING: "rest/api/2/myself",
     PROJECT: "rest/api/2/project?expand=description,lead,url",
     PROJECT_BY_KEY: "rest/api/2/project/{key}",
@@ -114,7 +115,7 @@ class EmptyResponseError(Exception):
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -134,7 +135,7 @@ class JiraClient:
             self.ssl_ctx = False
         self.session = None
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     def _get_session(self):
@@ -183,7 +184,7 @@ class JiraClient:
         )
         return self.session
 
-    async def close_session(self):
+    async def close_session(self) -> None:
         """Closes unclosed client session"""
         self._sleeps.cancel()
         if self.session is None:
@@ -191,7 +192,7 @@ class JiraClient:
         await self.session.close()
         self.session = None
 
-    async def _handle_client_errors(self, url, exception):
+    async def _handle_client_errors(self, url, exception: Union[TypeError, ValueError]):
         if exception.status == 429:
             response_headers = exception.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -405,7 +406,7 @@ class JiraClient:
             timezone = await response.json()
             return timezone.get("timeZone")
 
-    async def verify_projects(self):
+    async def verify_projects(self) -> None:
         if self.projects == ["*"]:
             return
 
@@ -422,7 +423,7 @@ class JiraClient:
             msg = f"Unable to verify projects: {self.projects}. Error: {exception}"
             raise Exception(msg) from exception
 
-    async def ping(self):
+    async def ping(self) -> None:
         await anext(self.api_call(url_name=PING))
 
     async def get_jira_fields(self):
@@ -444,7 +445,7 @@ class JiraDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the Jira
 
         Args:
@@ -463,11 +464,11 @@ class JiraDataSource(BaseDataSource):
         self.project_permission_cache = {}
         self.custom_fields = {}
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.jira_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[Dict[str, Union[int, str]]], List[str], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Jira
 
         Returns:
@@ -772,10 +773,10 @@ class JiraDataSource(BaseDataSource):
                     user=user
                 )
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[AtlassianAdvancedRulesValidator]:
         return [AtlassianAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options) -> None:
         """Tweak bulk options as per concurrent downloads support by jira
 
         Args:
@@ -783,11 +784,11 @@ class JiraDataSource(BaseDataSource):
         """
         options["concurrent_downloads"] = self.concurrent_downloads
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes unclosed client session"""
         await self.jira_client.close_session()
 
-    async def get_content(self, issue_key, attachment, timestamp=None, doit=False):
+    async def get_content(self, issue_key, attachment, timestamp=None, doit: bool=False):
         """Extracts the content for allowed file types.
 
         Args:
@@ -838,7 +839,7 @@ class JiraDataSource(BaseDataSource):
             ),
         )
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Jira"""
         try:
             await self.jira_client.ping()
@@ -847,7 +848,7 @@ class JiraDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the Jira")
             raise
 
-    async def _put_projects(self, project, timestamp):
+    async def _put_projects(self, project, timestamp) -> None:
         """Store project documents to queue
 
         Args:
@@ -869,7 +870,7 @@ class JiraDataSource(BaseDataSource):
         )
         await self.queue.put((document_with_access_control, None))  # pyright: ignore
 
-    async def _get_projects(self):
+    async def _get_projects(self) -> None:
         """Get projects with the help of REST APIs
 
         Yields:
@@ -889,7 +890,7 @@ class JiraDataSource(BaseDataSource):
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
             )
 
-    async def _put_issue(self, issue):
+    async def _put_issue(self, issue) -> None:
         """Put specific issue as per the given issue_key in a queue
 
         Args:
@@ -951,7 +952,7 @@ class JiraDataSource(BaseDataSource):
                 )
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _get_issues(self, custom_query=""):
+    async def _get_issues(self, custom_query: str="") -> None:
         """Get issues with the help of REST APIs
 
         Yields:
@@ -973,7 +974,7 @@ class JiraDataSource(BaseDataSource):
             self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _put_attachment(self, attachments, issue_key, access_control):
+    async def _put_attachment(self, attachments, issue_key, access_control) -> None:
         """Put attachments of a specific issue in a queue
 
         Args:

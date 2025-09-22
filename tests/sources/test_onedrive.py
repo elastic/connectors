@@ -26,6 +26,7 @@ from connectors.sources.onedrive import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from typing import Dict, List, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 EXPECTED_USERS = [
@@ -178,7 +179,7 @@ RESPONSE_USER1_FILES = [
     },
 ]
 
-EXPECTED_USER1_FILES = [
+EXPECTED_USER1_FILES: List[Union[Dict[str, Union[None, int, str]], Dict[str, Union[int, str]]]] = [
     {
         "created_at": "2023-05-01T09:09:19Z",
         "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
@@ -228,7 +229,7 @@ RESPONSE_USER2_FILES = [
     },
 ]
 
-EXPECTED_USER2_FILES = [
+EXPECTED_USER2_FILES: List[Union[Dict[str, Union[None, int, str]], Dict[str, Union[int, str]]]] = [
     {
         "created_at": "2023-05-01T09:09:19Z",
         "_id": "01DABHRNU2RE777OZMAZG24FV3XP24GXCO",
@@ -297,7 +298,7 @@ EXPECTED_CONTENT = {
     "_timestamp": "2023-05-01T09:10:21Z",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
-EXPECTED_CONTENT_EXTRACTED = {
+EXPECTED_CONTENT_EXTRACTED: Dict[str, str] = {
     "_id": "01DABHRNUACUYC4OM3GJG2NVHDI2ABGP4E",
     "_timestamp": "2023-05-01T09:10:21Z",
     "body": RESPONSE_CONTENT,
@@ -351,7 +352,7 @@ RESPONSE_PERMISSION_INVALID = {
     "grantedToIdentitiesV2": [{"group": {"bar": "foo"}}],
 }
 
-EXPECTED_USER1_FILES_PERMISSION = [
+EXPECTED_USER1_FILES_PERMISSION: List[Union[Dict[str, Union[None, List[str], int, str]], Dict[str, Union[List[str], int, str]]]] = [
     {
         "type": "folder",
         "title": "folder3",
@@ -383,7 +384,7 @@ EXPECTED_USER1_FILES_PERMISSION = [
         ],
     },
 ]
-EXPECTED_USER2_FILES_PERMISSION = [
+EXPECTED_USER2_FILES_PERMISSION: List[Union[Dict[str, Union[None, List[str], int, str]], Dict[str, Union[List[str], int, str]]]] = [
     {
         "type": "folder",
         "title": "folder4",
@@ -487,21 +488,21 @@ NEXT_BATCH_RESPONSE = {
 }
 
 
-def token_retrieval_errors(message, error_code):
+def token_retrieval_errors(message: str, error_code) -> ClientResponseError:
     error = ClientResponseError(None, None)
     error.status = error_code
     error.message = message
     return error
 
 
-def get_stream_reader():
+def get_stream_reader() -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
     return async_mock
 
 
 class JSONAsyncMock(AsyncMock):
-    def __init__(self, json, *args, **kwargs):
+    def __init__(self, json, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._json = json
 
@@ -510,12 +511,12 @@ class JSONAsyncMock(AsyncMock):
 
 
 class StreamReaderAsyncMock(AsyncMock):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.content = StreamReader
 
 
-def test_get_configuration():
+def test_get_configuration() -> None:
     config = DataSourceConfiguration(
         config=OneDriveDataSource.get_default_configuration()
     )
@@ -524,7 +525,7 @@ def test_get_configuration():
 
 
 @asynccontextmanager
-async def create_onedrive_source(use_text_extraction_service=False):
+async def create_onedrive_source(use_text_extraction_service: bool=False):
     async with create_source(
         OneDriveDataSource,
         client_id="foo",
@@ -550,14 +551,14 @@ async def create_onedrive_source(use_text_extraction_service=False):
 )
 async def test_validate_configuration_with_invalid_dependency_fields_raises_error(
     extras,
-):
+) -> None:
     async with create_source(OneDriveDataSource, **extras) as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session():
+async def test_close_with_client_session() -> None:
     async with create_onedrive_source() as source:
         source.client.access_token = "dummy"
 
@@ -567,7 +568,7 @@ async def test_close_with_client_session():
 
 
 @pytest.mark.asyncio
-async def test_set_access_token():
+async def test_set_access_token() -> None:
     async with create_onedrive_source() as source:
         mock_token = {"access_token": "msgraphtoken", "expires_in": "1234555"}
         async_response = AsyncMock()
@@ -582,7 +583,7 @@ async def test_set_access_token():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> None:
     async with create_onedrive_source() as source:
         DUMMY_RESPONSE = {}
         source.client.get = AsyncIterator([[DUMMY_RESPONSE]])
@@ -592,7 +593,7 @@ async def test_ping_for_successful_connection():
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection_exception(mock_get):
+async def test_ping_for_failed_connection_exception(mock_get) -> None:
     async with create_onedrive_source() as source:
         with patch.object(
             OneDriveClient, "get", side_effect=Exception("Something went wrong")
@@ -602,7 +603,7 @@ async def test_ping_for_failed_connection_exception(mock_get):
 
 
 @pytest.mark.asyncio
-async def test_get_token_raises_correct_exception_when_400():
+async def test_get_token_raises_correct_exception_when_400() -> None:
     klass = OneDriveDataSource
 
     config = DataSourceConfiguration(config=klass.get_default_configuration())
@@ -622,7 +623,7 @@ async def test_get_token_raises_correct_exception_when_400():
 
 
 @pytest.mark.asyncio
-async def test_get_token_raises_correct_exception_when_401():
+async def test_get_token_raises_correct_exception_when_401() -> None:
     klass = OneDriveDataSource
 
     config = DataSourceConfiguration(config=klass.get_default_configuration())
@@ -641,7 +642,7 @@ async def test_get_token_raises_correct_exception_when_401():
 
 
 @pytest.mark.asyncio
-async def test_get_token_raises_correct_exception_when_any_other_status():
+async def test_get_token_raises_correct_exception_when_any_other_status() -> None:
     klass = OneDriveDataSource
 
     config = DataSourceConfiguration(config=klass.get_default_configuration())
@@ -661,7 +662,7 @@ async def test_get_token_raises_correct_exception_when_any_other_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status():
+async def test_get_with_429_status() -> None:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -687,7 +688,7 @@ async def test_get_with_429_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status_without_retry_after_header():
+async def test_get_with_429_status_without_retry_after_header() -> None:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -712,7 +713,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
-async def test_get_with_404_status():
+async def test_get_with_404_status() -> None:
     error = ClientResponseError(None, None)
     error.status = 404
 
@@ -731,7 +732,7 @@ async def test_get_with_404_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_500_status():
+async def test_get_with_500_status() -> None:
     error = ClientResponseError(None, None)
     error.status = 500
 
@@ -750,7 +751,7 @@ async def test_get_with_500_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_post_with_429_status():
+async def test_post_with_429_status() -> None:
     initial_response = ClientPayloadError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -776,7 +777,7 @@ async def test_post_with_429_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_post_with_429_status_without_retry_after_header():
+async def test_post_with_429_status_without_retry_after_header() -> None:
     initial_response = ClientPayloadError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -801,7 +802,7 @@ async def test_post_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
-async def test_list_groups():
+async def test_list_groups() -> None:
     async with create_onedrive_source() as source:
         with patch.object(
             OneDriveClient,
@@ -816,7 +817,7 @@ async def test_list_groups():
 
 
 @pytest.mark.asyncio
-async def test_list_permissions():
+async def test_list_permissions() -> None:
     async with create_onedrive_source() as source:
         with patch.object(
             OneDriveClient,
@@ -847,7 +848,7 @@ async def test_list_permissions():
 @pytest.mark.asyncio
 async def test_get_entity_permission_when_response_missing_content(
     permissions, patch_logger
-):
+) -> None:
     async with create_onedrive_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
         response = await source.get_entity_permission("user-1", "file-1")
@@ -866,7 +867,7 @@ async def test_get_entity_permission_when_response_missing_content(
 
 
 @pytest.mark.asyncio
-async def test_get_owned_files():
+async def test_get_owned_files() -> None:
     async with create_onedrive_source() as source:
         async_response = AsyncMock()
         async_response.__aenter__ = AsyncMock(
@@ -887,7 +888,7 @@ async def test_get_owned_files():
 
 
 @pytest.mark.asyncio
-async def test_list_users():
+async def test_list_users() -> None:
     async with create_onedrive_source() as source:
         response = []
         async_response = AsyncMock()
@@ -914,7 +915,7 @@ async def test_list_users():
 )
 async def test_get_content_when_is_downloadable_is_true(
     file, download_url, expected_content
-):
+) -> None:
     async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch("aiohttp.ClientSession.get", return_value=get_stream_reader()):
@@ -931,7 +932,7 @@ async def test_get_content_when_is_downloadable_is_true(
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_extraction_service():
+async def test_get_content_with_extraction_service() -> None:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -960,7 +961,7 @@ async def test_get_content_with_extraction_service():
 
 
 @pytest.mark.asyncio
-async def test_prepare_doc_when_file_none():
+async def test_prepare_doc_when_file_none() -> None:
     async with create_onedrive_source() as source:
         mock_response = {
             "createdDateTime": "2023-05-01T09:09:19Z",
@@ -988,7 +989,7 @@ async def test_prepare_doc_when_file_none():
 
 
 @pytest.mark.asyncio
-async def test_lookup_request_by_id():
+async def test_lookup_request_by_id() -> None:
     async with create_onedrive_source() as source:
         requests = [
             {"id": "1", "url": "user1/delta"},
@@ -1000,7 +1001,7 @@ async def test_lookup_request_by_id():
 
 
 @pytest.mark.asyncio
-async def test_json_batching():
+async def test_json_batching() -> None:
     async_response, next_page_response = AsyncMock(), AsyncMock()
     result = []
     expected_result = [
@@ -1047,7 +1048,7 @@ async def test_json_batching():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs(users_patch, files_patch):
+async def test_get_docs(users_patch, files_patch) -> None:
     async with create_onedrive_source() as source:
         expected_responses = [*EXPECTED_USER1_FILES, *EXPECTED_USER2_FILES]
         source.get_content = AsyncMock(return_value=EXPECTED_CONTENT)
@@ -1156,7 +1157,7 @@ async def test_get_docs(users_patch, files_patch):
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
     async with create_onedrive_source() as source:
         validation_result = await OneDriveAdvancedRulesValidator(source).validate(
             advanced_rules
@@ -1187,7 +1188,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering):
+async def test_get_docs_with_advanced_rules(filtering) -> None:
     async with create_onedrive_source() as source:
         with patch.object(AccessToken, "get", return_value="abc"):
             with patch.object(
@@ -1221,7 +1222,7 @@ async def test_get_docs_with_advanced_rules(filtering):
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> None:
     async with create_onedrive_source() as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -1233,7 +1234,7 @@ async def test_get_access_control_dls_disabled():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_enabled():
+async def test_get_access_control_dls_enabled() -> None:
     expected_user_access_control = [
         [
             "email:AdeleV@w076v.onmicrosoft.com",
@@ -1284,7 +1285,7 @@ async def test_get_access_control_dls_enabled():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_without_dls_enabled(users_patch, files_patch):
+async def test_get_docs_without_dls_enabled(users_patch, files_patch) -> None:
     async with create_onedrive_source() as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -1329,7 +1330,7 @@ async def test_get_docs_without_dls_enabled(users_patch, files_patch):
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_dls_enabled(users_patch, files_patch, permissions_patch):
+async def test_get_docs_with_dls_enabled(users_patch, files_patch, permissions_patch) -> None:
     async with create_onedrive_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
 

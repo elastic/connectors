@@ -33,17 +33,18 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
+from typing import Any, Dict, Optional, Union
 
-QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
+QUEUE_MEM_SIZE: int = 5 * 1024 * 1024  # Size in Megabytes
 MAX_CONCURRENCY = 80
-FILE_WRITE_CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
+FILE_WRITE_CHUNK_SIZE: int = 1024 * 64  # 64KB default SSD page size
 MAX_FILE_SIZE = 10485760
 TOKEN_EXPIRES = 3599
 RETRY_COUNT = 3
 RETRY_SECONDS = 30
 RETRY_INTERVAL = 2
 
-RUNNING_FTEST = (
+RUNNING_FTEST: bool = (
     "RUNNING_FTEST" in os.environ
 )  # Flag to check if a connector is run for ftest or not.
 
@@ -54,14 +55,14 @@ if "OVERRIDE_URL" in os.environ:
     )
     logger.warning("IT'S SUPPOSED TO BE USED ONLY FOR TESTING")
     logger.warning("x" * 50)
-    override_url = os.environ["OVERRIDE_URL"]
-    BASE_URL = override_url
-    GRAPH_API_AUTH_URL = override_url
-    GRAPH_ACQUIRE_TOKEN_URL = override_url
+    override_url: str = os.environ["OVERRIDE_URL"]
+    BASE_URL: str = override_url
+    GRAPH_API_AUTH_URL: str = override_url
+    GRAPH_ACQUIRE_TOKEN_URL: str = override_url
 else:
-    GRAPH_API_AUTH_URL = "https://login.microsoftonline.com"
-    GRAPH_ACQUIRE_TOKEN_URL = "https://graph.microsoft.com/.default"  # noqa S105
-    BASE_URL = "https://graph.microsoft.com/v1.0"
+    GRAPH_API_AUTH_URL: str = "https://login.microsoftonline.com"
+    GRAPH_ACQUIRE_TOKEN_URL: str = "https://graph.microsoft.com/.default"  # noqa S105
+    BASE_URL: str = "https://graph.microsoft.com/v1.0"
 
 SCOPE = [
     "User.Read.All",
@@ -125,7 +126,7 @@ URLS = {
 
 
 class Schema:
-    def chat_messages(self):
+    def chat_messages(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "_timestamp": "lastModifiedDateTime",
@@ -137,13 +138,13 @@ class Schema:
             "message": "message",
         }
 
-    def chat_tabs(self):
+    def chat_tabs(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "title": "displayName",
         }
 
-    def chat_attachments(self):
+    def chat_attachments(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "name": "name",
@@ -153,7 +154,7 @@ class Schema:
             "creation_time": "createdDateTime",
         }
 
-    def meeting(self):
+    def meeting(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "creation_time": "createdDateTime",
@@ -168,14 +169,14 @@ class Schema:
             "original_end_timezone": "originalEndTimeZone",
         }
 
-    def teams(self):
+    def teams(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "title": "displayName",
             "description": "description",
         }
 
-    def channel(self):
+    def channel(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "url": "webUrl",
@@ -184,10 +185,10 @@ class Schema:
             "creation_time": "createdDateTime",
         }
 
-    def channel_tab(self):
+    def channel_tab(self) -> Dict[str, str]:
         return {"_id": "id", "title": "displayName", "url": "webUrl"}
 
-    def channel_message(self):
+    def channel_message(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "url": "webUrl",
@@ -195,7 +196,7 @@ class Schema:
             "creation_time": "createdDateTime",
         }
 
-    def channel_attachment(self):
+    def channel_attachment(self) -> Dict[str, str]:
         return {
             "_id": "id",
             "name": "name",
@@ -249,7 +250,7 @@ class TokenFetchFailed(Exception):
 class GraphAPIToken:
     """Class for handling access token for Microsoft Graph APIs"""
 
-    def __init__(self, tenant_id, client_id, client_secret, username, password):
+    def __init__(self, tenant_id, client_id, client_secret, username, password) -> None:
         """Initializer.
 
         Args:
@@ -326,7 +327,7 @@ class GraphAPIToken:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _fetch_token(self, is_acquire_for_client=False):
+    async def _fetch_token(self, is_acquire_for_client: bool=False):
         """Generate API token for usage with Graph API
         Args:
         is_acquire_for_client (boolean): True if token needs be generated using client. Default to false
@@ -361,7 +362,7 @@ class GraphAPIToken:
 class MicrosoftTeamsClient:
     """Client Class for API calls to Microsoft Teams"""
 
-    def __init__(self, tenant_id, client_id, client_secret, username, password):
+    def __init__(self, tenant_id, client_id, client_secret, username, password) -> None:
         self._sleeps = CancellableSleeps()
         self._http_session = aiohttp.ClientSession(
             headers={
@@ -381,13 +382,13 @@ class MicrosoftTeamsClient:
 
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     async def fetch(self, url):
         return await self._get_json(absolute_url=url)
 
-    async def pipe(self, url, stream):
+    async def pipe(self, url, stream) -> None:
         try:
             async for response in self._get(absolute_url=url, use_token=False):
                 async for data in response.content.iter_chunked(FILE_WRITE_CHUNK_SIZE):
@@ -426,7 +427,7 @@ class MicrosoftTeamsClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[NotFound, PermissionsMissing],
     )
-    async def _get(self, absolute_url, use_token=True):
+    async def _get(self, absolute_url, use_token: bool=True):
         try:
             if use_token:
                 if any(
@@ -560,7 +561,7 @@ class MicrosoftTeamsClient:
             for event in events:
                 yield event
 
-    async def download_item(self, url, async_buffer):
+    async def download_item(self, url, async_buffer) -> None:
         await self.pipe(url=url, stream=async_buffer)
 
     async def get_teams(self):
@@ -615,7 +616,7 @@ class MicrosoftTeamsClient:
                         yield documents
                 yield child
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         await self._http_session.close()
 
@@ -623,7 +624,7 @@ class MicrosoftTeamsClient:
 class MicrosoftTeamsFormatter:
     """Format documents"""
 
-    def __init__(self, schema):
+    def __init__(self, schema) -> None:
         self.schema = schema
 
     def map_document_with_schema(
@@ -631,7 +632,7 @@ class MicrosoftTeamsFormatter:
         document,
         item,
         document_type,
-    ):
+    ) -> None:
         """Prepare key mappings for documents
 
         Args:
@@ -654,7 +655,7 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def format_user_chat_meeting_recording(self, item, url):
+    def format_user_chat_meeting_recording(self, item, url) -> Dict[str, Any]:
         document = {"type": UserEndpointName.MEETING_RECORDING.value}
         document.update(
             {
@@ -666,7 +667,7 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def get_calendar_detail(self, calendar):
+    def get_calendar_detail(self, calendar) -> str:
         body = ""
         organizer = calendar.get("organizer", {}).get("emailAddress").get("name")
         calendar_recurrence = calendar.get("recurrence")
@@ -725,7 +726,7 @@ class MicrosoftTeamsFormatter:
             body = f"Schedule: {start_time} to {end_time} Organizer: {organizer}"
         return body
 
-    def format_user_calendars(self, item):
+    def format_user_calendars(self, item) -> Dict[str, Any]:
         document = {"type": UserEndpointName.MEETING.value}
         attendee_list = (
             [
@@ -755,7 +756,7 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def format_channel_message(self, item, channel_name, message_content):
+    def format_channel_message(self, item, channel_name, message_content) -> Dict[str, Any]:
         document = {"type": TeamEndpointName.MESSAGE.value}
         document.update(
             {  # pyright: ignore
@@ -774,7 +775,7 @@ class MicrosoftTeamsFormatter:
         )
         return document
 
-    def format_channel_meeting(self, reply):
+    def format_channel_meeting(self, reply) -> Dict[str, Any]:
         document = {"type": TeamEndpointName.MEETING.value}
         event = reply["eventDetail"]
         if event.get("@odata.type") == "#microsoft.graph.callEndedEventMessageDetail":
@@ -823,7 +824,7 @@ class MicrosoftTeamsFormatter:
         )
         return message
 
-    def format_attachment_names(self, attachments):
+    def format_attachment_names(self, attachments) -> str:
         if not attachments:
             return ""
 
@@ -841,7 +842,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
     service_type = "microsoft_teams"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Set up the connection to the Microsoft Teams.
 
         Args:
@@ -854,11 +855,11 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         self.schema = Schema()
         self.formatter = MicrosoftTeamsFormatter(self.schema)
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.client.set_logger(self._logger)
 
     @cached_property
-    def client(self):
+    def client(self) -> MicrosoftTeamsClient:
         tenant_id = self.configuration["tenant_id"]
         client_id = self.configuration["client_id"]
         client_secret = self.configuration["secret_value"]
@@ -883,7 +884,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             else:
                 yield item
 
-    def verify_filename_for_extraction(self, filename):
+    def verify_filename_for_extraction(self, filename) -> Optional[bool]:
         attachment_extension = os.path.splitext(filename)[-1]
         if attachment_extension == "":
             self._logger.debug(
@@ -897,7 +898,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             return
         return True
 
-    async def _download_content_for_attachment(self, download_func, original_filename):
+    async def _download_content_for_attachment(self, download_func, original_filename) -> str:
         attachment = None
         source_file_name = ""
 
@@ -923,13 +924,13 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         return attachment
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         await super().validate_config()
 
         # Check that we can log in into Graph API
         await self.client._api_token.get_with_username_password()
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Microsoft Teams"""
         try:
             await self.client.ping()
@@ -938,7 +939,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Microsoft Teams")
             raise
 
-    async def update_user_chat_attachments(self, **kwargs):
+    async def update_user_chat_attachments(self, **kwargs) -> None:
         async for attachments in self.client.get_user_chat_attachments(
             sender_id=kwargs["sender_id"],
             attachment_name=kwargs["attachment_name"],
@@ -965,8 +966,8 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
 
     async def get_content(
-        self, user_attachment, download_url, timestamp=None, doit=False
-    ):
+        self, user_attachment, download_url, timestamp=None, doit: bool=False
+    ) -> Optional[Dict[str, Any]]:
         """Extracts the content for allowed file types.
 
         Args:
@@ -1005,7 +1006,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
     async def get_messages(
         self, message, document_type=None, chat=None, channel_name=None, members=None
-    ):
+    ) -> None:
         if not message.get("deletedDateTime") and (
             "unknownFutureValue" not in message.get("messageType")
         ):
@@ -1041,7 +1042,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                         )
                     )
 
-    async def user_chat_meeting_recording(self, message):
+    async def user_chat_meeting_recording(self, message) -> None:
         if (
             message.get("eventDetail")
             and message["eventDetail"].get("@odata.type")
@@ -1059,14 +1060,14 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     )
                 )
 
-    def get_chat_members(self, members):
+    def get_chat_members(self, members) -> str:
         return ",".join(
             member.get("displayName")
             for member in members
             if member.get("displayName", "")
         )
 
-    async def user_chat_producer(self, chat):
+    async def user_chat_producer(self, chat) -> None:
         members = self.get_chat_members(chat.get("members", []))
         async for messages in self.client.get_user_chat_messages(chat_id=chat["id"]):
             for message in messages:
@@ -1110,7 +1111,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                 )
         await self.queue.put(EndSignal.USER_CHAT_TASK_FINISHED)
 
-    async def get_channel_messages(self, message, channel_name):
+    async def get_channel_messages(self, message, channel_name) -> None:
         await self.get_messages(message=message, channel_name=channel_name)
         meeting_document = {}
         for reply in message.get("replies", []):
@@ -1140,7 +1141,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
         for document in meeting_document.values():
             await self.queue.put((document, None))
 
-    async def team_channel_producer(self, channel, team_id, team_name):
+    async def team_channel_producer(self, channel, team_id, team_name) -> None:
         channel_name = channel.get("displayName")
         await self.queue.put(
             (
@@ -1200,7 +1201,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
     async def get_channel_drive_producer(
         self, drive_id, item_id, team_name, channel_name
-    ):
+    ) -> None:
         async for drive_child in self.client.get_channel_drive_childrens(
             drive_id=drive_id,
             item_id=item_id,
@@ -1228,7 +1229,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
                     )
                 )
 
-    async def teams_producer(self, team):
+    async def teams_producer(self, team) -> None:
         team_id = team.get("id")
         team_name = team.get("displayName")
         await self.queue.put(
@@ -1254,7 +1255,7 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         await self.queue.put(EndSignal.TEAM_TASK_FINISHED)
 
-    async def calendars_producer(self, user):
+    async def calendars_producer(self, user) -> None:
         async for event in self.client.get_calendars(user_id=user["id"]):
             if event and not event.get("isCancelled"):
                 await self.queue.put(
@@ -1297,12 +1298,12 @@ class MicrosoftTeamsDataSource(BaseDataSource):
 
         await self.fetchers.join()
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes unclosed client session"""
         await self.client.close()
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[int, str]]]:
         """Get the default configuration for Microsoft Teams.
 
         Returns:

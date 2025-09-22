@@ -27,17 +27,18 @@ from connectors.sources.sandfly import (
     format_sandfly_date,
 )
 from tests.sources.support import create_source
+from typing import Dict, List, Optional, Union
 
 SANDFLY_SERVER_URL = "https://blackbird.sandflysecurity.com/v4"
-URL_SANDFLY_LOGIN = SANDFLY_SERVER_URL + "/auth/login"
-URL_SANDFLY_LICENSE = SANDFLY_SERVER_URL + "/license"
-URL_SANDFLY_HOSTS = SANDFLY_SERVER_URL + "/hosts"
-URL_SANDFLY_SSH_SUMMARY = SANDFLY_SERVER_URL + "/sshhunter/summary"
-URL_SANDFLY_SSH_KEY1 = SANDFLY_SERVER_URL + "/sshhunter/key/1"
-URL_SANDFLY_SSH_KEY2 = SANDFLY_SERVER_URL + "/sshhunter/key/2"
-URL_SANDFLY_RESULTS = SANDFLY_SERVER_URL + "/results"
+URL_SANDFLY_LOGIN: str = SANDFLY_SERVER_URL + "/auth/login"
+URL_SANDFLY_LICENSE: str = SANDFLY_SERVER_URL + "/license"
+URL_SANDFLY_HOSTS: str = SANDFLY_SERVER_URL + "/hosts"
+URL_SANDFLY_SSH_SUMMARY: str = SANDFLY_SERVER_URL + "/sshhunter/summary"
+URL_SANDFLY_SSH_KEY1: str = SANDFLY_SERVER_URL + "/sshhunter/key/1"
+URL_SANDFLY_SSH_KEY2: str = SANDFLY_SERVER_URL + "/sshhunter/key/2"
+URL_SANDFLY_RESULTS: str = SANDFLY_SERVER_URL + "/results"
 
-configuration = {
+configuration: Dict[str, Union[int, str]] = {
     "server_url": SANDFLY_SERVER_URL,
     "username": "elastic_api_user",
     "password": "elastic_api_password@@",
@@ -76,7 +77,7 @@ LICENSE_RESPONSE_DATA = {
 }
 
 # Hosts Response Data
-HOSTS_RESPONSE_DATA = {
+HOSTS_RESPONSE_DATA: Dict[str, List[Union[Dict[str, Optional[str]], Dict[str, Union[Dict[str, Dict[str, Dict[str, str]]], str]]]]] = {
     "data": [
         {
             "host_id": "1001",
@@ -171,7 +172,7 @@ async def sandfly_data_source():
 
 
 @pytest.mark.asyncio
-async def test_sandfly_date(sandfly_client, mock_responses):
+async def test_sandfly_date(sandfly_client, mock_responses) -> None:
     expiry = "2025-06-23T17:35:23Z"
     expiry_date = extract_sandfly_date(expiry)
     assert type(expiry_date) is datetime
@@ -187,7 +188,7 @@ async def test_sandfly_date(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_ping_success(sandfly_client, mock_responses):
+async def test_client_ping_success(sandfly_client, mock_responses) -> None:
     mock_responses.head(
         SANDFLY_SERVER_URL,
         status=401,  # Error code 401 Unauthorized means server is running
@@ -197,7 +198,7 @@ async def test_client_ping_success(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_client_ping_failure(sandfly_client, mock_responses):
+async def test_client_ping_failure(sandfly_client, mock_responses) -> None:
     request_error = ClientResponseError(None, None)
     request_error.status = 403
     request_error.message = "Forbidden"
@@ -212,7 +213,7 @@ async def test_client_ping_failure(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_client_login_failures(sandfly_client, mock_responses):
+async def test_client_login_failures(sandfly_client, mock_responses) -> None:
     request_error = FetchTokenError(None, None)
     request_error.status = 403
     request_error.message = "Forbidden"
@@ -244,7 +245,7 @@ async def test_client_login_failures(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_client_resource_not_found(sandfly_client, mock_responses):
+async def test_client_resource_not_found(sandfly_client, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -276,7 +277,7 @@ async def test_client_resource_not_found(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_license(sandfly_client, mock_responses):
+async def test_client_get_license(sandfly_client, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -297,7 +298,7 @@ async def test_client_get_license(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_hosts(sandfly_client, mock_responses):
+async def test_client_get_hosts(sandfly_client, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -322,7 +323,7 @@ async def test_client_get_hosts(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_ssh_keys(sandfly_client, mock_responses):
+async def test_client_get_ssh_keys(sandfly_client, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -356,7 +357,7 @@ async def test_client_get_ssh_keys(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_results_by_time(sandfly_client, mock_responses):
+async def test_client_get_results_by_time(sandfly_client, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -396,7 +397,7 @@ async def test_client_get_results_by_time(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_results_by_id(sandfly_client, mock_responses):
+async def test_client_get_results_by_id(sandfly_client, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -439,7 +440,7 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_data_source_ping_success(sandfly_data_source, mock_responses):
+async def test_data_source_ping_success(sandfly_data_source, mock_responses) -> None:
     mock_responses.head(
         SANDFLY_SERVER_URL,
         status=401,  # Error code 401 Unauthorized means server is running
@@ -449,7 +450,7 @@ async def test_data_source_ping_success(sandfly_data_source, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
+async def test_data_source_ping_failure(sandfly_data_source, mock_responses) -> None:
     request_error = ClientResponseError(None, None)
     request_error.status = 403
     request_error.message = "Forbidden"
@@ -467,7 +468,7 @@ async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
 @pytest.mark.asyncio
 async def test_data_source_get_docs_license_expired(
     sandfly_data_source, mock_responses
-):
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -487,7 +488,7 @@ async def test_data_source_get_docs_license_expired(
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs_not_licensed(sandfly_data_source, mock_responses):
+async def test_data_source_get_docs_not_licensed(sandfly_data_source, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -507,7 +508,7 @@ async def test_data_source_get_docs_not_licensed(sandfly_data_source, mock_respo
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs(sandfly_data_source, mock_responses):
+async def test_data_source_get_docs(sandfly_data_source, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -568,7 +569,7 @@ async def test_data_source_get_docs(sandfly_data_source, mock_responses):
 @pytest.mark.parametrize("sync_cursor", [None, {}])
 async def test_data_source_get_docs_inc_empty_sync_cursor(
     sandfly_data_source, mock_responses, sync_cursor
-):
+) -> None:
     with pytest.raises(SyncCursorEmpty):
         docs = []
         async for doc, _, _ in sandfly_data_source.get_docs_incrementally(
@@ -580,7 +581,7 @@ async def test_data_source_get_docs_inc_empty_sync_cursor(
 @pytest.mark.asyncio
 async def test_data_source_get_docs_inc_license_expired(
     sandfly_data_source, mock_responses
-):
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -608,7 +609,7 @@ async def test_data_source_get_docs_inc_license_expired(
 @pytest.mark.asyncio
 async def test_data_source_get_docs_inc_not_licensed(
     sandfly_data_source, mock_responses
-):
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -634,7 +635,7 @@ async def test_data_source_get_docs_inc_not_licensed(
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs_inc(sandfly_data_source, mock_responses):
+async def test_data_source_get_docs_inc(sandfly_data_source, mock_responses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,

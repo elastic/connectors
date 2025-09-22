@@ -21,7 +21,7 @@ from tests.sources.support import create_source
 
 @asynccontextmanager
 async def create_abs_source(
-    use_text_extraction_service=False,
+    use_text_extraction_service: bool=False,
 ):
     async with create_source(
         AzureBlobStorageDataSource,
@@ -34,7 +34,7 @@ async def create_abs_source(
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> None:
     """Test ping method of AzureBlobStorageDataSource class"""
 
     # Setup
@@ -59,7 +59,7 @@ async def test_ping_for_successful_connection():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection():
+async def test_ping_for_failed_connection() -> None:
     """Test ping method of AzureBlobStorageDataSource class with negative case"""
 
     # Setup
@@ -75,7 +75,7 @@ async def test_ping_for_failed_connection():
 
 
 @pytest.mark.asyncio
-async def test_prepare_blob_doc():
+async def test_prepare_blob_doc() -> None:
     """Test prepare_blob_doc method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -115,7 +115,7 @@ async def test_prepare_blob_doc():
 
 
 @pytest.mark.asyncio
-async def test_get_container():
+async def test_get_container() -> None:
     """Test get_container method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -153,7 +153,7 @@ async def test_get_container():
 
 
 @pytest.mark.asyncio
-async def test_get_blob():
+async def test_get_blob() -> None:
     """Test get_blob method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -202,7 +202,7 @@ async def test_get_blob():
 
 
 @pytest.mark.asyncio
-async def test_get_blob_negative():
+async def test_get_blob_negative() -> None:
     """Test get_blob negative method of AzureBlobStorageDataSource Class"""
 
     async with create_abs_source() as source:
@@ -214,7 +214,7 @@ async def test_get_blob_negative():
 
 
 @pytest.mark.asyncio
-async def test_get_containr_negative():
+async def test_get_containr_negative() -> None:
     """Test get_container negative method of AzureBlobStorageDataSource Class"""
 
     async with create_abs_source() as source:
@@ -226,7 +226,7 @@ async def test_get_containr_negative():
 
 
 @pytest.mark.asyncio
-async def test_get_doc():
+async def test_get_doc() -> None:
     """Test get_doc method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -302,7 +302,7 @@ async def create_fake_coroutine(item):
 
 
 @pytest.mark.asyncio
-async def test_get_doc_for_specific_container():
+async def test_get_doc_for_specific_container() -> None:
     """Test get_doc for specific container method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -371,7 +371,7 @@ async def test_get_doc_for_specific_container():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> None:
     """Test get_content method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -417,7 +417,7 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_upper_extension():
+async def test_get_content_with_upper_extension() -> None:
     """Test get_content method of AzureBlobStorageDataSource Class"""
 
     # Setup
@@ -465,7 +465,7 @@ async def test_get_content_with_upper_extension():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_doit_false():
+async def test_get_content_when_doit_false() -> None:
     """Test get_content method when doit is false."""
 
     # Setup
@@ -493,7 +493,7 @@ async def test_get_content_when_doit_false():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_file_size_0b():
+async def test_get_content_when_file_size_0b() -> None:
     """Test get_content method when the file size is 0b"""
 
     # Setup
@@ -521,7 +521,7 @@ async def test_get_content_when_file_size_0b():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_size_limit_exceeded():
+async def test_get_content_when_size_limit_exceeded() -> None:
     """Test get_content method when the file size is 10MB"""
 
     # Setup
@@ -549,7 +549,7 @@ async def test_get_content_when_size_limit_exceeded():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_type_not_supported():
+async def test_get_content_when_type_not_supported() -> None:
     """Test get_content method when the file type is not supported"""
 
     # Setup
@@ -577,7 +577,7 @@ async def test_get_content_when_type_not_supported():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_no_account_name():
+async def test_validate_config_no_account_name() -> None:
     """Test configure connection string method of AzureBlobStorageDataSource class"""
 
     # Setup
@@ -590,7 +590,7 @@ async def test_validate_config_no_account_name():
 
 
 @pytest.mark.asyncio
-async def test_tweak_bulk_options():
+async def test_tweak_bulk_options() -> None:
     """Test tweak_bulk_options method of BaseDataSource class"""
 
     # Setup
@@ -603,7 +603,7 @@ async def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_invalid_concurrent_downloads():
+async def test_validate_config_invalid_concurrent_downloads() -> None:
     """Test tweak_bulk_options method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
@@ -616,7 +616,7 @@ async def test_validate_config_invalid_concurrent_downloads():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_blob_tier_archive():
+async def test_get_content_when_blob_tier_archive() -> None:
     """Test get_content method when the blob tier is archive"""
 
     # Setup
@@ -648,7 +648,7 @@ async def test_get_content_when_blob_tier_archive():
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_content_with_text_extraction_enabled_adds_body():
+async def test_get_content_with_text_extraction_enabled_adds_body() -> None:
     mock_response = {
         "type": "blob",
         "id": "container1/blob1",
@@ -704,7 +704,7 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
 
 
 @pytest.mark.asyncio
-async def test_get_container_client_when_client_already_exists():
+async def test_get_container_client_when_client_already_exists() -> None:
     async with create_abs_source() as source:
         container_client = ContainerClient.from_connection_string(
             conn_str="AccountName=foo;AccountKey=bar;BlobEndpoint=https://foo.endpoint.com",
@@ -715,7 +715,7 @@ async def test_get_container_client_when_client_already_exists():
 
 
 @pytest.mark.asyncio
-async def test_get_container_client_when_client_does_not_exist():
+async def test_get_container_client_when_client_does_not_exist() -> None:
     async with create_abs_source() as source:
         source.connection_string = (
             "AccountName=foo;AccountKey=bar;BlobEndpoint=https://foo.endpoint.com"
@@ -725,7 +725,7 @@ async def test_get_container_client_when_client_does_not_exist():
 
 
 @pytest.mark.asyncio
-async def test_close_with_connector_clients():
+async def test_close_with_connector_clients() -> None:
     async with create_abs_source() as source:
 
         class ContainerClientMock:

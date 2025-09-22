@@ -13,6 +13,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.utils import RetryStrategy, iso_utc, retryable
+from typing import Optional, Any, Dict
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -34,7 +35,7 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
     async def validate(self, advanced_rules):
@@ -50,7 +51,7 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             AtlassianAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -65,42 +66,42 @@ class AtlassianAdvancedRulesValidator(AdvancedRulesValidator):
         )
 
 
-def prefix_account_id(account_id):
+def prefix_account_id(account_id) -> Optional[str]:
     return prefix_identity("account_id", account_id)
 
 
-def prefix_group_id(group_id):
+def prefix_group_id(group_id) -> Optional[str]:
     return prefix_identity("group_id", group_id)
 
 
-def prefix_role_key(role_key):
+def prefix_role_key(role_key) -> Optional[str]:
     return prefix_identity("role_key", role_key)
 
 
-def prefix_account_name(account_name):
+def prefix_account_name(account_name) -> Optional[str]:
     return prefix_identity("name", account_name.replace(" ", "-"))
 
 
-def prefix_account_email(email):
+def prefix_account_email(email) -> Optional[str]:
     return prefix_identity("email_address", email)
 
 
-def prefix_account_locale(locale):
+def prefix_account_locale(locale) -> Optional[str]:
     return prefix_identity("locale", locale)
 
 
-def prefix_user(user):
+def prefix_user(user) -> Optional[str]:
     if not user:
         return
     return prefix_identity("user", user)
 
 
-def prefix_group(group):
+def prefix_group(group) -> Optional[str]:
     return prefix_identity("group", group)
 
 
 class AtlassianAccessControl:
-    def __init__(self, source, client):
+    def __init__(self, source, client) -> None:
         self.source = source
         self.client = client
 
@@ -155,7 +156,7 @@ class AtlassianAccessControl:
         user = await self.client.api_call(url=url)
         yield await user.json()
 
-    async def user_access_control_doc(self, user):
+    async def user_access_control_doc(self, user) -> Dict[str, Any]:
         """Generate a user access control document.
 
         This method generates a user access control document based on the provided user information.
@@ -216,7 +217,7 @@ class AtlassianAccessControl:
 
         return user_document | self.access_control_query(access_control=access_control)
 
-    def is_active_atlassian_user(self, user_info):
+    def is_active_atlassian_user(self, user_info) -> bool:
         from connectors.sources.confluence import CONFLUENCE_CLOUD
         from connectors.sources.jira import JIRA_CLOUD
 

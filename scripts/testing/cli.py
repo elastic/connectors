@@ -17,7 +17,7 @@ import yaml
 
 __all__ = ["main"]
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
 
 VM_STARTUP_SCRIPT_PATH = f"startup-script={BASE_DIR}/startup_scipt.sh"
 VM_INIT_ATTEMPTS = 30
@@ -42,7 +42,7 @@ PROJECT = "connectors-testing"
 
 @click.group()
 @click.pass_context
-def cli(ctx):
+def cli(ctx) -> None:
     pass
 
 
@@ -92,7 +92,7 @@ def create_test_environment(
     es_password,
     test_case,
     delete,
-):
+) -> None:
     """
     Creates a new VM and runs the tests
     """
@@ -115,7 +115,7 @@ cli.add_command(create_test_environment)
 @click.command(name="delete", help="Deletes a VM")
 @click.argument("name")
 @click.option("--vm-zone", default="europe-west1-b")
-def delete_test_environment(name, vm_zone):
+def delete_test_environment(name, vm_zone) -> None:
     """
     Deletes the VM
     """
@@ -138,7 +138,7 @@ def delete_test_environment(name, vm_zone):
 cli.add_command(delete_test_environment)
 
 
-def print_help(name, vm_zone):
+def print_help(name, vm_zone) -> None:
     """
     Prints a list of commands that can be used to interact with the setup
     """
@@ -185,7 +185,7 @@ def print_help(name, vm_zone):
     click.echo("List of sync jobs: " + click.style(sync_jobs_cmd, fg="green"))
 
 
-def create_vm(name, vm_type, vm_zone):
+def create_vm(name, vm_type, vm_zone) -> None:
     """
     Creates a new VM and waits until the startup script finishes its work
     """
@@ -287,7 +287,7 @@ def render_connector_configuration(file_path):
     return configuration
 
 
-def setup_stack(name, vm_zone, es_version, connectors_ref, es_host):
+def setup_stack(name, vm_zone, es_version, connectors_ref, es_host) -> None:
     with click.progressbar(label="Setting up the stack...", length=100) as steps:
         # Upload pull-connectors file
         cmd = [
@@ -411,7 +411,7 @@ def connector_service_config(es_host, es_username, es_password):
             os.remove(file_name)
 
 
-def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
+def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case) -> None:
     """
     Runs the scenarios from the test case file
     """
@@ -574,7 +574,7 @@ def run_scenarios(name, es_host, es_username, es_password, vm_zone, test_case):
 
 
 # TODO Read all the fields in one call
-def read_from_vault(key):
+def read_from_vault(key) -> str:
     """
     Reads a secret from Vault and returns its value
     """
@@ -588,7 +588,7 @@ def read_from_vault(key):
     return result.stdout.decode("utf-8")
 
 
-def run_gcloud_cmd(cmd):
+def run_gcloud_cmd(cmd) -> subprocess.CompletedProcess[bytes]:
     """
     Runs a gcloud command and raises an exception if the command failed
     """
@@ -600,7 +600,7 @@ def run_gcloud_cmd(cmd):
     return result
 
 
-def main(args=None):
+def main(args=None) -> None:
     cli()
 
 

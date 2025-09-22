@@ -27,7 +27,7 @@ CONFIG = {
 }
 
 
-def mock_connector(connector_id="1"):
+def mock_connector(connector_id: str="1") -> Mock:
     connector = Mock()
     connector.id = connector_id
     connector.sync_done = AsyncMock()
@@ -35,9 +35,9 @@ def mock_connector(connector_id="1"):
 
 
 def mock_sync_job(
-    sync_job_id="1",
-    connector_id="1",
-):
+    sync_job_id: str="1",
+    connector_id: str="1",
+) -> Mock:
     job = Mock()
     job.job_id = sync_job_id
     job.connector_id = connector_id
@@ -58,7 +58,7 @@ async def test_cleanup_jobs(
     connector_fetch_by_id,
     orphaned_idle_jobs,
     idle_jobs,
-):
+) -> None:
     connector = mock_connector()
     orphaned_idle_sync_job = mock_sync_job()
     idle_sync_job = mock_sync_job()

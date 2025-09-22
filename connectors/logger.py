@@ -13,14 +13,16 @@ import logging
 import time
 from datetime import datetime, timezone
 from functools import wraps
-from typing import AsyncGenerator
+from typing import Mapping, Optional, Tuple, Type, Union, AsyncGenerator
 
 import ecs_logging
 from dateutil.tz import tzlocal
 
 from connectors import __version__
+from types import TracebackType
 
-logger = None
+logger: logging.Logger = logging.getLogger("connectors")
+logger_initialized = False
 
 
 class ColorFormatter(logging.Formatter):
@@ -40,17 +42,17 @@ class ColorFormatter(logging.Formatter):
 
     DATE_FMT = "%H:%M:%S"
 
-    def __init__(self, prefix):
+    def __init__(self, prefix) -> None:
         self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
         super().__init__(datefmt=self.DATE_FMT)
         self.local_tz = tzlocal()
 
-    def converter(self, timestamp):
+    def converter(self, timestamp: float) -> datetime:
         dt = datetime.fromtimestamp(timestamp, self.local_tz)
         return dt.astimezone(timezone.utc)
 
     # override logging.Formatter to use an aware datetime object
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str]=None) -> str:
         dt = self.converter(record.created)
         if datefmt:
             s = dt.strftime(datefmt)
@@ -61,20 +63,20 @@ class ColorFormatter(logging.Formatter):
                 s = dt.isoformat()
         return s
 
-    def format(self, record):  # noqa: A003
+    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
         self._style._fmt = self.COLORS[record.levelno] + self.custom_format + self.RESET
         return super().format(record)
 
 
 class DocumentLogger:
-    def __init__(self, prefix, extra):
+    def __init__(self, prefix, extra) -> None:
         self._prefix = prefix
         self._extra = extra
 
     def isEnabledFor(self, level):
         return logger.isEnabledFor(level)
 
-    def debug(self, msg, *args, **kwargs):
+    def debug(self, msg, *args, **kwargs) -> None:
         logger.debug(
             msg,
             *args,
@@ -83,7 +85,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def info(self, msg, *args, **kwargs):
+    def info(self, msg, *args, **kwargs) -> None:
         logger.info(
             msg,
             *args,
@@ -92,7 +94,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def warning(self, msg, *args, **kwargs):
+    def warning(self, msg, *args, **kwargs) -> None:
         logger.warning(
             msg,
             *args,
@@ -101,7 +103,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def error(self, msg, *args, **kwargs):
+    def error(self, msg, *args, **kwargs) -> None:
         logger.error(
             msg,
             *args,
@@ -110,7 +112,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def exception(self, msg, *args, exc_info=True, **kwargs):
+    def exception(self, msg, *args, exc_info: bool=True, **kwargs) -> None:
         logger.exception(
             msg,
             *args,
@@ -120,7 +122,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def critical(self, msg, *args, **kwargs):
+    def critical(self, msg, *args, **kwargs) -> None:
         logger.critical(
             msg,
             *args,
@@ -129,7 +131,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def fatal(self, msg, *args, **kwargs):
+    def fatal(self, msg, *args, **kwargs) -> None:
         logger.fatal(
             msg,
             *args,
@@ -140,7 +142,7 @@ class DocumentLogger:
 
 
 class ExtraLogger(logging.Logger):
-    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None):
+    def _log(self, level: int, msg: str, args: Union[Mapping[str, object], Tuple[object, ...]], exc_info: Union[None, BaseException, bool, Tuple[Type[BaseException], BaseException, Optional[TracebackType]], Tuple[None, ...]]=None, prefix=None, extra: Optional[Mapping[str, object]]=None) -> None:
         if (
             not (hasattr(self, "filebeat") and self.filebeat)  # pyright: ignore
             and prefix
@@ -158,19 +160,21 @@ class ExtraLogger(logging.Logger):
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
-def set_logger(log_level=logging.INFO, filebeat=False):
+def set_logger(log_level: int=logging.INFO, filebeat: bool=False):
     global logger
+    global logger_initialized
     if filebeat:
         formatter = ecs_logging.StdlibFormatter()
     else:
         formatter = ColorFormatter("FMWK")
 
-    if logger is None:
+    if not logger_initialized:
         logging.setLoggerClass(ExtraLogger)
         logger = logging.getLogger("connectors")
         logger.handlers.clear()
         handler = logging.StreamHandler()
         logger.addHandler(handler)
+        logger_initialized = True
 
     logger.propagate = False
     logger.setLevel(log_level)
@@ -180,7 +184,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
     return logger
 
 
-def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=False):
+def set_extra_logger(logger: Optional[str], log_level: Union[int, str]=logging.INFO, prefix: str="BYOC", filebeat: bool=False) -> None:
     if isinstance(logger, str):
         logger = logging.getLogger(logger)
     handler = logging.StreamHandler()
@@ -226,14 +230,14 @@ def timed_execution(name, func_name, slow_log=None, canceled=None):
 
 
 class _TracedAsyncGenerator:
-    def __init__(self, generator, name, func_name, slow_log=None):
+    def __init__(self, generator, name, func_name, slow_log=None) -> None:
         self.gen = generator
         self.name = name
         self.slow_log = slow_log
         self.func_name = func_name
         self.counter = 0
 
-    def __aiter__(self):
+    def __aiter__(self) -> "_TracedAsyncGenerator":
         return self
 
     async def __anext__(self):

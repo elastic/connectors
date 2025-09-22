@@ -34,6 +34,7 @@ from connectors.sources.jira import (
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from typing import Optional, Dict
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -201,7 +202,7 @@ EXPECTED_CONTENT = {
     "_timestamp": "2023-02-01T01:02:20",
     "_attachment": "IyBUaGlzIGlzIHRoZSBkdW1teSBmaWxl",
 }
-EXPECTED_CONTENT_EXTRACTED = {
+EXPECTED_CONTENT_EXTRACTED: Dict[str, str] = {
     "_id": "TP-1-10001",
     "_timestamp": "2023-02-01T01:02:20",
     "body": RESPONSE_CONTENT,
@@ -331,9 +332,9 @@ ACCESS_CONTROL = "_allow_access_control"
 
 @asynccontextmanager
 async def create_jira_source(
-    use_text_extraction_service=False,
-    data_source="jira_cloud",
-    jira_url="http://127.0.0.1:8080",
+    use_text_extraction_service: bool=False,
+    data_source: str="jira_cloud",
+    jira_url: str="http://127.0.0.1:8080",
 ):
     async with create_source(
         JiraDataSource,
@@ -353,13 +354,13 @@ async def create_jira_source(
 class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
-    def load_verify_locations(self, cadata):
+    def load_verify_locations(self, cadata) -> None:
         """This method verify locations"""
         pass
 
 
 class JSONAsyncMock(AsyncMock):
-    def __init__(self, json, *args, **kwargs):
+    def __init__(self, json, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._json = json
 
@@ -368,24 +369,24 @@ class JSONAsyncMock(AsyncMock):
 
 
 class StreamReaderAsyncMock(AsyncMock):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.content = StreamReader
 
 
-def get_json_mock(mock_response):
+def get_json_mock(mock_response) -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(return_value=JSONAsyncMock(mock_response))
     return async_mock
 
 
-def get_stream_reader():
+def get_stream_reader() -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
     return async_mock
 
 
-def side_effect_function(url, ssl):
+def side_effect_function(url, ssl) -> Optional[AsyncMock]:
     """Dynamically changing return values for API calls
     Args:
         url, ssl: Params required for get call
@@ -459,7 +460,7 @@ def side_effect_function(url, ssl):
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, data_source):
+async def test_validate_configuration_for_empty_fields(field, data_source) -> None:
     async with create_jira_source() as source:
         source.jira_client.configuration.get_field("data_source").value = data_source
         source.jira_client.configuration.get_field(field).value = ""
@@ -470,7 +471,7 @@ async def test_validate_configuration_for_empty_fields(field, data_source):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_api_call_negative():
+async def test_api_call_negative() -> None:
     """Tests the api_call function while getting an exception."""
 
     async with create_jira_source() as source:
@@ -491,7 +492,7 @@ async def test_api_call_negative():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_api_call_when_server_is_down():
+async def test_api_call_when_server_is_down() -> None:
     """Tests the api_call function while server gets disconnected."""
 
     async with create_jira_source() as source:
@@ -508,7 +509,7 @@ async def test_api_call_when_server_is_down():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_api_call_with_empty_response():
+async def test_api_call_with_empty_response() -> None:
     """Tests the api_call function when response is empty."""
 
     async with create_jira_source() as source:
@@ -524,7 +525,7 @@ async def test_api_call_with_empty_response():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status():
+async def test_get_with_429_status() -> None:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -549,7 +550,7 @@ async def test_get_with_429_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status_without_retry_after_header():
+async def test_get_with_429_status_without_retry_after_header() -> None:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -573,7 +574,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
 
 @pytest.mark.asyncio
-async def test_get_with_404_status():
+async def test_get_with_404_status() -> None:
     error = ClientResponseError(None, None)
     error.status = 404
 
@@ -591,7 +592,7 @@ async def test_get_with_404_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_500_status():
+async def test_get_with_500_status() -> None:
     error = ClientResponseError(None, None)
     error.status = 500
 
@@ -608,7 +609,7 @@ async def test_get_with_500_status():
 
 
 @pytest.mark.asyncio
-async def test_ping_to_custom_path_server():
+async def test_ping_to_custom_path_server() -> None:
     expected_url = "http://127.0.0.1:8080/test/"
 
     async with create_jira_source(jira_url=expected_url) as source:
@@ -631,7 +632,7 @@ async def test_ping_to_custom_path_server():
 @patch("aiohttp.ClientSession.get")
 async def test_ping_with_ssl(
     mock_get,
-):
+) -> None:
     """Test ping method of JiraDataSource class with SSL"""
 
     mock_get.return_value.__aenter__.return_value.status = 200
@@ -650,7 +651,7 @@ async def test_ping_with_ssl(
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection_exception(client_session_get):
+async def test_ping_for_failed_connection_exception(client_session_get) -> None:
     """Tests the ping functionality when connection can not be established to Jira."""
 
     async with create_jira_source() as source:
@@ -662,7 +663,7 @@ async def test_ping_for_failed_connection_exception(client_session_get):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error() -> None:
     """This function test _validate_configuration when certification is empty when ssl is enabled"""
     async with create_jira_source() as source:
         source.configuration.get_field("ssl_enabled").value = True
@@ -671,7 +672,7 @@ async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_concurrent_downloads():
+async def test_validate_config_with_invalid_concurrent_downloads() -> None:
     """Test validate_config method of BaseDataSource class with invalid concurrent downloads"""
 
     async with create_jira_source() as source:
@@ -684,7 +685,7 @@ async def test_validate_config_with_invalid_concurrent_downloads():
 
 
 @pytest.mark.asyncio
-async def test_tweak_bulk_options():
+async def test_tweak_bulk_options() -> None:
     """Test tweak_bulk_options method of BaseDataSource class"""
 
     async with create_jira_source() as source:
@@ -700,7 +701,7 @@ async def test_tweak_bulk_options():
 @pytest.mark.parametrize(
     "data_source_type", [JIRA_CLOUD, JIRA_DATA_CENTER, JIRA_SERVER]
 )
-async def test_get_session(data_source_type):
+async def test_get_session(data_source_type) -> None:
     async with create_jira_source(data_source=data_source_type) as source:
         try:
             source.jira_client._get_session()
@@ -711,7 +712,7 @@ async def test_get_session(data_source_type):
 
 
 @pytest.mark.asyncio
-async def test_get_session_multiple_calls_return_same_instance():
+async def test_get_session_multiple_calls_return_same_instance() -> None:
     async with create_jira_source() as source:
         first_instance = source.jira_client._get_session()
         second_instance = source.jira_client._get_session()
@@ -719,14 +720,14 @@ async def test_get_session_multiple_calls_return_same_instance():
 
 
 @pytest.mark.asyncio
-async def test_get_session_raise_on_invalid_data_source_type():
+async def test_get_session_raise_on_invalid_data_source_type() -> None:
     async with create_jira_source(data_source="invalid") as source:
         with pytest.raises(InvalidJiraDataSourceTypeError):
             source.jira_client._get_session()
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session():
+async def test_close_with_client_session() -> None:
     async with create_jira_source() as source:
         source.jira_client._get_session()
 
@@ -734,7 +735,7 @@ async def test_close_with_client_session():
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session():
+async def test_close_without_client_session() -> None:
     """Test close method when the session does not exist"""
 
     async with create_jira_source() as source:
@@ -742,7 +743,7 @@ async def test_close_without_client_session():
 
 
 @pytest.mark.asyncio
-async def test_get_timezone():
+async def test_get_timezone() -> None:
     async with create_jira_source() as source:
         with patch.object(
             aiohttp.ClientSession, "get", side_effect=side_effect_function
@@ -753,7 +754,7 @@ async def test_get_timezone():
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_projects():
+async def test_get_projects() -> None:
     """Test _get_projects method"""
 
     async with create_jira_source() as source:
@@ -772,7 +773,7 @@ async def test_get_projects():
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_projects_for_specific_project():
+async def test_get_projects_for_specific_project() -> None:
     """Test _get_projects method for specific project key"""
 
     async with create_jira_source() as source:
@@ -795,7 +796,7 @@ async def test_get_projects_for_specific_project():
 
 
 @pytest.mark.asyncio
-async def test_verify_projects():
+async def test_verify_projects() -> None:
     """Test verify_projects method"""
     async with create_jira_source() as source:
         source.jira_client.projects = ["TP", "DP"]
@@ -805,7 +806,7 @@ async def test_verify_projects():
 
 
 @pytest.mark.asyncio
-async def test_verify_projects_with_unavailable_project_keys():
+async def test_verify_projects_with_unavailable_project_keys() -> None:
     async with create_jira_source() as source:
         source.jira_client.projects = ["TP", "AP"]
 
@@ -815,7 +816,7 @@ async def test_verify_projects_with_unavailable_project_keys():
 
 
 @pytest.mark.asyncio
-async def test_put_issue():
+async def test_put_issue() -> None:
     """Test _put_issue method"""
 
     async with create_jira_source() as source:
@@ -827,7 +828,7 @@ async def test_put_issue():
 
 
 @pytest.mark.asyncio
-async def test_get_custom_fields():
+async def test_get_custom_fields() -> None:
     async with create_jira_source() as source:
         with patch("aiohttp.ClientSession.get", side_effect=side_effect_function):
             custom_fields = await anext(source.jira_client.get_jira_fields())
@@ -835,7 +836,7 @@ async def test_get_custom_fields():
 
 
 @pytest.mark.asyncio
-async def test_put_attachment_positive():
+async def test_put_attachment_positive() -> None:
     """Test _put_attachment method"""
 
     async with create_jira_source() as source:
@@ -855,7 +856,7 @@ async def test_put_attachment_positive():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> None:
     """Tests the get content method."""
 
     async with create_jira_source() as source:
@@ -873,7 +874,7 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_text_extraction_enabled_adds_body():
+async def test_get_content_with_text_extraction_enabled_adds_body() -> None:
     """Tests the get content method."""
     with (
         patch(
@@ -902,7 +903,7 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_upper_extension():
+async def test_get_content_with_upper_extension() -> None:
     """Tests the get content method."""
 
     async with create_jira_source() as source:
@@ -923,7 +924,7 @@ async def test_get_content_with_upper_extension():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_filesize_is_large():
+async def test_get_content_when_filesize_is_large() -> None:
     """Tests the get content method for file size greater than max limit."""
 
     async with create_jira_source() as source:
@@ -944,7 +945,7 @@ async def test_get_content_when_filesize_is_large():
 
 
 @pytest.mark.asyncio
-async def test_get_content_for_unsupported_filetype():
+async def test_get_content_for_unsupported_filetype() -> None:
     """Tests the get content method for file type is not supported."""
 
     async with create_jira_source() as source:
@@ -965,7 +966,7 @@ async def test_get_content_for_unsupported_filetype():
 
 
 @pytest.mark.asyncio
-async def test_get_consumer():
+async def test_get_consumer() -> None:
     """Test _get_consumer method"""
     async with create_jira_source() as source:
         source.tasks = 3
@@ -985,7 +986,7 @@ async def test_get_consumer():
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> None:
     """Test _get_docs method"""
     async with create_jira_source() as source:
         source.jira_client.projects = ["*"]
@@ -1026,7 +1027,7 @@ async def test_get_docs():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering, expected_docs):
+async def test_get_docs_with_advanced_rules(filtering, expected_docs) -> None:
     async with create_jira_source() as source:
         source.get_content = Mock(return_value=EXPECTED_ATTACHMENT_TYPE_BUG)
 
@@ -1040,7 +1041,7 @@ async def test_get_docs_with_advanced_rules(filtering, expected_docs):
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> None:
     async with create_jira_source() as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -1053,7 +1054,7 @@ async def test_get_access_control_dls_disabled():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19")
-async def test_get_access_control_dls_enabled():
+async def test_get_access_control_dls_enabled() -> None:
     mock_users = [
         {
             # Indexable: The user is active and atlassian user.
@@ -1158,7 +1159,7 @@ async def test_get_access_control_dls_enabled():
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_get_docs_with_dls_enabled():
+async def test_get_docs_with_dls_enabled() -> None:
     expected_projects_with_access_controls = [
         project
         | {

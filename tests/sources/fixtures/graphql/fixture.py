@@ -11,10 +11,11 @@ import os
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
+from typing import Any, Dict
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium")
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium")
 
 match DATA_SIZE:
     case "small":
@@ -26,14 +27,14 @@ match DATA_SIZE:
 
 
 class GraphQLAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.app.route("/graphql", methods=["POST"])(self.mock_graphql_response)
 
-    def encode_cursor(self, value):
+    def encode_cursor(self, value) -> str:
         return base64.b64encode(str(value).encode()).decode()
 
-    def decode_cursor(self, cursor):
+    def decode_cursor(self, cursor) -> int:
         return int(base64.b64decode(cursor.encode()).decode())
 
     def get_index_metadata(self, variables, data):
@@ -43,7 +44,7 @@ class GraphQLAPI:
         subset_nodes = data["nodes"][start_index:end_index]
         return start_index, end_index, subset_nodes
 
-    def mock_graphql_response(self):
+    def mock_graphql_response(self) -> Dict[str, Dict[str, Dict[str, Dict[str, Any]]]]:
         issue_data = {
             "nodes": [
                 {

@@ -10,12 +10,12 @@ from tests.sources.support import assert_basics, create_source
 
 
 @pytest.mark.asyncio
-async def test_basics():
+async def test_basics() -> None:
     await assert_basics(DirectoryDataSource, "directory", DEFAULT_DIR)
 
 
 @pytest.mark.asyncio
-async def test_get_docs(catch_stdout):
+async def test_get_docs(catch_stdout) -> None:
     async with create_source(DirectoryDataSource) as source:
         num = 0
         async for doc, dl in source.get_docs():

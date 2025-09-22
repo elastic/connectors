@@ -31,12 +31,12 @@ class ESManagementClient(ESClient):
     This client, on the contrary, is used to manage a number of indices outside of connector protocol operations.
     """
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         logger.debug(f"ESManagementClient connecting to {config['host']}")
         # initialize ESIndex instance
         super().__init__(config)
 
-    async def ensure_exists(self, indices=None):
+    async def ensure_exists(self, indices=None) -> None:
         if indices is None:
             indices = []
 
@@ -60,7 +60,7 @@ class ESManagementClient(ESClient):
 
     async def ensure_ingest_pipeline_exists(
         self, pipeline_id, version, description, processors
-    ):
+    ) -> None:
         try:
             await self._retrier.execute_with_retry(
                 partial(self.client.ingest.get_pipeline, id=pipeline_id)
@@ -76,7 +76,7 @@ class ESManagementClient(ESClient):
                 )
             )
 
-    async def delete_indices(self, indices):
+    async def delete_indices(self, indices) -> None:
         await self._retrier.execute_with_retry(
             partial(self.client.indices.delete, index=indices, ignore_unavailable=True)
         )
@@ -91,7 +91,7 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self, index="*"):
+    async def list_indices(self, index: str="*"):
         """
         List indices using Elasticsearch.stats API. Includes the number of documents in each index.
         """
@@ -105,7 +105,7 @@ class ESManagementClient(ESClient):
 
         return indices
 
-    async def list_indices_serverless(self, index="*"):
+    async def list_indices_serverless(self, index: str="*"):
         """
         List indices in a serverless environment. This method is a workaround to the fact that
         the `indices.stats` API is not available in serverless environments.
@@ -130,7 +130,7 @@ class ESManagementClient(ESClient):
             partial(self.client.indices.exists, index=index_name)
         )
 
-    async def get_index_or_alias(self, index_name, ignore_unavailable=False):
+    async def get_index_or_alias(self, index_name, ignore_unavailable: bool=False):
         """
         Get index definition (mappings and settings) by its name or its alias.
         """

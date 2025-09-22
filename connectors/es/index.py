@@ -24,7 +24,7 @@ class TemporaryConnectorApiWrapper(ESClient):
     this class will be removed.
     """
 
-    def __init__(self, elastic_config):
+    def __init__(self, elastic_config) -> None:
         super().__init__(elastic_config)
 
     async def connector_get(self, connector_id, include_deleted):
@@ -37,7 +37,7 @@ class TemporaryConnectorApiWrapper(ESClient):
 
 
 class ESApi(ESClient):
-    def __init__(self, elastic_config):
+    def __init__(self, elastic_config) -> None:
         super().__init__(elastic_config)
         self._api_wrapper = TemporaryConnectorApiWrapper(elastic_config)
 
@@ -46,7 +46,7 @@ class ESApi(ESClient):
             partial(self.client.connector.check_in, connector_id=connector_id)
         )
 
-    async def connector_get(self, connector_id, include_deleted=False):
+    async def connector_get(self, connector_id, include_deleted: bool=False):
         return await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_get, connector_id, include_deleted)
         )
@@ -147,7 +147,7 @@ class ESIndex(ESClient):
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
-    def __init__(self, index_name, elastic_config):
+    def __init__(self, index_name, elastic_config) -> None:
         # initialize elasticsearch client
         super().__init__(elastic_config)
         self.api = ESApi(elastic_config)
@@ -230,7 +230,7 @@ class ESIndex(ESClient):
             )
         )
 
-    async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
+    async def get_all_docs(self, query=None, sort=None, page_size: int=DEFAULT_PAGE_SIZE):
         """
         Lookup for elasticsearch documents using {query}
 

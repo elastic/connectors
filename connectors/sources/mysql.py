@@ -27,8 +27,9 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from typing import Dict, List, Union
 
-SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
+SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN: re.Pattern[str] = re.compile(r"`(?:[^`]|``)+`|\w+")
 
 MAX_POOL_SIZE = 10
 DEFAULT_FETCH_SIZE = 5000
@@ -36,7 +37,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 
 
-def format_list(list_):
+def format_list(list_) -> str:
     return ", ".join(list_)
 
 
@@ -56,7 +57,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
     async def validate(self, advanced_rules):
@@ -72,7 +73,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -115,9 +116,9 @@ class MySQLClient:
         ssl_certificate,
         logger_,
         database=None,
-        max_pool_size=MAX_POOL_SIZE,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        max_pool_size: int=MAX_POOL_SIZE,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -150,7 +151,7 @@ class MySQLClient:
 
         return self
 
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
+    async def __aexit__(self, exception_type, exception_value, exception_traceback) -> None:
         self._sleeps.cancel()
 
         self.connection_pool.release(self.connection)
@@ -169,7 +170,7 @@ class MySQLClient:
             )
             return [table[0] for table in await cursor.fetchall()]
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.connection.ping()
             self._logger.info("Successfully connected to the MySQL Server.")
@@ -182,7 +183,7 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_column_names_for_query(self, query):
+    async def get_column_names_for_query(self, query) -> List[str]:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(f"SELECT q.* FROM ({query}) as q LIMIT 0")
 
@@ -198,7 +199,7 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_primary_key_column_names(self, table):
+    async def get_primary_key_column_names(self, table) -> List[str]:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(
                 f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
@@ -241,7 +242,7 @@ class MySQLClient:
                     break
             offset += self.fetch_size
 
-    async def _get_table_row_count_for_query(self, query):
+    async def _get_table_row_count_for_query(self, query) -> int:
         table_row_count_query = re.sub(
             r"SELECT\s.*?\sFROM",
             "SELECT COUNT(*) FROM",
@@ -255,7 +256,7 @@ class MySQLClient:
 
     def _update_query_with_pagination_attributes(
         self, query, offset, primary_key_columns
-    ):
+    ) -> str:
         updated_query = ""
         has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
         # Checking if custom query has a semicolon at the end or not
@@ -326,7 +327,7 @@ def row2doc(row, column_names, primary_key_columns, table, timestamp):
     return row
 
 
-def generate_id(tables, row, primary_key_columns):
+def generate_id(tables, row, primary_key_columns) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:
@@ -351,7 +352,7 @@ class MySqlDataSource(BaseDataSource):
     service_type = "mysql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         super().__init__(configuration=configuration)
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
@@ -361,7 +362,7 @@ class MySqlDataSource(BaseDataSource):
         self.tables = self.configuration["tables"]
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, Union[bool, str]]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         return {
             "host": {
                 "label": "Host",
@@ -430,7 +431,7 @@ class MySqlDataSource(BaseDataSource):
             },
         }
 
-    def mysql_client(self):
+    def mysql_client(self) -> MySQLClient:
         return MySQLClient(
             host=self.configuration["host"],
             port=self.configuration["port"],
@@ -443,13 +444,13 @@ class MySqlDataSource(BaseDataSource):
             logger_=self._logger,
         )
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[MySQLAdvancedRulesValidator]:
         return [MySQLAdvancedRulesValidator(self)]
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates that user input is not empty and adheres to the specified constraints.
         Also validate, if the configured database and the configured tables are present and accessible using the configured user.
 
@@ -465,20 +466,20 @@ class MySqlDataSource(BaseDataSource):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         async with self.mysql_client() as client:
             async with client.connection.cursor() as cursor:
                 await self._validate_database_accessible(cursor)
                 await self._validate_tables_accessible(cursor)
 
-    async def _validate_database_accessible(self, cursor):
+    async def _validate_database_accessible(self, cursor) -> None:
         try:
             await cursor.execute(f"USE `{self.database}`;")
         except aiomysql.Error as e:
             msg = f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
             raise ConfigurableFieldValueError(msg) from e
 
-    async def _validate_tables_accessible(self, cursor):
+    async def _validate_tables_accessible(self, cursor) -> None:
         non_accessible_tables = []
         tables_to_validate = await self.get_tables_to_fetch()
 
@@ -492,7 +493,7 @@ class MySqlDataSource(BaseDataSource):
             msg = f"The tables '{format_list(non_accessible_tables)}' are either not present or not accessible for user '{self.configuration['user']}'."
             raise ConfigurableFieldValueError(msg)
 
-    async def ping(self):
+    async def ping(self) -> None:
         async with self.mysql_client() as client:
             await client.ping()
 

@@ -12,17 +12,17 @@ from connectors.agent.component import ConnectorsAgentComponent
 
 
 class StubMultiService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.running_stop = asyncio.Event()
         self.has_ran = False
         self.has_shutdown = False
 
-    async def run(self):
+    async def run(self) -> None:
         self.has_ran = True
         self.running_stop.clear()
         await self.running_stop.wait()
 
-    def shutdown(self, sig):
+    def shutdown(self, sig) -> None:
         self.has_shutdown = True
         self.running_stop.set()
 
@@ -32,7 +32,7 @@ class StubMultiService:
 @patch("connectors.agent.component.new_v2_from_reader", return_value=MagicMock())
 async def test_try_update_without_auth_data(
     stub_multi_service, patch_new_v2_from_reader
-):
+) -> None:
     component = ConnectorsAgentComponent()
 
     async def stop_after_timeout():

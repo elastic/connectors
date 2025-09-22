@@ -15,13 +15,17 @@ from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
+from _io import BytesIO
+from flask.wrappers import Response
+from typing import Any, Dict, List, Union
+from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider()
 
 app = Flask(__name__)
 
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 
 match DATA_SIZE:
     case "small":
@@ -35,7 +39,7 @@ match DATA_SIZE:
         FILE_COUNT_PER_USER = 150
 
 
-THROTTLING = os.environ.get("THROTTLING", False)
+THROTTLING: Union[bool, str] = os.environ.get("THROTTLING", False)
 PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
 
 if THROTTLING:
@@ -60,9 +64,9 @@ if THROTTLING:
 
 
 TOKEN_EXPIRATION_TIMEOUT = 3699  # seconds
-fake = fake_provider.fake
+fake: Faker = fake_provider.fake
 DRIVE_ID = fake.uuid4()
-ROOT = os.environ.get("ROOT_HOST_URL", "http://127.0.0.1:10972")
+ROOT: str = os.environ.get("ROOT_HOST_URL", "http://127.0.0.1:10972")
 
 
 class DataGenerator:
@@ -70,12 +74,12 @@ class DataGenerator:
     This class is used to generate fake data for OneDrive source.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.users = []
         self.files_per_user = {}
         self.files_by_id = {}
 
-    def generate(self):
+    def generate(self) -> None:
         # Generate users in Azure AD
         for user_id in range(1, TOTAL_USERS + 1):
             user = {
@@ -109,7 +113,7 @@ class DataGenerator:
 
                 self.files_per_user[user["id"]].append(item)
 
-    def get_users(self, skip=0, take=100):
+    def get_users(self, skip: int=0, take: int=100):
         results = []
 
         for user in self.users[skip:][:take]:
@@ -117,7 +121,7 @@ class DataGenerator:
 
         return results
 
-    def get_drive_items(self, user_id, skip=0, take=100):
+    def get_drive_items(self, user_id, skip: int=0, take: int=100) -> List[Dict[str, Any]]:
         results = []
 
         for file in self.files_per_user[user_id][skip:][:take]:
@@ -159,7 +163,7 @@ class DataGenerator:
 
 
 class OneDriveAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.first_sync = True
         self.data_generator = DataGenerator()
@@ -182,10 +186,10 @@ class OneDriveAPI:
 
         self.app.before_request(self.before_request)
 
-    def before_request(self):
+    def before_request(self) -> None:
         time.sleep(PRE_REQUEST_SLEEP)
 
-    def get_access_token(self, tenant_id):
+    def get_access_token(self, tenant_id) -> Response:
         res = {
             "access_token": f"fake-access-token-for-{tenant_id}",
             "expires_in": TOKEN_EXPIRATION_TIMEOUT,
@@ -194,7 +198,7 @@ class OneDriveAPI:
         response.headers["status_code"] = 200
         return response
 
-    def batched_uris(self):
+    def batched_uris(self) -> Dict[str, List[Dict[str, Any]]]:
         payload = request.get_json()
         response = []
         for rest_request in payload["requests"]:
@@ -204,7 +208,7 @@ class OneDriveAPI:
             )
         return {"responses": response}
 
-    def get_users(self):
+    def get_users(self) -> Dict[str, Any]:
         skip = int(request.args.get("$skip", 0))
         take = int(request.args.get("$take", 100))
         users = self.data_generator.get_users(skip, take)
@@ -220,7 +224,7 @@ class OneDriveAPI:
 
         return response
 
-    def get_drive(self):
+    def get_drive(self) -> Dict[str, Union[Dict[str, Any], str]]:
         return {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives",
             "value": {
@@ -235,7 +239,7 @@ class OneDriveAPI:
             },
         }
 
-    def get_root_drive_delta(self, user_id):
+    def get_root_drive_delta(self, user_id) -> Dict[str, Any]:
         skip = int(request.args.get("$skip", 0))
         take = int(request.args.get("$take", 100))
 
@@ -252,7 +256,7 @@ class OneDriveAPI:
 
         return response
 
-    def download_content(self, user_id, item_id):
+    def download_content(self, user_id, item_id) -> BytesIO:
         content = self.data_generator.get_drive_item_content(user_id, item_id)
 
         return io.BytesIO(bytes(content, encoding="utf-8"))

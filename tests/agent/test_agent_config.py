@@ -11,7 +11,7 @@ CONNECTOR_ID = "test-connector"
 SERVICE_TYPE = "test-service-type"
 
 
-def prepare_unit_mock(fields, log_level):
+def prepare_unit_mock(fields, log_level) -> Mock:
     if not fields:
         fields = {}
     unit_mock = Mock()
@@ -25,7 +25,7 @@ def prepare_unit_mock(fields, log_level):
     return unit_mock
 
 
-def prepare_config_wrapper():
+def prepare_config_wrapper() -> ConnectorsAgentConfigurationWrapper:
     # populate with connectors list, so that we can test for changes in other config properties
     config_wrapper = ConnectorsAgentConfigurationWrapper()
     initial_config_unit = prepare_unit_mock({}, None)
@@ -37,7 +37,7 @@ def prepare_config_wrapper():
     return config_wrapper
 
 
-def test_try_update_without_auth_data():
+def test_try_update_without_auth_data() -> None:
     config_wrapper = prepare_config_wrapper()
 
     unit_mock = prepare_unit_mock({}, None)
@@ -52,7 +52,7 @@ def test_try_update_without_auth_data():
     )
 
 
-def test_try_update_with_api_key_auth_data():
+def test_try_update_with_api_key_auth_data() -> None:
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in"
 
@@ -71,7 +71,7 @@ def test_try_update_with_api_key_auth_data():
     assert config_wrapper.get()["elasticsearch"]["api_key"] == api_key
 
 
-def test_try_update_with_non_encoded_api_key_auth_data():
+def test_try_update_with_non_encoded_api_key_auth_data() -> None:
     hosts = ["https://localhost:9200"]
     api_key = "something:else"
     encoded = "c29tZXRoaW5nOmVsc2U="
@@ -91,7 +91,7 @@ def test_try_update_with_non_encoded_api_key_auth_data():
     assert config_wrapper.get()["elasticsearch"]["api_key"] == encoded
 
 
-def test_try_update_with_basic_auth_auth_data():
+def test_try_update_with_basic_auth_auth_data() -> None:
     hosts = ["https://localhost:9200"]
     username = "elastic"
     password = "hold the door"
@@ -114,7 +114,7 @@ def test_try_update_with_basic_auth_auth_data():
     assert config_wrapper.get()["elasticsearch"]["password"] == password
 
 
-def test_try_update_multiple_times_does_not_reset_config_values():
+def test_try_update_multiple_times_does_not_reset_config_values() -> None:
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in"
 
@@ -149,7 +149,7 @@ def test_try_update_multiple_times_does_not_reset_config_values():
     assert config_wrapper.get()["service"]["log_level"] == log_level
 
 
-def test_config_changed_when_new_variables_are_passed():
+def test_config_changed_when_new_variables_are_passed() -> None:
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in_lalala"
 
@@ -163,7 +163,7 @@ def test_config_changed_when_new_variables_are_passed():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_elasticsearch_config_changed():
+def test_config_changed_when_elasticsearch_config_changed() -> None:
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in_lalala"
 
@@ -189,7 +189,7 @@ def test_config_changed_when_elasticsearch_config_changed():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_elasticsearch_config_did_not_change():
+def test_config_changed_when_elasticsearch_config_did_not_change() -> None:
     hosts = ["https://localhost:9200"]
     api_key = "lemme_in_lalala"
 
@@ -208,7 +208,7 @@ def test_config_changed_when_elasticsearch_config_did_not_change():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_log_level_config_changed():
+def test_config_changed_when_log_level_config_changed() -> None:
     config_wrapper = prepare_config_wrapper()
     config_wrapper.try_update(
         connector_id=CONNECTOR_ID,
@@ -224,7 +224,7 @@ def test_config_changed_when_log_level_config_changed():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_log_level_config_did_not_change():
+def test_config_changed_when_log_level_config_did_not_change() -> None:
     config_wrapper = prepare_config_wrapper()
     config_wrapper.try_update(
         connector_id=CONNECTOR_ID,
@@ -240,7 +240,7 @@ def test_config_changed_when_log_level_config_did_not_change():
     assert config_wrapper.config_changed(new_config) is False
 
 
-def test_config_changed_when_connectors_changed():
+def test_config_changed_when_connectors_changed() -> None:
     config_wrapper = ConnectorsAgentConfigurationWrapper()
 
     config_wrapper.try_update(
@@ -258,7 +258,7 @@ def test_config_changed_when_connectors_changed():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_connectors_list_is_cleared():
+def test_config_changed_when_connectors_list_is_cleared() -> None:
     config_wrapper = ConnectorsAgentConfigurationWrapper()
 
     config_wrapper.try_update(
@@ -274,7 +274,7 @@ def test_config_changed_when_connectors_list_is_cleared():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_connectors_list_is_extended():
+def test_config_changed_when_connectors_list_is_extended() -> None:
     config_wrapper = ConnectorsAgentConfigurationWrapper()
 
     config_wrapper.try_update(
@@ -293,7 +293,7 @@ def test_config_changed_when_connectors_list_is_extended():
     assert config_wrapper.config_changed(new_config) is True
 
 
-def test_config_changed_when_connectors_did_not_change():
+def test_config_changed_when_connectors_did_not_change() -> None:
     config_wrapper = ConnectorsAgentConfigurationWrapper()
 
     config_wrapper.try_update(

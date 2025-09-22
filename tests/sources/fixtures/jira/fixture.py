@@ -12,10 +12,12 @@ import os
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
+from _io import BytesIO
+from typing import Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 PROJECT_TO_DELETE_COUNT = 100
 
@@ -32,7 +34,7 @@ app = Flask(__name__)
 
 
 @app.route("/rest/api/2/myself", methods=["GET"])
-def get_myself():
+def get_myself() -> Dict[str, str]:
     """Function to load an authenticated user's data"""
     myself = {
         "accountId": "5ff5815e34847e0069fedee3",
@@ -44,7 +46,7 @@ def get_myself():
 
 
 @app.route("/rest/api/2/project", methods=["GET"])
-def get_projects():
+def get_projects() -> List[Dict[str, str]]:
     """Function to load projects on the jira server
     Returns:
         projects (list): List of projects
@@ -139,7 +141,7 @@ def get_issue(issue_id):
 
 
 @app.route("/rest/api/2/attachment/content/<string:attachment_id>", methods=["GET"])
-def get_attachment_content(attachment_id):
+def get_attachment_content(attachment_id) -> BytesIO:
     """Function to handle get attachment content calls
     Args:
         id (string): id of an attachment.
@@ -150,7 +152,7 @@ def get_attachment_content(attachment_id):
 
 
 @app.route("/rest/api/2/field", methods=["GET"])
-def get_fields():
+def get_fields() -> List[Dict[str, Union[Dict[str, str], List[str], bool, str]]]:
     """Function to get all fields including default and custom fields from Jira"""
     return [
         {

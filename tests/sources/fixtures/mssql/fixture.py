@@ -29,7 +29,7 @@ fake_provider = WeightedFakeProvider(
 faked = Faker()
 
 BATCH_SIZE = 1000
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -45,11 +45,11 @@ match DATA_SIZE:
 RECORDS_TO_DELETE = 10
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-def inject_lines(table, cursor, lines):
+def inject_lines(table, cursor, lines) -> None:
     """Ingest rows in table
 
     Args:
@@ -144,7 +144,7 @@ def inject_lines(table, cursor, lines):
         print(f"Inserted batch #{batch} of {batch_size} documents.")
 
 
-async def load():
+async def load() -> None:
     """N tables of 10001 rows each. each row is ~ 1024*20 bytes"""
 
     database_sa = pytds.connect(
@@ -171,7 +171,7 @@ async def load():
     database.commit()
 
 
-async def remove():
+async def remove() -> None:
     """Removes 10 random items per table"""
 
     database = pytds.connect(server=HOST, port=PORT, user=USER, password=PASSWORD)

@@ -11,12 +11,13 @@ import random
 import asyncpg
 
 from tests.commons import WeightedFakeProvider
+from asyncio.events import AbstractEventLoop
 
 fake_provider = WeightedFakeProvider(weights=[0.65, 0.3, 0.05, 0])
 
 CONNECTION_STRING = "postgresql://admin:Password_123@127.0.0.1:9090/xe"
 BATCH_SIZE = 100
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 READONLY_USERNAME = "readonly"
 READONLY_PASSWORD = "foobar123"
@@ -34,14 +35,14 @@ match DATA_SIZE:
 
 RECORDS_TO_DELETE = 10
 
-event_loop = asyncio.get_event_loop()
+event_loop: AbstractEventLoop = asyncio.get_event_loop()
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     print(NUM_TABLES * (RECORD_COUNT - RECORDS_TO_DELETE))
 
 
-async def load():
+async def load() -> None:
     """Create a read-only user for use when configuring the connector,
     then create tables and load table data."""
 
@@ -95,7 +96,7 @@ async def load():
     await load_rows()
 
 
-async def remove():
+async def remove() -> None:
     """Remove documents from tables"""
     connect = await asyncpg.connect(CONNECTION_STRING)
     for table in range(NUM_TABLES):

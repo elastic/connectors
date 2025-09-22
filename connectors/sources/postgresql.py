@@ -38,6 +38,9 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from sqlalchemy.ext.asyncio.engine import AsyncEngine
+from typing import Optional, Sized, List
+from pyre_extensions import PyreReadOnly
 
 FETCH_LIMIT = 1000
 
@@ -45,15 +48,15 @@ FETCH_LIMIT = 1000
 class PostgreSQLQueries(Queries):
     """Class contains methods which return query"""
 
-    def ping(self):
+    def ping(self) -> str:
         """Query to ping source"""
         return "SELECT 1+1"
 
-    def all_tables(self, **kwargs):
+    def all_tables(self, **kwargs) -> str:
         """Query to get all tables"""
         return f"SELECT table_name FROM information_schema.tables WHERE table_catalog = '{kwargs['database']}' and table_schema = '{kwargs['schema']}'"
 
-    def table_primary_key(self, **kwargs):
+    def table_primary_key(self, **kwargs) -> str:
         """Query to get the primary key"""
         return (
             f"SELECT a.attname AS c "
@@ -67,19 +70,19 @@ class PostgreSQLQueries(Queries):
             f"ORDER BY array_position(i.indkey, a.attnum)"
         )
 
-    def table_data(self, **kwargs):
+    def table_data(self, **kwargs) -> str:
         """Query to get the table data"""
         return f'SELECT * FROM "{kwargs["schema"]}"."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
 
-    def table_last_update_time(self, **kwargs):
+    def table_last_update_time(self, **kwargs) -> str:
         """Query to get the last update time of the table"""
         return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
-    def table_data_count(self, **kwargs):
+    def table_data_count(self, **kwargs) -> str:
         """Query to get the number of rows in the table"""
         return f'SELECT COUNT(*) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
-    def all_schemas(self):
+    def all_schemas(self) -> None:
         """Query to get all schemas of database"""
         pass
 
@@ -100,7 +103,7 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source) -> None:
         self.source = source
 
     async def validate(self, advanced_rules):
@@ -116,7 +119,7 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=DEFAULT_WAIT_MULTIPLIER,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
         try:
             PostgreSQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -165,9 +168,9 @@ class PostgreSQLClient:
         ssl_enabled,
         ssl_ca,
         logger_,
-        retry_count=DEFAULT_RETRY_COUNT,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        retry_count: int=DEFAULT_RETRY_COUNT,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -184,18 +187,18 @@ class PostgreSQLClient:
         self.connection = None
         self._logger = logger_
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @cached_property
-    def engine(self):
+    def engine(self) -> AsyncEngine:
         connection_string = f"postgresql+asyncpg://{self.user}:{quote(self.password)}@{self.host}:{self.port}/{self.database}"
         return create_async_engine(
             connection_string,
             connect_args=self._get_connect_args(),
         )
 
-    async def get_cursor(self, query):
+    async def get_cursor(self, query: str):
         """Execute the passed query on the Async supported Database server and return cursor.
 
         Args:
@@ -224,7 +227,7 @@ class PostgreSQLClient:
             )
         )
 
-    async def get_tables_to_fetch(self, is_filtering=False):
+    async def get_tables_to_fetch(self, is_filtering: bool=False):
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
             self._logger.info("Fetching all tables")
@@ -394,7 +397,7 @@ class PostgreSQLDataSource(BaseDataSource):
     service_type = "postgresql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup connection to the PostgreSQL database-server configured by user
 
         Args:
@@ -418,7 +421,7 @@ class PostgreSQLDataSource(BaseDataSource):
             logger_=self._logger,
         )
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.postgresql_client.set_logger(self._logger)
 
     @classmethod
@@ -498,10 +501,10 @@ class PostgreSQLDataSource(BaseDataSource):
             },
         }
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[PostgreSQLAdvancedRulesValidator]:
         return [PostgreSQLAdvancedRulesValidator(self)]
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with the database-server configured by user"""
         self._logger.debug("Pinging the PostgreSQL instance")
         try:
@@ -666,7 +669,7 @@ class PostgreSQLDataSource(BaseDataSource):
     async def yield_rows_for_query(
         self,
         primary_key_columns,
-        tables,
+        tables: Optional[PyreReadOnly[Sized]],
         query=None,
         row_count=None,
         order_by_columns=None,

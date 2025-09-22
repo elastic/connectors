@@ -7,8 +7,10 @@
 from connectors.agent.logger import get_logger
 from connectors.protocol import ConnectorIndex
 from connectors.utils import generate_random_id
+from typing import Optional, Tuple
+from logging import Logger
 
-logger = get_logger("agent_connector_record_manager")
+logger: Logger = get_logger("agent_connector_record_manager")
 
 
 class ConnectorRecordManager:
@@ -17,10 +19,10 @@ class ConnectorRecordManager:
     exist in the connector index. It creates the connector record if necessary.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.connector_index = None
 
-    async def ensure_connector_records_exist(self, agent_config, connector_name=None):
+    async def ensure_connector_records_exist(self, agent_config, connector_name: Optional[str]=None) -> None:
         """
         Ensure that connector records exist for all connectors specified in the agent configuration.
 
@@ -71,7 +73,7 @@ class ConnectorRecordManager:
                     f"Skipping connector creation. Connector record for {connector_id} already exists."
                 )
 
-    def _check_agent_config_ready(self, agent_config):
+    def _check_agent_config_ready(self, agent_config) -> Tuple[bool, Optional[str]]:
         """
         Validates the agent configuration to check if all info is present to create a connector record.
 

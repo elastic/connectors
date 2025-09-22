@@ -15,7 +15,7 @@ CONFIG_FILE_PATH = ".cli/config.yml"
 
 
 class Auth:
-    def __init__(self, host, username=None, password=None, api_key=None):
+    def __init__(self, host, username=None, password=None, api_key=None) -> None:
         elastic_config = {
             "host": host,
             "username": username,
@@ -28,14 +28,14 @@ class Auth:
 
         self.cli_client = CLIClient(self.elastic_config)
 
-    def authenticate(self):
+    def authenticate(self) -> bool:
         if asyncio.run(self.__ping_es_client()):
             self.__save_config()
             return True
         else:
             return False
 
-    def is_config_present(self):
+    def is_config_present(self) -> bool:
         return os.path.isfile(CONFIG_FILE_PATH)
 
     async def __ping_es_client(self):

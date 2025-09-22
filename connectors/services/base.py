@@ -34,7 +34,7 @@ class ServiceAlreadyRunningError(Exception):
 _SERVICES = {}
 
 
-def get_services(names, config):
+def get_services(names, config) -> "MultiService":
     """Instantiates a list of services given their names and a config.
 
     returns a `MultiService` instance.
@@ -69,7 +69,7 @@ class BaseService(metaclass=_Registry):
 
     name = None  # using None here avoids registering this class
 
-    def __init__(self, config, service_name):
+    def __init__(self, config, service_name) -> None:
         self.config = config
         self.logger = DocumentLogger(
             f"[{service_name}]", {"service_name": service_name}
@@ -83,14 +83,14 @@ class BaseService(metaclass=_Registry):
         self._sleeps = CancellableSleeps()
         self.errors = [0, time.time()]
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
         self._sleeps.cancel()
 
     async def _run(self):
         raise NotImplementedError()
 
-    async def run(self):
+    async def run(self) -> None:
         """Runs the service"""
         if self.running:
             msg = f"{self.__class__.__name__} is already running."
@@ -102,7 +102,7 @@ class BaseService(metaclass=_Registry):
         finally:
             self.stop()
 
-    def raise_if_spurious(self, exception):
+    def raise_if_spurious(self, exception) -> None:
         errors, first = self.errors
         errors += 1
 
@@ -166,10 +166,10 @@ class BaseService(metaclass=_Registry):
 class MultiService:
     """Wrapper class to run multiple services against the same config."""
 
-    def __init__(self, *services):
+    def __init__(self, *services) -> None:
         self._services = services
 
-    async def run(self):
+    async def run(self) -> None:
         """Runs every service in a task and wait for all tasks."""
         tasks = [asyncio.create_task(service.run()) for service in self._services]
 
@@ -182,7 +182,7 @@ class MultiService:
             except asyncio.CancelledError:
                 logger.error("Service did not handle cancellation gracefully.")
 
-    def shutdown(self, sig):
+    def shutdown(self, sig) -> None:
         logger.info(f"Caught {sig}. Graceful shutdown.")
 
         for service in self._services:

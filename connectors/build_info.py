@@ -11,7 +11,7 @@ from connectors import __version__
 
 # This references a file that's built in .buildkite/publish/publish-common.sh
 # See https://github.com/elastic/connectors/pull/3154 for more info
-yaml_path = os.path.join(os.path.dirname(__file__), "build.yaml")
+yaml_path: str = os.path.join(os.path.dirname(__file__), "build.yaml")
 if os.path.exists(yaml_path):
     __build_info__ = ""
     with open(yaml_path) as f:

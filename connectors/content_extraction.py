@@ -28,11 +28,11 @@ class ContentExtraction:
         return __EXTRACTION_CONFIG
 
     @classmethod
-    def set_extraction_config(cls, extraction_config):
+    def set_extraction_config(cls, extraction_config) -> None:
         global __EXTRACTION_CONFIG
         __EXTRACTION_CONFIG = extraction_config
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.session = None
 
         self.extraction_config = ContentExtraction.get_extraction_config()
@@ -60,7 +60,7 @@ class ContentExtraction:
                 "Extraction service has been initialised but no extraction service configuration was found. No text will be extracted for this sync."
             )
 
-    def _check_configured(self):
+    def _check_configured(self) -> bool:
         if self.host is not None:
             return True
 
@@ -76,7 +76,7 @@ class ContentExtraction:
             headers=self.headers,
         )
 
-    async def _end_session(self):
+    async def _end_session(self) -> None:
         if not self.session:
             return
 

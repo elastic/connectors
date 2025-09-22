@@ -27,6 +27,7 @@ from connectors.utils import (
     func_human_readable_name,
     time_to_sleep_between_retries,
 )
+from typing import Tuple
 
 
 class License(Enum):
@@ -45,7 +46,7 @@ USER_AGENT_BASE = f"elastic-connectors-{__version__}"
 class ESClient:
     user_agent = f"{USER_AGENT_BASE}/service"
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         self.serverless = config.get("serverless", False)
         self.config = config
         self.configured_host = config.get("host", "http://localhost:9200")
@@ -114,11 +115,11 @@ class ESClient:
         self.client = AsyncElasticsearch(**options)
         self._keep_waiting = True
 
-    def stop_waiting(self):
+    def stop_waiting(self) -> None:
         self._keep_waiting = False
         self._sleeps.cancel()
 
-    async def has_active_license_enabled(self, license_):
+    async def has_active_license_enabled(self, license_) -> Tuple[bool, License]:
         """This method checks, whether an active license or a more powerful active license is enabled.
 
         Returns:
@@ -151,7 +152,7 @@ class ESClient:
             actual_license,
         )
 
-    async def close(self):
+    async def close(self) -> None:
         await self._retrier.close()
         await self.client.close()
 
@@ -208,8 +209,8 @@ class TransientElasticsearchRetrier:
         logger_,
         max_retries,
         retry_interval,
-        retry_strategy=RetryStrategy.LINEAR_BACKOFF,
-    ):
+        retry_strategy: RetryStrategy=RetryStrategy.LINEAR_BACKOFF,
+    ) -> None:
         self._logger = logger_
         self._sleeps = CancellableSleeps()
         self._keep_retrying = True
@@ -218,11 +219,11 @@ class TransientElasticsearchRetrier:
         self._retry_interval = retry_interval
         self._retry_strategy = retry_strategy
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         self._keep_retrying = False
 
-    async def _sleep(self, retry):
+    async def _sleep(self, retry) -> None:
         time_to_sleep = time_to_sleep_between_retries(
             self._retry_strategy, self._retry_interval, retry
         )
@@ -260,7 +261,7 @@ class TransientElasticsearchRetrier:
         raise RetryInterruptedError(msg)
 
 
-def with_concurrency_control(retries=3):
+def with_concurrency_control(retries: int=3):
     def wrapper(func):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):

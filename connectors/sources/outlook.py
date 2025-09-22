@@ -46,11 +46,14 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
+from aiohttp.client import ClientSession
+from ldap3.core.connection import Connection
+from typing import Optional, Any, Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
 
-QUEUE_MEM_SIZE = 5 * 1024 * 1024  # Size in Megabytes
+QUEUE_MEM_SIZE: int = 5 * 1024 * 1024  # Size in Megabytes
 
 OUTLOOK_SERVER = "outlook_server"
 OUTLOOK_CLOUD = "outlook_cloud"
@@ -73,7 +76,7 @@ SEARCH_FILTER_FOR_NORMAL_USERS = (
 )
 SEARCH_FILTER_FOR_ADMIN = "(&(objectClass=person)(|(cn=*admin*)(cn=*normal*)))"
 
-MAIL_TYPES = [
+MAIL_TYPES: List[Dict[str, str]] = [
     {
         "folder": "inbox",
         "constant": INBOX_MAIL_OBJECT,
@@ -167,19 +170,19 @@ def ews_format_to_datetime(source_datetime, timezone):
         return source_datetime
 
 
-def _prefix_email(email):
+def _prefix_email(email) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_display_name(user):
+def _prefix_display_name(user) -> Optional[str]:
     return prefix_identity("name", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
-def _prefix_job(job_title):
+def _prefix_job(job_title) -> Optional[str]:
     return prefix_identity("job_title", job_title)
 
 
@@ -214,14 +217,14 @@ class SSLFailed(Exception):
 
 
 class ManageCertificate:
-    async def store_certificate(self, certificate):
+    async def store_certificate(self, certificate: str) -> None:
         async with aiofiles.open(CERT_FILE, "w") as file:
             await file.write(certificate)
 
-    def get_certificate_path(self):
+    def get_certificate_path(self) -> str:
         return os.path.join(os.getcwd(), CERT_FILE)
 
-    async def remove_certificate_file(self):
+    async def remove_certificate_file(self) -> None:
         if os.path.exists(CERT_FILE):
             await remove(CERT_FILE)
 
@@ -229,7 +232,7 @@ class ManageCertificate:
 class RootCAAdapter(requests.adapters.HTTPAdapter):
     """Class to verify SSL Certificate for Exchange Servers"""
 
-    def cert_verify(self, conn, url, verify, cert):
+    def cert_verify(self, conn, url, verify, cert) -> None:
         try:
             super().cert_verify(
                 conn=conn,
@@ -247,7 +250,7 @@ class ExchangeUsers:
 
     def __init__(
         self, ad_server, domain, exchange_server, user, password, ssl_enabled, ssl_ca
-    ):
+    ) -> None:
         self.ad_server = Server(host=ad_server)
         self.domain = domain
         self.exchange_server = exchange_server
@@ -257,7 +260,7 @@ class ExchangeUsers:
         self.ssl_ca = ssl_ca
 
     @cached_property
-    def _create_connection(self):
+    def _create_connection(self) -> Connection:
         return Connection(
             server=self.ad_server,
             user=self.user,
@@ -266,10 +269,10 @@ class ExchangeUsers:
             auto_bind=True,  # pyright: ignore
         )
 
-    async def close(self):
+    async def close(self) -> None:
         await ManageCertificate().remove_certificate_file()
 
-    def _fetch_normal_users(self, search_query):
+    def _fetch_normal_users(self, search_query: str):
         try:
             has_value_for_normal_users, _, response, _ = self._create_connection.search(
                 search_query,
@@ -288,7 +291,7 @@ class ExchangeUsers:
             msg = f"Something went wrong while fetching users. Error: {e}"
             raise UsersFetchFailed(msg) from e
 
-    def _fetch_admin_users(self, search_query):
+    def _fetch_admin_users(self, search_query: str):
         try:
             (
                 has_value_for_admin_users,
@@ -352,16 +355,16 @@ class ExchangeUsers:
 class Office365Users:
     """Fetch users from Office365 Active Directory"""
 
-    def __init__(self, client_id, client_secret, tenant_id):
+    def __init__(self, client_id, client_secret, tenant_id) -> None:
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.client_secret = client_secret
 
     @cached_property
-    def _get_session(self):
+    def _get_session(self) -> ClientSession:
         return aiohttp.ClientSession(raise_for_status=True)
 
-    async def close(self):
+    async def close(self) -> None:
         await self._get_session.close()
         del self._get_session
 
@@ -588,7 +591,7 @@ class OutlookDocFormatter:
 class OutlookClient:
     """Outlook client to handle API calls made to Outlook"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -601,11 +604,11 @@ class OutlookClient:
         else:
             self.ssl_ca = ""
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @cached_property
-    def _get_user_instance(self):
+    def _get_user_instance(self) -> Union[ExchangeUsers, Office365Users]:
         if self.is_cloud:
             return Office365Users(
                 client_id=self.configuration["client_id"],
@@ -628,7 +631,7 @@ class OutlookClient:
         async for user in self._get_user_instance.get_users():
             yield user
 
-    async def ping(self):
+    async def ping(self) -> None:
         await anext(self._get_user_instance.get_users())
 
     async def get_mails(self, account):
@@ -681,7 +684,7 @@ class OutlookDataSource(BaseDataSource):
     incremental_sync_enabled = True
     dls_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the Outlook
 
         Args:
@@ -693,14 +696,14 @@ class OutlookDataSource(BaseDataSource):
         self.doc_formatter = OutlookDocFormatter()
 
     @cached_property
-    def client(self):
+    def client(self) -> OutlookClient:
         return OutlookClient(configuration=self.configuration)
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[List[Union[Dict[str, str], Dict[str, Union[bool, str]]]], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for Outlook
 
         Returns:
@@ -833,7 +836,7 @@ class OutlookDataSource(BaseDataSource):
             elif users.get("attributes", {}).get("mail"):
                 yield await self._user_access_control_doc_for_server(users=users)
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
         user_id = user.get("id", "")
         display_name = user.get("displayName", "")
         user_email = user.get("mail", "")
@@ -856,7 +859,7 @@ class OutlookDataSource(BaseDataSource):
             access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
         )
 
-    async def _user_access_control_doc_for_server(self, users):
+    async def _user_access_control_doc_for_server(self, users) -> Dict[str, Any]:
         name_metadata = users.get("dn", "").split("=", 1)[1]
         display_name = name_metadata.split(",", 1)[0]
         user_email = users.get("attributes", {}).get("mail")
@@ -884,10 +887,10 @@ class OutlookDataSource(BaseDataSource):
             )
         return document
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client._get_user_instance.close()
 
-    async def get_content(self, attachment, timezone, timestamp=None, doit=False):
+    async def get_content(self, attachment, timezone, timestamp=None, doit: bool=False):
         """Extracts the content for allowed file types.
 
         Args:
@@ -1059,7 +1062,7 @@ class OutlookDataSource(BaseDataSource):
             ):
                 yield doc
 
-    async def ping(self):
+    async def ping(self) -> None:
         """Verify the connection with Outlook"""
         await self.client.ping()
         self._logger.info("Successfully connected to Outlook")

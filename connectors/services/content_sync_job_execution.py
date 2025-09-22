@@ -13,15 +13,15 @@ from connectors.services.job_execution import JobExecutionService
 class ContentSyncJobExecutionService(JobExecutionService):
     name = "sync_content"
 
-    def __init__(self, config):
+    def __init__(self, config) -> None:
         super().__init__(config, "content_sync_job_execution_service")
 
     @cached_property
-    def display_name(self):
+    def display_name(self) -> str:
         return "content sync job execution"
 
     @cached_property
-    def max_concurrency_config(self):
+    def max_concurrency_config(self) -> str:
         return "service.max_concurrent_content_syncs"
 
     @cached_property
@@ -32,7 +32,7 @@ class ContentSyncJobExecutionService(JobExecutionService):
     def max_concurrency(self):
         return self.service_config.get("max_concurrent_content_syncs")
 
-    def should_execute(self, connector, sync_job):
+    def should_execute(self, connector, sync_job) -> bool:
         if connector.last_sync_status == JobStatus.IN_PROGRESS:
             sync_job.log_debug("Connector is still syncing content, skip the job...")
             return False

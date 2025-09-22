@@ -30,6 +30,7 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from typing import Tuple, Any, Dict
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -38,7 +39,7 @@ RESULTS_SIZE = 999
 CURSOR_SEQUENCE_ID_KEY = "sequence_id"
 
 
-def extract_sandfly_date(datestr):
+def extract_sandfly_date(datestr: str) -> datetime:
     return datetime.strptime(datestr, "%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -73,7 +74,7 @@ class SandflyNotLicensed(Exception):
 
 
 class SandflyAccessToken:
-    def __init__(self, http_session, configuration, logger_):
+    def __init__(self, http_session, configuration, logger_) -> None:
         self._token_cache = CacheWithTimeout()
         self._http_session = http_session
         self._logger = logger_
@@ -82,10 +83,10 @@ class SandflyAccessToken:
         self.username = configuration["username"]
         self.password = configuration["password"]
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def get(self, is_cache=True):
+    async def get(self, is_cache: bool=True):
         cached_value = self._token_cache.get_value() if is_cache else None
 
         if cached_value:
@@ -125,20 +126,20 @@ class SandflyAccessToken:
 
 
 class SandflySession:
-    def __init__(self, http_session, token, logger_):
+    def __init__(self, http_session, token, logger_) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger_
 
         self._http_session = http_session
         self._token = token
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         self._sleeps.cancel()
 
-    async def ping(self, server_url):
+    async def ping(self, server_url) -> bool:
         try:
             await self._http_session.head(server_url)
             return True
@@ -241,7 +242,7 @@ class SandflySession:
 
 
 class SandflyClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger
 
@@ -268,16 +269,16 @@ class SandflyClient:
             logger_=self._logger,
         )
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
         self.token.set_logger(self._logger)
         self.client.set_logger(self._logger)
 
-    async def close(self):
+    async def close(self) -> None:
         await self.http_session.close()
         self.client.close()
 
-    async def ping(self):
+    async def ping(self) -> bool:
         try:
             await self.client.ping(self.server_url)
             self._logger.info(
@@ -445,7 +446,7 @@ class SandflyDataSource(BaseDataSource):
     service_type = "sandfly"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         super().__init__(configuration=configuration)
         self._logger = logger
 
@@ -457,7 +458,7 @@ class SandflyDataSource(BaseDataSource):
         self.fetch_days = self.configuration["fetch_days"]
 
     @cached_property
-    def client(self):
+    def client(self) -> SandflyClient:
         return SandflyClient(configuration=self.configuration)
 
     @classmethod
@@ -512,14 +513,14 @@ class SandflyDataSource(BaseDataSource):
             },
         }
 
-    async def ping(self):
+    async def ping(self) -> bool:
         try:
             await self.client.ping()
             return True
         except Exception:
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client.close()
 
     def init_sync_cursor(self):
@@ -531,7 +532,7 @@ class SandflyDataSource(BaseDataSource):
 
         return self._sync_cursor
 
-    def _format_doc(self, doc_id, doc_time, doc_text, doc_field, doc_data):
+    def _format_doc(self, doc_id, doc_time, doc_text, doc_field, doc_data) -> Dict[str, Any]:
         document = {
             "_id": doc_id,
             "_timestamp": doc_time,
@@ -569,7 +570,7 @@ class SandflyDataSource(BaseDataSource):
 
         return friendly, doc_id
 
-    def extract_host_data(self, host_item):
+    def extract_host_data(self, host_item) -> Tuple[str, str]:
         hostid = host_item["host_id"]
         hostname = host_item["hostname"]
 
@@ -588,7 +589,7 @@ class SandflyDataSource(BaseDataSource):
 
         return key_data, doc_id
 
-    def validate_license(self, license_data):
+    def validate_license(self, license_data) -> None:
         customer = license_data["customer"]["name"]
         expiry = license_data["date"]["expiry"]
 

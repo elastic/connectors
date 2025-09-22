@@ -15,8 +15,9 @@ from connectors.agent.logger import get_logger
 from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHandler
 from connectors.agent.service_manager import ConnectorServiceManager
 from connectors.services.base import MultiService
+from logging import Logger
 
-logger = get_logger("component")
+logger: Logger = get_logger("component")
 
 CONNECTOR_SERVICE = "connector-service"
 
@@ -30,7 +31,7 @@ class ConnectorsAgentComponent:
     and provides applied interface to be able to run it in 2 simple methods: run and stop.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Inits the class.
 
         Init should be safe to call without expectations of side effects (connections to Agent, blocking or anything).
@@ -42,7 +43,7 @@ class ConnectorsAgentComponent:
         self.buffer = sys.stdin.buffer
         self.config_wrapper = ConnectorsAgentConfigurationWrapper()
 
-    async def run(self):
+    async def run(self) -> None:
         """Start reading from Agent protocol and run Connectors Service with settings reported by agent.
 
         This method can block if it's not running from Agent - it expects the client to be able to read messages
@@ -72,7 +73,7 @@ class ConnectorsAgentComponent:
 
         await self.multi_service.run()
 
-    def stop(self, sig):
+    def stop(self, sig) -> None:
         """Shutdown everything running in the component.
 
         Attempts to gracefully shutdown the services that are running under the component.

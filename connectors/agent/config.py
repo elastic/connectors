@@ -8,8 +8,9 @@ import base64
 from connectors.agent.logger import get_logger
 from connectors.config import add_defaults
 from connectors.utils import nested_get_from_dict
+from logging import Logger
 
-logger = get_logger("config")
+logger: Logger = get_logger("config")
 
 
 class ConnectorsAgentConfigurationWrapper:
@@ -21,7 +22,7 @@ class ConnectorsAgentConfigurationWrapper:
     - Indicating that configuration has changed so that the user of the class can trigger the restart
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Inits the class.
 
         There's default config that allows us to run connectors service. When final
@@ -37,7 +38,7 @@ class ConnectorsAgentConfigurationWrapper:
 
         self.specific_config = {}
 
-    def try_update(self, connector_id, service_type, output_unit):
+    def try_update(self, connector_id, service_type, output_unit) -> bool:
         """Try update the configuration and see if it changed.
 
         This method takes the check-in event data (connector_id, service_type and output) coming
@@ -103,7 +104,7 @@ class ConnectorsAgentConfigurationWrapper:
         logger.debug("No changes detected for connectors-relevant configurations")
         return False
 
-    def config_changed(self, new_config):
+    def config_changed(self, new_config) -> bool:
         """See if configuration passed in new_config will update currently stored configuration
 
         This method takes the new configuration received from the agent and see if there are any changes

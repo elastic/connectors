@@ -10,6 +10,8 @@ from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.utils import RetryStrategy, retryable
+from pyre_extensions import PyreReadOnly
+from typing import List, Optional, Sized
 
 WILDCARD = "*"
 
@@ -43,11 +45,11 @@ def configured_tables(tables):
     )
 
 
-def is_wildcard(tables):
+def is_wildcard(tables) -> bool:
     return tables in (WILDCARD, [WILDCARD])
 
 
-def map_column_names(column_names, schema=None, tables=None):
+def map_column_names(column_names, schema=None, tables: Optional[PyreReadOnly[Sized]]=None) -> List[str]:
     prefix = ""
     if schema and len(schema.strip()) > 0:
         prefix += schema.strip() + "_"
@@ -56,7 +58,7 @@ def map_column_names(column_names, schema=None, tables=None):
     return [f"{prefix}{column}".lower() for column in column_names]
 
 
-def hash_id(tables, row, primary_key_columns):
+def hash_id(tables, row, primary_key_columns) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:
@@ -76,9 +78,9 @@ def hash_id(tables, row, primary_key_columns):
 
 async def fetch(
     cursor_func,
-    fetch_columns=False,
-    fetch_size=DEFAULT_FETCH_SIZE,
-    retry_count=DEFAULT_RETRY_COUNT,
+    fetch_columns: bool=False,
+    fetch_size: int=DEFAULT_FETCH_SIZE,
+    retry_count: int=DEFAULT_RETRY_COUNT,
 ):
     @retryable(
         retries=retry_count,

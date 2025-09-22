@@ -11,7 +11,7 @@ from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 from connectors.content_extraction import ContentExtraction
 
 
-def test_set_and_get_configuration():
+def test_set_and_get_configuration() -> None:
     config = {
         "extraction_service": {
             "host": "http://localhost:8090",
@@ -36,7 +36,7 @@ def test_set_and_get_configuration():
         ({"extraction_service": {"not_a_host": "!!!m"}}, False),
     ],
 )
-def test_check_configured(mock_config, expected_result):
+def test_check_configured(mock_config, expected_result) -> None:
     with patch(
         "connectors.content_extraction.ContentExtraction.get_extraction_config",
         return_value=mock_config.get("extraction_service", None),
@@ -46,7 +46,7 @@ def test_check_configured(mock_config, expected_result):
 
 
 @pytest.mark.asyncio
-async def test_extract_text(mock_responses, patch_logger):
+async def test_extract_text(mock_responses, patch_logger) -> None:
     filepath = "tmp/notreal.txt"
     url = "http://localhost:8090/extract_text/"
     payload = {"extracted_text": "I've been extracted!"}
@@ -73,7 +73,7 @@ async def test_extract_text(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_extract_text_with_file_pointer(mock_responses, patch_logger):
+async def test_extract_text_with_file_pointer(mock_responses, patch_logger) -> None:
     filepath = "/tmp/notreal.txt"
     url = "http://localhost:8090/extract_text/?local_file_path=/tmp/notreal.txt"
     payload = {"extracted_text": "I've been extracted from a local file!"}
@@ -104,7 +104,7 @@ async def test_extract_text_with_file_pointer(mock_responses, patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_extract_text_when_host_is_none(mock_responses, patch_logger):
+async def test_extract_text_when_host_is_none(mock_responses, patch_logger) -> None:
     filepath = "/tmp/notreal.txt"
 
     with (
@@ -134,7 +134,7 @@ async def test_extract_text_when_host_is_none(mock_responses, patch_logger):
 @pytest.mark.asyncio
 async def test_extract_text_when_response_isnt_200_logs_warning(
     mock_responses, patch_logger
-):
+) -> None:
     filepath = "tmp/notreal.txt"
     url = "http://localhost:8090/extract_text/"
 
@@ -167,7 +167,7 @@ async def test_extract_text_when_response_isnt_200_logs_warning(
 
 
 @pytest.mark.asyncio
-async def test_extract_text_when_response_is_error(mock_responses, patch_logger):
+async def test_extract_text_when_response_is_error(mock_responses, patch_logger) -> None:
     filepath = "tmp/notreal.txt"
 
     with (
@@ -194,7 +194,7 @@ async def test_extract_text_when_response_is_error(mock_responses, patch_logger)
 
 
 @pytest.mark.asyncio
-async def test_extract_text_when_response_is_timeout(mock_responses, patch_logger):
+async def test_extract_text_when_response_is_timeout(mock_responses, patch_logger) -> None:
     filepath = "tmp/notreal.txt"
 
     with (
@@ -223,7 +223,7 @@ async def test_extract_text_when_response_is_timeout(mock_responses, patch_logge
 @pytest.mark.asyncio
 async def test_extract_text_when_response_is_200_with_error_logs_warning(
     mock_responses, patch_logger
-):
+) -> None:
     filepath = "tmp/notreal.txt"
     url = "http://localhost:8090/extract_text/"
 

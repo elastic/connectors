@@ -42,41 +42,41 @@ class ESDocument:
             return default
         return value
 
-    async def reload(self):
+    async def reload(self) -> None:
         doc_source = await self.index.fetch_response_by_id(self.id)
         self._seq_no = doc_source.get("_seq_no")
         self._primary_term = doc_source.get("_primary_term")
         self._source = doc_source.get("_source", {})
 
-    def log_debug(self, msg, *args, **kwargs):
+    def log_debug(self, msg, *args, **kwargs) -> None:
         self.logger.debug(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_info(self, msg, *args, **kwargs):
+    def log_info(self, msg, *args, **kwargs) -> None:
         self.logger.info(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_warning(self, msg, *args, **kwargs):
+    def log_warning(self, msg, *args, **kwargs) -> None:
         self.logger.warning(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_error(self, msg, *args, **kwargs):
+    def log_error(self, msg, *args, **kwargs) -> None:
         self.logger.error(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_exception(self, msg, *args, exc_info=True, **kwargs):
+    def log_exception(self, msg, *args, exc_info: bool=True, **kwargs) -> None:
         self.logger.exception(
             msg,
             *args,
@@ -84,21 +84,21 @@ class ESDocument:
             **kwargs,
         )
 
-    def log_critical(self, msg, *args, **kwargs):
+    def log_critical(self, msg, *args, **kwargs) -> None:
         self.logger.critical(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_fatal(self, msg, *args, **kwargs):
+    def log_fatal(self, msg, *args, **kwargs) -> None:
         self.logger.fatal(
             msg,
             *args,
             **kwargs,
         )
 
-    def _prefix(self):
+    def _prefix(self) -> None:
         """Return a string which will be prefixed to the log message when filebeat is not turned on"""
         return None
 

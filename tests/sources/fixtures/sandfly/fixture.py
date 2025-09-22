@@ -12,12 +12,14 @@ from datetime import datetime, timedelta
 from flask import Flask
 
 from tests.commons import WeightedFakeProvider
+from typing import Any, Dict, List, Union
+from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider()
 
-fake = fake_provider.fake
+fake: Faker = fake_provider.fake
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -40,13 +42,13 @@ match DATA_SIZE:
         raise Exception(msg)
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     total_docs = HOSTS_COUNT + KEYS_COUNT + (RESULTS_LOOP * RESULTS_COUNT)
     print(total_docs)
 
 
 class SandflyAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.results_start = 0
         self.results_stop = 0
@@ -62,7 +64,7 @@ class SandflyAPI:
         )
         self.app.route("/v4/results", methods=["POST"])(self.get_results)
 
-    def do_ping(self):
+    def do_ping(self) -> Dict[str, Union[int, str]]:
         return {
             "data": "",
             "detail": "authentication failed",
@@ -70,13 +72,13 @@ class SandflyAPI:
             "title": "Unauthorized",
         }
 
-    def get_access_token(self):
+    def get_access_token(self) -> Dict[str, str]:
         return {
             "access_token": "Token#123",
             "refresh_token": "Refresh#123",
         }
 
-    def get_license(self):
+    def get_license(self) -> Dict[str, Union[Dict[str, Any], int]]:
         def _format_date(date):
             return date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -89,7 +91,7 @@ class SandflyAPI:
             "limits": {"features": ["demo", "elasticsearch_replication"]},
         }
 
-    def get_hosts(self):
+    def get_hosts(self) -> Dict[str, List[Dict[str, Any]]]:
         return {
             "data": [
                 {
@@ -101,13 +103,13 @@ class SandflyAPI:
             ],
         }
 
-    def get_ssh_summary(self):
+    def get_ssh_summary(self) -> Dict[str, Union[List[Dict[str, str]], bool]]:
         return {
             "more_results": False,
             "data": [{"id": f"{key_id}"} for key_id in range(1, KEYS_COUNT + 1)],
         }
 
-    def get_ssh_key(self, key_id):
+    def get_ssh_key(self, key_id) -> Dict[str, str]:
         return {
             "id": key_id,
             "friendly_name": f"key{key_id} " + fake.word() + " " + fake.word(),

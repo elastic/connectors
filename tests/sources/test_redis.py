@@ -21,6 +21,7 @@ from connectors.sources.redis import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from typing import Dict, List, Set
 
 ADVANCED_SNIPPET = "advanced_snippet"
 
@@ -38,46 +39,46 @@ DOCUMENTS = [
 
 
 class RedisClientMock:
-    async def execute_command(self, SELECT="JSON.GET", key="json_key"):
+    async def execute_command(self, SELECT: str="JSON.GET", key: str="json_key") -> str:
         return json.dumps({"1": "1", "2": "2"})
 
-    async def zrange(self, key, start, skip, withscores=True):
+    async def zrange(self, key, start, skip, withscores: bool=True) -> Set[int]:
         return {1, 2, 3}
 
-    async def smembers(self, key):
+    async def smembers(self, key) -> Set[int]:
         return {1, 2, 3}
 
-    async def get(self, key):
+    async def get(self, key) -> str:
         return "this is value"
 
-    async def hgetall(self, key):
+    async def hgetall(self, key) -> str:
         return "hash"
 
-    async def xread(self, key):
+    async def xread(self, key) -> str:
         return "stream"
 
-    async def lrange(self, key, start, skip):
+    async def lrange(self, key, start, skip) -> List[int]:
         return [1, 2, 3]
 
-    async def config_get(self, databases):
+    async def config_get(self, databases) -> Dict[str, str]:
         return {"databases": "1"}
 
-    async def ping(self):
+    async def ping(self) -> bool:
         return False
 
-    async def aclose(self):
+    async def aclose(self) -> bool:
         return True
 
-    async def type(self, key):  # NOQA
+    async def type(self, key) -> str:  # NOQA
         return "string"
 
-    async def memory_usage(self, key):
+    async def memory_usage(self, key) -> int:
         return 10
 
     async def scan_iter(self, match, count, _type):
         yield "0"
 
-    async def validate_database(self, db=0):
+    async def validate_database(self, db: int=0) -> None:
         await self.execute_command()
 
 
@@ -95,14 +96,14 @@ async def create_redis_source():
 
 
 @pytest.mark.asyncio
-async def test_ping_positive():
+async def test_ping_positive() -> None:
     async with create_redis_source() as source:
         source.client.ping = AsyncMock()
         await source.ping()
 
 
 @pytest.mark.asyncio
-async def test_ping_negative():
+async def test_ping_negative() -> None:
     async with create_redis_source() as source:
         mocked_client = AsyncMock()
         with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
@@ -114,7 +115,7 @@ async def test_ping_negative():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_database_is_not_integer():
+async def test_validate_config_when_database_is_not_integer() -> None:
     async with create_redis_source() as source:
         source.client.database = ["db123", "db456"]
         with mock.patch("redis.asyncio.from_url", return_value=AsyncMock()):
@@ -123,7 +124,7 @@ async def test_validate_config_when_database_is_not_integer():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_wrong_configuration():
+async def test_validate_config_with_wrong_configuration() -> None:
     async with create_redis_source() as source:
         mocked_client = AsyncMock()
         with mock.patch("redis.asyncio.from_url", return_value=mocked_client):
@@ -135,7 +136,7 @@ async def test_validate_config_with_wrong_configuration():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_database_is_invalid():
+async def test_validate_config_when_database_is_invalid() -> None:
     async with create_redis_source() as source:
         source.client.database = ["123"]
         source.client.validate_database = AsyncMock(return_value=False)
@@ -146,7 +147,7 @@ async def test_validate_config_when_database_is_invalid():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19+00:00")
-async def test_get_docs():
+async def test_get_docs() -> None:
     async with create_redis_source() as source:
         source.client.database = [1]
 
@@ -160,7 +161,7 @@ async def test_get_docs():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_for_multiple_db():
+async def test_get_databases_for_multiple_db() -> None:
     async with create_redis_source() as source:
         source.client.database = [1, 2]
         async for database in source.client.get_databases():
@@ -168,7 +169,7 @@ async def test_get_databases_for_multiple_db():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_with_asterisk():
+async def test_get_databases_with_asterisk() -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client._client = RedisClientMock()
@@ -177,7 +178,7 @@ async def test_get_databases_with_asterisk():
 
 
 @pytest.mark.asyncio
-async def test_get_databases_expect_no_databases_on_auth_error():
+async def test_get_databases_expect_no_databases_on_auth_error() -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         mocked_client = AsyncMock()
@@ -202,7 +203,7 @@ async def test_get_databases_expect_no_databases_on_auth_error():
         ("stream_key", "stream", "stream"),
     ],
 )
-async def test_get_key_value(key, key_type, expected_response):
+async def test_get_key_value(key, key_type, expected_response) -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client._client = RedisClientMock()
@@ -212,7 +213,7 @@ async def test_get_key_value(key, key_type, expected_response):
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19+00:00")
-async def test_get_key_metadata():
+async def test_get_key_metadata() -> None:
     async with create_redis_source() as source:
         source.client._client = RedisClientMock()
         key_type, value, size = await source.client.get_key_metadata(key="0")
@@ -223,7 +224,7 @@ async def test_get_key_metadata():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19+00:00")
-async def test_get_db_records():
+async def test_get_db_records() -> None:
     async with create_redis_source() as source:
         source.client._client = RedisClientMock()
         source.client.get_paginated_key = AsyncIterator(["0"])
@@ -247,7 +248,7 @@ async def test_get_db_records():
 )
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19+00:00")
-async def test_get_docs_with_sync_rules(filtering):
+async def test_get_docs_with_sync_rules(filtering) -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client._client = Mock()
@@ -336,7 +337,7 @@ async def test_get_docs_with_sync_rules(filtering):
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules, expected_validation_result) -> None:
     async with create_redis_source() as source:
         source.client._client = RedisClientMock()
         validation_result = await RedisAdvancedRulesValidator(source).validate(
@@ -346,7 +347,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 
 
 @pytest.mark.asyncio
-async def test_client_when_mutual_ssl_enabled():
+async def test_client_when_mutual_ssl_enabled() -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client.ssl_enabled = True
@@ -362,7 +363,7 @@ async def test_client_when_mutual_ssl_enabled():
 
 
 @pytest.mark.asyncio
-async def test_client_when_ssl_enabled():
+async def test_client_when_ssl_enabled() -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client.ssl_enabled = True
@@ -376,7 +377,7 @@ async def test_client_when_ssl_enabled():
 
 
 @pytest.mark.asyncio
-async def test_ping_when_mutual_ssl_enabled():
+async def test_ping_when_mutual_ssl_enabled() -> None:
     async with create_redis_source() as source:
         source.client.database = ["*"]
         source.client.ssl_enabled = True

@@ -21,7 +21,7 @@ from tests.sources.support import create_source
 
 
 class JSONAsyncMock(AsyncMock):
-    def __init__(self, json, status, *args, **kwargs):
+    def __init__(self, json, status, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._json = json
         self.status = status
@@ -30,7 +30,7 @@ class JSONAsyncMock(AsyncMock):
         return self._json
 
 
-def get_json_mock(mock_response, status):
+def get_json_mock(mock_response, status) -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(json=mock_response, status=status)
@@ -42,8 +42,8 @@ def get_json_mock(mock_response, status):
 async def create_graphql_source(
     headers=None,
     graphql_variables=None,
-    graphql_query="{users {name {firstName } } }",
-    graphql_object_to_id_map='{"users": "id"}',
+    graphql_query: str="{users {name {firstName } } }",
+    graphql_object_to_id_map: str='{"users": "id"}',
 ):
     async with create_source(
         GraphQLDataSource,
@@ -86,7 +86,7 @@ async def create_graphql_source(
         ),
     ],
 )
-async def test_extract_graphql_data_items(object_list, data, expected_result):
+async def test_extract_graphql_data_items(object_list, data, expected_result) -> None:
     actual_response = []
     async with create_graphql_source() as source:
         source.graphql_client.graphql_object_to_id_map = object_list
@@ -96,7 +96,7 @@ async def test_extract_graphql_data_items(object_list, data, expected_result):
 
 
 @pytest.mark.asyncio
-async def test_get():
+async def test_get() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.session.get = Mock(
             return_value=get_json_mock(
@@ -109,7 +109,7 @@ async def test_get():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_errors():
+async def test_get_with_errors() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.session.get = Mock(
             return_value=get_json_mock(
@@ -124,7 +124,7 @@ async def test_get_with_errors():
 
 
 @pytest.mark.asyncio
-async def test_post():
+async def test_post() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
             return_value=get_json_mock(
@@ -137,7 +137,7 @@ async def test_post():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_post_with_errors():
+async def test_post_with_errors() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
             return_value=get_json_mock(
@@ -153,7 +153,7 @@ async def test_post_with_errors():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_make_request_with_unauthorized():
+async def test_make_request_with_unauthorized() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
             side_effect=ClientResponseError(
@@ -170,7 +170,7 @@ async def test_make_request_with_unauthorized():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_make_request_with_429_exception():
+async def test_make_request_with_429_exception() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.session.post = Mock(
             side_effect=ClientResponseError(
@@ -186,7 +186,7 @@ async def test_make_request_with_429_exception():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_url():
+async def test_validate_config_with_invalid_url() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.url = "dummy_url"
         with pytest.raises(ConfigurableFieldValueError):
@@ -194,7 +194,7 @@ async def test_validate_config_with_invalid_url():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_mutation():
+async def test_validate_config_with_mutation() -> None:
     async with create_graphql_source(
         graphql_query="""mutation {
                     addCategory(id: 6, name: "Green Fruits", products: [8, 2, 3]) {
@@ -210,21 +210,21 @@ async def test_validate_config_with_mutation():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_non_json_headers():
+async def test_validate_config_with_non_json_headers() -> None:
     async with create_graphql_source(headers="Invalid Headers") as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_non_json_variables():
+async def test_validate_config_with_non_json_variables() -> None:
     async with create_graphql_source(graphql_variables="Invalid Variables") as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.post = AsyncMock()
         await source.ping()
@@ -232,7 +232,7 @@ async def test_ping():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_ping_negative():
+async def test_ping_negative() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.post = AsyncMock(side_effect=Exception())
         with pytest.raises(Exception):
@@ -240,7 +240,7 @@ async def test_ping_negative():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data():
+async def test_fetch_data() -> None:
     expected_response = [{"id": "1", "name": {"firstName": "xyz"}, "_id": "1"}]
     actual_response = []
     async with create_graphql_source() as source:
@@ -257,7 +257,7 @@ async def test_fetch_data():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data_with_pagination():
+async def test_fetch_data_with_pagination() -> None:
     expected_response = [
         {
             "id": "1",
@@ -305,7 +305,7 @@ async def test_fetch_data_with_pagination():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data_without_pageinfo():
+async def test_fetch_data_without_pageinfo() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.pagination_model = "cursor_pagination"
         source.graphql_client.graphql_object_to_id_map = {"users": id}
@@ -320,7 +320,7 @@ async def test_fetch_data_without_pageinfo():
 
 @pytest.mark.asyncio
 @freeze_time("2024-01-24T04:07:19")
-async def test_get_docs():
+async def test_get_docs() -> None:
     expected_response = [
         {
             "name": "xyz",
@@ -358,7 +358,7 @@ async def test_get_docs():
 
 @pytest.mark.asyncio
 @freeze_time("2024-01-24T04:07:19")
-async def test_get_docs_with_dict_id():
+async def test_get_docs_with_dict_id() -> None:
     async with create_graphql_source() as source:
         source.fetch_data = AsyncIterator(
             [
@@ -371,7 +371,7 @@ async def test_get_docs_with_dict_id():
 
 
 @pytest.mark.asyncio
-async def test_extract_graphql_data_items_with_invalid_key():
+async def test_extract_graphql_data_items_with_invalid_key() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.graphql_object_to_id_map = {"user": "id"}
         data = {"users": {"namexyzid": "123"}}
@@ -381,7 +381,7 @@ async def test_extract_graphql_data_items_with_invalid_key():
 
 
 @pytest.mark.asyncio
-async def test_extract_pagination_info_with_invalid_key():
+async def test_extract_pagination_info_with_invalid_key() -> None:
     async with create_graphql_source() as source:
         source.pagination_key = ["users_data.user"]
         data = {"users_data": {"users": {"namexyzid": "123"}}}
@@ -391,7 +391,7 @@ async def test_extract_pagination_info_with_invalid_key():
 
 
 @pytest.mark.asyncio
-async def test_is_query_with_mutation_query():
+async def test_is_query_with_mutation_query() -> None:
     async with create_graphql_source() as source:
         ast = parse("mutation Login($email: String!){login(email: $email) { token }}")
         response = source.is_query(ast)
@@ -399,7 +399,7 @@ async def test_is_query_with_mutation_query():
 
 
 @pytest.mark.asyncio
-async def test_is_query_with_invalid_query():
+async def test_is_query_with_invalid_query() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.graphql_query = "invalid_query {user {}}"
         with pytest.raises(ConfigurableFieldValueError):
@@ -407,7 +407,7 @@ async def test_is_query_with_invalid_query():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_objects():
+async def test_validate_config_with_invalid_objects() -> None:
     async with create_graphql_source() as source:
         source.graphql_client.graphql_query = (
             "query {organization {repository { issues {name}}}}"
@@ -420,7 +420,7 @@ async def test_validate_config_with_invalid_objects():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_pagination_key():
+async def test_validate_config_with_invalid_pagination_key() -> None:
     async with create_graphql_source(
         graphql_object_to_id_map='{"organization.repository.issues": "id"}'
     ) as source:
@@ -434,7 +434,7 @@ async def test_validate_config_with_invalid_pagination_key():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_missing_config_field():
+async def test_validate_config_with_missing_config_field() -> None:
     async with create_graphql_source(
         graphql_object_to_id_map='{"organization.repository.issues": "id"}'
     ) as source:
@@ -446,7 +446,7 @@ async def test_validate_config_with_missing_config_field():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_with_invalid_json():
+async def test_validate_config_with_invalid_json() -> None:
     async with create_graphql_source(
         graphql_object_to_id_map='{"organization.repository.issues": "id"'
     ) as source:

@@ -12,13 +12,15 @@ from flask_limiter import HEADERS, Limiter
 from flask_limiter.util import get_remote_address
 
 from tests.commons import WeightedFakeProvider
+from _io import BytesIO
+from typing import Any, Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
 app = Flask(__name__)
 
 
-THROTTLING = os.environ.get("THROTTLING", False)
+THROTTLING: Union[bool, str] = os.environ.get("THROTTLING", False)
 PRE_REQUEST_SLEEP = float(os.environ.get("PRE_REQUEST_SLEEP", "0.05"))
 
 if THROTTLING:
@@ -64,7 +66,7 @@ def adjust_document_id_size(doc_id):
     return f"{doc_id}-{addition}"
 
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -92,10 +94,10 @@ match DATA_SIZE:
 MESSAGES_TO_DELETE = 10
 EVENTS_TO_DELETE = 1
 
-ROOT = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
+ROOT: str = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     # I tried to do the maths, but it's not possible without diving too deep into the connector
     # Therefore, doing naive way - just ran connector and took the number from the test
     expected_count = 0
@@ -111,7 +113,7 @@ def get_num_docs():
 
 
 class MicrosoftTeamsAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.app.route("/me", methods=["GET"])(self.get_myself)
 
@@ -150,7 +152,7 @@ class MicrosoftTeamsAPI:
 
         self.app.route("/sites/list.txt", methods=["GET"])(self.download_file)
 
-    def get_myself(self):
+    def get_myself(self) -> Dict[str, Any]:
         return {
             "displayName": "Alex Wilber",
             "givenName": "Alex",
@@ -159,7 +161,7 @@ class MicrosoftTeamsAPI:
             "id": adjust_document_id_size("me-1"),
         }
 
-    def get_user_chats(self):
+    def get_user_chats(self) -> Dict[str, List[Dict[str, Any]]]:
         return {
             "value": [
                 {
@@ -181,7 +183,7 @@ class MicrosoftTeamsAPI:
             ]
         }
 
-    def get_user_chat_messages(self, chat_id):
+    def get_user_chat_messages(self, chat_id) -> Union[Dict[str, str], Dict[str, Union[List[Dict[str, Any]], str]]]:
         global MESSAGES
         message_data = []
         top = int(request.args.get("$top"))
@@ -212,7 +214,7 @@ class MicrosoftTeamsAPI:
             MESSAGES -= MESSAGES_TO_DELETE  # performs deletion and pagination
         return response
 
-    def get_user_chat_tabs(self, chat_id):
+    def get_user_chat_tabs(self, chat_id) -> Dict[str, List[Dict[str, Any]]]:
         return {
             "value": [
                 {
@@ -223,7 +225,7 @@ class MicrosoftTeamsAPI:
             ]
         }
 
-    def get_users(self):
+    def get_users(self) -> Dict[str, List[Dict[str, Any]]]:
         return {
             "value": [
                 {
@@ -233,7 +235,7 @@ class MicrosoftTeamsAPI:
             ]
         }
 
-    def get_events(self, user_id):
+    def get_events(self, user_id) -> Union[Dict[str, str], Dict[str, Union[List[Dict[str, Any]], str]]]:
         global EVENTS
         event_data = []
         top = int(request.args.get("$top"))
@@ -290,7 +292,7 @@ class MicrosoftTeamsAPI:
             EVENTS -= EVENTS_TO_DELETE
         return response
 
-    def get_teams(self):
+    def get_teams(self) -> Dict[str, Union[List[Dict[str, Any]], str]]:
         return {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#teams)",
             "value": [
@@ -321,7 +323,7 @@ class MicrosoftTeamsAPI:
             ],
         }
 
-    def get_channels(self, team_id):
+    def get_channels(self, team_id) -> Dict[str, Union[List[Dict[str, Any]], str]]:
         channel_list = []
         for channel in range(CHANNEL):
             channel_list.append(
@@ -338,7 +340,7 @@ class MicrosoftTeamsAPI:
             "value": channel_list,
         }
 
-    def get_channel_messages(self, team_id, channel_id):
+    def get_channel_messages(self, team_id, channel_id) -> Dict[str, Union[List[Dict[str, Any]], str]]:
         message_list = []
         for message in range(CHANNEL_MESSAGE):
             message_list.append(
@@ -372,7 +374,7 @@ class MicrosoftTeamsAPI:
             "value": message_list,
         }
 
-    def get_channel_tabs(self, team_id, channel_id):
+    def get_channel_tabs(self, team_id, channel_id) -> Dict[str, Union[List[Dict[str, Any]], str]]:
         return {
             "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#tabs)",
             "value": [
@@ -385,7 +387,7 @@ class MicrosoftTeamsAPI:
             ],
         }
 
-    def get_teams_filefolder(self, team_id, channel_id):
+    def get_teams_filefolder(self, team_id, channel_id) -> Dict[str, Union[Dict[str, str], int, str]]:
         return {
             "id": "filfolder-1",
             "createdDateTime": "0001-01-01T00:00:00Z",
@@ -398,7 +400,7 @@ class MicrosoftTeamsAPI:
             },
         }
 
-    def get_teams_file(self, drive_id, item_id):
+    def get_teams_file(self, drive_id, item_id) -> Dict[str, List[Dict[str, Any]]]:
         files_list = []
         for file_data in range(FILES):
             files_list.append(
@@ -419,7 +421,7 @@ class MicrosoftTeamsAPI:
             )
         return {"value": files_list}
 
-    def download_file(self):
+    def download_file(self) -> BytesIO:
         return io.BytesIO(bytes(fake_provider.get_html(), encoding="utf-8"))
 
 

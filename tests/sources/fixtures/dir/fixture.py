@@ -10,8 +10,8 @@ import shutil
 import urllib.request
 import zipfile
 
-SYSTEM_DIR = os.path.join(os.path.dirname(__file__), "data")
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+SYSTEM_DIR: str = os.path.join(os.path.dirname(__file__), "data")
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 
 if DATA_SIZE == "small":
     REPO = "connectors-python"
@@ -21,7 +21,7 @@ else:
     REPO = "kibana"
 
 
-def get_num_docs():
+def get_num_docs() -> None:
     match os.environ.get("DATA_SIZE", "medium"):
         case "small":
             print("100")
@@ -31,7 +31,7 @@ def get_num_docs():
             print("300")
 
 
-async def load():
+async def load() -> None:
     if os.path.exists(SYSTEM_DIR):
         teardown()
     print(f"Working in {SYSTEM_DIR}")
@@ -51,7 +51,7 @@ async def load():
     os.unlink(repo_zip)
 
 
-async def remove():
+async def remove() -> None:
     # removing 10 files
     files = []
     for root, __, filenames in os.walk(SYSTEM_DIR):
@@ -64,5 +64,5 @@ async def remove():
         os.unlink(files[i])
 
 
-async def teardown():
+async def teardown() -> None:
     shutil.rmtree(SYSTEM_DIR)

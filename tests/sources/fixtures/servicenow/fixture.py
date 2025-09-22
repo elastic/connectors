@@ -14,16 +14,20 @@ import string
 from urllib.parse import parse_qs, urlparse
 
 from flask import Flask, make_response, request
+from _io import BytesIO
+from flask.wrappers import Response
+from typing import Dict, List, Tuple
+from typing_extensions import Buffer
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "small").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "small").lower()
 _SIZES = {"small": 500000, "medium": 1000000, "large": 3000000}
-FILE_SIZE = _SIZES[DATA_SIZE]
-LARGE_DATA = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
+FILE_SIZE: int = _SIZES[DATA_SIZE]
+LARGE_DATA: str = "".join([random.choice(string.ascii_letters) for _ in range(FILE_SIZE)])
 TABLE_FETCH_SIZE = 50
 
 
 class ServiceNowAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.table_length = 500
         self.get_table_length_call = 6
@@ -35,17 +39,17 @@ class ServiceNowAPI:
         )
         self.app.route("/api/now/v1/batch", methods=["POST"])(self.get_batch_data)
 
-    def get_servicenow_formatted_data(self, response_key, response_data):
+    def get_servicenow_formatted_data(self, response_key, response_data) -> bytes:
         return bytes(str({response_key: response_data}).replace("'", '"'), "utf-8")
 
-    def get_url_data(self, url):
+    def get_url_data(self, url) -> Tuple[str, Dict[str, List[str]]]:
         parsed_url = urlparse(url)
         return parsed_url.path, parse_qs(parsed_url.query)
 
-    def decode_response(self, response):
+    def decode_response(self, response: Buffer) -> str:
         return base64.b64encode(response).decode()
 
-    def get_batch_data(self):
+    def get_batch_data(self) -> Response:
         batch_data = request.get_json()
         response = []
         for rest_request in batch_data["rest_requests"]:
@@ -80,7 +84,7 @@ class ServiceNowAPI:
         batch_response.headers["Content-Type"] = "application/json"
         return batch_response
 
-    def get_table_length(self, table):
+    def get_table_length(self, table) -> Response:
         response = make_response(bytes(str({"Response": "Dummy"}), "utf-8"))
         response.headers["Content-Type"] = "application/json"
         if int(request.args["sysparm_limit"]) == 1:
@@ -92,7 +96,7 @@ class ServiceNowAPI:
             self.table_length = 300  # to delete 2000 records per service in next sync
         return response
 
-    def get_table_data(self, table, offset):
+    def get_table_data(self, table, offset) -> bytes:
         records = []
         for i in range(offset - TABLE_FETCH_SIZE, offset):
             records.append(
@@ -106,7 +110,7 @@ class ServiceNowAPI:
             response_key="result", response_data=records
         )
 
-    def get_attachment_data(self, table_sys_id):
+    def get_attachment_data(self, table_sys_id) -> bytes:
         record = [
             {
                 "sys_id": f"attachment-{table_sys_id}",
@@ -119,7 +123,7 @@ class ServiceNowAPI:
             response_key="result", response_data=record
         )
 
-    def get_attachment_content(self, sys_id):
+    def get_attachment_content(self, sys_id) -> BytesIO:
         return io.BytesIO(bytes(LARGE_DATA, encoding="utf-8"))
 
 

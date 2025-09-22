@@ -12,13 +12,15 @@ from datetime import datetime, timedelta
 from flask import Flask, request
 
 from tests.commons import WeightedFakeProvider
+from typing import Any, Dict, List, Optional, Union
+from faker.proxy import Faker
 
 fake_provider = WeightedFakeProvider()
 
-override_url = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
-fake = fake_provider.fake
+override_url: str = os.environ.get("OVERRIDE_URL", "http://127.0.0.1:10971")
+fake: Faker = fake_provider.fake
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 match DATA_SIZE:
     case "small":
@@ -45,7 +47,7 @@ USERS_TO_DELETE = 2
 
 
 class ZoomAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.files = {}
         self.total_user = USER_COUNT
@@ -66,7 +68,7 @@ class ZoomAPI:
         )
         self.app.route("/download/<string:file_id>", methods=["GET"])(self.get_content)
 
-    def get_access_token(self):
+    def get_access_token(self) -> Dict[str, Union[int, str]]:
         return {"access_token": "123456789", "expires_in": 3599}
 
     def get_users(self):
@@ -89,7 +91,7 @@ class ZoomAPI:
             }
         return res
 
-    def get_meetings(self, user):
+    def get_meetings(self, user) -> Dict[str, Optional[List[Dict[str, Any]]]]:
         meeting_type = request.args.get("type")
         return {
             "next_page_token": None,
@@ -105,7 +107,7 @@ class ZoomAPI:
             ],
         }
 
-    def get_recordings(self, user):
+    def get_recordings(self, user) -> Dict[str, Optional[List[Dict[str, Any]]]]:
         def _format_recording_date(date):
             return date.strftime("%Y-%m-%d")
 
@@ -152,7 +154,7 @@ class ZoomAPI:
             res = {}
         return res
 
-    def get_channels(self, user):
+    def get_channels(self, user) -> Dict[str, Optional[List[Dict[str, Any]]]]:
         return {
             "next_page_token": None,
             "channels": [
@@ -167,7 +169,7 @@ class ZoomAPI:
             ],
         }
 
-    def get_messages(self, user):
+    def get_messages(self, user) -> Dict[str, Optional[List[Dict[str, Any]]]]:
         message_type = request.args.get("search_type")
         if message_type == "message":
             res = {

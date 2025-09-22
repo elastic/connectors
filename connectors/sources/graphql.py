@@ -24,6 +24,9 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from aiohttp.client import ClientSession
+from graphql.language.source import Source
+from typing import Dict, List, Union
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -53,7 +56,7 @@ class FieldVisitor(Visitor):
     fields_dict = {}
     variables_dict = {}
 
-    def enter_field(self, node, *args):
+    def enter_field(self, node, *args) -> None:
         self.fields_dict[node.name.value] = []
         self.variables_dict[node.name.value] = {}
         if node.arguments:
@@ -70,7 +73,7 @@ class UnauthorizedException(Exception):
 
 
 class GraphQLClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -85,11 +88,11 @@ class GraphQLClient:
         self.variables = {}
         self.headers = {}
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_) -> None:
         self._logger = logger_
 
     @cached_property
-    def session(self):
+    def session(self) -> ClientSession:
         timeout = aiohttp.ClientTimeout(total=self.configuration["connection_timeout"])
         if self.authentication_method == BEARER:
             self.headers.update(
@@ -181,7 +184,7 @@ class GraphQLClient:
             msg = "Pagination is enabled but the query is missing 'pageInfo'. Please include 'pageInfo { hasNextPage endCursor }' in the query to support pagination."
             raise ConfigurableFieldValueError(msg)
 
-    def validate_paginated_query(self, graphql_query, visitor):
+    def validate_paginated_query(self, graphql_query, visitor) -> None:
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
         if not (
@@ -191,7 +194,7 @@ class GraphQLClient:
             msg = f"Pagination is enabled but 'pageInfo' not found. Please include 'pageInfo' field inside '{graphql_object}' and 'after' argument in '{graphql_object}'."
             raise ConfigurableFieldValueError(msg)
 
-    async def paginated_call(self, graphql_query):
+    async def paginated_call(self, graphql_query: Union[Source, str]):
         if self.pagination_model == CURSOR_PAGINATION:
             ast = parse(graphql_query)  # pyright: ignore
             visitor = FieldVisitor()
@@ -279,12 +282,12 @@ class GraphQLClient:
             msg = f"Error while executing query. Exception: {json_response['errors']}"
             raise Exception(msg)
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
         await self.session.close()
         del self.session
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self.make_request(graphql_query=PING_QUERY)
 
 
@@ -294,7 +297,7 @@ class GraphQLDataSource(BaseDataSource):
     name = "GraphQL"
     service_type = "graphql"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration) -> None:
         """Setup the connection to the GraphQL instance.
 
         Args:
@@ -303,11 +306,11 @@ class GraphQLDataSource(BaseDataSource):
         super().__init__(configuration=configuration)
         self.graphql_client = GraphQLClient(configuration=configuration)
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         self.graphql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Union[Dict[str, Union[List[Dict[str, str]], int, str]], Dict[str, Union[List[str], int, str]], Dict[str, Union[int, str]]]]:
         """Get the default configuration for GraphQL.
 
         Returns:
@@ -421,7 +424,7 @@ class GraphQLDataSource(BaseDataSource):
             },
         }
 
-    def is_query(self, ast):
+    def is_query(self, ast) -> bool:
         for definition in ast.definitions:  # pyright: ignore
             if (
                 hasattr(definition, "operation")
@@ -430,13 +433,13 @@ class GraphQLDataSource(BaseDataSource):
                 return False
         return True
 
-    def validate_endpoints(self):
+    def validate_endpoints(self) -> bool:
         if re.match(URL_REGEX, self.graphql_client.url):
             return True
         return False
 
     def check_field_existence(
-        self, ast, field_path, graphql_field_id=None, check_id=False
+        self, ast, field_path, graphql_field_id=None, check_id: bool=False
     ):
         def traverse(selections, path):
             for selection in selections:
@@ -460,7 +463,7 @@ class GraphQLDataSource(BaseDataSource):
 
         return False, False
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
@@ -544,10 +547,10 @@ class GraphQLDataSource(BaseDataSource):
                 )
                 raise ConfigurableFieldValueError(msg)
 
-    async def close(self):
+    async def close(self) -> None:
         await self.graphql_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.graphql_client.ping()
             self._logger.debug("Successfully connected to GraphQL Instance.")

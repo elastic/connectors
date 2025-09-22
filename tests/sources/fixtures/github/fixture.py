@@ -12,10 +12,12 @@ import os
 from flask import Flask, make_response, request
 
 from tests.commons import WeightedFakeProvider
+from flask.wrappers import Response
+from typing import Any, Dict, List, Union
 
 fake_provider = WeightedFakeProvider()
 
-DATA_SIZE = os.environ.get("DATA_SIZE", "medium").lower()
+DATA_SIZE: str = os.environ.get("DATA_SIZE", "medium").lower()
 
 # TODO: change number of files based on DATA_SIZE
 match DATA_SIZE:
@@ -33,12 +35,12 @@ match DATA_SIZE:
 app = Flask(__name__)
 
 
-def encode_data(content):
+def encode_data(content) -> str:
     return base64.b64encode(bytes(content, "utf-8")).decode("utf-8")
 
 
 class GitHubAPI:
-    def __init__(self):
+    def __init__(self) -> None:
         self.app = Flask(__name__)
         self.file_count = FILE_COUNT
         self.issue_count = ISSUE_COUNT
@@ -56,10 +58,10 @@ class GitHubAPI:
         self.app.route("/api/graphql", methods=["HEAD"])(self.get_scopes)
         self.files = {}
 
-    def encode_cursor(self, value):
+    def encode_cursor(self, value) -> str:
         return base64.b64encode(str(value).encode()).decode()
 
-    def decode_cursor(self, cursor):
+    def decode_cursor(self, cursor) -> int:
         return int(base64.b64decode(cursor.encode()).decode())
 
     def get_index_metadata(self, variables, data):
@@ -69,7 +71,7 @@ class GitHubAPI:
         subset_nodes = data["nodes"][start_index:end_index]
         return start_index, end_index, subset_nodes
 
-    def mock_graphql_response(self):
+    def mock_graphql_response(self) -> Union[Dict[str, Dict[str, Dict[str, Dict[str, Any]]]], Dict[str, Dict[str, Dict[str, str]]], Dict[str, List[str]]]:
         data = request.get_json()
         query = data.get("query")
         variables = data.get("variables", {})
@@ -292,7 +294,7 @@ class GitHubAPI:
 
         return mock_data
 
-    def get_tree(self):
+    def get_tree(self) -> Dict[str, List[Dict[str, Union[int, str]]]]:
         args = request.args
         tree_list = []
         if args.get("recursive") == "1":
@@ -312,7 +314,7 @@ class GitHubAPI:
         self.file_count = 2000
         return {"tree": tree_list}
 
-    def get_content(self, file_id):
+    def get_content(self, file_id) -> Dict[str, Any]:
         file = self.files[file_id]
         return {
             "name": f"dummy_file_{file_id}.md",
@@ -324,7 +326,7 @@ class GitHubAPI:
             "encoding": "base64",
         }
 
-    def get_commits(self):
+    def get_commits(self) -> List[Dict[str, Dict[str, Dict[str, str]]]]:
         return [
             {
                 "commit": {
@@ -337,7 +339,7 @@ class GitHubAPI:
             }
         ]
 
-    def get_scopes(self):
+    def get_scopes(self) -> Response:
         response = make_response({})
         response.headers["status_code"] = 200
         response.headers["X-OAuth-Scopes"] = "repo, user, read:org"
