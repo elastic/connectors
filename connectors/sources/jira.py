@@ -242,7 +242,7 @@ class JiraClient:
             self.host_url,
             URLS[url_name].format(**url_kwargs),  # pyright: ignore
         )
-        self._logger.debug(f"Making a GET call for url: {url}")
+        self._logger.info(f"Making a GET call for url: {url}")
         while True:
             try:
                 async with self._get_session().get(  # pyright: ignore
@@ -270,7 +270,7 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        next_page_token = "null"
+        next_page_token = "null"  # noqa: S105
 
         self._logger.info(
             f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> nextPageToken: null, maxResults: {FETCH_SIZE} and jql query: {jql}"

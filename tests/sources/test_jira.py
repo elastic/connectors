@@ -390,14 +390,20 @@ def side_effect_function(url, ssl):
     Args:
         url, ssl: Params required for get call
     """
-    if url == f"{HOST_URL}/rest/api/3/search/jql?jql=&maxResults=100&nextPageToken=null":
+    if (
+        url
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=&maxResults=100&nextPageToken=null"
+    ):
         mocked_issue_response = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_response)
     elif url == f"{HOST_URL}/rest/api/2/field":
         return get_json_mock(mock_response=MOCK_JIRA_FIELDS)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1":
         return get_json_mock(mock_response=MOCK_ISSUE)
-    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=&maxResults=100&nextPageToken=token_123":
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=&maxResults=100&nextPageToken=token_123"
+    ):
         mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG]}
         return get_json_mock(mock_response=mocked_issue_data)
     elif url == f"{HOST_URL}/rest/api/2/myself":
@@ -406,12 +412,21 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_MYSELF)
     elif url == f"{HOST_URL}/rest/api/2/project?expand=description,lead,url":
         return get_json_mock(mock_response=MOCK_PROJECT)
-    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=type=bug&maxResults=100&nextPageToken=null":
-        mocked_issue_data_bug = {"issues": [MOCK_ISSUE_TYPE_BUG], "nextPageToken": "token_123"}
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=type=bug&maxResults=100&nextPageToken=null"
+    ):
+        mocked_issue_data_bug = {
+            "issues": [MOCK_ISSUE_TYPE_BUG],
+            "nextPageToken": "token_123",
+        }
         return get_json_mock(mock_response=mocked_issue_data_bug)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-2":
         return get_json_mock(mock_response=MOCK_ISSUE_TYPE_BUG)
-    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&maxResults=100&nextPageToken=null":
+    elif (
+        url
+        == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&maxResults=100&nextPageToken=null"
+    ):
         mocked_issue_data_task = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (
