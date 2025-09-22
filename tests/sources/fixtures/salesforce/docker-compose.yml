@@ -28,7 +28,7 @@ services:
     build:
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
-    command: .venv/bin/python tests/sources/fixtures/salesforce/fixture.py
+    command: .venv/bin/python -m tests.sources.fixtures.salesforce.fixture
     ports:
       - "10338:10338"
     volumes:

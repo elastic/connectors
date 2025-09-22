@@ -28,7 +28,7 @@ services:
     build:
       context: ../../../../
       dockerfile: ${DOCKERFILE_FTEST_PATH}
-    command: .venv/bin/python tests/sources/fixtures/graphql/fixture.py
+    command: .venv/bin/python -m tests.sources.fixtures.graphql.fixture
     ports:
       - "9094:9094"
     volumes:
