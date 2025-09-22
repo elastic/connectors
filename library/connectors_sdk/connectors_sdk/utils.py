@@ -6,7 +6,6 @@
 import asyncio
 import base64
 import functools
-import logger
 import inspect
 import os
 import platform
@@ -29,6 +28,8 @@ import tzcron
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from pympler import asizeof
+
+from connectors_sdk.connector_logger import logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500

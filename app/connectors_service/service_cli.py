@@ -33,10 +33,10 @@ from click import ClickException, UsageError
 
 # NEW IMPORTS
 # import __version__
-from connectors_sdk.src.config import load_config
-from connectors_sdk.src.content_extraction import ContentExtraction
-from connectors_sdk.src.logger import logger, set_logger
-from connectors_sdk.src.source import get_source_klass, get_source_klasses
+from connectors_sdk.config import load_config
+from connectors_sdk.content_extraction import ContentExtraction
+from connectors_sdk.connector_logger import logger, set_logger
+from connectors_sdk.source import get_source_klass, get_source_klasses
 
 from connectors_protocol.preflight_check import PreflightCheck
 from connectors_protocol.services import get_services

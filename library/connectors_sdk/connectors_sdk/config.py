@@ -8,7 +8,7 @@ import os
 
 from envyaml import EnvYAML
 
-from connector_logger import logger
+from connectors_sdk.connector_logger import logger
 
 DEFAULT_ELASTICSEARCH_MAX_RETRIES = 5
 DEFAULT_ELASTICSEARCH_RETRY_INTERVAL = 10
@@ -17,7 +17,7 @@ DEFAULT_MAX_FILE_SIZE = 10485760  # 10MB
 
 
 def load_config(config_file):
-    # logger.info(f"Loading config from {config_file}")
+    logger.info(f"Loading config from {config_file}")
     yaml_config = EnvYAML(config_file, flatten=False).export()
     nested_yaml_config = {}
     for key, value in yaml_config.items():
@@ -149,7 +149,7 @@ def _default_config():
 def _ent_search_config(configuration):
     if "ENT_SEARCH_CONFIG_PATH" not in os.environ:
         return
-    # logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
+    logger.info("Found ENT_SEARCH_CONFIG_PATH, loading ent-search config")
     ent_search_config = EnvYAML(os.environ["ENT_SEARCH_CONFIG_PATH"])
     for es_field in config_mappings.keys():
         if es_field not in ent_search_config:
@@ -166,7 +166,7 @@ def _ent_search_config(configuration):
 
         _nest_configs(configuration, connector_field, es_field_value)
 
-        # logger.debug(f"Overridden {connector_field}")
+        logger.debug(f"Overridden {connector_field}")
 
 
 def _nest_configs(configuration, field, value):

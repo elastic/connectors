@@ -10,7 +10,7 @@ import aiofiles
 import aiohttp
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
-from connectors.logger import logger
+from connectors_sdk.connector_logger import logger
 
 
 class ContentExtraction:

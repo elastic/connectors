@@ -10,8 +10,8 @@ from enum import Enum
 
 from dateutil.parser import ParserError, parser
 
-from connectors.logger import logger
-from connectors.utils import Format, shorten_str
+from connectors_sdk.connector_logger import logger
+from connectors_sdk.utils import Format, shorten_str
 
 IS_BOOL_FALSE = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)

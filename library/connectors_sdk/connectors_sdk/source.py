@@ -20,15 +20,16 @@ from aiofiles.os import remove
 from aiofiles.tempfile import NamedTemporaryFile
 from bson import Decimal128
 
-from connectors.config import DataSourceFrameworkConfig
-from connectors.content_extraction import ContentExtraction
-from connectors.filtering.validation import (
+from connectors_sdk.connector_logger import logger
+from connectors_sdk.config import DataSourceFrameworkConfig
+from connectors_sdk.content_extraction import ContentExtraction
+from connectors_sdk.filtering.validation import (
     BasicRuleAgainstSchemaValidator,
     BasicRuleNoMatchAllRegexValidator,
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-from connectors.utils import (
+from connectors_sdk.utils import (
     TIKA_SUPPORTED_FILETYPES,
     convert_to_b64,
     epoch_timestamp_zulu,

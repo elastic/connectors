@@ -8,9 +8,9 @@ from enum import Enum
 
 import fastjsonschema
 
-from connectors.filtering.basic_rule import BasicRule, Policy, Rule
-from connectors.logger import logger
-from connectors.utils import Format
+from connectors_sdk.filtering.basic_rule import BasicRule, Policy, Rule
+from connectors_sdk.connector_logger import logger
+from connectors_sdk.utils import Format
 
 
 class InvalidFilteringError(Exception):
