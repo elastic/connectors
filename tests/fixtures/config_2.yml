@@ -19,5 +19,5 @@ connectors:
     connector_id: 'blah'
 
 sources:
-  fake: fake_sources:FakeSource
+  fake: tests.fake_sources:FakeSource
 
