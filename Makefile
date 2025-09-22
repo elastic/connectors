@@ -50,8 +50,7 @@ install-agent: .venv/bin/elastic-ingest
 	.venv/bin/pip install -e .
 
 .venv/bin/ruff: .venv/bin/python
-	.venv/bin/pip install -r requirements/$(ARCH).txt
-	.venv/bin/pip install -r requirements/tests.txt
+	.venv/bin/pip install ".[tests]"
 
 .venv/bin/pytest: .venv/bin/python
 	.venv/bin/pip install -e ".[tests,ftest]"
