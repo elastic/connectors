@@ -45,7 +45,7 @@ class ColorFormatter(logging.Formatter):
         super().__init__(datefmt=self.DATE_FMT)
         self.local_tz = tzlocal()
 
-    def converter(self, timestamp):
+    def converter(self, timestamp): # type: ignore
         dt = datetime.fromtimestamp(timestamp, self.local_tz)
         return dt.astimezone(timezone.utc)
 
@@ -140,7 +140,7 @@ class DocumentLogger:
 
 
 class ExtraLogger(logging.Logger):
-    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None):
+    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None): # type: ignore
         if (
             not (hasattr(self, "filebeat") and self.filebeat)  # pyright: ignore
             and prefix

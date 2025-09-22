@@ -21,14 +21,25 @@ import signal
 import click
 from click import ClickException, UsageError
 
-from connectors import __version__
-from connectors.build_info import __build_info__
-from connectors.config import load_config
-from connectors.content_extraction import ContentExtraction
-from connectors.logger import logger, set_logger
-from connectors.preflight_check import PreflightCheck
-from connectors.services import get_services
-from connectors.source import get_source_klass, get_source_klasses
+# OLD IMPORTS
+# from connectors import __version__
+# from connectors.build_info import __build_info__
+# from connectors.config import load_config
+# from connectors.content_extraction import ContentExtraction
+# from connectors.logger import logger, set_logger
+# from connectors.preflight_check import PreflightCheck
+# from connectors.services import get_services
+# from connectors.source import get_source_klass, get_source_klasses
+
+# NEW IMPORTS
+# import __version__
+from connectors_sdk.src.config import load_config
+from connectors_sdk.src.content_extraction import ContentExtraction
+from connectors_sdk.src.logger import logger, set_logger
+from connectors_sdk.src.source import get_source_klass, get_source_klasses
+
+from connectors_protocol.preflight_check import PreflightCheck
+from connectors_protocol.services import get_services
 
 __all__ = ["main"]
 
@@ -178,7 +189,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 
 
 @click.command()
-@click.version_option(__build_info__, "-v", "--version", message="%(version)s")
+@click.version_option(__build_info__, "-v", "--version", message="%(version)s") #type: ignore
 @click.option(
     "--action",
     type=click.Choice(

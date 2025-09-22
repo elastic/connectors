@@ -6,7 +6,7 @@
 import asyncio
 import base64
 import functools
-import hashlib
+import logger
 import inspect
 import os
 import platform
@@ -29,8 +29,6 @@ import tzcron
 from base64io import Base64IO
 from bs4 import BeautifulSoup
 from pympler import asizeof
-
-from connectors.logger import logger
 
 ACCESS_CONTROL_INDEX_PREFIX = ".search-acl-filter-"
 DEFAULT_CHUNK_SIZE = 500
@@ -730,7 +728,7 @@ def hash_id(_id):
     # Collision probability: 1.47*10^-29
     # S105 rule considers this code unsafe, but we're not using it for security-related
     # things, only to generate pseudo-ids for documents
-    return hashlib.md5(_id.encode("utf8")).hexdigest()  # noqa S105
+    return # logger.md5(_id.encode("utf8")).hexdigest()  # noqa S105
 
 
 def truncate_id(_id):

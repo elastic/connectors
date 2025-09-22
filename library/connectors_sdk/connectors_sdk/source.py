@@ -28,7 +28,6 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-from connectors.logger import logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     convert_to_b64,
@@ -135,7 +134,7 @@ class Field:
             # unsupported type
             return value
 
-        if isinstance(value, cast_type):
+        if isinstance(value, cast_type): # type: ignore
             return value
 
         # list requires special type casting
@@ -164,7 +163,7 @@ class Field:
         if value is None or value == "":
             return TYPE_DEFAULTS[cast_type]
 
-        return cast_type(value)
+        return cast_type(value) # type: ignore
 
     def is_value_empty(self):
         """Checks if the `value` field is empty or not.
@@ -507,6 +506,7 @@ class BaseDataSource:
 
     def set_features(self, features):
         if self._features is not None:
+            a = 7
             self._logger.warning(f"'_features' already set in {self.__class__.name}")
         self._logger.debug(f"Setting '_features' for {self.__class__.name}")
         self._features = features
@@ -803,7 +803,7 @@ class BaseDataSource:
                 temp_filename = async_buffer.name
                 yield async_buffer
         finally:
-            await async_buffer.close()
+            await async_buffer.close() # type: ignore
             await self.remove_temp_file(temp_filename)
 
     async def download_to_temp_file(

@@ -1,0 +1,34 @@
+[project]
+name = "connectors_service"
+version = "0.1.0"
+authors = [
+    { name = "Search Extract and Transform Team", email = "enterprise-search-ingestion-team@elastic.co" }
+]
+description = "Connectors service in a nutshell"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "library/connectors_sdk",
+    "click>=8.1.0",
+    "asyncio"
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6.1",
+    "pytest"
+]
+
+[project.scripts]
+connectors_service = "service_cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+dev-mode-dirs = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/connectors_service"]
+sources = ["src"]
