@@ -7,10 +7,10 @@
 A task periodically clean up orphaned and idle jobs.
 """
 
-from connectors.es.index import DocumentNotFoundError
-from connectors.es.management_client import ESManagementClient
-from connectors.protocol import ConnectorIndex, SyncJobIndex
-from connectors.services.base import BaseService
+from connectors_protocol.es.index import DocumentNotFoundError
+from connectors_protocol.es.management_client import ESManagementClient
+from connectors_protocol.protocol.connectors import ConnectorIndex, SyncJobIndex
+from connectors_protocol.services.base import BaseService
 
 IDLE_JOB_ERROR = "The job has not seen any update for some time."
 

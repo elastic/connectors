@@ -12,9 +12,9 @@ from elasticsearch import (
 )
 from elasticsearch.helpers import async_scan
 
-from connectors.es import TIMESTAMP_FIELD
-from connectors.es.client import ESClient
-from connectors.logger import logger
+from connectors_protocol.es import TIMESTAMP_FIELD
+from connectors_protocol.es.client import ESClient
+from connectors_sdk.connector_logger import logger
 
 
 class ESManagementClient(ESClient):

@@ -8,10 +8,10 @@ import re
 
 import aiohttp
 
-from connectors.es.management_client import ESManagementClient
-from connectors.logger import logger
-from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
-from connectors.utils import CancellableSleeps
+from connectors_protocol.es.management_client import ESManagementClient
+from connectors_sdk.connector_logger import logger
+from connectors_protocol.protocol.connectors import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
+from connectors_sdk.utils import CancellableSleeps
 
 
 class PreflightCheck:

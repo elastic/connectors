@@ -11,11 +11,11 @@ from elasticsearch import (
     AuthorizationException as ElasticAuthorizationException,
 )
 
-from connectors.config import DataSourceFrameworkConfig
-from connectors.es.client import License, with_concurrency_control
-from connectors.es.index import DocumentNotFoundError
-from connectors.es.license import requires_platinum_license
-from connectors.es.sink import (
+from connectors_sdk.config import DataSourceFrameworkConfig
+from connectors_protocol.es.client import License, with_concurrency_control
+from connectors_protocol.es.index import DocumentNotFoundError
+from connectors_protocol.es.license import requires_platinum_license
+from connectors_protocol.es.sink import (
     CREATES_QUEUED,
     DELETES_QUEUED,
     OP_INDEX,
@@ -23,15 +23,15 @@ from connectors.es.sink import (
     SyncOrchestrator,
     UnsupportedJobType,
 )
-from connectors.logger import logger
-from connectors.protocol import JobStatus, JobType
-from connectors.protocol.connectors import (
+from connectors_sdk.connector_logger import logger
+from connectors_protocol.protocol.connectors import JobStatus, JobType
+from connectors_protocol.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.source import BaseDataSource
-from connectors.utils import truncate_id
+from connectors_sdk.source import BaseDataSource
+from connectors_sdk.utils import truncate_id
 
 UTF_8 = "utf-8"
 

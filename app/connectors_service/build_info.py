@@ -7,7 +7,7 @@ import os
 
 import yaml
 
-from connectors import __version__
+from connectors_service import __version__
 
 # This references a file that's built in .buildkite/publish/publish-common.sh
 # See https://github.com/elastic/connectors/pull/3154 for more info

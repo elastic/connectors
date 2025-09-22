@@ -24,21 +24,21 @@ import functools
 import logging
 import time
 
-from connectors.config import (
+from connectors_sdk.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
-from connectors.es import TIMESTAMP_FIELD
-from connectors.es.management_client import ESManagementClient
-from connectors.filtering.basic_rule import BasicRuleEngine, parse
-from connectors.logger import logger, tracer
-from connectors.protocol import Filter, JobType
-from connectors.protocol.connectors import (
+from connectors_protocol.es import TIMESTAMP_FIELD
+from connectors_protocol.es.management_client import ESManagementClient
+from connectors_sdk.filtering.basic_rule import BasicRuleEngine, parse
+from connectors_sdk.connector_logger import logger, tracer
+from connectors_protocol.protocol.connectors import Filter, JobType
+from connectors_protocol.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_COUNT,
     INDEXED_DOCUMENT_VOLUME,
 )
-from connectors.utils import (
+from connectors_sdk.utils import (
     DEFAULT_CHUNK_MEM_SIZE,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONCURRENT_DOWNLOADS,

@@ -15,8 +15,8 @@ import asyncio
 import time
 from copy import deepcopy
 
-from connectors.logger import DocumentLogger, logger
-from connectors.utils import CancellableSleeps
+from connectors_sdk.connector_logger import DocumentLogger, logger
+from connectors_sdk.utils import CancellableSleeps
 
 __all__ = [
     "MultiService",

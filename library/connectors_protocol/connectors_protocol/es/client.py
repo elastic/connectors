@@ -15,13 +15,13 @@ from elasticsearch import (
     ConnectionError as ElasticConnectionError,
 )
 
-from connectors import __version__
-from connectors.config import (
+# from connectors import __version__
+from connectors_sdk.config import (
     DEFAULT_ELASTICSEARCH_MAX_RETRIES,
     DEFAULT_ELASTICSEARCH_RETRY_INTERVAL,
 )
-from connectors.logger import logger, set_extra_logger
-from connectors.utils import (
+from connectors_sdk.connector_logger import logger, set_extra_logger
+from connectors_sdk.utils import (
     CancellableSleeps,
     RetryStrategy,
     func_human_readable_name,
@@ -39,7 +39,7 @@ class License(Enum):
     UNSET = None
 
 
-USER_AGENT_BASE = f"elastic-connectors-{__version__}"
+USER_AGENT_BASE = f"elastic-connectors-{'9.2.0'}"
 
 
 class ESClient:

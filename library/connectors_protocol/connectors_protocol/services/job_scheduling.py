@@ -14,9 +14,9 @@ Event loop
 import functools
 from datetime import datetime, timezone
 
-from connectors.es.client import License, with_concurrency_control
-from connectors.es.index import DocumentNotFoundError
-from connectors.protocol import (
+from connectors_protocol.es.client import License, with_concurrency_control
+from connectors_protocol.es.index import DocumentNotFoundError
+from connectors_protocol.protocol.connectors import (
     ConnectorIndex,
     DataSourceError,
     JobTriggerMethod,
@@ -26,9 +26,10 @@ from connectors.protocol import (
     Status,
     SyncJobIndex,
 )
-from connectors.services.base import BaseService
-from connectors.source import get_source_klass
-from connectors.utils import ConcurrentTasks
+from connectors_protocol.services.base import BaseService
+
+from connectors_sdk.source import get_source_klass
+from connectors_sdk.utils import ConcurrentTasks
 
 
 class JobSchedulingService(BaseService):

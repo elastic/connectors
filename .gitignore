@@ -22,3 +22,4 @@ config.yml
 scripts/stack/connectors-config
 
 .python-version
+rebuild.sh

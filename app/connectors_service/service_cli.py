@@ -21,18 +21,6 @@ import signal
 import click
 from click import ClickException, UsageError
 
-# OLD IMPORTS
-# from connectors import __version__
-# from connectors.build_info import __build_info__
-# from connectors.config import load_config
-# from connectors.content_extraction import ContentExtraction
-# from connectors.logger import logger, set_logger
-# from connectors.preflight_check import PreflightCheck
-# from connectors.services import get_services
-# from connectors.source import get_source_klass, get_source_klasses
-
-# NEW IMPORTS
-# import __version__
 from connectors_sdk.config import load_config
 from connectors_sdk.content_extraction import ContentExtraction
 from connectors_sdk.connector_logger import logger, set_logger
@@ -43,7 +31,7 @@ from connectors_protocol.services import get_services
 
 __all__ = ["main"]
 
-from connectors.utils import sleeps_for_retryable
+from connectors_sdk.utils import sleeps_for_retryable
 
 
 async def _start_service(actions, config, loop):
@@ -53,7 +41,7 @@ async def _start_service(actions, config, loop):
     - performs a preflight check using `PreflightCheck`
     - instantiates a `MultiService` instance and runs its `run` async function
     """
-    preflight = PreflightCheck(config, __version__)
+    preflight = PreflightCheck(config, '9.2.0') # BAD - hardcoded version for now
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, functools.partial(preflight.shutdown, sig))
     try:
@@ -120,7 +108,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
     - list: prints out a list of all connectors and exits
     - poll: starts the event loop and run forever (default)
     """
-    logger.info(f"Running connector service version {__version__}")
+    logger.info(f"Running connector service version {'9.2.0'}") # BAD - hardcoded version for now
 
     # load config
     config = {}
@@ -189,7 +177,7 @@ def run(action, config_file, log_level, filebeat, service_type, uvloop):
 
 
 @click.command()
-@click.version_option(__build_info__, "-v", "--version", message="%(version)s") #type: ignore
+@click.version_option("-v", "--version", message="%(version)s") #type: ignore
 @click.option(
     "--action",
     type=click.Choice(

@@ -26,19 +26,20 @@ from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
 
-from connectors.es import ESDocument, ESIndex
-from connectors.es.client import with_concurrency_control
-from connectors.filtering.validation import (
+from connectors_protocol.es import ESDocument, ESIndex
+from connectors_protocol.es.client import with_concurrency_control
+
+from connectors_sdk.filtering.validation import (
     FilteringValidationState,
     InvalidFilteringError,
 )
-from connectors.logger import logger
-from connectors.source import (
+from connectors_sdk.connector_logger import logger
+from connectors_sdk.source import (
     DEFAULT_CONFIGURATION,
     DataSourceConfiguration,
     get_source_klass,
 )
-from connectors.utils import (
+from connectors_sdk.utils import (
     ACCESS_CONTROL_INDEX_PREFIX,
     deep_merge_dicts,
     filter_nested_dict_by_keys,

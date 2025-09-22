@@ -3,9 +3,7 @@
 # or more contributor license agreements. Licensed under the Elastic License 2.0;
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
-from connectors.es.client import USER_AGENT_BASE
-from connectors.es.management_client import ESManagementClient
+import os
 
-
-class CLIClient(ESManagementClient):
-    user_agent = f"{USER_AGENT_BASE}/cli"
+with open(os.path.join(os.path.dirname(__file__), "VERSION")) as f:
+    __version__ = f.read().strip()
