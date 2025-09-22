@@ -418,7 +418,6 @@ def side_effect_function(url, ssl):
     ):
         mocked_issue_data_bug = {
             "issues": [MOCK_ISSUE_TYPE_BUG],
-            "nextPageToken": "token_123",
         }
         return get_json_mock(mock_response=mocked_issue_data_bug)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-2":
@@ -427,7 +426,7 @@ def side_effect_function(url, ssl):
         url
         == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&maxResults=100&nextPageToken=null"
     ):
-        mocked_issue_data_task = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
+        mocked_issue_data_task = {"issues": [MOCK_ISSUE]}
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (
         url
