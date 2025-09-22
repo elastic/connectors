@@ -242,7 +242,7 @@ class JiraClient:
             self.host_url,
             URLS[url_name].format(**url_kwargs),  # pyright: ignore
         )
-        self._logger.info(f"Making a GET call for url: {url}")
+        self._logger.debug(f"Making a GET call for url: {url}")
         while True:
             try:
                 async with self._get_session().get(  # pyright: ignore
@@ -270,10 +270,17 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
+        cursor_based_pagination = [ISSUES]
+
         next_page_token = "null"  # noqa: S105
+        start_at = 0
+        if url_name in cursor_based_pagination:
+            pagination_arg = {"next_page_token": next_page_token}
+        else:
+            pagination_arg = {"start_at": start_at}
 
         self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> nextPageToken: null, maxResults: {FETCH_SIZE} and jql query: {jql}"
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> {pagination_arg}, maxResults: {FETCH_SIZE} and jql query: {jql}"
         )
         while True:
             try:
@@ -283,22 +290,32 @@ class JiraClient:
                         self.host_url,
                         URLS[url_name].format(
                             max_results=FETCH_SIZE,
-                            next_page_token=next_page_token,
                             level_id=kwargs.get("level_id"),
+                            **pagination_arg,
                         ),  # pyright: ignore
                     )
                 async for response in self.api_call(
                     url_name=url_name,
-                    next_page_token=next_page_token,
                     max_results=FETCH_SIZE,
                     jql=jql,
                     url=url,
+                    **pagination_arg,
                 ):
                     response_json = await response.json()
                     yield response_json
-                    next_page_token = response_json.get("nextPageToken")
-                    if not next_page_token:
-                        return
+
+                    if url_name in cursor_based_pagination:
+                        next_page_token = response_json.get("nextPageToken")
+                        if not next_page_token:
+                            return
+                        pagination_arg = {"next_page_token": next_page_token}
+                    else:
+                        total = response_json["total"]
+                        if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
+                            return
+                        start_at += FETCH_SIZE
+                        pagination_arg = {"start_at": start_at}
+
             except Exception as exception:
                 self._logger.warning(
                     f"Skipping data for type: {url_name}, query params: jql={jql}, nextPageToken={next_page_token}, maxResults={FETCH_SIZE}. Error: {exception}."
