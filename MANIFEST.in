@@ -1,4 +1,3 @@
 include Makefile README.md config.yml LICENSE
 recursive-include connectors/ *.yml
-recursive-include requirements/ *.txt
 include connectors/VERSION
