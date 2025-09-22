@@ -390,15 +390,15 @@ def side_effect_function(url, ssl):
     Args:
         url, ssl: Params required for get call
     """
-    if url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=0":
-        mocked_issue_response = {"issues": [MOCK_ISSUE], "total": 101}
+    if url == f"{HOST_URL}/rest/api/3/search/jql?jql=&maxResults=100&nextPageToken=null":
+        mocked_issue_response = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_response)
     elif url == f"{HOST_URL}/rest/api/2/field":
         return get_json_mock(mock_response=MOCK_JIRA_FIELDS)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-1":
         return get_json_mock(mock_response=MOCK_ISSUE)
-    elif url == f"{HOST_URL}/rest/api/2/search?jql=&maxResults=100&startAt=100":
-        mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG], "total": 1}
+    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=&maxResults=100&nextPageToken=token_123":
+        mocked_issue_data = {"issues": [MOCK_ISSUE_TYPE_BUG]}
         return get_json_mock(mock_response=mocked_issue_data)
     elif url == f"{HOST_URL}/rest/api/2/myself":
         return get_json_mock(mock_response=MOCK_MYSELF)
@@ -406,13 +406,13 @@ def side_effect_function(url, ssl):
         return get_json_mock(mock_response=MOCK_MYSELF)
     elif url == f"{HOST_URL}/rest/api/2/project?expand=description,lead,url":
         return get_json_mock(mock_response=MOCK_PROJECT)
-    elif url == f"{HOST_URL}/rest/api/2/search?jql=type=bug&maxResults=100&startAt=0":
-        mocked_issue_data_bug = {"issues": [MOCK_ISSUE_TYPE_BUG], "total": 1}
+    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=type=bug&maxResults=100&nextPageToken=null":
+        mocked_issue_data_bug = {"issues": [MOCK_ISSUE_TYPE_BUG], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_data_bug)
     elif url == f"{HOST_URL}/rest/api/2/issue/TP-2":
         return get_json_mock(mock_response=MOCK_ISSUE_TYPE_BUG)
-    elif url == f"{HOST_URL}/rest/api/2/search?jql=type=task&maxResults=100&startAt=0":
-        mocked_issue_data_task = {"issues": [MOCK_ISSUE], "total": 1}
+    elif url == f"{HOST_URL}/rest/api/3/search/jql?jql=type=task&maxResults=100&nextPageToken=null":
+        mocked_issue_data_task = {"issues": [MOCK_ISSUE], "nextPageToken": "token_123"}
         return get_json_mock(mock_response=mocked_issue_data_task)
     elif (
         url
@@ -492,7 +492,7 @@ async def test_api_call_negative():
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_api_call_when_server_is_down():
-    """Tests the api_call function while server gets disconnected."""
+    """Tests the api_call function while the server gets disconnected."""
 
     async with create_jira_source() as source:
         source.jira_client.retry_count = 0
