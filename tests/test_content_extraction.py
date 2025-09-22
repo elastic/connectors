@@ -9,9 +9,10 @@ import pytest
 from aiohttp.client_exceptions import ClientConnectionError, ServerTimeoutError
 
 from connectors.content_extraction import ContentExtraction
+from typing import Dict, Union
 
 
-def test_set_and_get_configuration():
+def test_set_and_get_configuration() -> None:
     config = {
         "extraction_service": {
             "host": "http://localhost:8090",
@@ -36,7 +37,7 @@ def test_set_and_get_configuration():
         ({"extraction_service": {"not_a_host": "!!!m"}}, False),
     ],
 )
-def test_check_configured(mock_config, expected_result):
+def test_check_configured(mock_config: Dict[str, Union[Dict[str, str], str]], expected_result: bool) -> None:
     with patch(
         "connectors.content_extraction.ContentExtraction.get_extraction_config",
         return_value=mock_config.get("extraction_service", None),

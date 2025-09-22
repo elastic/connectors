@@ -4,13 +4,14 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import MagicMock, AsyncMock, Mock, patch
 
 import pytest
 
 from connectors.services.job_cleanup import IDLE_JOB_ERROR, JobCleanUpService
 from tests.commons import AsyncIterator
 from tests.services.test_base import create_and_run_service
+from typing import Awaitable, Iterator
 
 CONFIG = {
     "elasticsearch": {
@@ -27,7 +28,7 @@ CONFIG = {
 }
 
 
-def mock_connector(connector_id="1"):
+def mock_connector(connector_id: str="1") -> Mock:
     connector = Mock()
     connector.id = connector_id
     connector.sync_done = AsyncMock()
@@ -35,9 +36,9 @@ def mock_connector(connector_id="1"):
 
 
 def mock_sync_job(
-    sync_job_id="1",
-    connector_id="1",
-):
+    sync_job_id: str="1",
+    connector_id: str="1",
+) -> Mock:
     job = Mock()
     job.job_id = sync_job_id
     job.connector_id = connector_id
@@ -53,12 +54,12 @@ def mock_sync_job(
 @patch("connectors.protocol.ConnectorIndex.supported_connectors")
 @patch("connectors.protocol.ConnectorIndex.all_connectors")
 async def test_cleanup_jobs(
-    all_connectors,
-    supported_connectors,
-    connector_fetch_by_id,
-    orphaned_idle_jobs,
-    idle_jobs,
-):
+    all_connectors: MagicMock,
+    supported_connectors: MagicMock,
+    connector_fetch_by_id: AsyncMock,
+    orphaned_idle_jobs: MagicMock,
+    idle_jobs: MagicMock,
+) -> Iterator[Awaitable]:
     connector = mock_connector()
     orphaned_idle_sync_job = mock_sync_job()
     idle_sync_job = mock_sync_job()

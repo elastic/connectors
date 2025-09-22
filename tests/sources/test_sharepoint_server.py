@@ -19,6 +19,9 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.sharepoint_server import SharepointServerDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from _asyncio import Future, Task
+from _pytest.logging import LogCaptureFixture
+from typing import Dict, Iterator, List, Union
 
 EXCEPTION_MESSAGE = "Something went wrong"
 HOST_URL = "http://127.0.0.1:8491"
@@ -45,7 +48,7 @@ async def create_sps_source(
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
-    def load_verify_locations(self, cadata):
+    def load_verify_locations(self, cadata: str) -> None:
         """This method verify locations"""
         pass
 
@@ -53,12 +56,12 @@ class MockSSL:
 class MockResponse:
     """Mock class for ClientResponse"""
 
-    def __init__(self, json, status):
+    def __init__(self, json: Union[List[Dict[str, str]], Dict[str, str]], status: int) -> None:
         self._json = json
         self.status = status
         self.is_success = True
 
-    async def json(self):
+    async def json(self) -> List[Dict[str, str]]:
         """This Method is used to return a json response"""
         return self._json
 
@@ -74,7 +77,7 @@ class MockResponse:
 class MockObjectResponse:
     """Class to mock object response of httpx session.get method"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Setup a streamReader object"""
         self.content = ByteStream
 
@@ -96,7 +99,7 @@ async def async_native_coroutine_generator(item):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> None:
     """Tests the ping functionality for ensuring connection to the Sharepoint."""
 
     async with create_sps_source() as source:
@@ -109,7 +112,7 @@ async def test_ping_for_successful_connection():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_failed_connection_exception():
+async def test_ping_for_failed_connection_exception() -> None:
     """Tests the ping functionality when connection can not be established to Sharepoint."""
 
     async with create_sps_source(retry_count=0) as source:
@@ -124,7 +127,7 @@ async def test_ping_for_failed_connection_exception():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_host_url_is_empty():
+async def test_validate_config_when_host_url_is_empty() -> None:
     """This function test validate_config when host_url is empty"""
     async with create_sps_source() as source:
         source.configuration.set_field(name="host_url", value="")
@@ -134,7 +137,7 @@ async def test_validate_config_when_host_url_is_empty():
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error():
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_raise_error() -> None:
     """This function test validate_config when ssl is enabled and certificate is missing"""
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_sps_source(
@@ -159,14 +162,14 @@ async def test_validate_config_for_ssl_enabled_when_ssl_ca_not_empty_does_not_ra
 
 
 @pytest.mark.asyncio
-async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error():
+async def test_validate_config_for_ssl_enabled_when_ssl_ca_empty_raises_error() -> None:
     async with create_sps_source(ssl_enabled=True) as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_api_call_for_exception():
+async def test_api_call_for_exception() -> None:
     """This function test _api_call when credentials are incorrect"""
     async with create_sps_source(retry_count=0) as source:
         with patch.object(
@@ -177,7 +180,7 @@ async def test_api_call_for_exception():
 
 
 @pytest.mark.asyncio
-async def test_prepare_drive_items_doc():
+async def test_prepare_drive_items_doc() -> None:
     """Test the prepare drive items method"""
     async with create_sps_source() as source:
         list_items = {
@@ -215,7 +218,7 @@ async def test_prepare_drive_items_doc():
 
 
 @pytest.mark.asyncio
-async def test_prepare_list_items_doc():
+async def test_prepare_list_items_doc() -> None:
     """Test the prepare list items method"""
     async with create_sps_source() as source:
         list_items = {
@@ -255,7 +258,7 @@ async def test_prepare_list_items_doc():
 
 
 @pytest.mark.asyncio
-async def test_prepare_sites_doc():
+async def test_prepare_sites_doc() -> None:
     """Test the method for preparing sites document"""
     async with create_sps_source() as source:
         list_items = {
@@ -284,7 +287,7 @@ async def test_prepare_sites_doc():
 
 
 @pytest.mark.asyncio
-async def test_get_sites_when_no_site_available():
+async def test_get_sites_when_no_site_available() -> None:
     """Test get sites method with valid details"""
     async with create_sps_source() as source:
         api_response = []
@@ -299,7 +302,7 @@ async def test_get_sites_when_no_site_available():
 
 
 @pytest.mark.asyncio
-async def test_get_list_items():
+async def test_get_list_items() -> None:
     """Test get list items method with valid details"""
     api_response = [
         {
@@ -395,7 +398,7 @@ async def test_get_list_items():
 
 
 @pytest.mark.asyncio
-async def test_get_drive_items():
+async def test_get_drive_items() -> None:
     """Test get drive items method with valid details"""
     api_response = [
         {
@@ -481,7 +484,7 @@ async def test_get_drive_items():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_list_items():
+async def test_get_docs_list_items() -> None:
     """Test get docs method for list items"""
 
     site_content_response = {
@@ -533,7 +536,7 @@ async def test_get_docs_list_items():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_list_items_when_relativeurl_is_not_none():
+async def test_get_docs_list_items_when_relativeurl_is_not_none() -> None:
     """Test get docs method for list items"""
 
     site_content_response = {
@@ -584,7 +587,7 @@ async def test_get_docs_list_items_when_relativeurl_is_not_none():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_drive_items():
+async def test_get_docs_drive_items() -> None:
     """Test get docs method for drive items"""
 
     site_content_response = {
@@ -637,7 +640,7 @@ async def test_get_docs_drive_items():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_drive_items_for_web_pages():
+async def test_get_docs_drive_items_for_web_pages() -> None:
     site_content_response = {
         "Title": "ctest",
         "Id": "f764b597-ed44-49be-8867-f8e9ca5d0a6e",
@@ -687,7 +690,7 @@ async def test_get_docs_drive_items_for_web_pages():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_when_no_site_available():
+async def test_get_docs_when_no_site_available() -> None:
     """Test get docs when site is not available method"""
 
     async with create_sps_source() as source:
@@ -705,7 +708,7 @@ async def test_get_docs_when_no_site_available():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> Iterator[Future]:
     """Test the get content method"""
 
     response_content = "This is a dummy sharepoint body response"
@@ -738,7 +741,7 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_content_extraction():
+async def test_get_content_with_content_extraction() -> Iterator[Future]:
     response_content = "This is a dummy sharepoint body response"
     with (
         patch(
@@ -782,7 +785,7 @@ class ContentResponse:
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_size_is_bigger():
+async def test_get_content_when_size_is_bigger() -> None:
     """Test the get content method when document size is greater than the allowed size limit."""
     document = {
         "id": 1,
@@ -802,7 +805,7 @@ async def test_get_content_when_size_is_bigger():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_doit_is_none():
+async def test_get_content_when_doit_is_none() -> None:
     """Test the get content method when doit is None"""
     document = {
         "id": 1,
@@ -820,7 +823,7 @@ async def test_get_content_when_doit_is_none():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data_with_query_sites():
+async def test_fetch_data_with_query_sites() -> None:
     """Test get invoke call for sites"""
     get_response = {
         "value": [
@@ -854,7 +857,7 @@ async def test_fetch_data_with_query_sites():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data_with_query_list():
+async def test_fetch_data_with_query_list() -> None:
     """Test get invoke call for list"""
     get_response = {
         "value": [
@@ -888,7 +891,7 @@ async def test_fetch_data_with_query_list():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data_with_next_url_items():
+async def test_fetch_data_with_next_url_items() -> None:
     """Test get invoke call for drive item"""
     get_response = {
         "value": [
@@ -923,7 +926,7 @@ async def test_fetch_data_with_next_url_items():
 
 
 @pytest.mark.asyncio
-async def test_fetch_data_with_next_url_list_items():
+async def test_fetch_data_with_next_url_list_items() -> None:
     """Test get invoke call when for list item"""
     get_response = {
         "value": [
@@ -960,13 +963,13 @@ async def test_fetch_data_with_next_url_list_items():
 class ClientSession:
     """Mock Client Session Class"""
 
-    async def aclose(self):
+    async def aclose(self) -> None:
         """Close method of Mock Client Session Class"""
         pass
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session():
+async def test_close_with_client_session() -> None:
     """Test close method of SharepointServerDataSource with client session"""
 
     async with create_sps_source() as source:
@@ -976,7 +979,7 @@ async def test_close_with_client_session():
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session():
+async def test_close_without_client_session() -> None:
     """Test close method of SharepointServerDataSource without client session"""
 
     async with create_sps_source() as source:
@@ -986,7 +989,7 @@ async def test_close_without_client_session():
 
 
 @pytest.mark.asyncio
-async def test_api_call_negative(patch_default_wait_multiplier):
+async def test_api_call_negative(patch_default_wait_multiplier: None) -> None:
     """Tests the _api_call function while getting an exception."""
 
     async with create_sps_source(retry_count=2) as source:
@@ -999,7 +1002,7 @@ async def test_api_call_negative(patch_default_wait_multiplier):
 
 
 @pytest.mark.asyncio
-async def test_api_call_successfully():
+async def test_api_call_successfully() -> None:
     """Tests the _api_call function."""
 
     async with create_sps_source() as source:
@@ -1020,7 +1023,7 @@ async def test_api_call_successfully():
 
 
 @pytest.fixture
-def patch_default_wait_multiplier():
+def patch_default_wait_multiplier() -> Iterator[None]:
     with mock.patch("connectors.sources.sharepoint_server.RETRY_INTERVAL", 0):
         yield
 
@@ -1031,8 +1034,8 @@ class ClientErrorException:
 
 @pytest.mark.asyncio
 async def test_api_call_when_status_429_exception(
-    patch_default_wait_multiplier, caplog
-):
+    patch_default_wait_multiplier: None, caplog: LogCaptureFixture
+) -> Iterator[Task]:
     async with create_sps_source(retry_count=2) as source:
         mock_response = {"access_token": "test2344", "expires_in": "1234555"}
         async_response = MockResponse(mock_response, 429)
@@ -1052,7 +1055,7 @@ async def test_api_call_when_status_429_exception(
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_server_is_down(patch_default_wait_multiplier, caplog):
+async def test_api_call_when_server_is_down(patch_default_wait_multiplier: None, caplog: LogCaptureFixture) -> Iterator[Task]:
     """Tests the _api_call function while server gets disconnected."""
     async with create_sps_source(retry_count=2) as source:
         mock_response = {"access_token": "test2344", "expires_in": "1234555"}
@@ -1072,7 +1075,7 @@ async def test_api_call_when_server_is_down(patch_default_wait_multiplier, caplo
 
 
 @pytest.mark.asyncio
-async def test_get_session():
+async def test_get_session() -> None:
     """Test that the instance of session returned is always the same for the datasource class."""
     async with create_sps_source() as source:
         first_instance = source.sharepoint_client._get_session()
@@ -1081,7 +1084,7 @@ async def test_get_session():
 
 
 @pytest.mark.asyncio
-async def test_get_site_pages_content():
+async def test_get_site_pages_content() -> Iterator[Future]:
     EXPECTED_ATTACHMENT = {
         "id": 1,
         "server_relative_url": "/url",
@@ -1114,7 +1117,7 @@ async def coroutine_generator(item):
 
 
 @pytest.mark.asyncio
-async def test_get_site_pages_content_when_doit_is_none():
+async def test_get_site_pages_content_when_doit_is_none() -> None:
     document = {"title": "Home.aspx", "type": "File", "size": 1000000}
     async with create_sps_source() as source:
         response_content = await source.get_site_pages_content(
@@ -1127,7 +1130,7 @@ async def test_get_site_pages_content_when_doit_is_none():
 
 
 @pytest.mark.asyncio
-async def test_get_site_pages_content_for_canvascontent1_none():
+async def test_get_site_pages_content_for_canvascontent1_none() -> None:
     async with create_sps_source() as source:
         EXPECTED_ATTACHMENT = {"title": "Home.aspx", "type": "File", "size": "1000000"}
         response_content = await source.get_site_pages_content(
@@ -1139,7 +1142,7 @@ async def test_get_site_pages_content_for_canvascontent1_none():
 
 
 @pytest.mark.asyncio
-async def test_get_list_items_with_no_extension():
+async def test_get_list_items_with_no_extension() -> None:
     api_response = [
         {
             "AttachmentFiles": [
@@ -1207,7 +1210,7 @@ async def test_get_list_items_with_no_extension():
 
 
 @pytest.mark.asyncio
-async def test_get_list_items_with_extension_only():
+async def test_get_list_items_with_extension_only() -> None:
     api_response = [
         {
             "AttachmentFiles": [
@@ -1274,13 +1277,13 @@ async def test_get_list_items_with_extension_only():
         assert expected_response == target_response
 
 
-async def create_fake_coroutine(data):
+async def create_fake_coroutine(data: bool) -> bool:
     """create a method for returning fake coroutine value"""
     return data
 
 
 @pytest.mark.asyncio
-async def test_get_access_control():
+async def test_get_access_control() -> None:
     async with create_sps_source() as source:
         source._dls_enabled = Mock(return_value=True)
         source.sharepoint_client.site_collections_path = ["collection1"]
@@ -1334,7 +1337,7 @@ async def test_get_access_control():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_with_dls_disabled():
+async def test_get_access_control_with_dls_disabled() -> None:
     async with create_sps_source() as source:
         source._dls_enabled = Mock(return_value=False)
         access_control = []
@@ -1346,7 +1349,7 @@ async def test_get_access_control_with_dls_disabled():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_dls_enabled():
+async def test_get_docs_with_dls_enabled() -> None:
     async with create_sps_source() as source:
         source.sharepoint_client.site_collections_path = ["collection1"]
         source.sharepoint_client.fix_relative_url = Mock(return_value="sites/site1")
@@ -1559,7 +1562,7 @@ async def test_get_docs_with_dls_enabled():
 
 
 @pytest.mark.asyncio
-async def test_site_list_item_role_assignments():
+async def test_site_list_item_role_assignments() -> None:
     api_response = {"value": [{"verifying_calls_only": True}]}
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = Mock(
@@ -1572,7 +1575,7 @@ async def test_site_list_item_role_assignments():
 
 
 @pytest.mark.asyncio
-async def test_site_role_assignments_using_title():
+async def test_site_role_assignments_using_title() -> None:
     api_response = {"value": [{"verifying_calls_only": True}]}
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = Mock(
@@ -1585,7 +1588,7 @@ async def test_site_role_assignments_using_title():
 
 
 @pytest.mark.asyncio
-async def test_site_admins():
+async def test_site_admins() -> None:
     api_response = {"value": [{"verifying_calls_only": True}]}
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = Mock(
@@ -1596,7 +1599,7 @@ async def test_site_admins():
 
 
 @pytest.mark.asyncio
-async def test_site_role_assignments():
+async def test_site_role_assignments() -> None:
     api_response = {"value": [{"verifying_calls_only": True}]}
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = Mock(
@@ -1607,7 +1610,7 @@ async def test_site_role_assignments():
 
 
 @pytest.mark.asyncio
-async def test_site_list_has_unique_role_assignments():
+async def test_site_list_has_unique_role_assignments() -> None:
     api_response = {"value": True}
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = Mock(
@@ -1620,7 +1623,7 @@ async def test_site_list_has_unique_role_assignments():
 
 
 @pytest.mark.asyncio
-async def test_site_list_item_has_unique_role_assignments():
+async def test_site_list_item_has_unique_role_assignments() -> None:
     api_response = {"value": True}
     async with create_sps_source() as source:
         source.sharepoint_client._api_call = Mock(

@@ -14,10 +14,12 @@ from freezegun import freeze_time
 
 import connectors.logger
 from connectors.logger import ColorFormatter, logger, set_logger, tracer
+from _asyncio import Future
+from typing import Iterator
 
 
 @contextmanager
-def unset_logger():
+def unset_logger() -> Iterator[None]:
     old = connectors.logger.logger
     connectors.logger.logger = None
     try:
@@ -27,13 +29,13 @@ def unset_logger():
             connectors.logger.logger = logger
 
 
-def test_logger():
+def test_logger() -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG)
         assert logger.level == logging.DEBUG
 
 
-def test_logger_filebeat():
+def test_logger_filebeat() -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -50,7 +52,7 @@ def test_logger_filebeat():
         assert data["service"]["type"] == "connectors-python"
 
 
-def test_tracer():
+def test_tracer() -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -74,7 +76,7 @@ def test_tracer():
 
 
 @pytest.mark.asyncio
-async def test_async_tracer():
+async def test_async_tracer() -> Iterator[Future]:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -97,7 +99,7 @@ async def test_async_tracer():
 
 
 @pytest.mark.asyncio
-async def test_async_tracer_slow():
+async def test_async_tracer_slow() -> Iterator[Future]:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -123,7 +125,7 @@ async def test_async_tracer_slow():
 
 
 @pytest.mark.asyncio
-async def test_trace_async_gen():
+async def test_trace_async_gen() -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []
@@ -159,7 +161,7 @@ async def test_trace_async_gen():
         ("critical", ColorFormatter.BOLD_RED),
     ],
 )
-def test_colored_logging(log_level, color):
+def test_colored_logging(log_level: str, color: str) -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=False)
         logs = []
@@ -177,7 +179,7 @@ def test_colored_logging(log_level, color):
 
 # first param is UTC time, second param is offset we run with
 @freeze_time("2024-07-10 12:00:00", tz_offset=-7)
-def test_timestamp_is_utc():
+def test_timestamp_is_utc() -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=False)
         logs = []
@@ -193,7 +195,7 @@ def test_timestamp_is_utc():
         )  # if the local time was respected, this would be 05:00:00
 
 
-def test_colored_logging_with_filebeat():
+def test_colored_logging_with_filebeat() -> None:
     with unset_logger():
         logger = set_logger(logging.DEBUG, filebeat=True)
         logs = []

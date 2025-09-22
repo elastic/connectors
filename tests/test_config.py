@@ -21,26 +21,26 @@ ES_CONFIG_INVALID_LOG_LEVEL_FILE = os.path.join(
 )
 
 
-def test_bad_config_file():
+def test_bad_config_file() -> None:
     with pytest.raises(FileNotFoundError):
         load_config("BEEUUUAH")
 
 
-def test_config(set_env):
+def test_config(set_env: None) -> None:
     config = load_config(CONFIG_FILE)
     assert isinstance(config, dict)
     assert config["elasticsearch"]["host"] == "http://nowhere.com:9200"
     assert config["elasticsearch"]["user"] == "elastic"
 
 
-def test_config_with_ent_search(set_env):
+def test_config_with_ent_search(set_env: None) -> None:
     with mock.patch.dict(os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_FILE}):
         config = load_config(CONFIG_FILE)
         assert config["elasticsearch"]["headers"]["X-Elastic-Auth"] == "SomeYeahValue"
         assert config["service"]["log_level"] == "DEBUG"
 
 
-def test_config_with_invalid_log_level(set_env):
+def test_config_with_invalid_log_level(set_env: None) -> None:
     with mock.patch.dict(
         os.environ, {"ENT_SEARCH_CONFIG_PATH": ES_CONFIG_INVALID_LOG_LEVEL_FILE}
     ):
@@ -50,7 +50,7 @@ def test_config_with_invalid_log_level(set_env):
         assert e.match("Unexpected log level.*")
 
 
-def test_nest_config_when_nested_field_does_not_exist():
+def test_nest_config_when_nested_field_does_not_exist() -> None:
     config = {}
 
     _nest_configs(config, "test.nested.property", 50)
@@ -58,7 +58,7 @@ def test_nest_config_when_nested_field_does_not_exist():
     assert config["test"]["nested"]["property"] == 50
 
 
-def test_nest_config_when_nested_field_exists():
+def test_nest_config_when_nested_field_exists() -> None:
     config = {"test": {"nested": {"property": 25}}}
 
     _nest_configs(config, "test.nested.property", 50)
@@ -66,7 +66,7 @@ def test_nest_config_when_nested_field_exists():
     assert config["test"]["nested"]["property"] == 50
 
 
-def test_nest_config_when_root_field_does_not_exist():
+def test_nest_config_when_root_field_does_not_exist() -> None:
     config = {}
 
     _nest_configs(config, "test", 50)
@@ -74,7 +74,7 @@ def test_nest_config_when_root_field_does_not_exist():
     assert config["test"] == 50
 
 
-def test_nest_config_when_root_field_does_exists():
+def test_nest_config_when_root_field_does_exists() -> None:
     config = {"test": 10}
 
     _nest_configs(config, "test", 50)

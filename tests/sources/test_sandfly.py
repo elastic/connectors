@@ -27,6 +27,9 @@ from connectors.sources.sandfly import (
     format_sandfly_date,
 )
 from tests.sources.support import create_source
+from _asyncio import Task
+from aioresponses.core import aioresponses
+from typing import Iterator
 
 SANDFLY_SERVER_URL = "https://blackbird.sandflysecurity.com/v4"
 URL_SANDFLY_LOGIN = SANDFLY_SERVER_URL + "/auth/login"
@@ -171,7 +174,7 @@ async def sandfly_data_source():
 
 
 @pytest.mark.asyncio
-async def test_sandfly_date(sandfly_client, mock_responses):
+async def test_sandfly_date(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     expiry = "2025-06-23T17:35:23Z"
     expiry_date = extract_sandfly_date(expiry)
     assert type(expiry_date) is datetime
@@ -187,7 +190,7 @@ async def test_sandfly_date(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_ping_success(sandfly_client, mock_responses):
+async def test_client_ping_success(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.head(
         SANDFLY_SERVER_URL,
         status=401,  # Error code 401 Unauthorized means server is running
@@ -197,7 +200,7 @@ async def test_client_ping_success(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_client_ping_failure(sandfly_client, mock_responses):
+async def test_client_ping_failure(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     request_error = ClientResponseError(None, None)
     request_error.status = 403
     request_error.message = "Forbidden"
@@ -212,7 +215,7 @@ async def test_client_ping_failure(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_client_login_failures(sandfly_client, mock_responses):
+async def test_client_login_failures(sandfly_client: SandflyClient, mock_responses: aioresponses) -> Iterator[Task]:
     request_error = FetchTokenError(None, None)
     request_error.status = 403
     request_error.message = "Forbidden"
@@ -244,7 +247,7 @@ async def test_client_login_failures(sandfly_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_client_resource_not_found(sandfly_client, mock_responses):
+async def test_client_resource_not_found(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -276,7 +279,7 @@ async def test_client_resource_not_found(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_license(sandfly_client, mock_responses):
+async def test_client_get_license(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -297,7 +300,7 @@ async def test_client_get_license(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_hosts(sandfly_client, mock_responses):
+async def test_client_get_hosts(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -322,7 +325,7 @@ async def test_client_get_hosts(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_ssh_keys(sandfly_client, mock_responses):
+async def test_client_get_ssh_keys(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -356,7 +359,7 @@ async def test_client_get_ssh_keys(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_results_by_time(sandfly_client, mock_responses):
+async def test_client_get_results_by_time(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -396,7 +399,7 @@ async def test_client_get_results_by_time(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_client_get_results_by_id(sandfly_client, mock_responses):
+async def test_client_get_results_by_id(sandfly_client: SandflyClient, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -439,7 +442,7 @@ async def test_client_get_results_by_id(sandfly_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_data_source_ping_success(sandfly_data_source, mock_responses):
+async def test_data_source_ping_success(sandfly_data_source: SandflyDataSource, mock_responses: aioresponses) -> None:
     mock_responses.head(
         SANDFLY_SERVER_URL,
         status=401,  # Error code 401 Unauthorized means server is running
@@ -449,7 +452,7 @@ async def test_data_source_ping_success(sandfly_data_source, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
+async def test_data_source_ping_failure(sandfly_data_source: SandflyDataSource, mock_responses: aioresponses) -> None:
     request_error = ClientResponseError(None, None)
     request_error.status = 403
     request_error.message = "Forbidden"
@@ -466,8 +469,8 @@ async def test_data_source_ping_failure(sandfly_data_source, mock_responses):
 
 @pytest.mark.asyncio
 async def test_data_source_get_docs_license_expired(
-    sandfly_data_source, mock_responses
-):
+    sandfly_data_source: SandflyDataSource, mock_responses: aioresponses
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -487,7 +490,7 @@ async def test_data_source_get_docs_license_expired(
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs_not_licensed(sandfly_data_source, mock_responses):
+async def test_data_source_get_docs_not_licensed(sandfly_data_source: SandflyDataSource, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -507,7 +510,7 @@ async def test_data_source_get_docs_not_licensed(sandfly_data_source, mock_respo
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs(sandfly_data_source, mock_responses):
+async def test_data_source_get_docs(sandfly_data_source: SandflyDataSource, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -567,8 +570,8 @@ async def test_data_source_get_docs(sandfly_data_source, mock_responses):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sync_cursor", [None, {}])
 async def test_data_source_get_docs_inc_empty_sync_cursor(
-    sandfly_data_source, mock_responses, sync_cursor
-):
+    sandfly_data_source: SandflyDataSource, mock_responses: aioresponses, sync_cursor: None
+) -> None:
     with pytest.raises(SyncCursorEmpty):
         docs = []
         async for doc, _, _ in sandfly_data_source.get_docs_incrementally(
@@ -579,8 +582,8 @@ async def test_data_source_get_docs_inc_empty_sync_cursor(
 
 @pytest.mark.asyncio
 async def test_data_source_get_docs_inc_license_expired(
-    sandfly_data_source, mock_responses
-):
+    sandfly_data_source: SandflyDataSource, mock_responses: aioresponses
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -607,8 +610,8 @@ async def test_data_source_get_docs_inc_license_expired(
 
 @pytest.mark.asyncio
 async def test_data_source_get_docs_inc_not_licensed(
-    sandfly_data_source, mock_responses
-):
+    sandfly_data_source: SandflyDataSource, mock_responses: aioresponses
+) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,
@@ -634,7 +637,7 @@ async def test_data_source_get_docs_inc_not_licensed(
 
 
 @pytest.mark.asyncio
-async def test_data_source_get_docs_inc(sandfly_data_source, mock_responses):
+async def test_data_source_get_docs_inc(sandfly_data_source: SandflyDataSource, mock_responses: aioresponses) -> None:
     mock_responses.post(
         URL_SANDFLY_LOGIN,
         status=200,

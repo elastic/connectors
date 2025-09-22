@@ -12,7 +12,7 @@ from urllib.parse import quote
 import fastjsonschema
 from asyncpg.exceptions._base import InternalClientError
 from fastjsonschema import JsonSchemaValueException
-from sqlalchemy import text
+from sqlalchemy import CursorResult, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -20,7 +20,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -38,6 +38,9 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from _asyncio import Task
+from connectors.logger import ExtraLogger
+from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
 
 FETCH_LIMIT = 1000
 
@@ -45,15 +48,15 @@ FETCH_LIMIT = 1000
 class PostgreSQLQueries(Queries):
     """Class contains methods which return query"""
 
-    def ping(self):
+    def ping(self) -> str:
         """Query to ping source"""
         return "SELECT 1+1"
 
-    def all_tables(self, **kwargs):
+    def all_tables(self, **kwargs) -> str:
         """Query to get all tables"""
         return f"SELECT table_name FROM information_schema.tables WHERE table_catalog = '{kwargs['database']}' and table_schema = '{kwargs['schema']}'"
 
-    def table_primary_key(self, **kwargs):
+    def table_primary_key(self, **kwargs) -> str:
         """Query to get the primary key"""
         return (
             f"SELECT a.attname AS c "
@@ -67,15 +70,15 @@ class PostgreSQLQueries(Queries):
             f"ORDER BY array_position(i.indkey, a.attnum)"
         )
 
-    def table_data(self, **kwargs):
+    def table_data(self, **kwargs) -> str:
         """Query to get the table data"""
         return f'SELECT * FROM "{kwargs["schema"]}"."{kwargs["table"]}" ORDER BY {kwargs["columns"]} LIMIT {kwargs["limit"]} OFFSET {kwargs["offset"]}'
 
-    def table_last_update_time(self, **kwargs):
+    def table_last_update_time(self, **kwargs) -> str:
         """Query to get the last update time of the table"""
         return f'SELECT MAX(pg_xact_commit_timestamp(xmin)) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
-    def table_data_count(self, **kwargs):
+    def table_data_count(self, **kwargs) -> str:
         """Query to get the number of rows in the table"""
         return f'SELECT COUNT(*) FROM "{kwargs["schema"]}"."{kwargs["table"]}"'
 
@@ -100,10 +103,10 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "PostgreSQLDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[List[Dict[str, Union[List[str], str]]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -116,7 +119,7 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=DEFAULT_WAIT_MULTIPLIER,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[List[str], str]]]) -> SyncRuleValidationResult:
         try:
             PostgreSQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -155,19 +158,19 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
 class PostgreSQLClient:
     def __init__(
         self,
-        host,
-        port,
-        user,
-        password,
-        database,
-        schema,
-        tables,
-        ssl_enabled,
-        ssl_ca,
-        logger_,
-        retry_count=DEFAULT_RETRY_COUNT,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        host: str,
+        port: Union[str, int],
+        user: str,
+        password: str,
+        database: str,
+        schema: str,
+        tables: Union[str, List[str]],
+        ssl_enabled: bool,
+        ssl_ca: str,
+        logger_: Optional[ExtraLogger],
+        retry_count: int=DEFAULT_RETRY_COUNT,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -195,7 +198,7 @@ class PostgreSQLClient:
             connect_args=self._get_connect_args(),
         )
 
-    async def get_cursor(self, query):
+    async def get_cursor(self, query: str) -> CursorResult[Any]:
         """Execute the passed query on the Async supported Database server and return cursor.
 
         Args:
@@ -215,7 +218,7 @@ class PostgreSQLClient:
             )
             raise
 
-    async def ping(self):
+    async def ping(self) -> Generator[Task, None, Tuple[int]]:
         return await anext(
             fetch(
                 cursor_func=partial(self.get_cursor, self.queries.ping()),
@@ -245,7 +248,7 @@ class PostgreSQLClient:
             for table in tables:
                 yield table
 
-    async def get_table_row_count(self, table):
+    async def get_table_row_count(self, table: str) -> int:
         [row_count] = await anext(
             fetch(
                 cursor_func=partial(
@@ -261,7 +264,7 @@ class PostgreSQLClient:
         )
         return row_count
 
-    async def get_table_primary_key(self, table):
+    async def get_table_primary_key(self, table: str) -> List[str]:
         primary_keys = [
             key
             async for [key] in fetch(
@@ -281,7 +284,7 @@ class PostgreSQLClient:
 
         return primary_keys
 
-    async def get_table_last_update_time(self, table):
+    async def get_table_last_update_time(self, table: str) -> str:
         self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
@@ -371,7 +374,7 @@ class PostgreSQLClient:
 
             self._logger.info(f"Found {record_count} records for '{query}' query")
 
-    def _get_connect_args(self):
+    def _get_connect_args(self) -> Dict[str, Any]:
         """Convert string to pem format and create an SSL context
 
         Returns:
@@ -394,7 +397,7 @@ class PostgreSQLDataSource(BaseDataSource):
     service_type = "postgresql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup connection to the PostgreSQL database-server configured by user
 
         Args:
@@ -422,7 +425,7 @@ class PostgreSQLDataSource(BaseDataSource):
         self.postgresql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[str], List[Dict[str, Union[bool, str]]]]]]:
         return {
             "host": {
                 "label": "Host",
@@ -501,7 +504,7 @@ class PostgreSQLDataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [PostgreSQLAdvancedRulesValidator(self)]
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         """Verify the connection with the database-server configured by user"""
         self._logger.debug("Pinging the PostgreSQL instance")
         try:
@@ -510,7 +513,7 @@ class PostgreSQLDataSource(BaseDataSource):
             msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
             raise Exception(msg) from e
 
-    def row2doc(self, row, doc_id, table, timestamp):
+    def row2doc(self, row: Dict[str, Union[str, int]], doc_id: str, table: Union[str, List[str]], timestamp: str) -> Dict[str, Union[int, str, List[str]]]:
         row.update(
             {
                 "_id": doc_id,
@@ -522,7 +525,7 @@ class PostgreSQLDataSource(BaseDataSource):
         )
         return row
 
-    async def get_primary_key(self, tables):
+    async def get_primary_key(self, tables: List[str]) -> Tuple[List[str], List[str]]:
         self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:

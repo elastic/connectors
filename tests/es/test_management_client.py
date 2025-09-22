@@ -15,11 +15,13 @@ from elasticsearch import (
 
 from connectors.es.management_client import ESManagementClient
 from tests.commons import AsyncIterator
+from aioresponses.core import aioresponses
+from typing import Iterator
 
 
 class TestESManagementClient:
     @pytest_asyncio.fixture
-    def es_management_client(self):
+    def es_management_client(self) -> Iterator[ESManagementClient]:
         config = {
             "username": "elastic",
             "password": "changeme",
@@ -32,13 +34,13 @@ class TestESManagementClient:
         yield es_management_client
 
     @pytest.mark.asyncio
-    async def test_ensure_exists_when_no_indices_passed(self, es_management_client):
+    async def test_ensure_exists_when_no_indices_passed(self, es_management_client: ESManagementClient) -> None:
         await es_management_client.ensure_exists()
 
         es_management_client.client.indices.exists.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_ensure_exists_when_indices_passed(self, es_management_client):
+    async def test_ensure_exists_when_indices_passed(self, es_management_client: ESManagementClient) -> None:
         index_name = "search-mongo"
         es_management_client.client.indices.exists.return_value = False
 
@@ -48,7 +50,7 @@ class TestESManagementClient:
         es_management_client.client.indices.create.assert_called_with(index=index_name)
 
     @pytest.mark.asyncio
-    async def test_create_content_index(self, es_management_client):
+    async def test_create_content_index(self, es_management_client: ESManagementClient) -> None:
         index_name = "search-mongo"
         lang_code = "en"
         await es_management_client.create_content_index(index_name, lang_code)
@@ -57,8 +59,8 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_do_not_exist(
-        self, es_management_client
-    ):
+        self, es_management_client: ESManagementClient
+    ) -> None:
         pipeline_id = 1
         version = 2
         description = "that's a pipeline"
@@ -83,8 +85,8 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_ensure_ingest_pipeline_exists_when_pipeline_exists(
-        self, es_management_client
-    ):
+        self, es_management_client: ESManagementClient
+    ) -> None:
         pipeline_id = 1
         version = 2
         description = "that's a pipeline"
@@ -99,7 +101,7 @@ class TestESManagementClient:
         es_management_client.client.ingest.put_pipeline.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_delete_indices(self, es_management_client):
+    async def test_delete_indices(self, es_management_client: ESManagementClient) -> None:
         indices = ["search-mongo"]
         es_management_client.client.indices.delete = AsyncMock()
 
@@ -109,7 +111,7 @@ class TestESManagementClient:
         )
 
     @pytest.mark.asyncio
-    async def test_index_exists(self, es_management_client):
+    async def test_index_exists(self, es_management_client: ESManagementClient) -> None:
         index_name = "search-mongo"
         es_management_client.client.indices.exists = AsyncMock()
 
@@ -117,7 +119,7 @@ class TestESManagementClient:
         es_management_client.client.indices.exists.assert_awaited_with(index=index_name)
 
     @pytest.mark.asyncio
-    async def test_clean_index(self, es_management_client):
+    async def test_clean_index(self, es_management_client: ESManagementClient) -> None:
         index_name = "search-mongo"
         es_management_client.client.indices.exists = AsyncMock()
 
@@ -127,13 +129,13 @@ class TestESManagementClient:
         )
 
     @pytest.mark.asyncio
-    async def test_list_indices(self, es_management_client):
+    async def test_list_indices(self, es_management_client: ESManagementClient) -> None:
         await es_management_client.list_indices(index="search-*")
 
         es_management_client.client.indices.stats.assert_awaited_with(index="search-*")
 
     @pytest.mark.asyncio
-    async def test_upsert(self, es_management_client):
+    async def test_upsert(self, es_management_client: ESManagementClient) -> None:
         _id = "123"
         index_name = "search-mongo"
         document = {"something": "something"}
@@ -146,8 +148,8 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_yield_existing_documents_metadata_when_index_does_not_exist(
-        self, es_management_client, mock_responses
-    ):
+        self, es_management_client: ESManagementClient, mock_responses: aioresponses
+    ) -> None:
         es_management_client.index_exists = AsyncMock(return_value=False)
 
         records = [
@@ -170,8 +172,8 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_yield_existing_documents_metadata_when_index_exists(
-        self, es_management_client, mock_responses
-    ):
+        self, es_management_client: ESManagementClient, mock_responses: aioresponses
+    ) -> None:
         es_management_client.index_exists = AsyncMock(return_value=True)
 
         records = [
@@ -193,7 +195,7 @@ class TestESManagementClient:
             assert ids == ["1", "2"]
 
     @pytest.mark.asyncio
-    async def test_get_connector_secret(self, es_management_client, mock_responses):
+    async def test_get_connector_secret(self, es_management_client: ESManagementClient, mock_responses: aioresponses) -> None:
         secret_id = "secret-id"
 
         es_management_client.client.perform_request = AsyncMock(
@@ -208,8 +210,8 @@ class TestESManagementClient:
 
     @pytest.mark.asyncio
     async def test_get_connector_secret_when_secret_does_not_exist(
-        self, es_management_client, mock_responses
-    ):
+        self, es_management_client: ESManagementClient, mock_responses: aioresponses
+    ) -> None:
         secret_id = "secret-id"
 
         error_meta = Mock()
@@ -227,7 +229,7 @@ class TestESManagementClient:
             assert secret is None
 
     @pytest.mark.asyncio
-    async def test_create_connector_secret(self, es_management_client, mock_responses):
+    async def test_create_connector_secret(self, es_management_client: ESManagementClient, mock_responses: aioresponses) -> None:
         secret_id = "secret-id"
         secret_value = "my-secret"
 
@@ -245,7 +247,7 @@ class TestESManagementClient:
         )
 
     @pytest.mark.asyncio
-    async def test_extract_index_or_alias_with_index(self, es_management_client):
+    async def test_extract_index_or_alias_with_index(self, es_management_client: ESManagementClient) -> None:
         response = {
             "shapo-online": {
                 "aliases": {"search-shapo-online": {}},
@@ -261,7 +263,7 @@ class TestESManagementClient:
         assert index == response["shapo-online"]
 
     @pytest.mark.asyncio
-    async def test_extract_index_or_alias_with_alias(self, es_management_client):
+    async def test_extract_index_or_alias_with_alias(self, es_management_client: ESManagementClient) -> None:
         response = {
             "shapo-online": {
                 "aliases": {"search-shapo-online": {}},
@@ -277,7 +279,7 @@ class TestESManagementClient:
         assert index == response["shapo-online"]
 
     @pytest.mark.asyncio
-    async def test_extract_index_or_alias_when_none_present(self, es_management_client):
+    async def test_extract_index_or_alias_when_none_present(self, es_management_client: ESManagementClient) -> None:
         response = {
             "shapo-online": {
                 "aliases": {"search-shapo-online": {}},
@@ -293,7 +295,7 @@ class TestESManagementClient:
         assert index is None
 
     @pytest.mark.asyncio
-    async def test_get_index_or_alias(self, es_management_client, mock_responses):
+    async def test_get_index_or_alias(self, es_management_client: ESManagementClient, mock_responses: aioresponses) -> None:
         secret_id = "secret-id"
         secret_value = "my-secret"
 

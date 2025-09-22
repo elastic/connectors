@@ -15,7 +15,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.generic_database import (
     configured_tables,
     is_wildcard,
@@ -27,6 +27,10 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from connectors.logger import ExtraLogger
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock, MagicMock
 
 SPLIT_BY_COMMA_OUTSIDE_BACKTICKS_PATTERN = re.compile(r"`(?:[^`]|``)+`|\w+")
 
@@ -36,7 +40,7 @@ RETRIES = 3
 RETRY_INTERVAL = 2
 
 
-def format_list(list_):
+def format_list(list_: Union[str, List[str]]) -> str:
     return ", ".join(list_)
 
 
@@ -56,10 +60,10 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "MySqlDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Any) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -72,7 +76,7 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: List[Union[Dict[str, Union[List[str], str, bool]], Dict[str, str], str, Dict[str, List[str]], Dict[str, Union[str, List[str]]]]]) -> SyncRuleValidationResult:
         try:
             MySQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -107,17 +111,17 @@ class MySQLAdvancedRulesValidator(AdvancedRulesValidator):
 class MySQLClient:
     def __init__(
         self,
-        host,
-        port,
-        user,
-        password,
-        ssl_enabled,
-        ssl_certificate,
-        logger_,
-        database=None,
-        max_pool_size=MAX_POOL_SIZE,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        ssl_enabled: bool,
+        ssl_certificate: str,
+        logger_: ExtraLogger,
+        database: None=None,
+        max_pool_size: int=MAX_POOL_SIZE,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -131,7 +135,7 @@ class MySQLClient:
         self.connection = None
         self._logger = logger_
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MySQLClient":
         connection_string = {
             "host": self.host,
             "port": int(self.port),
@@ -150,7 +154,7 @@ class MySQLClient:
 
         return self
 
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
+    async def __aexit__(self, exception_type: None, exception_value: None, exception_traceback: None) -> None:
         self._sleeps.cancel()
 
         self.connection_pool.release(self.connection)
@@ -162,14 +166,14 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_all_table_names(self):
+    async def get_all_table_names(self) -> List[str]:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(
                 f"SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}'"
             )
             return [table[0] for table in await cursor.fetchall()]
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.connection.ping()
             self._logger.info("Successfully connected to the MySQL Server.")
@@ -182,13 +186,13 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_column_names_for_query(self, query):
+    async def get_column_names_for_query(self, query: str) -> List[Union[Any, str]]:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(f"SELECT q.* FROM ({query}) as q LIMIT 0")
 
             return [f"{column[0]}" for column in cursor.description]
 
-    async def get_column_names_for_table(self, table):
+    async def get_column_names_for_table(self, table: str) -> List[Union[Any, str]]:
         return await self.get_column_names_for_query(
             f"SELECT * FROM `{self.database}`.`{table}`"
         )
@@ -198,7 +202,7 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_primary_key_column_names(self, table):
+    async def get_primary_key_column_names(self, table: str) -> List[Union[Any, str]]:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(
                 f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}' AND COLUMN_KEY = 'PRI'"
@@ -211,7 +215,7 @@ class MySQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_last_update_time(self, table):
+    async def get_last_update_time(self, table: str) -> str:
         async with self.connection.cursor(aiomysql.cursors.SSCursor) as cursor:
             await cursor.execute(
                 f"SELECT UPDATE_TIME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '{self.database}' AND TABLE_NAME = '{table}'"
@@ -241,7 +245,7 @@ class MySQLClient:
                     break
             offset += self.fetch_size
 
-    async def _get_table_row_count_for_query(self, query):
+    async def _get_table_row_count_for_query(self, query: str) -> int:
         table_row_count_query = re.sub(
             r"SELECT\s.*?\sFROM",
             "SELECT COUNT(*) FROM",
@@ -254,8 +258,8 @@ class MySQLClient:
             return int(table_row_count[0])
 
     def _update_query_with_pagination_attributes(
-        self, query, offset, primary_key_columns
-    ):
+        self, query: str, offset: int, primary_key_columns: List[str]
+    ) -> str:
         updated_query = ""
         has_orderby = bool(re.search(r"\bORDER\s+BY\b", query, flags=re.IGNORECASE))
         # Checking if custom query has a semicolon at the end or not
@@ -313,7 +317,7 @@ class MySQLClient:
                 )
 
 
-def row2doc(row, column_names, primary_key_columns, table, timestamp):
+def row2doc(row: Union[Tuple[int, str, int], List[str]], column_names: List[str], primary_key_columns: Union[str, List[str]], table: Union[str, List[str]], timestamp: Optional[Union[str, datetime]]) -> Dict[str, Union[str, int, datetime, List[str]]]:
     row = dict(zip(column_names, row, strict=True))
     row.update(
         {
@@ -326,7 +330,7 @@ def row2doc(row, column_names, primary_key_columns, table, timestamp):
     return row
 
 
-def generate_id(tables, row, primary_key_columns):
+def generate_id(tables: Union[str, List[str]], row: Dict[str, Union[str, int]], primary_key_columns: Union[str, List[str]]) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:
@@ -351,7 +355,7 @@ class MySqlDataSource(BaseDataSource):
     service_type = "mysql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self._sleeps = CancellableSleeps()
         self.retry_count = self.configuration["retry_count"]
@@ -361,7 +365,7 @@ class MySqlDataSource(BaseDataSource):
         self.tables = self.configuration["tables"]
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[Dict[str, Union[str, bool]]], List[str]]]]:
         return {
             "host": {
                 "label": "Host",
@@ -446,7 +450,7 @@ class MySqlDataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [MySQLAdvancedRulesValidator(self)]
 
-    async def close(self):
+    async def close(self) -> None:
         self._sleeps.cancel()
 
     async def validate_config(self):
@@ -471,14 +475,14 @@ class MySqlDataSource(BaseDataSource):
                 await self._validate_database_accessible(cursor)
                 await self._validate_tables_accessible(cursor)
 
-    async def _validate_database_accessible(self, cursor):
+    async def _validate_database_accessible(self, cursor: AsyncMock) -> None:
         try:
             await cursor.execute(f"USE `{self.database}`;")
         except aiomysql.Error as e:
             msg = f"The database '{self.database}' is either not present or not accessible for the user '{self.configuration['user']}'."
             raise ConfigurableFieldValueError(msg) from e
 
-    async def _validate_tables_accessible(self, cursor):
+    async def _validate_tables_accessible(self, cursor: AsyncMock) -> None:
         non_accessible_tables = []
         tables_to_validate = await self.get_tables_to_fetch()
 
@@ -523,7 +527,7 @@ class MySqlDataSource(BaseDataSource):
             async for row in self.fetch_documents(tables):
                 yield row, None
 
-    async def fetch_documents(self, tables, query=None, id_columns=None):
+    async def fetch_documents(self, tables: List[str], query: Optional[str]=None, id_columns: None=None) -> None:
         """If query is not present it fetches all rows from all tables.
         Otherwise, the custom query is executed.
 
@@ -577,7 +581,7 @@ class MySqlDataSource(BaseDataSource):
                     timestamp=last_update_time,
                 )
 
-    async def _yield_docs_custom_query(self, client, tables, query, id_columns):
+    async def _yield_docs_custom_query(self, client: Union[MySQLClient, MagicMock], tables: Union[str, List[str]], query: str, id_columns: None) -> None:
         primary_key_columns = [
             await client.get_primary_key_column_names(table) for table in tables
         ]
@@ -617,7 +621,7 @@ class MySqlDataSource(BaseDataSource):
                 timestamp=max(last_update_times) if len(last_update_times) else None,
             )
 
-    async def get_tables_to_fetch(self):
+    async def get_tables_to_fetch(self) -> Union[str, List[str]]:
         tables = configured_tables(self.tables)
 
         async with self.mysql_client() as client:

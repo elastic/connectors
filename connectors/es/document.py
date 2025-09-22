@@ -4,6 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from connectors.logger import DocumentLogger
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+
+if TYPE_CHECKING:
+    from connectors.protocol.connectors import ConnectorIndex
+from unittest.mock import MagicMock, Mock
 
 
 class InvalidDocumentSourceError(Exception):
@@ -15,7 +20,7 @@ class ESDocument:
     Represents a document in an Elasticsearch index.
     """
 
-    def __init__(self, elastic_index, doc_source):
+    def __init__(self, elastic_index: Optional[Union[MagicMock, Mock, "ConnectorIndex"]], doc_source: Any) -> None:
         self.index = elastic_index
         if not isinstance(doc_source, dict):
             msg = f"Invalid type found for doc_source: {type(doc_source).__name__}, expected: {dict.__name__}"
@@ -32,7 +37,7 @@ class ESDocument:
             raise InvalidDocumentSourceError(msg)
         self.logger = DocumentLogger(prefix=self._prefix(), extra=self._extra())
 
-    def get(self, *keys, default=None):
+    def get(self, *keys, default=None) -> Any:
         value = self._source
         for key in keys:
             if not isinstance(value, dict):
@@ -42,34 +47,34 @@ class ESDocument:
             return default
         return value
 
-    async def reload(self):
+    async def reload(self) -> None:
         doc_source = await self.index.fetch_response_by_id(self.id)
         self._seq_no = doc_source.get("_seq_no")
         self._primary_term = doc_source.get("_primary_term")
         self._source = doc_source.get("_source", {})
 
-    def log_debug(self, msg, *args, **kwargs):
+    def log_debug(self, msg: str, *args, **kwargs) -> None:
         self.logger.debug(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_info(self, msg, *args, **kwargs):
+    def log_info(self, msg: str, *args, **kwargs) -> None:
         self.logger.info(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_warning(self, msg, *args, **kwargs):
+    def log_warning(self, msg: str, *args, **kwargs) -> None:
         self.logger.warning(
             msg,
             *args,
             **kwargs,
         )
 
-    def log_error(self, msg, *args, **kwargs):
+    def log_error(self, msg: Union[str, ValueError], *args, **kwargs) -> None:
         self.logger.error(
             msg,
             *args,
@@ -98,10 +103,10 @@ class ESDocument:
             **kwargs,
         )
 
-    def _prefix(self):
+    def _prefix(self) -> None:
         """Return a string which will be prefixed to the log message when filebeat is not turned on"""
         return None
 
-    def _extra(self):
+    def _extra(self) -> Dict[Any, Any]:
         """Return custom fields to be added to ecs logging when filebeat is turned on"""
         return {}

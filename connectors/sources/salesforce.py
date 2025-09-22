@@ -25,7 +25,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CancellableSleeps,
@@ -33,6 +33,11 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from _asyncio import Future, Task
+from aiohttp.client import ClientSession
+from aiohttp.client_reqrep import ClientResponse
+from connectors.protocol.connectors import Filter
+from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
 
 SALESFORCE_EMULATOR_HOST = os.environ.get("SALESFORCE_EMULATOR_HOST")
 RUNNING_FTEST = (
@@ -138,16 +143,16 @@ RELEVANT_SOBJECT_FIELDS = [
 ]
 
 
-def _prefix_user(user):
+def _prefix_user(user: str) -> Optional[str]:
     if user:
         return prefix_identity("user", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id: str) -> str:
     return prefix_identity("user_id", user_id)
 
 
-def _prefix_email(email):
+def _prefix_email(email: Optional[str]) -> Optional[str]:
     return prefix_identity("email", email)
 
 
@@ -188,7 +193,7 @@ class SalesforceServerError(Exception):
 
 
 class SalesforceClient:
-    def __init__(self, configuration, base_url):
+    def __init__(self, configuration: DataSourceConfiguration, base_url: str) -> None:
         self._logger = logger
         self._sleeps = CancellableSleeps()
 
@@ -220,15 +225,15 @@ class SalesforceClient:
             timeout=aiohttp.ClientTimeout(total=None),
         )
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self.session.head(self.base_url)
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         self.api_token.clear()
         await self.session.close()
         del self.session
 
-    def modify_soql_query(self, query):
+    def modify_soql_query(self, query: str) -> str:
         lowered_query = query.lower()
         match_limit = re.search(r"(?i)(.*)FROM\s+(.*?)(?:LIMIT)(.*)", lowered_query)
         match_offset = re.search(r"(?i)(.*)FROM\s+(.*?)(?:OFFSET)(.*)", lowered_query)
@@ -244,7 +249,7 @@ class SalesforceClient:
 
         return query
 
-    def _add_last_modified_date(self, query):
+    def _add_last_modified_date(self, query: str) -> str:
         lowered_query = query.lower()
         if (
             not ("fields(all)" in lowered_query or "fields(standard)" in lowered_query)
@@ -256,7 +261,7 @@ class SalesforceClient:
 
         return query
 
-    def _add_id(self, query):
+    def _add_id(self, query: str) -> str:
         lowered_query = query.lower()
         if not (
             "fields(all)" in lowered_query or "fields(standard)" in lowered_query
@@ -265,7 +270,7 @@ class SalesforceClient:
 
         return query
 
-    async def get_sync_rules_results(self, rule):
+    async def get_sync_rules_results(self, rule: Dict[str, str]) -> None:
         if rule["language"] == "SOQL":
             query_with_id = self._add_id(query=rule["query"])
             query = self._add_last_modified_date(query=query_with_id)
@@ -297,7 +302,7 @@ class SalesforceClient:
                 custom_objects.append(sobject.get("name"))
         return custom_objects
 
-    async def get_custom_objects(self):
+    async def get_custom_objects(self) -> None:
         for custom_object in self.custom_objects_to_sync:
             query = await self._custom_object_query(custom_object=custom_object)
             async for records in self._yield_non_bulk_query_pages(query):
@@ -322,7 +327,7 @@ class SalesforceClient:
             for record in records:
                 yield record
 
-    async def get_username_by_id(self, user_list):
+    async def get_username_by_id(self, user_list: Tuple[str]) -> None:
         query = USERNAME_FROM_IDS.format(user_list=user_list)
         async for records in self._yield_non_bulk_query_pages(query):
             for record in records:
@@ -334,7 +339,7 @@ class SalesforceClient:
             for record in records:
                 yield record
 
-    async def get_accounts(self):
+    async def get_accounts(self) -> Iterator[Task]:
         if not await self._is_queryable("Account"):
             self._logger.warning(
                 "Object Account is not queryable, so they won't be ingested."
@@ -346,7 +351,7 @@ class SalesforceClient:
             for record in records:
                 yield record
 
-    async def get_opportunities(self):
+    async def get_opportunities(self) -> None:
         if not await self._is_queryable("Opportunity"):
             self._logger.warning(
                 "Object Opportunity is not queryable, so they won't be ingested."
@@ -358,7 +363,7 @@ class SalesforceClient:
             for record in records:
                 yield record
 
-    async def get_contacts(self):
+    async def get_contacts(self) -> None:
         if not await self._is_queryable("Contact"):
             self._logger.warning(
                 "Object Contact is not queryable, so they won't be ingested."
@@ -375,7 +380,7 @@ class SalesforceClient:
                 record["Owner"] = sobjects_by_id["User"].get(record.get("OwnerId"), {})
                 yield record
 
-    async def get_leads(self):
+    async def get_leads(self) -> None:
         if not await self._is_queryable("Lead"):
             self._logger.warning(
                 "Object Lead is not queryable, so they won't be ingested."
@@ -399,7 +404,7 @@ class SalesforceClient:
 
                 yield record
 
-    async def get_campaigns(self):
+    async def get_campaigns(self) -> None:
         if not await self._is_queryable("Campaign"):
             self._logger.warning(
                 "Object Campaign is not queryable, so they won't be ingested."
@@ -411,7 +416,7 @@ class SalesforceClient:
             for record in records:
                 yield record
 
-    async def get_cases(self):
+    async def get_cases(self) -> None:
         if not await self._is_queryable("Case"):
             self._logger.warning(
                 "Object Case is not queryable, so they won't be ingested."
@@ -445,7 +450,7 @@ class SalesforceClient:
                 record["Feeds"] = case_feeds_by_case_id.get(record.get("Id"))
                 yield record
 
-    async def get_case_feeds(self, case_ids):
+    async def get_case_feeds(self, case_ids: List[str]) -> List[Dict[str, Any]]:
         query = await self._case_feeds_query(case_ids)
         all_case_feeds = []
         async for case_feeds in self._yield_non_bulk_query_pages(query):
@@ -453,7 +458,7 @@ class SalesforceClient:
 
         return all_case_feeds
 
-    async def queryable_sobjects(self):
+    async def queryable_sobjects(self) -> List[str]:
         """Cached async property"""
         if self._queryable_sobjects is not None:
             return self._queryable_sobjects
@@ -469,9 +474,9 @@ class SalesforceClient:
 
     async def queryable_sobject_fields(
         self,
-        relevant_objects,
-        relevant_sobject_fields,
-    ):
+        relevant_objects: List[str],
+        relevant_sobject_fields: Optional[List[str]],
+    ) -> Dict[str, List[str]]:
         """Cached async property"""
         objects_to_query = [
             obj for obj in relevant_objects if obj not in self._queryable_sobject_fields
@@ -520,7 +525,7 @@ class SalesforceClient:
         self._sobjects_cache_by_type["User"] = await self._prepare_sobject_cache("User")
         return self._sobjects_cache_by_type
 
-    async def _prepare_sobject_cache(self, sobject):
+    async def _prepare_sobject_cache(self, sobject: str) -> Dict[str, Dict[str, str]]:
         if not await self._is_queryable(sobject):
             self._logger.warning(
                 f"{sobject} is not queryable, so they won't be cached."
@@ -545,13 +550,13 @@ class SalesforceClient:
 
         return sobjects
 
-    async def _is_queryable(self, sobject):
+    async def _is_queryable(self, sobject: str) -> bool:
         """User settings can cause sobjects to be non-queryable
         Querying these causes errors, so we try to filter those out in advance
         """
         return sobject.lower() in await self.queryable_sobjects()
 
-    async def _select_queryable_fields(self, sobject, fields):
+    async def _select_queryable_fields(self, sobject: str, fields: List[str]) -> List[str]:
         """User settings can cause fields to be non-queryable
         Querying these causes errors, so we try to filter those out in advance
         """
@@ -569,7 +574,7 @@ class SalesforceClient:
             return queryable_fields
         return [f for f in fields if f.lower() in queryable_fields]
 
-    async def _yield_non_bulk_query_pages(self, soql_query, endpoint=QUERY_ENDPOINT):
+    async def _yield_non_bulk_query_pages(self, soql_query: str, endpoint: str=QUERY_ENDPOINT) -> Iterator[Task]:
         """loops through query response pages and yields lists of records"""
         url = f"{self.base_url}{endpoint}"
         params = {"q": soql_query}
@@ -624,7 +629,7 @@ class SalesforceClient:
         )
         yield response.get("searchRecords", [])
 
-    async def _execute_non_paginated_query(self, soql_query):
+    async def _execute_non_paginated_query(self, soql_query: None) -> List[Dict[str, Union[Dict[str, str], str, Dict[str, Union[str, Dict[str, str]]], Dict[str, Union[int, bool, List[Dict[str, Union[str, Dict[str, str]]]]]], Dict[str, Union[str, int]]]]]:
         """For quick queries, ignores pagination"""
         url = f"{self.base_url}{QUERY_ENDPOINT}"
         params = {"q": soql_query}
@@ -634,7 +639,7 @@ class SalesforceClient:
         )
         return response.get("records")
 
-    async def _auth_headers(self):
+    async def _auth_headers(self) -> Dict[str, str]:
         token = await self.api_token.token()
         return {"authorization": f"Bearer {token}"}
 
@@ -643,7 +648,7 @@ class SalesforceClient:
         interval=RETRY_INTERVAL,
         skipped_exceptions=[RateLimitedException, InvalidQueryException],
     )
-    async def _get_json(self, url, params=None):
+    async def _get_json(self, url: str, params: Optional[Dict[str, str]]=None) -> Dict[str, Any]:
         response_body = None
         try:
             response = await self._get(url, params=params)
@@ -656,7 +661,7 @@ class SalesforceClient:
         except Exception as e:
             raise e
 
-    async def _get(self, url, params=None):
+    async def _get(self, url: str, params: Optional[Dict[str, str]]=None) -> ClientResponse:
         self._logger.debug(f"Sending request. Url: {url}, params: {params}")
         headers = await self._auth_headers()
         return await self.session.get(
@@ -665,14 +670,14 @@ class SalesforceClient:
             params=params,
         )
 
-    async def _download(self, content_version_id):
+    async def _download(self, content_version_id: str):
         endpoint = CONTENT_VERSION_DOWNLOAD_ENDPOINT.replace(
             "<content_version_id>", content_version_id
         )
         response = await self._get(f"{self.base_url}{endpoint}")
         yield response
 
-    async def _handle_client_response_error(self, response_body, e):
+    async def _handle_client_response_error(self, response_body: Optional[List[Dict[str, str]]], e: ClientResponseError):
         exception_details = f"status: {e.status}, message: {e.message}"
 
         if e.status == 401:
@@ -713,13 +718,13 @@ class SalesforceClient:
             )
             raise SalesforceServerError(msg)
 
-    def _handle_response_body_error(self, error_list):
+    def _handle_response_body_error(self, error_list: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
         if error_list is None or len(error_list) < 1:
             return [{"errorCode": "unknown"}]
 
         return error_list
 
-    async def _custom_object_query(self, custom_object):
+    async def _custom_object_query(self, custom_object: str) -> str:
         queryable_fields = await self._select_queryable_fields(
             custom_object,
             [],
@@ -732,7 +737,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _user_query(self):
+    async def _user_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "User",
             ["Name", "Email", "UserType"],
@@ -746,7 +751,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _accounts_query(self):
+    async def _accounts_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "Account",
             [
@@ -791,7 +796,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _opportunities_query(self):
+    async def _opportunities_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "Opportunity",
             [
@@ -812,7 +817,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _contacts_query(self):
+    async def _contacts_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "Contact",
             [
@@ -837,7 +842,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _leads_query(self):
+    async def _leads_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "Lead",
             [
@@ -868,7 +873,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _campaigns_query(self):
+    async def _campaigns_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "Campaign",
             [
@@ -893,7 +898,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _cases_query(self):
+    async def _cases_query(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "Case",
             [
@@ -925,7 +930,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _email_messages_join_query(self):
+    async def _email_messages_join_query(self) -> str:
         """For join with Case"""
         queryable_fields = await self._select_queryable_fields(
             "EmailMessage",
@@ -955,7 +960,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _case_comments_join_query(self):
+    async def _case_comments_join_query(self) -> str:
         """For join with Case"""
         queryable_fields = await self._select_queryable_fields(
             "CaseComment",
@@ -976,7 +981,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _case_feeds_query(self, case_ids):
+    async def _case_feeds_query(self, case_ids: List[str]) -> str:
         queryable_fields = await self._select_queryable_fields(
             "CaseFeed",
             [
@@ -1003,7 +1008,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def _case_feed_comments_join(self):
+    async def _case_feed_comments_join(self) -> str:
         queryable_fields = await self._select_queryable_fields(
             "FeedComment",
             [
@@ -1025,7 +1030,7 @@ class SalesforceClient:
             .build()
         )
 
-    async def content_document_links_join(self):
+    async def content_document_links_join(self) -> str:
         """Cached async property for getting downloadable attached files
         This join is identical for all SObject queries"""
         if self._content_document_links_join is not None:
@@ -1099,7 +1104,7 @@ class SalesforceClient:
 
 
 class SalesforceAPIToken:
-    def __init__(self, session, base_url, client_id, client_secret):
+    def __init__(self, session: ClientSession, base_url: str, client_id: str, client_secret: str) -> None:
         self._token = None
         self.session = session
         self.url = f"{base_url}{TOKEN_ENDPOINT}"
@@ -1114,7 +1119,7 @@ class SalesforceAPIToken:
         interval=RETRY_INTERVAL,
         skipped_exceptions=[InvalidCredentialsException],
     )
-    async def token(self):
+    async def token(self) -> str:
         if self._token:
             return self._token
 
@@ -1142,49 +1147,49 @@ class SalesforceAPIToken:
                 msg = f"Unexpected error while fetching Salesforce token. Status: {e.status}, message: {e.message}"
                 raise TokenFetchException(msg) from e
 
-    def clear(self):
+    def clear(self) -> None:
         self._token = None
 
 
 class SalesforceSoqlBuilder:
-    def __init__(self, table):
+    def __init__(self, table: str) -> None:
         self.table_name = table
         self.fields = []
         self.where = ""
         self.order_by = ""
         self.limit = ""
 
-    def with_id(self):
+    def with_id(self) -> "SalesforceSoqlBuilder":
         self.fields.append("Id")
         return self
 
-    def with_default_metafields(self):
+    def with_default_metafields(self) -> "SalesforceSoqlBuilder":
         self.fields.extend(["CreatedDate", "LastModifiedDate"])
         return self
 
-    def with_fields(self, fields):
+    def with_fields(self, fields: List[str]) -> "SalesforceSoqlBuilder":
         self.fields.extend(fields)
         return self
 
-    def with_where(self, where_string):
+    def with_where(self, where_string: str) -> "SalesforceSoqlBuilder":
         self.where = f"WHERE {where_string}"
         return self
 
-    def with_order_by(self, order_by_string):
+    def with_order_by(self, order_by_string: str) -> "SalesforceSoqlBuilder":
         self.order_by = f"ORDER BY {order_by_string}"
         return self
 
-    def with_limit(self, limit):
+    def with_limit(self, limit: int) -> "SalesforceSoqlBuilder":
         self.limit = f"LIMIT {limit}"
         return self
 
-    def with_join(self, join):
+    def with_join(self, join: str) -> "SalesforceSoqlBuilder":
         if join:
             self.fields.append(f"(\n{join})\n")
 
         return self
 
-    def build(self):
+    def build(self) -> str:
         select_columns = ",\n".join(set(self.fields))
 
         query_lines = []
@@ -1198,10 +1203,10 @@ class SalesforceSoqlBuilder:
 
 
 class SalesforceDocMapper:
-    def __init__(self, base_url):
+    def __init__(self, base_url: str) -> None:
         self.base_url = base_url
 
-    def map_content_document(self, content_document):
+    def map_content_document(self, content_document: Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]], List[str]]]) -> Dict[str, Union[str, int, List[str]]]:
         content_version = content_document.get("LatestPublishedVersion", {}) or {}
         owner = content_document.get("Owner", {}) or {}
         created_by = content_document.get("CreatedBy", {}) or {}
@@ -1225,7 +1230,7 @@ class SalesforceDocMapper:
             "version_url": f"{self.base_url}/{content_version.get('Id')}",
         }
 
-    def map_salesforce_objects(self, _object):
+    def map_salesforce_objects(self, _object: Dict[str, Any]) -> Dict[str, Any]:
         def _format_datetime(datetime_):
             datetime_ = datetime_ or iso_utc()
             return datetime.strptime(datetime_, "%Y-%m-%dT%H:%M:%S.%f%z").strftime(
@@ -1258,10 +1263,10 @@ class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "SalesforceDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: List[Dict[str, str]]) -> SyncRuleValidationResult:
         return await self._remote_validation(advanced_rules)
 
     @retryable(
@@ -1269,7 +1274,7 @@ class SalesforceAdvancedRulesValidator(AdvancedRulesValidator):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: List[Dict[str, str]]) -> SyncRuleValidationResult:
         try:
             SalesforceAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -1321,7 +1326,7 @@ class SalesforceDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
 
         base_url = (
@@ -1340,7 +1345,7 @@ class SalesforceDataSource(BaseDataSource):
         self.salesforce_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[Dict[str, Union[bool, str]]], List[str]]]]:
         return {
             "domain": {
                 "label": "Domain",
@@ -1406,7 +1411,7 @@ class SalesforceDataSource(BaseDataSource):
             },
         }
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
         Returns:
@@ -1420,14 +1425,14 @@ class SalesforceDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(self, document: Dict[str, Any], access_control: List[Union[str, Any]]) -> Dict[str, Any]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user: Dict[str, Union[str, Dict[str, str]]]) -> Dict[str, Union[str, Dict[str, Optional[str]], Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]]:
         email = user.get("Email")
         username = user.get("Name")
 
@@ -1447,7 +1452,7 @@ class SalesforceDataSource(BaseDataSource):
             "_timestamp": user.get("LastModifiedDate", iso_utc()),
         } | es_access_control_query(access_control)
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         """Get access control documents for Salesforce users.
 
         This method fetches access control documents for Salesforce users when document level security (DLS)
@@ -1492,10 +1497,10 @@ class SalesforceDataSource(BaseDataSource):
                 msg = f"Custom objects {[obj[:-3] for obj in self.salesforce_client.custom_objects_to_sync if obj not in custom_object_response]} are not available."
                 raise ConfigurableFieldValueError(msg)
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         await self.salesforce_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.salesforce_client.ping()
             self._logger.debug("Successfully connected to Salesforce.")
@@ -1506,13 +1511,13 @@ class SalesforceDataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [SalesforceAdvancedRulesValidator(self)]
 
-    async def _get_advanced_sync_rules_result(self, rule):
+    async def _get_advanced_sync_rules_result(self, rule: Dict[str, str]) -> None:
         async for doc in self.salesforce_client.get_sync_rules_results(rule=rule):
             if sobject := doc.get("attributes", {}).get("type"):
                 await self._fetch_users_with_read_access(sobject=sobject)
             yield doc
 
-    async def _fetch_users_with_read_access(self, sobject):
+    async def _fetch_users_with_read_access(self, sobject: str) -> None:
         if not self._dls_enabled():
             self._logger.debug("DLS is not enabled. Skipping")
             return
@@ -1547,7 +1552,7 @@ class SalesforceDataSource(BaseDataSource):
 
         self.permissions[sobject] = list(access_control)
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: Optional[Filter]=None) -> None:
         # We collect all content documents and de-duplicate them before downloading and yielding
         content_docs = []
 
@@ -1695,7 +1700,7 @@ class SalesforceDataSource(BaseDataSource):
 
             yield self._decorate_with_access_control(doc, access_control), None
 
-    async def get_content(self, doc, content_version_id):
+    async def get_content(self, doc: Dict[str, Union[str, int, List[str]]], content_version_id: str) -> Generator[Future, None, Dict[str, Union[str, int, List[str]]]]:
         file_size = doc["content_size"]
         filename = doc["title"]
         file_extension = self.get_file_extension(filename)
@@ -1716,7 +1721,7 @@ class SalesforceDataSource(BaseDataSource):
             return_doc_if_failed=True,  # we still ingest on download failure for Salesforce
         )
 
-    def _parse_content_documents(self, record):
+    def _parse_content_documents(self, record: Dict[str, Any]) -> List[Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]]]]]:
         content_docs = []
         content_links = record.get("ContentDocumentLinks", {}) or {}
         content_links = content_links.get("records", []) or []
@@ -1730,7 +1735,7 @@ class SalesforceDataSource(BaseDataSource):
 
         return content_docs
 
-    def _combine_duplicate_content_docs(self, content_docs):
+    def _combine_duplicate_content_docs(self, content_docs: List[Union[Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]]]], Dict[str, str], Any]]) -> List[Union[Dict[str, Union[str, List[str]]], Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]], List[str]]], Any]]:
         """Duplicate ContentDocuments may appear linked to multiple SObjects
         Here we ensure that we don't download any duplicates while retaining links"""
         grouped = {}

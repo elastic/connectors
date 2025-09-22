@@ -7,7 +7,7 @@ import asyncio
 import logging
 import os
 import signal
-from unittest.mock import ANY, AsyncMock, Mock, call, patch
+from unittest.mock import MagicMock, ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from click import ClickException, UsageError
@@ -15,6 +15,7 @@ from click.testing import CliRunner
 
 from connectors import __version__
 from connectors.service_cli import _start_service, get_event_loop, main
+from aioresponses.core import aioresponses
 
 SUCCESS_EXIT_CODE = 0
 CLICK_EXCEPTION_EXIT_CODE = ClickException.exit_code
@@ -25,7 +26,7 @@ FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
 CONFIG = os.path.join(FIXTURES_DIR, "config.yml")
 
 
-def test_main_exits_on_sigterm(mock_responses):
+def test_main_exits_on_sigterm(mock_responses: aioresponses) -> None:
     headers = {"X-Elastic-Product": "Elasticsearch"}
     host = "http://localhost:9200"
 
@@ -49,7 +50,7 @@ def test_main_exits_on_sigterm(mock_responses):
 
 
 @pytest.mark.parametrize("option", ["-v", "--version"])
-def test_version_action(option):
+def test_version_action(option: str) -> None:
     runner = CliRunner()
     result = runner.invoke(main, [option])
 
@@ -61,8 +62,8 @@ def test_version_action(option):
 @patch("connectors.service_cli.PreflightCheck")
 @patch("connectors.service_cli.get_services")
 async def test_shutdown_signal_registered(
-    patch_get_services, patch_preflight_check, set_env
-):
+    patch_get_services: MagicMock, patch_preflight_check: MagicMock, set_env: None
+) -> None:
     patch_multi_service = Mock()
     patch_get_services.return_value = patch_multi_service
     patch_multi_service.run = AsyncMock()
@@ -74,7 +75,7 @@ async def test_shutdown_signal_registered(
     )
 
 
-def test_list_action(set_env):
+def test_list_action(set_env: None) -> None:
     runner = CliRunner()
 
     config_file = CONFIG
@@ -95,7 +96,7 @@ def test_list_action(set_env):
     assert "Bye" in output
 
 
-def test_config_with_service_type_actions(set_env):
+def test_config_with_service_type_actions(set_env: None) -> None:
     runner = CliRunner()
 
     config_file = CONFIG
@@ -122,7 +123,7 @@ def test_config_with_service_type_actions(set_env):
     assert "Getting default configuration for service type fake" in output
 
 
-def test_list_cannot_be_used_with_other_actions(set_env):
+def test_list_cannot_be_used_with_other_actions(set_env: None) -> None:
     runner = CliRunner()
 
     config_file = CONFIG
@@ -145,7 +146,7 @@ def test_list_cannot_be_used_with_other_actions(set_env):
     assert "Cannot use the `list` action with other actions" in result.output
 
 
-def test_config_cannot_be_used_with_other_actions(set_env):
+def test_config_cannot_be_used_with_other_actions(set_env: None) -> None:
     runner = CliRunner()
 
     config_file = CONFIG
@@ -172,7 +173,7 @@ def test_config_cannot_be_used_with_other_actions(set_env):
 @patch(
     "connectors.service_cli.load_config", side_effect=Exception("something went wrong")
 )
-def test_main_with_invalid_configuration(load_config, set_logger):
+def test_main_with_invalid_configuration(load_config: MagicMock, set_logger: MagicMock) -> None:
     runner = CliRunner()
 
     log_level = "DEBUG"  # should be ignored!
@@ -183,7 +184,7 @@ def test_main_with_invalid_configuration(load_config, set_logger):
     set_logger.assert_called_with(logging.INFO, filebeat=True)
 
 
-def test_unknown_service_type(set_env):
+def test_unknown_service_type(set_env: None) -> None:
     runner = CliRunner()
 
     config_file = CONFIG
@@ -211,7 +212,7 @@ def test_unknown_service_type(set_env):
 
 @patch("connectors.service_cli._get_uvloop")
 @patch("connectors.service_cli.asyncio")
-def test_uvloop_success(patched_asyncio, patched_uvloop):
+def test_uvloop_success(patched_asyncio: MagicMock, patched_uvloop: MagicMock) -> None:
     get_event_loop(True)
     assert patched_asyncio.set_event_loop_policy.called_once_with(
         patched_uvloop.EventLoopPolicy()
@@ -221,7 +222,7 @@ def test_uvloop_success(patched_asyncio, patched_uvloop):
 @patch("connectors.service_cli._get_uvloop", side_effect=Exception("import fails"))
 @patch("connectors.service_cli.asyncio")
 @patch("connectors.service_cli.logger")
-def test_uvloop_error(patched_logger, patched_asyncio, patched_uvloop):
+def test_uvloop_error(patched_logger: MagicMock, patched_asyncio: MagicMock, patched_uvloop: MagicMock) -> None:
     get_event_loop(True)
     patched_logger.warning.assert_any_call(
         "Unable to enable uvloop: import fails. Running with default event loop"

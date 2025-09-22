@@ -15,7 +15,7 @@ from connectors.access_control import (
 )
 from connectors.es.sink import OP_DELETE, OP_INDEX
 from connectors.source import (
-    CURSOR_SYNC_TIMESTAMP,
+    DataSourceConfiguration, CURSOR_SYNC_TIMESTAMP,
     BaseDataSource,
     ConfigurableFieldValueError,
 )
@@ -31,6 +31,9 @@ from connectors.utils import (
     iso_zulu,
     validate_email_address,
 )
+from _asyncio import Future, Task
+from typing import Awaitable, Any, Callable, Dict, Generator, Iterator, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock, MagicMock
 
 GOOGLE_DRIVE_SERVICE_NAME = "Google Drive"
 GOOGLE_ADMIN_DIRECTORY_SERVICE_NAME = "Google Admin Directory"
@@ -66,7 +69,7 @@ class SyncCursorEmpty(Exception):
 class GoogleDriveClient(GoogleServiceAccountClient):
     """A google drive client to handle api calls made to Google Drive API."""
 
-    def __init__(self, json_credentials, subject=None):
+    def __init__(self, json_credentials: Dict[str, str], subject: None=None) -> None:
         """Initialize the GoogleApiClient superclass.
 
         Args:
@@ -88,10 +91,10 @@ class GoogleDriveClient(GoogleServiceAccountClient):
             api_timeout=DRIVE_API_TIMEOUT,
         )
 
-    async def ping(self):
+    async def ping(self) -> Generator[Optional[Union[Awaitable, Task]], None, Future]:
         return await self.api_call(resource="about", method="get", fields="kind")
 
-    async def list_drives(self):
+    async def list_drives(self) -> Iterator[Awaitable]:
         """Fetch all shared drive (id, name) from Google Drive
 
         Yields:
@@ -106,7 +109,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         ):
             yield drive
 
-    async def get_all_drives(self):
+    async def get_all_drives(self) -> Generator[Union[Awaitable, Task], None, Dict[Any, Any]]:
         """Retrieves all shared drives from Google Drive
 
         Returns:
@@ -138,7 +141,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
         ):
             yield folder
 
-    async def get_all_folders(self):
+    async def get_all_folders(self) -> Generator[Union[Awaitable, Task], None, Dict[str, Dict[str, Union[str, List[str]]]]]:
         """Retrieves all folders from Google Drive
 
         Returns:
@@ -257,7 +260,7 @@ class GoogleDriveClient(GoogleServiceAccountClient):
 class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
     """A google admin directory client to handle api calls made to Google Admin API."""
 
-    def __init__(self, json_credentials, subject):
+    def __init__(self, json_credentials: Dict[str, str], subject: str) -> None:
         """Initialize the GoogleApiClient superclass.
 
         Args:
@@ -316,35 +319,35 @@ class GoogleAdminDirectoryClient(GoogleServiceAccountClient):
             yield group
 
 
-def _prefix_group(group):
+def _prefix_group(group: str) -> str:
     return prefix_identity("group", group)
 
 
-def _prefix_user(user):
+def _prefix_user(user: str) -> str:
     return prefix_identity("user", user)
 
 
-def _prefix_domain(domain):
+def _prefix_domain(domain: str) -> str:
     return prefix_identity("domain", domain)
 
 
-def _is_user_permission(permission_type):
+def _is_user_permission(permission_type: str) -> bool:
     return permission_type == "user"
 
 
-def _is_group_permission(permission_type):
+def _is_group_permission(permission_type: str) -> bool:
     return permission_type == "group"
 
 
-def _is_domain_permission(permission_type):
+def _is_domain_permission(permission_type: str) -> bool:
     return permission_type == "domain"
 
 
-def _is_anyone_permission(permission_type):
+def _is_anyone_permission(permission_type: str) -> bool:
     return permission_type == "anyone"
 
 
-def _get_domain_from_email(email):
+def _get_domain_from_email(email: str) -> str:
     return email.split("@")[-1]
 
 
@@ -356,7 +359,7 @@ class GoogleDriveDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the data source.
 
         Args:
@@ -369,7 +372,7 @@ class GoogleDriveDataSource(BaseDataSource):
             self.google_admin_directory_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Any]]:
         """Get the default configuration for Google Drive.
 
         Returns:
@@ -456,7 +459,7 @@ class GoogleDriveDataSource(BaseDataSource):
             },
         }
 
-    def google_drive_client(self, impersonate_email=None):
+    def google_drive_client(self, impersonate_email: None=None) -> GoogleDriveClient:
         """
         Initialize and return an instance of the GoogleDriveClient.
 
@@ -541,7 +544,7 @@ class GoogleDriveDataSource(BaseDataSource):
         self._validate_google_workspace_admin_email()
         self._validate_google_workspace_email_for_shared_drives_sync()
 
-    def _validate_google_workspace_admin_email(self):
+    def _validate_google_workspace_admin_email(self) -> None:
         """
         This method is used to validate the Google Workspace admin email address when Document Level Security (DLS) is enabled
         for the current configuration. The email address should not be empty, and it should have a valid email format (no
@@ -594,7 +597,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 msg = "Google Workspace email for shared drives sync is malformed or contains whitespace characters."
                 raise ConfigurableFieldValueError(msg)
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Union[None, Awaitable, Task]]:
         """Verify the connection with Google Drive"""
         try:
             if self._domain_wide_delegation_sync_enabled():
@@ -607,7 +610,7 @@ class GoogleDriveDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the Google Drive.")
             raise
 
-    def _get_google_workspace_admin_email(self):
+    def _get_google_workspace_admin_email(self) -> Optional[str]:
         """
         Retrieves the Google Workspace admin email based on the current configuration.
 
@@ -630,10 +633,10 @@ class GoogleDriveDataSource(BaseDataSource):
         else:
             return None
 
-    def _google_google_workspace_email_for_shared_drives_sync(self):
+    def _google_google_workspace_email_for_shared_drives_sync(self) -> str:
         return self.configuration.get("google_workspace_email_for_shared_drives_sync")
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if Document Level Security is enabled"""
         if self._features is None:
             return False
@@ -643,21 +646,21 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return bool(self.configuration.get("use_document_level_security", False))
 
-    def _domain_wide_delegation_sync_enabled(self):
+    def _domain_wide_delegation_sync_enabled(self) -> bool:
         """Check if Domain Wide delegation sync is enabled"""
 
         return bool(
             self.configuration.get("use_domain_wide_delegation_for_sync", False)
         )
 
-    def _max_concurrency(self):
+    def _max_concurrency(self) -> int:
         """Get maximum concurrent open connections from the user config"""
         return self.configuration.get("max_concurrency") or GOOGLE_API_MAX_CONCURRENCY
 
-    def access_control_query(self, access_control):
+    def access_control_query(self, access_control: List[str]) -> Dict[str, Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]]]:
         return es_access_control_query(access_control)
 
-    async def _process_items_concurrently(self, items, process_item_func):
+    async def _process_items_concurrently(self, items: List[Dict[str, Union[str, bool, List[str], Dict[str, str]]]], process_item_func: Union[Callable, AsyncMock]) -> Generator[Awaitable, None, List[Union[Dict[str, Union[str, Dict[str, str], Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]]]], Dict[str, Union[str, Dict[str, str]]], Tuple[Dict[str, Optional[Union[str, bool]]], None]]]]:
         """Process a list of items concurrently using a semaphore for concurrency control.
 
         This function applies the `process_item_func` to each item in the `items` list
@@ -690,7 +693,7 @@ class GoogleDriveDataSource(BaseDataSource):
         # Gather the results of all tasks concurrently
         return await asyncio.gather(*tasks)
 
-    async def prepare_single_access_control_document(self, user):
+    async def prepare_single_access_control_document(self, user: Dict[str, Union[str, Dict[str, str]]]) -> Generator[Union[Awaitable, Task], None, Dict[str, Union[str, Dict[str, str], Dict[str, Dict[str, Union[str, Dict[str, List[str]]]]]]]]:
         """Generate access control document for a single user. Fetch group memberships for a given user.
         Generate a user_access_control query that includes information about user email, groups and domain.
 
@@ -740,7 +743,7 @@ class GoogleDriveDataSource(BaseDataSource):
         for ac_doc in prepared_ac_docs:
             yield ac_doc
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         """Yields an access control document for every user of Google Workspace organization.
 
         Yields:
@@ -757,7 +760,7 @@ class GoogleDriveDataSource(BaseDataSource):
             ):
                 yield access_control_doc
 
-    async def resolve_paths(self, google_drive_client=None):
+    async def resolve_paths(self, google_drive_client: Optional[MagicMock]=None) -> Generator[Union[Awaitable, Task], None, Dict[str, Union[Dict[str, str], Dict[str, Union[str, List[str]]]]]]:
         """Builds a lookup between a folder id and its absolute path in Google Drive structure
 
         Returns:
@@ -798,7 +801,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return folders
 
-    async def _download_content(self, file, file_extension, download_func):
+    async def _download_content(self, file: Dict[str, Optional[Union[str, int]]], file_extension: str, download_func: partial) -> Generator[Union[Future, Awaitable], None, Tuple[str, None, int]]:
         """Downloads the file from Google Drive and returns the encoded file content.
 
         Args:
@@ -826,7 +829,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return attachment, body, file_size
 
-    async def get_google_workspace_content(self, client, file, timestamp=None):
+    async def get_google_workspace_content(self, client: GoogleDriveClient, file: Dict[str, Optional[Union[str, int]]], timestamp: None=None) -> Optional[Dict[str, str]]:
         """Exports Google Workspace documents to an allowed file type and extracts its text content.
 
         Shared Google Workspace documents are different than regular files. When shared from
@@ -879,7 +882,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return document
 
-    async def get_generic_file_content(self, client, file, timestamp=None):
+    async def get_generic_file_content(self, client: GoogleDriveClient, file: Dict[str, Optional[Union[str, int]]], timestamp: None=None) -> Generator[Union[Future, Awaitable], None, Optional[Dict[str, str]]]:
         """Extracts the content from allowed file types supported by Apache Tika.
 
         Args:
@@ -928,7 +931,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return document
 
-    async def get_content(self, client, file, timestamp=None, doit=None):
+    async def get_content(self, client: GoogleDriveClient, file: Dict[str, Optional[Union[str, int]]], timestamp: Optional[str]=None, doit: Optional[bool]=None) -> Generator[Union[Future, Awaitable], None, Optional[Dict[str, str]]]:
         """Extracts the content from a file file.
 
         Args:
@@ -956,7 +959,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 client, file, timestamp=timestamp
             )
 
-    async def _get_permissions_on_shared_drive(self, client, file_id):
+    async def _get_permissions_on_shared_drive(self, client: GoogleDriveClient, file_id: str) -> Generator[Union[Awaitable, Task], None, List[Dict[str, str]]]:
         """Retrieves the permissions on a shared drive for the given file ID.
 
         Args:
@@ -973,7 +976,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return permissions
 
-    def _process_permissions(self, permissions):
+    def _process_permissions(self, permissions: List[Dict[str, str]]) -> List[str]:
         """Formats the access permission list for Google Drive object.
 
         Args:
@@ -1007,7 +1010,7 @@ class GoogleDriveDataSource(BaseDataSource):
 
         return processed_permissions
 
-    async def prepare_file(self, client, file, paths):
+    async def prepare_file(self, client: Union[MagicMock, GoogleDriveClient], file: Dict[str, Any], paths: Dict[str, Union[Dict[str, str], Dict[str, Union[str, List[str]]]]]) -> Generator[Union[Awaitable, Task], None, Union[Tuple[Dict[str, Optional[Union[str, bool]]], None], Tuple[Dict[str, Optional[Union[str, int, bool, List[str]]]], None], Tuple[Dict[str, Optional[Union[str, int, bool]]], None], Tuple[Dict[str, Optional[Union[str, List[str], bool]]], None], Tuple[Dict[str, Optional[Union[str, bool]]], str]]]:
         """Apply key mappings to the file document.
 
         Args:
@@ -1197,7 +1200,7 @@ class GoogleDriveDataSource(BaseDataSource):
                 ):
                     yield file, partial(self.get_content, google_drive_client, file)
 
-    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+    async def get_docs_incrementally(self, sync_cursor: None, filtering: None=None):
         """Executes the logic to fetch Google Drive objects incrementally in an async manner.
 
         Args:
@@ -1334,7 +1337,7 @@ class GoogleDriveDataSource(BaseDataSource):
                         )
         self.update_sync_timestamp_cursor(timestamp)
 
-    def init_sync_cursor(self):
+    def init_sync_cursor(self) -> Dict[str, str]:
         if not self._sync_cursor:
             self._sync_cursor = {
                 CURSOR_GOOGLE_DRIVE_KEY: {},

@@ -13,12 +13,14 @@ import logging
 import time
 from datetime import datetime, timezone
 from functools import wraps
-from typing import AsyncGenerator
+from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union, AsyncGenerator
 
 import ecs_logging
 from dateutil.tz import tzlocal
 
 from connectors import __version__
+from connectors.exceptions import DataSourceError
+from freezegun.api import FakeDatetime
 
 logger = None
 
@@ -40,17 +42,17 @@ class ColorFormatter(logging.Formatter):
 
     DATE_FMT = "%H:%M:%S"
 
-    def __init__(self, prefix):
+    def __init__(self, prefix: str) -> None:
         self.custom_format = "[" + prefix + "][%(asctime)s][%(levelname)s] %(message)s"
         super().__init__(datefmt=self.DATE_FMT)
         self.local_tz = tzlocal()
 
-    def converter(self, timestamp):
+    def converter(self, timestamp: float) -> Union[datetime, FakeDatetime]:
         dt = datetime.fromtimestamp(timestamp, self.local_tz)
         return dt.astimezone(timezone.utc)
 
     # override logging.Formatter to use an aware datetime object
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str]=None) -> str:
         dt = self.converter(record.created)
         if datefmt:
             s = dt.strftime(datefmt)
@@ -61,20 +63,20 @@ class ColorFormatter(logging.Formatter):
                 s = dt.isoformat()
         return s
 
-    def format(self, record):  # noqa: A003
+    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
         self._style._fmt = self.COLORS[record.levelno] + self.custom_format + self.RESET
         return super().format(record)
 
 
 class DocumentLogger:
-    def __init__(self, prefix, extra):
+    def __init__(self, prefix: Optional[str], extra: Dict[str, Optional[str]]) -> None:
         self._prefix = prefix
         self._extra = extra
 
     def isEnabledFor(self, level):
         return logger.isEnabledFor(level)
 
-    def debug(self, msg, *args, **kwargs):
+    def debug(self, msg: str, *args, **kwargs) -> None:
         logger.debug(
             msg,
             *args,
@@ -83,7 +85,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def info(self, msg, *args, **kwargs):
+    def info(self, msg: str, *args, **kwargs) -> None:
         logger.info(
             msg,
             *args,
@@ -92,7 +94,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def warning(self, msg, *args, **kwargs):
+    def warning(self, msg: str, *args, **kwargs) -> None:
         logger.warning(
             msg,
             *args,
@@ -101,7 +103,7 @@ class DocumentLogger:
             **kwargs,
         )
 
-    def error(self, msg, *args, **kwargs):
+    def error(self, msg: Union[TypeError, str, ValueError], *args, **kwargs) -> None:
         logger.error(
             msg,
             *args,
@@ -140,7 +142,7 @@ class DocumentLogger:
 
 
 class ExtraLogger(logging.Logger):
-    def _log(self, level, msg, args, exc_info=None, prefix=None, extra=None):
+    def _log(self, level: int, msg: Optional[Union[TypeError, str, ValueError]], args: Tuple[()], exc_info: Optional[Union[bool, DataSourceError, Exception]]=None, prefix: Optional[str]=None, extra: Optional[Union[Dict[str, Optional[str]], Dict[str, str]]]=None) -> None:
         if (
             not (hasattr(self, "filebeat") and self.filebeat)  # pyright: ignore
             and prefix
@@ -158,7 +160,7 @@ class ExtraLogger(logging.Logger):
         super(ExtraLogger, self)._log(level, msg, args, exc_info, extra)
 
 
-def set_logger(log_level=logging.INFO, filebeat=False):
+def set_logger(log_level: Union[str, int]=logging.INFO, filebeat: bool=False) -> ExtraLogger:
     global logger
     if filebeat:
         formatter = ecs_logging.StdlibFormatter()
@@ -180,7 +182,7 @@ def set_logger(log_level=logging.INFO, filebeat=False):
     return logger
 
 
-def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=False):
+def set_extra_logger(logger: Union[logging.Logger, ExtraLogger], log_level: int=logging.INFO, prefix: str="BYOC", filebeat: bool=False) -> None:
     if isinstance(logger, str):
         logger = logging.getLogger(logger)
     handler = logging.StreamHandler()
@@ -202,7 +204,7 @@ def set_extra_logger(logger, log_level=logging.INFO, prefix="BYOC", filebeat=Fal
 
 
 @contextlib.contextmanager
-def timed_execution(name, func_name, slow_log=None, canceled=None):
+def timed_execution(name: str, func_name: str, slow_log: Optional[Union[float, int]]=None, canceled: Optional[Callable]=None) -> Iterator[None]:
     """Context manager to log time execution in DEBUG
 
     - name: prefix used for the log message
@@ -233,10 +235,10 @@ class _TracedAsyncGenerator:
         self.func_name = func_name
         self.counter = 0
 
-    def __aiter__(self):
+    def __aiter__(self) -> "_TracedAsyncGenerator":
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> Any:
         try:
             with timed_execution(
                 self.name, f"{self.counter}-{self.func_name}", self.slow_log
@@ -248,7 +250,7 @@ class _TracedAsyncGenerator:
 
 class CustomTracer:
     # spans as decorators, https://opentelemetry.io/docs/instrumentation/python/manual/#creating-spans-with-decorators
-    def start_as_current_span(self, name, func_name=None, slow_log=None):
+    def start_as_current_span(self, name: str, func_name: Optional[str]=None, slow_log: Optional[Union[int, float]]=None) -> Callable:
         def _wrapped(func):
             if inspect.iscoroutinefunction(func):
 

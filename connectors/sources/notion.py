@@ -11,7 +11,7 @@ import os
 import re
 from copy import copy
 from functools import cached_property, partial
-from typing import Any, Awaitable, Callable
+from typing import Dict, Generator, Iterator, List, Optional, Union, Any, Awaitable, Callable
 from urllib.parse import unquote
 
 import aiohttp
@@ -24,8 +24,10 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import CancellableSleeps, RetryStrategy, retryable
+from _asyncio import Task
+from unittest.mock import MagicMock
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -45,7 +47,7 @@ class NotFound(Exception):
 class NotionClient:
     """Notion API client"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -81,7 +83,7 @@ class NotionClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def get_via_session(self, url):
+    async def get_via_session(self, url: str) -> Iterator[Task]:
         self._logger.debug(f"Fetching data from url {url}")
         try:
             async with self.session.get(url=url) as response:
@@ -106,8 +108,8 @@ class NotionClient:
         skipped_exceptions=NotFound,
     )
     async def fetch_results(
-        self, function: Callable[..., Awaitable[Any]], next_cursor=None, **kwargs: Any
-    ):
+        self, function: Callable[..., Awaitable[Any]], next_cursor: None=None, **kwargs: Any
+    ) -> Generator[Task, None, Dict[str, Optional[Union[List[Dict[str, str]], bool]]]]:
         try:
             return await function(start_cursor=next_cursor, **kwargs)
         except APIResponseError as exception:
@@ -143,7 +145,7 @@ class NotionClient:
         """Fetch integration authorized owner"""
         await self._get_client.users.me()
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         self._sleeps.cancel()
         await self._get_client.aclose()
         await self.session.close()
@@ -160,7 +162,7 @@ class NotionClient:
             if user_document.get("type") != "bot":
                 yield user_document
 
-    async def fetch_child_blocks(self, block_id):
+    async def fetch_child_blocks(self, block_id: str) -> None:
         """Fetch child blocks recursively for a given block ID.
         Args:
             block_id (str): The ID of the parent block.
@@ -220,7 +222,7 @@ class NotionClient:
         ):
             yield block_comment
 
-    async def query_database(self, database_id, body=None):
+    async def query_database(self, database_id: str, body: None=None) -> None:
         if body is None:
             body = {}
         async for result in self.async_iterate_paginated_api(
@@ -278,11 +280,11 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=RULES_OBJECT_SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "NotionDataSource") -> None:
         self.source = source
         self._logger = logger
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Dict[str, Union[List[Dict[str, Union[Dict[str, List[Dict[str, Union[str, Dict[str, str]]]]], str]]], List[Dict[str, str]], List[Dict[str, Union[str, Dict[str, str]]]], List[Dict[str, Union[Dict[str, Union[str, Dict[str, str]]], str]]], List[Dict[str, Dict[str, str]]]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -291,7 +293,7 @@ class NotionAdvancedRulesValidator(AdvancedRulesValidator):
         self._logger.info("Remote validation started")
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: Dict[str, Union[List[Dict[str, Union[Dict[str, List[Dict[str, Union[str, Dict[str, str]]]]], str]]], List[Dict[str, str]], List[Dict[str, Union[str, Dict[str, str]]]], List[Dict[str, Union[Dict[str, Union[str, Dict[str, str]]], str]]], List[Dict[str, Dict[str, str]]]]]) -> SyncRuleValidationResult:
         try:
             NotionAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -358,7 +360,7 @@ class NotionDataSource(BaseDataSource):
     advanced_rules_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the Notion instance.
 
         Args:
@@ -378,7 +380,7 @@ class NotionDataSource(BaseDataSource):
     def _set_internal_logger(self):
         self.notion_client.set_logger(self._logger)
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.notion_client.fetch_owner()
             self._logger.info("Successfully connected to Notion.")
@@ -386,10 +388,10 @@ class NotionDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to Notion.")
             raise
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         await self.notion_client.close()
 
-    async def get_entities(self, entity_type, entity_titles):
+    async def get_entities(self, entity_type: str, entity_titles: List[str]) -> List[Dict[str, Union[List[Dict[str, str]], Dict[str, Dict[str, List[Dict[str, Dict[str, str]]]]]]]]:
         """Search for a database or page with the given title."""
         invalid_titles = []
         found_titles = set()
@@ -444,7 +446,7 @@ class NotionDataSource(BaseDataSource):
         )
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[int, str, bool, List[str]]]]:
         """Get the default configuration for Notion.
         Returns:
             dict: Default configuration.
@@ -503,14 +505,14 @@ class NotionDataSource(BaseDataSource):
 
         options["concurrent_downloads"] = self.concurrent_downloads
 
-    async def get_file_metadata(self, attachment_metadata, file_url):
+    async def get_file_metadata(self, attachment_metadata: Dict[Any, Any], file_url: str) -> Dict[str, Union[str, int]]:
         response = await anext(self.notion_client.get_via_session(url=file_url))
         attachment_metadata["extension"] = "." + response.url.path.split(".")[-1]
         attachment_metadata["size"] = response.content_length
         attachment_metadata["name"] = unquote(response.url.path.split("/")[-1])
         return attachment_metadata
 
-    async def get_content(self, attachment, file_url, timestamp=None, doit=False):
+    async def get_content(self, attachment: Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, Dict[str, str]]]]], file_url: Optional[str], timestamp: None=None, doit: bool=False) -> Optional[MagicMock]:
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
@@ -551,7 +553,7 @@ class NotionDataSource(BaseDataSource):
             ),
         )
 
-    def _format_doc(self, data):
+    def _format_doc(self, data: Dict[str, Any]) -> Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, Dict[str, str]]], List[Dict[str, Optional[Union[str, Dict[str, Optional[str]], Dict[str, Union[bool, str]]]]]], Dict[str, List[Dict[str, Optional[Union[str, Dict[str, Optional[str]], Dict[str, Union[bool, str]]]]]]]]]:
         """Format document for handling empty values & type casting.
 
         Args:
@@ -570,7 +572,7 @@ class NotionDataSource(BaseDataSource):
             del data["properties"]
         return data
 
-    def generate_query(self):
+    def generate_query(self) -> Iterator[Dict[str, Union[str, Dict[str, str]]]]:
         if self.pages == ["*"] and self.databases == ["*"]:
             yield {}
         else:
@@ -585,7 +587,7 @@ class NotionDataSource(BaseDataSource):
                     "filter": {"value": "database", "property": "object"},
                 }
 
-    def is_connected_property_block(self, page_database):
+    def is_connected_property_block(self, page_database: Dict[str, Union[str, Dict[str, Dict[str, Union[str, List[Dict[str, Optional[Union[str, Dict[str, Optional[str]], Dict[str, Union[bool, str]]]]]]]]], Dict[str, str], Dict[str, Union[Dict[str, Union[str, List[Dict[str, Union[str, Dict[str, str]]]]]], Dict[str, Union[str, List[Dict[str, str]]]]]]]]) -> bool:
         properties = page_database.get("properties")
         if properties is None:
             return False

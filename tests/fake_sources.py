@@ -14,7 +14,8 @@ from connectors.filtering.validation import (
     FilteringValidationResult,
     FilteringValidationState,
 )
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
+from typing import Any, Dict
 
 
 class FakeSource(BaseDataSource):
@@ -23,7 +24,7 @@ class FakeSource(BaseDataSource):
     name = "Fakey"
     service_type = "fake"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self.configuration = configuration
         if configuration.has_field("raise"):
             msg = "I break on init"
@@ -34,10 +35,10 @@ class FakeSource(BaseDataSource):
     async def changed(self):
         return True
 
-    async def ping(self):
+    async def ping(self) -> None:
         pass
 
-    async def close(self):
+    async def close(self) -> None:
         pass
 
     async def _dl(self, doc_id, timestamp=None, doit=None):
@@ -52,7 +53,7 @@ class FakeSource(BaseDataSource):
         yield {"_id": "1"}, partial(self._dl, "1")
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[Any, Any]:
         return {}
 
     @classmethod
@@ -62,7 +63,7 @@ class FakeSource(BaseDataSource):
             state=FilteringValidationState.VALID, errors=[]
         )
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         if self.configuration_invalid:
             msg = "I fail when validating configuration"
             raise ValueError(msg)

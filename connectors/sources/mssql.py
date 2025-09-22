@@ -21,7 +21,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -39,6 +39,10 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from _asyncio import Task
+from connectors.logger import ExtraLogger
+from connectors.protocol.connectors import Filter
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
 
 # Connector will skip the below tables if it gets from the input
 TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
@@ -47,15 +51,15 @@ TABLES_TO_SKIP = {"msdb": ["sysutility_ucp_configuration_internal"]}
 class MSSQLQueries(Queries):
     """Class contains methods which return query"""
 
-    def ping(self):
+    def ping(self) -> str:
         """Query to ping source"""
         return "SELECT 1+1"
 
-    def all_tables(self, **kwargs):
+    def all_tables(self, **kwargs) -> str:
         """Query to get all tables"""
         return f"SELECT table_name FROM information_schema.tables WHERE TABLE_SCHEMA = '{ kwargs['schema'] }'"
 
-    def table_primary_key(self, **kwargs):
+    def table_primary_key(self, **kwargs) -> str:
         """Query to get the primary key"""
         return f"SELECT C.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS T JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE C ON C.CONSTRAINT_NAME=T.CONSTRAINT_NAME WHERE C.TABLE_NAME='{kwargs['table']}' and C.TABLE_SCHEMA='{kwargs['schema']}' and T.CONSTRAINT_TYPE='PRIMARY KEY'"
 
@@ -63,15 +67,15 @@ class MSSQLQueries(Queries):
         """Query to get the table data"""
         return f'SELECT * FROM {kwargs["schema"]}."{kwargs["table"]}"'
 
-    def table_last_update_time(self, **kwargs):
+    def table_last_update_time(self, **kwargs) -> str:
         """Query to get the last update time of the table"""
         return f"SELECT last_user_update FROM sys.dm_db_index_usage_stats WHERE object_id=object_id('{kwargs['schema']}.{kwargs['table']}')"
 
-    def table_data_count(self, **kwargs):
+    def table_data_count(self, **kwargs) -> str:
         """Query to get the number of rows in the table"""
         return f'SELECT COUNT(*) FROM {kwargs["schema"]}."{kwargs["table"]}"'
 
-    def all_schemas(self):
+    def all_schemas(self) -> None:
         """Query to get all schemas of database"""
         pass
 
@@ -92,10 +96,10 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "MSSQLDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[List[Dict[str, Union[List[str], str]]], List[Dict[str, str]]]) -> Generator[Task, None, SyncRuleValidationResult]:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -108,7 +112,7 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=DEFAULT_WAIT_MULTIPLIER,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[List[str], str]]]) -> Generator[Task, None, SyncRuleValidationResult]:
         try:
             MSSQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -146,20 +150,20 @@ class MSSQLAdvancedRulesValidator(AdvancedRulesValidator):
 class MSSQLClient:
     def __init__(
         self,
-        host,
-        port,
-        user,
-        password,
-        database,
-        tables,
-        schema,
-        ssl_enabled,
-        ssl_ca,
-        validate_host,
-        logger_,
-        retry_count=DEFAULT_RETRY_COUNT,
-        fetch_size=DEFAULT_FETCH_SIZE,
-    ):
+        host: str,
+        port: None,
+        user: str,
+        password: str,
+        database: str,
+        tables: List[str],
+        schema: str,
+        ssl_enabled: bool,
+        ssl_ca: str,
+        validate_host: bool,
+        logger_: ExtraLogger,
+        retry_count: int=DEFAULT_RETRY_COUNT,
+        fetch_size: int=DEFAULT_FETCH_SIZE,
+    ) -> None:
         self.host = host
         self.port = port
         self.user = user
@@ -181,7 +185,7 @@ class MSSQLClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    def close(self):
+    def close(self) -> None:
         if os.path.exists(self.certfile):
             try:
                 os.remove(self.certfile)
@@ -212,14 +216,14 @@ class MSSQLClient:
             }
         return create_engine(connection_string, connect_args=connect_args)
 
-    def create_pem_file(self):
+    def create_pem_file(self) -> None:
         """Create pem file for SSL Verification"""
         pem_certificates = get_pem_format(key=self.ssl_ca)
         with NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as cert:
             cert.write(pem_certificates)
             self.certfile = cert.name
 
-    async def get_cursor(self, query):
+    async def get_cursor(self, query: str):
         """Executes the passed query on the Non-Async supported Database server and return cursor.
 
         Args:
@@ -246,7 +250,7 @@ class MSSQLClient:
             )
             raise
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         return await anext(
             fetch(
                 cursor_func=partial(self.get_cursor, self.queries.ping()),
@@ -255,7 +259,7 @@ class MSSQLClient:
             )
         )
 
-    async def get_tables_to_fetch(self, is_filtering=False):
+    async def get_tables_to_fetch(self, is_filtering: bool=False) -> Iterator[Task]:
         tables = configured_tables(self.tables)
         if is_wildcard(tables) or is_filtering:
             if is_filtering:
@@ -297,7 +301,7 @@ class MSSQLClient:
         self._logger.info(f'Table "{table}" has {row_count} records')
         return row_count
 
-    async def get_table_primary_key(self, table):
+    async def get_table_primary_key(self, table: str) -> Iterator[Task]:
         primary_keys = [
             key
             async for [key] in fetch(
@@ -372,7 +376,7 @@ class MSSQLDataSource(BaseDataSource):
     service_type = "mssql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup connection to the Microsoft SQL database-server configured by user
 
         Args:
@@ -401,7 +405,7 @@ class MSSQLDataSource(BaseDataSource):
         self.mssql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[str], List[Dict[str, Union[str, bool]]]]]]:
         return {
             "host": {
                 "label": "Host",
@@ -487,10 +491,10 @@ class MSSQLDataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [MSSQLAdvancedRulesValidator(self)]
 
-    async def close(self):
+    async def close(self) -> None:
         self.mssql_client.close()
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         """Verify the connection with the database-server configured by user"""
         self._logger.debug("Validating the Connector Configuration...")
         try:
@@ -511,7 +515,7 @@ class MSSQLDataSource(BaseDataSource):
         )
         return row
 
-    async def get_primary_key(self, tables):
+    async def get_primary_key(self, tables: List[str]) -> Generator[Task, None, List[Any]]:
         self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
@@ -542,7 +546,7 @@ class MSSQLDataSource(BaseDataSource):
                 f"Skipping query {query} for tables {', '.join(tables)} as primary key column name is not present in query."
             )
 
-    async def fetch_documents_from_table(self, table):
+    async def fetch_documents_from_table(self, table: str) -> None:
         """Fetches all the table entries and format them in Elasticsearch documents
 
         Args:
@@ -561,7 +565,7 @@ class MSSQLDataSource(BaseDataSource):
                 f'Something went wrong while fetching document for table "{table}". Error: {exception}'
             )
 
-    async def fetch_documents_from_query(self, tables, query, id_columns):
+    async def fetch_documents_from_query(self, tables: List[str], query: str, id_columns: List[Union[Any, str]]) -> Iterator[Task]:
         """Fetches all the data from the given query and format them in Elasticsearch documents
 
         Args:
@@ -585,7 +589,7 @@ class MSSQLDataSource(BaseDataSource):
                 f"Something went wrong while fetching document for query {query} and tables {', '.join(tables)}. Error: {exception}"
             )
 
-    async def _yield_docs_custom_query(self, tables, query, id_columns=None):
+    async def _yield_docs_custom_query(self, tables: List[str], query: str, id_columns: Optional[List[str]]=None) -> Iterator[Task]:
         primary_key_columns = await self.get_primary_key(tables=tables)
 
         if id_columns:
@@ -628,7 +632,7 @@ class MSSQLDataSource(BaseDataSource):
                 )
             )
 
-    async def _yield_all_docs_from_tables(self, table):
+    async def _yield_all_docs_from_tables(self, table: str):
         row_count = await self.mssql_client.get_table_row_count(table=table)
         if row_count > 0:
             # Query to get the table's primary key
@@ -664,7 +668,7 @@ class MSSQLDataSource(BaseDataSource):
         else:
             self._logger.warning(f'No rows found for table "{table}"')
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: Optional[Filter]=None) -> Iterator[Task]:
         """Executes the logic to fetch databases, tables and rows in async manner.
 
         Args:

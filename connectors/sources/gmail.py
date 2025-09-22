@@ -14,7 +14,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
@@ -29,6 +29,9 @@ from connectors.utils import (
     iso_utc,
     validate_email_address,
 )
+from connectors.protocol.connectors import Filter
+from typing import Dict, List, Optional, Union
+from unittest.mock import AsyncMock
 
 CUSTOMER_ID_LABEL = "Google customer id"
 
@@ -54,7 +57,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
         definition=SCHEMA_DEFINITION,
     )
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Dict[str, Union[List[str], List[int]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -74,7 +77,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _message_doc(message):
+def _message_doc(message: Dict[str, Optional[Union[int, str]]]) -> Dict[str, Optional[Union[int, str]]]:
     timestamp_field = "_timestamp"
 
     # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
@@ -98,7 +101,7 @@ def _message_doc(message):
     return es_doc
 
 
-def _filtering_enabled(filtering):
+def _filtering_enabled(filtering: Optional[Filter]) -> bool:
     return filtering is not None and filtering.has_advanced_rules()
 
 
@@ -111,11 +114,11 @@ class GMailDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[List[Dict[str, str]], str, int, bool]]]:
         """Get the default configuration for the GMail connector.
         Returns:
             dict: Default configuration.
@@ -165,7 +168,7 @@ class GMailDataSource(BaseDataSource):
             },
         }
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user inputs are valid or not for configuration fields.
 
         Raises:
@@ -187,7 +190,7 @@ class GMailDataSource(BaseDataSource):
         await self._validate_google_directory_auth()
         await self._validate_gmail_auth()
 
-    async def _validate_gmail_auth(self):
+    async def _validate_gmail_auth(self) -> None:
         """
         Validates, whether the provided configuration values allow the connector to authenticate against GMail API.
         Failed authentication indicates, that either the provided credentials are incorrect or mandatory GMail API
@@ -203,7 +206,7 @@ class GMailDataSource(BaseDataSource):
             msg = f"GMail authentication was not successful. Check the values of the following fields: '{SERVICE_ACCOUNT_CREDENTIALS_LABEL}', '{SUBJECT_LABEL}' and '{CUSTOMER_ID_LABEL}'. Also make sure that the OAuth2 scopes for GMail are setup correctly."
             raise ConfigurableFieldValueError(msg) from e
 
-    async def _validate_google_directory_auth(self):
+    async def _validate_google_directory_auth(self) -> None:
         """
         Validates, whether the provided configuration values allow the connector to authenticate against Google
         Directory API. Failed authentication indicates, that either the provided credentials are incorrect or mandatory
@@ -241,7 +244,7 @@ class GMailDataSource(BaseDataSource):
             subject=self.configuration["subject"],
         )
 
-    def _gmail_client(self, subject):
+    def _gmail_client(self, subject: str) -> AsyncMock:
         """Instantiates a GMail client for a corresponding subject.
         Args:
             subject (str): Email address for the subject.
@@ -257,7 +260,7 @@ class GMailDataSource(BaseDataSource):
         gmail_client.set_logger(self._logger)
         return gmail_client
 
-    async def ping(self):
+    async def ping(self) -> None:
         for service_name, client in [
             ("GMail", self._gmail_client(self.configuration["subject"])),
             ("Google directory", self._google_directory_client),
@@ -269,17 +272,17 @@ class GMailDataSource(BaseDataSource):
                 self._logger.exception(f"Error while connecting to {service_name}.")
                 raise
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         return (
             self._features is not None
             and self._features.document_level_security_enabled()
             and self.configuration["use_document_level_security"]
         )
 
-    def access_control_query(self, access_control):
+    def access_control_query(self, access_control: List[str]) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
         return es_access_control_query(access_control)
 
-    def _user_access_control_doc(self, user, access_control):
+    def _user_access_control_doc(self, user: Dict[str, str], access_control: List[str]) -> Dict[str, Union[str, Dict[str, str], Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]]:
         email = user.get(UserFields.EMAIL.value)
         created_at = user.get(UserFields.CREATION_DATE.value)
 
@@ -289,7 +292,7 @@ class GMailDataSource(BaseDataSource):
             "created_at": created_at or iso_utc(),
         } | self.access_control_query(access_control)
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(self, document: Dict[str, str], access_control: List[str]) -> Dict[str, Union[List[str], str]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -297,7 +300,7 @@ class GMailDataSource(BaseDataSource):
 
         return document
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         """Yields all users found in the Google Workspace associated with the configured service account.
 
         Yields:
@@ -316,8 +319,8 @@ class GMailDataSource(BaseDataSource):
                 yield self._user_access_control_doc(user, access_control)
 
     async def _message_doc_with_access_control(
-        self, access_control, gmail_client, message
-    ):
+        self, access_control: List[str], gmail_client: AsyncMock, message: Dict[str, str]
+    ) -> Dict[str, Union[List[str], str]]:
         message_id = message.get("id")
         message_content = await gmail_client.message(message_id)
         message_content["id"] = message_id
@@ -329,7 +332,7 @@ class GMailDataSource(BaseDataSource):
 
         return message_doc_with_access_control
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: None=None) -> None:
         """Yields messages for all users present in the Google Workspace.
         Includes spam and trash messages, if the corresponding configuration value is set to `True`.
 

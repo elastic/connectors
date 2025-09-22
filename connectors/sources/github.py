@@ -31,7 +31,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
@@ -40,6 +40,8 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from _asyncio import Future, Task
+from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
 
 WILDCARD = "*"
 BLOB = "blob"
@@ -79,15 +81,15 @@ PATH_SCHEMA = {
 }
 
 
-def _prefix_email(email):
+def _prefix_email(email: str) -> str:
     return prefix_identity("email", email)
 
 
-def _prefix_username(user):
+def _prefix_username(user: str) -> str:
     return prefix_identity("username", user)
 
 
-def _prefix_user_id(user_id):
+def _prefix_user_id(user_id: str) -> str:
     return prefix_identity("user_id", user_id)
 
 
@@ -651,8 +653,8 @@ class ForbiddenException(Exception):
 
 class GitHubClient:
     def __init__(
-        self, auth_method, base_url, app_id, private_key, token, ssl_enabled, ssl_ca
-    ):
+        self, auth_method: str, base_url: str, app_id: int, private_key: str, token: str, ssl_enabled: bool, ssl_ca: str
+    ) -> None:
         self._sleeps = CancellableSleeps()
         self._logger = logger
         self.auth_method = auth_method
@@ -687,7 +689,7 @@ class GitHubClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def _get_retry_after(self, resource_type):
+    async def _get_retry_after(self, resource_type: str) -> float:
         current_time = time.time()
         response = await self.get_github_item("/rate_limit")
         reset = nested_get_from_dict(
@@ -696,7 +698,7 @@ class GitHubClient:
         # Adding a 5 second delay to account for server delays
         return (reset - current_time) + 5  # pyright: ignore
 
-    async def _put_to_sleep(self, resource_type):
+    async def _put_to_sleep(self, resource_type: str) -> Iterator[Task]:
         retry_after = await self._get_retry_after(resource_type=resource_type)
         self._logger.debug(
             f"Rate limit exceeded. Retry after {retry_after} seconds. Resource type: {resource_type}"
@@ -705,7 +707,7 @@ class GitHubClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
-    def _access_token(self):
+    def _access_token(self) -> str:
         if self.auth_method == PERSONAL_ACCESS_TOKEN:
             return self._personal_access_token
         if not self._installation_access_token:
@@ -713,7 +715,7 @@ class GitHubClient:
         return self._installation_access_token
 
     # update the current installation id and re-generate access token
-    async def update_installation_id(self, installation_id):
+    async def update_installation_id(self, installation_id: int) -> None:
         self._logger.debug(
             f"Updating installation id - new ID: {installation_id}, original ID: {self._installation_id}"
         )
@@ -725,7 +727,7 @@ class GitHubClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _update_installation_access_token(self):
+    async def _update_installation_access_token(self) -> None:
         try:
             access_token_response = await get_installation_access_token(
                 gh=self._get_client,
@@ -767,7 +769,7 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def graphql(self, query, variables=None):
+    async def graphql(self, query: Union[str, Dict[str, Union[str, Dict[str, str]]]], variables: Optional[Dict[str, str]]=None) -> Generator[Task, None, Dict[str, str]]:
         """Invoke GraphQL request to fetch repositories, pull requests, and issues.
 
         Args:
@@ -826,7 +828,7 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def get_github_item(self, resource):
+    async def get_github_item(self, resource: str) -> Dict[str, Union[str, int, Dict[str, Dict[str, int]]]]:
         """Execute request using getitem method of GitHubAPI which is using REST API.
         Using Rest API for fetching files and folder along with content.
 
@@ -864,7 +866,7 @@ class GitHubClient:
             )
             raise
 
-    async def paginated_api_call(self, query, variables, keys):
+    async def paginated_api_call(self, query: str, variables: Dict[str, Optional[str]], keys: List[str]):
         """Make a paginated API call for fetching GitHub objects.
 
         Args:
@@ -884,7 +886,7 @@ class GitHubClient:
                 break
             variables["cursor"] = page_info["endCursor"]  # pyright: ignore
 
-    def get_repo_details(self, repo_name):
+    def get_repo_details(self, repo_name: str) -> List[str]:
         return repo_name.split("/")
 
     @retryable(
@@ -893,7 +895,7 @@ class GitHubClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def get_personal_access_token_scopes(self):
+    async def get_personal_access_token_scopes(self) -> Set[str]:
         try:
             request_headers = sansio.create_headers(
                 self._get_client.requester,
@@ -926,7 +928,7 @@ class GitHubClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _github_app_get(self, url):
+    async def _github_app_get(self, url: str) -> Union[Tuple[List[Dict[str, int]], None], Tuple[List[Union[Dict[str, Optional[str]], Dict[str, str]]], None], Tuple[List[Dict[str, int]], str]]:
         self._logger.debug(f"Making a get request to GitHub: {url}")
         try:
             return await self._get_client._make_request(
@@ -993,7 +995,7 @@ class GitHubClient:
             ):
                 yield repo
 
-    async def get_foreign_repo(self, repo_name):
+    async def get_foreign_repo(self, repo_name: str) -> None:
         owner, repo = self.get_repo_details(repo_name=repo_name)
         repo_variables = {"owner": owner, "repositoryName": repo}
         data = await self.graphql(
@@ -1018,22 +1020,22 @@ class GitHubClient:
             ):
                 yield repo.get("node")
 
-    async def get_logged_in_user(self):
+    async def get_logged_in_user(self) -> Optional[str]:
         data = await self.graphql(query=GithubQuery.USER_QUERY.value)
         return nested_get_from_dict(data, ["viewer", "login"])
 
-    async def ping(self):
+    async def ping(self) -> None:
         if self.auth_method == GITHUB_APP:
             await self._github_app_get(url="/app")
         else:
             await self.get_logged_in_user()
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         self._sleeps.cancel()
         await self._get_session.close()
         del self._get_session
 
-    def bifurcate_repos(self, repos, owner):
+    def bifurcate_repos(self, repos: List[str], owner: str) -> Tuple[List[str], List[str]]:
         foreign_repos, configured_repos = [], []
         for repo_name in repos:
             if repo_name not in ["", None]:
@@ -1069,10 +1071,10 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "GitHubDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[List[Dict[str, Dict[str, str]]], List[Dict[str, Union[str, Dict[str, str]]]], List[Dict[str, Union[str, List[Dict[str, str]]]]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -1080,7 +1082,7 @@ class GitHubAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[str, List[Dict[str, str]], Dict[str, str]]]]) -> SyncRuleValidationResult:
         try:
             GitHubAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -1114,7 +1116,7 @@ class GitHubDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the GitHub instance.
 
         Args:
@@ -1150,7 +1152,7 @@ class GitHubDataSource(BaseDataSource):
         return [GitHubAdvancedRulesValidator(self)]
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Any]]:
         """Get the default configuration for GitHub.
 
         Returns:
@@ -1280,7 +1282,7 @@ class GitHubDataSource(BaseDataSource):
             },
         }
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
         Returns:
@@ -1297,7 +1299,7 @@ class GitHubDataSource(BaseDataSource):
             and self.configuration["use_document_level_security"]
         )
 
-    async def _logged_in_user(self):
+    async def _logged_in_user(self) -> Optional[str]:
         if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
             return None
         if self._user:
@@ -1305,7 +1307,7 @@ class GitHubDataSource(BaseDataSource):
         self._user = await self.github_client.get_logged_in_user()
         return self._user
 
-    async def get_invalid_repos(self):
+    async def get_invalid_repos(self) -> List[str]:
         self._logger.debug(
             "Checking if there are any inaccessible repositories configured"
         )
@@ -1314,7 +1316,7 @@ class GitHubDataSource(BaseDataSource):
         else:
             return await self._get_invalid_repos_for_personal_access_token()
 
-    async def _get_invalid_repos_for_github_app(self):
+    async def _get_invalid_repos_for_github_app(self) -> List[str]:
         # A github app can be installed on multiple orgs/personal accounts,
         # so the repo must be configured in the format of 'OWNER/REPO', any other format will be rejected
         invalid_repos = set(
@@ -1336,7 +1338,7 @@ class GitHubDataSource(BaseDataSource):
 
         return list(invalid_repos)
 
-    async def _get_repo_object_for_github_app(self, owner, repo_name):
+    async def _get_repo_object_for_github_app(self, owner: str, repo_name: str) -> Optional[Dict[str, str]]:
         await self._fetch_installations()
         full_repo_name = f"{owner}/{repo_name}"
         if owner not in self._installations:
@@ -1369,7 +1371,7 @@ class GitHubDataSource(BaseDataSource):
 
         return cached_repo[owner][full_repo_name]
 
-    async def _get_invalid_repos_for_personal_access_token(self):
+    async def _get_invalid_repos_for_personal_access_token(self) -> List[str]:
         try:
             if self.configuration["repo_type"] == "other":
                 logged_in_user = await self._logged_in_user()
@@ -1421,7 +1423,7 @@ class GitHubDataSource(BaseDataSource):
             )
             raise
 
-    async def _user_access_control_doc(self, user):
+    async def _user_access_control_doc(self, user: Dict[str, str]) -> Dict[str, Union[str, Dict[str, str], Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]]:
         user_id = user.get("id", "")
         user_name = user.get("login", "")
         user_email = user.get("email", "")
@@ -1441,7 +1443,7 @@ class GitHubDataSource(BaseDataSource):
             access_control=[_prefixed_user_id, _prefixed_user_name, _prefixed_email]
         )
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -1463,7 +1465,7 @@ class GitHubDataSource(BaseDataSource):
             else:
                 yield await self._logged_in_user()
 
-    async def _remote_validation(self):
+    async def _remote_validation(self) -> None:
         """Validate scope of the configured personal access token and accessibility of repositories
 
         Raises:
@@ -1473,7 +1475,7 @@ class GitHubDataSource(BaseDataSource):
         await self._validate_personal_access_token_scopes()
         await self._validate_configured_repos()
 
-    async def _validate_personal_access_token_scopes(self):
+    async def _validate_personal_access_token_scopes(self) -> None:
         if self.configuration["auth_method"] != PERSONAL_ACCESS_TOKEN:
             return
 
@@ -1494,7 +1496,7 @@ class GitHubDataSource(BaseDataSource):
             msg = "Configured token does not have required rights to fetch the content. Required scopes are 'repo', 'user', and 'read:org'."
             raise ConfigurableFieldValueError(msg)
 
-    async def _validate_configured_repos(self):
+    async def _validate_configured_repos(self) -> None:
         if WILDCARD in self.configured_repos:
             return
 
@@ -1503,17 +1505,17 @@ class GitHubDataSource(BaseDataSource):
             msg = f"Inaccessible repositories '{', '.join(invalid_repos)}'."
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """Validates whether user input is empty or not for configuration fields
         Also validate, if user configured repositories are accessible or not and scope of the token
         """
         await super().validate_config()
         await self._remote_validation()
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         await self.github_client.close()
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.github_client.ping()
             self._logger.debug("Successfully connected to GitHub.")
@@ -1521,13 +1523,13 @@ class GitHubDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to GitHub.")
             raise
 
-    def adapt_gh_doc_to_es_doc(self, github_document, schema):
+    def adapt_gh_doc_to_es_doc(self, github_document: Dict[str, Union[str, int]], schema: Dict[str, str]) -> Dict[str, Union[str, int]]:
         return {
             es_field: github_document[github_field]
             for es_field, github_field in schema.items()
         }
 
-    def _prepare_pull_request_doc(self, pull_request, reviews):
+    def _prepare_pull_request_doc(self, pull_request: Dict[str, Any], reviews: List[Dict[str, Union[str, List[Dict[str, str]]]]]) -> Dict[str, Union[str, List[Dict[str, Union[str, Dict[str, str]]]], List[Dict[str, Union[str, List[Dict[str, str]]]]], List[Dict[str, str]], List[Dict[str, Dict[str, str]]]]]:
         return {
             "_id": pull_request.pop("id"),
             "_timestamp": pull_request.pop("updatedAt"),
@@ -1539,7 +1541,7 @@ class GitHubDataSource(BaseDataSource):
             "requested_reviewers": pull_request.get("reviewRequests", {}).get("nodes"),
         }
 
-    def _prepare_issue_doc(self, issue):
+    def _prepare_issue_doc(self, issue: Dict[str, Any]) -> Dict[str, Union[str, List[Dict[str, Union[str, Dict[str, str]]]], List[Dict[str, str]]]]:
         return {
             "_id": issue.pop("id"),
             "type": ObjectType.ISSUE.value,
@@ -1549,7 +1551,7 @@ class GitHubDataSource(BaseDataSource):
             "assignees_list": issue.get("assignees", {}).get("nodes"),
         }
 
-    def _prepare_review_doc(self, review):
+    def _prepare_review_doc(self, review: Dict[str, Optional[Union[str, Dict[str, Union[Dict[str, Union[str, bool]], List[Dict[str, str]]]], Dict[str, str]]]]) -> Dict[str, Optional[Union[str, List[Dict[str, str]]]]]:
         # review.author can be None if the user was deleted, so need to be extra null-safe
         author = review.get("author", {}) or {}
 
@@ -1560,7 +1562,7 @@ class GitHubDataSource(BaseDataSource):
             "comments": review.get("comments", {}).get("nodes"),
         }
 
-    async def _fetch_installations(self):
+    async def _fetch_installations(self) -> Dict[str, Union[int, Dict[str, int]]]:
         """Fetches GitHub App installations, and populates instance variable self._installations
         Only populates Organization installations when repo_type is organization, and only populates User installations when repo_type is other
         """
@@ -1676,7 +1678,7 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    def _convert_repo_object_to_doc(self, repo_object):
+    def _convert_repo_object_to_doc(self, repo_object: Dict[str, str]) -> Dict[str, str]:
         repo_object = repo_object.copy()
         repo_object.update(
             {
@@ -1698,8 +1700,8 @@ class GitHubDataSource(BaseDataSource):
             )
 
     async def _fetch_remaining_fields(
-        self, type_obj, object_type, owner, repo, field_type
-    ):
+        self, type_obj: Dict[str, Any], object_type: str, owner: str, repo: str, field_type: str
+    ) -> None:
         sample_dict = {
             "reviews": {
                 "query": GithubQuery.REVIEW_QUERY.value,
@@ -1751,7 +1753,7 @@ class GitHubDataSource(BaseDataSource):
                 else:
                     type_obj[sample_dict[field_type]["es_field"]].extend(response)
 
-    async def _extract_pull_request(self, pull_request, owner, repo):
+    async def _extract_pull_request(self, pull_request: Dict[str, Any], owner: str, repo: str):
         reviews = [
             self._prepare_review_doc(review=review)
             for review in pull_request.get("reviews", {}).get("nodes")
@@ -1772,10 +1774,10 @@ class GitHubDataSource(BaseDataSource):
 
     async def _fetch_pull_requests(
         self,
-        repo_name,
-        response_key,
-        filter_query=None,
-    ):
+        repo_name: str,
+        response_key: List[str],
+        filter_query: None=None,
+    ) -> None:
         self._logger.info(
             f"Fetching pull requests from '{repo_name}' with response_key '{response_key}' and filter query: '{filter_query}'"
         )
@@ -1832,9 +1834,9 @@ class GitHubDataSource(BaseDataSource):
 
     async def _fetch_issues(
         self,
-        repo_name,
-        response_key,
-        filter_query=None,
+        repo_name: str,
+        response_key: List[str],
+        filter_query: None=None,
     ):
         self._logger.info(
             f"Fetching issues from repo: {repo_name} with response_key: '{response_key}' and filter_query: '{filter_query}'"
@@ -1871,7 +1873,7 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def _fetch_last_commit_timestamp(self, repo_name, path):
+    async def _fetch_last_commit_timestamp(self, repo_name: str, path: str) -> str:
         commit, *_ = await self.github_client.get_github_item(  # pyright: ignore
             resource=self.github_client.endpoints["COMMITS"].format(
                 repo_name=repo_name, path=path
@@ -1879,7 +1881,7 @@ class GitHubDataSource(BaseDataSource):
         )
         return commit["commit"]["committer"]["date"]
 
-    async def _format_file_document(self, repo_object, repo_name, schema):
+    async def _format_file_document(self, repo_object: Dict[str, Union[str, int]], repo_name: str, schema: Dict[str, str]) -> Tuple[Dict[str, Union[int, str]], Dict[str, Union[int, str]]]:
         file_name = repo_object["path"].split("/")[-1]
         file_extension = (
             file_name[file_name.rfind(".") :] if "." in file_name else ""  # noqa
@@ -1904,7 +1906,7 @@ class GitHubDataSource(BaseDataSource):
             document["_id"] = f"{repo_name}/{repo_object['path']}"
             return document, repo_object
 
-    async def _fetch_files(self, repo_name, default_branch):
+    async def _fetch_files(self, repo_name: str, default_branch: str):
         self._logger.info(
             f"Fetching files from repo: '{repo_name}' (branch: '{default_branch}')"
         )
@@ -1956,7 +1958,7 @@ class GitHubDataSource(BaseDataSource):
                 exc_info=True,
             )
 
-    async def get_content(self, attachment, timestamp=None, doit=False):
+    async def get_content(self, attachment: Dict[str, Union[str, int]], timestamp: None=None, doit: bool=False) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for Apache TIKA supported file types.
 
         Args:
@@ -1997,7 +1999,7 @@ class GitHubDataSource(BaseDataSource):
         else:
             yield
 
-    def _filter_rule_query(self, repo, query, query_type):
+    def _filter_rule_query(self, repo: str, query: str, query_type: str) -> Tuple[bool, str]:
         """
         Filters a query based on the query type.
 
@@ -2024,20 +2026,20 @@ class GitHubDataSource(BaseDataSource):
         else:
             return False, query
 
-    def is_previous_repo(self, repo_name):
+    def is_previous_repo(self, repo_name: str) -> bool:
         if repo_name in self.prev_repos:
             return True
         self.prev_repos.append(repo_name)
         return False
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(self, document: Dict[str, Any], access_control: List[str]) -> Dict[str, Any]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _fetch_access_control(self, repo_name):
+    async def _fetch_access_control(self, repo_name: str) -> List[str]:
         owner, repo = self.github_client.get_repo_details(repo_name)
         collaborator_variables = {
             "orgName": owner,

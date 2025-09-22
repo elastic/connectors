@@ -13,21 +13,22 @@ from connectors.protocol import (
     CONCRETE_JOBS_INDEX,
     ConnectorIndex,
 )
+from typing import Dict
 
 
 class Index:
-    def __init__(self, config):
+    def __init__(self, config: Dict[str, str]) -> None:
         self.elastic_config = config
         self.cli_client = CLIClient(self.elastic_config)
         self.connectors_index = ConnectorIndex(self.elastic_config)
 
-    def list_indices(self):
+    def list_indices(self) -> Dict[str, Dict[str, int]]:
         return asyncio.run(self.__list_indices())
 
-    def clean(self, index_name):
+    def clean(self, index_name: str) -> bool:
         return asyncio.run(self.__clean_index(index_name))
 
-    def delete(self, index_name):
+    def delete(self, index_name: str) -> bool:
         return asyncio.run(self.__delete_index(index_name))
 
     def index_or_connector_exists(self, index_name):

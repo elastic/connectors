@@ -23,6 +23,9 @@ from connectors.sources.microsoft_teams import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from _asyncio import Future, Task
+from aioresponses.core import aioresponses
+from typing import Awaitable, Dict, Iterator, Optional, Tuple, Union
 
 USER_CHATS = [
     {
@@ -546,7 +549,7 @@ class ClientSession:
         pass
 
 
-async def create_fake_coroutine(item):
+async def create_fake_coroutine(item: Union[Dict[str, Union[str, int, Dict[str, str]]], Tuple[str, int]]) -> Union[Dict[str, Union[str, int, Dict[str, str]]], Tuple[str, int]]:
     """create a method for returning fake coroutine value for
     Args:
         item: Value for converting into coroutine
@@ -554,7 +557,7 @@ async def create_fake_coroutine(item):
     return item
 
 
-def test_get_configuration():
+def test_get_configuration() -> None:
     config = DataSourceConfiguration(
         config=MicrosoftTeamsDataSource.get_default_configuration()
     )
@@ -576,15 +579,15 @@ def test_get_configuration():
     ],
 )
 async def test_validate_configuration_with_invalid_fields_raises_error(
-    extras,
-):
+    extras: Dict[str, str],
+) -> Iterator[None]:
     async with create_source(MicrosoftTeamsDataSource, **extras) as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> Iterator[None]:
     async with create_source(MicrosoftTeamsDataSource) as source:
         DUMMY_RESPONSE = {}
         source.client.fetch = Mock(
@@ -595,7 +598,7 @@ async def test_ping_for_successful_connection():
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection_exception(mock_get):
+async def test_ping_for_failed_connection_exception(mock_get: MagicMock) -> Iterator[None]:
     async with create_source(MicrosoftTeamsDataSource) as source:
         with patch.object(
             MicrosoftTeamsClient,
@@ -607,7 +610,7 @@ async def test_ping_for_failed_connection_exception(mock_get):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_for_user_chats():
+async def test_get_docs_for_user_chats() -> Iterator[Union[Future, Awaitable, None]]:
     async with create_source(MicrosoftTeamsDataSource) as source:
         source.client.get_user_chats = Mock(return_value=AsyncIterator([USER_CHATS]))
         source.client.get_user_chat_messages = Mock(
@@ -629,7 +632,7 @@ async def test_get_docs_for_user_chats():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_for_events():
+async def test_get_docs_for_events() -> Iterator[Union[Future, Awaitable, None]]:
     async with create_source(MicrosoftTeamsDataSource) as source:
         source.client.get_user_chats = Mock(return_value=AsyncIterator([]))
         source.client.get_teams = Mock(return_value=AsyncIterator([]))
@@ -646,7 +649,7 @@ async def test_get_docs_for_events():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_for_teams():
+async def test_get_docs_for_teams() -> Iterator[Union[Future, Awaitable, None]]:
     async with create_source(MicrosoftTeamsDataSource) as source:
         source.client.get_user_chats = Mock(return_value=AsyncIterator([]))
         source.client.users = Mock(return_value=AsyncIterator([]))
@@ -682,7 +685,7 @@ async def test_get_docs_for_teams():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> Iterator[Optional[Future]]:
     message = b"This is content of attachment"
 
     async def download_func(url, async_buffer):
@@ -706,7 +709,7 @@ async def test_get_content():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_content_negative(attachment, download_url):
+async def test_get_content_negative(attachment: Dict[str, Union[int, str]], download_url: str) -> Iterator[None]:
     message = b"This is content of attachment"
 
     async def download_func(url, async_buffer):
@@ -719,7 +722,7 @@ async def test_get_content_negative(attachment, download_url):
 
 
 @pytest.mark.asyncio
-async def test_get_channel_file():
+async def test_get_channel_file() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -732,7 +735,7 @@ async def test_get_channel_file():
 
 
 @pytest.mark.asyncio
-async def test_get_channel_messages(patch_scroll, client):
+async def test_get_channel_messages(patch_scroll: MagicMock, client: MicrosoftTeamsClient) -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -745,7 +748,7 @@ async def test_get_channel_messages(patch_scroll, client):
 
 
 @pytest.mark.asyncio
-async def test_format_user_chat_messages(patch_scroll, client):
+async def test_format_user_chat_messages(patch_scroll: MagicMock, client: MicrosoftTeamsClient) -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -756,7 +759,7 @@ async def test_format_user_chat_messages(patch_scroll, client):
 
 
 @pytest.mark.asyncio
-async def test_format_user_chat_messages_for_members(patch_scroll, client):
+async def test_format_user_chat_messages_for_members(patch_scroll: MagicMock, client: MicrosoftTeamsClient) -> Iterator[None]:
     user_chat_request = {
         "id": "19:2ea91886",
         "topic": None,
@@ -793,7 +796,7 @@ async def test_format_user_chat_messages_for_members(patch_scroll, client):
 
 
 @pytest.mark.asyncio
-async def test_get_channel_messages_for_base_class(patch_scroll, client):
+async def test_get_channel_messages_for_base_class(patch_scroll: MagicMock, client: MicrosoftTeamsClient) -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -803,7 +806,7 @@ async def test_get_channel_messages_for_base_class(patch_scroll, client):
 
 
 @pytest.mark.asyncio
-async def test_get_messages(patch_scroll, client):
+async def test_get_messages(patch_scroll: MagicMock, client: MicrosoftTeamsClient) -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -816,7 +819,7 @@ async def test_get_messages(patch_scroll, client):
 
 
 @pytest.mark.asyncio
-async def test_get_channel_tabs():
+async def test_get_channel_tabs() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -827,7 +830,7 @@ async def test_get_channel_tabs():
 
 
 @pytest.mark.asyncio
-async def test_get_team_channels():
+async def test_get_team_channels() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -838,7 +841,7 @@ async def test_get_team_channels():
 
 
 @pytest.mark.asyncio
-async def test_get_teams():
+async def test_get_teams() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -849,7 +852,7 @@ async def test_get_teams():
 
 
 @pytest.mark.asyncio
-async def test_get_calendars():
+async def test_get_calendars() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -864,7 +867,7 @@ async def test_get_calendars():
 
 
 @pytest.mark.asyncio
-async def test_get_user_chat_tabs():
+async def test_get_user_chat_tabs() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -875,7 +878,7 @@ async def test_get_user_chat_tabs():
 
 
 @pytest.mark.asyncio
-async def test_get_user_chat_messages():
+async def test_get_user_chat_messages() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -885,7 +888,7 @@ async def test_get_user_chat_messages():
 
 
 @pytest.mark.asyncio
-async def test_get_user_chats():
+async def test_get_user_chats() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -895,7 +898,7 @@ async def test_get_user_chats():
 
 
 @pytest.mark.asyncio
-async def test_users():
+async def test_users() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -905,7 +908,7 @@ async def test_users():
 
 
 @pytest.mark.asyncio
-async def test_set_internal_logger():
+async def test_set_internal_logger() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:
@@ -914,7 +917,7 @@ async def test_set_internal_logger():
 
 
 @pytest.mark.asyncio
-async def test_scroll(microsoft_client, mock_responses):
+async def test_scroll(microsoft_client: MicrosoftTeamsClient, mock_responses: aioresponses) -> None:
     url = "http://localhost:1234/url"
     first_page = ["1", "2", "3"]
 
@@ -941,7 +944,7 @@ async def test_scroll(microsoft_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_pipe(microsoft_client, mock_responses):
+async def test_pipe(microsoft_client: MicrosoftTeamsClient, mock_responses: aioresponses) -> None:
     class AsyncStream:
         def __init__(self):
             self.stream = BytesIO()
@@ -968,9 +971,9 @@ async def test_pipe(microsoft_client, mock_responses):
 
 @pytest.mark.asyncio
 async def test_call_api_with_403(
-    microsoft_client,
-    mock_responses,
-):
+    microsoft_client: MicrosoftTeamsClient,
+    mock_responses: aioresponses,
+) -> None:
     url = "http://localhost:1234/download-some-sample-file"
 
     unauthorized_error = ClientResponseError(None, None)
@@ -994,9 +997,9 @@ async def test_call_api_with_403(
 
 @pytest.mark.asyncio
 async def test_call_api_with_404(
-    microsoft_client,
-    mock_responses,
-):
+    microsoft_client: MicrosoftTeamsClient,
+    mock_responses: aioresponses,
+) -> None:
     url = "http://localhost:1234/download-some-sample-file"
 
     not_found_error = ClientResponseError(None, None)
@@ -1020,10 +1023,10 @@ async def test_call_api_with_404(
 
 @pytest.mark.asyncio
 async def test_call_api_with_os_error(
-    microsoft_client,
-    mock_responses,
-    patch_sleep,
-):
+    microsoft_client: MicrosoftTeamsClient,
+    mock_responses: aioresponses,
+    patch_sleep: AsyncMock,
+) -> Iterator[Task]:
     url = "http://localhost:1234/download-some-sample-file"
 
     not_found_error = ClientOSError()
@@ -1046,10 +1049,10 @@ async def test_call_api_with_os_error(
 
 @pytest.mark.asyncio
 async def test_call_api_with_500(
-    microsoft_client,
-    mock_responses,
-    patch_sleep,
-):
+    microsoft_client: MicrosoftTeamsClient,
+    mock_responses: aioresponses,
+    patch_sleep: AsyncMock,
+) -> Iterator[Task]:
     url = "http://localhost:1234/download-some-sample-file"
 
     not_found_error = ClientResponseError(
@@ -1085,9 +1088,9 @@ class JSONAsyncMock(AsyncMock):
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_call_api_with_429(
-    microsoft_client,
-    mock_responses,
-):
+    microsoft_client: MicrosoftTeamsClient,
+    mock_responses: aioresponses,
+) -> Iterator[Task]:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -1113,9 +1116,9 @@ async def test_call_api_with_429(
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 async def test_call_api_with_429_with_retry_after(
-    microsoft_client,
-    mock_responses,
-):
+    microsoft_client: MicrosoftTeamsClient,
+    mock_responses: aioresponses,
+) -> Iterator[Task]:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -1141,8 +1144,8 @@ async def test_call_api_with_429_with_retry_after(
 
 @pytest.mark.asyncio
 async def test_call_api_with_unhandled_status(
-    microsoft_client, mock_responses, patch_sleep
-):
+    microsoft_client: MicrosoftTeamsClient, mock_responses: aioresponses, patch_sleep: AsyncMock
+) -> Iterator[Task]:
     url = "http://localhost:1234/download-some-sample-file"
 
     error_message = "Something went wrong"
@@ -1167,7 +1170,7 @@ async def test_call_api_with_unhandled_status(
 
 
 @pytest.mark.asyncio
-async def test_get_for_client():
+async def test_get_for_client() -> None:
     bearer = "hello"
     source = GraphAPIToken(
         "tenant_id", "client_id", "client_secret", "username", "password"
@@ -1179,7 +1182,7 @@ async def test_get_for_client():
 
 
 @pytest.mark.asyncio
-async def test_get_for_username_password():
+async def test_get_for_username_password() -> None:
     bearer = "hello"
     source = GraphAPIToken(
         "tenant_id", "client_id", "client_secret", "username", "password"
@@ -1191,7 +1194,7 @@ async def test_get_for_username_password():
 
 
 @pytest.mark.asyncio
-async def test_fetch(microsoft_client, mock_responses):
+async def test_fetch(microsoft_client: MicrosoftTeamsClient, mock_responses: aioresponses) -> None:
     with patch.object(
         GraphAPIToken,
         "_fetch_token",
@@ -1208,7 +1211,7 @@ async def test_fetch(microsoft_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_user_drive_root_children():
+async def test_get_user_drive_root_children() -> Iterator[None]:
     async with create_source(
         MicrosoftTeamsDataSource,
     ) as source:

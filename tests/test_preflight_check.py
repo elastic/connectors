@@ -4,12 +4,16 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from copy import deepcopy
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from connectors.preflight_check import PreflightCheck
 from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
+from _asyncio import Task
+from aioresponses.core import aioresponses
+from pytest_mock.plugin import MockerFixture
+from typing import Iterator, Optional
 
 connectors_version = "1.2.3.4"
 headers = {"X-Elastic-Product": "Elasticsearch"}
@@ -33,12 +37,12 @@ config = {
 
 
 def mock_es_info(
-    mock_responses,
-    healthy=True,
-    repeat=False,
-    es_version=connectors_version,
-    serverless=False,
-):
+    mock_responses: aioresponses,
+    healthy: bool=True,
+    repeat: bool=False,
+    es_version: str=connectors_version,
+    serverless: bool=False,
+) -> None:
     status = 200 if healthy else 503
     payload = {
         "version": {
@@ -51,7 +55,7 @@ def mock_es_info(
     )
 
 
-def mock_index_exists(mock_responses, index, exist=True, repeat=False):
+def mock_index_exists(mock_responses: aioresponses, index: str, exist: bool=True, repeat: bool=False) -> None:
     status = 200 if exist else 404
     mock_responses.head(f"{host}/{index}", status=status, repeat=repeat)
 
@@ -61,7 +65,7 @@ def mock_index(mock_responses, index, doc_id, repeat=False):
     mock_responses.put(f"{host}/{index}/_doc/{doc_id}", status=status, repeat=repeat)
 
 
-def mock_create_index(mock_responses, index, repeat=False):
+def mock_create_index(mock_responses: aioresponses, index: str, repeat: bool=False) -> None:
     status = 200
     mock_responses.put(f"{host}/{index}", status=status, repeat=repeat)
 
@@ -72,7 +76,7 @@ def mock_delete(mock_responses, index, doc_id, repeat=False):
 
 
 @pytest.mark.asyncio
-async def test_es_unavailable(mock_responses):
+async def test_es_unavailable(mock_responses: aioresponses) -> Iterator[Optional[Task]]:
     mock_es_info(mock_responses, healthy=False, repeat=True)
     preflight = PreflightCheck(config, connectors_version)
     result = await preflight.run()
@@ -80,7 +84,7 @@ async def test_es_unavailable(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_connectors_index_missing(mocker, mock_responses):
+async def test_connectors_index_missing(mocker: MockerFixture, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=True)
@@ -93,7 +97,7 @@ async def test_connectors_index_missing(mocker, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_jobs_index_missing(mocker, mock_responses):
+async def test_jobs_index_missing(mocker: MockerFixture, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=True)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
@@ -105,7 +109,7 @@ async def test_jobs_index_missing(mocker, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_both_indices_missing(mocker, mock_responses):
+async def test_both_indices_missing(mocker: MockerFixture, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX, exist=False)
@@ -118,7 +122,7 @@ async def test_both_indices_missing(mocker, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_pass(mock_responses):
+async def test_pass(mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -129,7 +133,7 @@ async def test_pass(mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_pass_serverless(patched_logger, mock_responses):
+async def test_pass_serverless(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses, serverless=True)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -143,7 +147,7 @@ async def test_pass_serverless(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_pass_serverless_mismatched_versions(patched_logger, mock_responses):
+async def test_pass_serverless_mismatched_versions(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses, es_version="2.0.0-SNAPSHOT", serverless=True)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -171,8 +175,8 @@ async def test_pass_serverless_mismatched_versions(patched_logger, mock_response
     ],
 )
 async def test_fail_mismatched_version(
-    patched_logger, mock_responses, es_version, expected_log
-):
+    patched_logger: MagicMock, mock_responses: aioresponses, es_version: str, expected_log: str
+) -> Iterator[None]:
     mock_es_info(mock_responses, es_version=es_version)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -198,8 +202,8 @@ async def test_fail_mismatched_version(
     ],
 )
 async def test_warn_mismatched_version(
-    patched_logger, mock_responses, es_version, expected_log
-):
+    patched_logger: MagicMock, mock_responses: aioresponses, es_version: str, expected_log: str
+) -> Iterator[None]:
     mock_es_info(mock_responses, es_version=es_version)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -252,8 +256,8 @@ async def test_warn_mismatched_version(
     ],
 )
 async def test_pass_mismatched_version(
-    patched_logger, mock_responses, es_version, connectors_version, expected_log
-):
+    patched_logger: MagicMock, mock_responses: aioresponses, es_version: str, connectors_version: str, expected_log: str
+) -> Iterator[None]:
     mock_es_info(mock_responses, es_version=es_version)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -264,7 +268,7 @@ async def test_pass_mismatched_version(
 
 
 @pytest.mark.asyncio
-async def test_es_transient_error(mock_responses):
+async def test_es_transient_error(mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses, healthy=False)
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
@@ -275,7 +279,7 @@ async def test_es_transient_error(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_index_exist_transient_error(mock_responses):
+async def test_index_exist_transient_error(mock_responses: aioresponses) -> Iterator[Optional[Task]]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, exist=False)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX, repeat=True)
@@ -288,7 +292,7 @@ async def test_index_exist_transient_error(mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_native_config_is_warned(patched_logger, mock_responses):
+async def test_native_config_is_warned(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -311,7 +315,7 @@ async def test_native_config_is_warned(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_native_config_is_forced(patched_logger, mock_responses):
+async def test_native_config_is_forced(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -326,7 +330,7 @@ async def test_native_config_is_forced(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_client_config(patched_logger, mock_responses):
+async def test_client_config(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -341,7 +345,7 @@ async def test_client_config(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_unmodified_default_config(patched_logger, mock_responses):
+async def test_unmodified_default_config(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -358,7 +362,7 @@ async def test_unmodified_default_config(patched_logger, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
-async def test_missing_mode_config(patched_logger, mock_responses):
+async def test_missing_mode_config(patched_logger: MagicMock, mock_responses: aioresponses) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -373,8 +377,8 @@ async def test_missing_mode_config(patched_logger, mock_responses):
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
 async def test_extraction_service_enabled_and_found_writes_info_log(
-    patched_logger, mock_responses
-):
+    patched_logger: MagicMock, mock_responses: aioresponses
+) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -397,8 +401,8 @@ async def test_extraction_service_enabled_and_found_writes_info_log(
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
 async def test_extraction_service_enabled_but_missing_logs_warning(
-    patched_logger, mock_responses
-):
+    patched_logger: MagicMock, mock_responses: aioresponses
+) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)
@@ -421,8 +425,8 @@ async def test_extraction_service_enabled_but_missing_logs_warning(
 @pytest.mark.asyncio
 @patch("connectors.preflight_check.logger")
 async def test_extraction_service_enabled_but_missing_logs_critical(
-    patched_logger, mock_responses
-):
+    patched_logger: MagicMock, mock_responses: aioresponses
+) -> Iterator[None]:
     mock_es_info(mock_responses)
     mock_index_exists(mock_responses, CONCRETE_CONNECTORS_INDEX)
     mock_index_exists(mock_responses, CONCRETE_JOBS_INDEX)

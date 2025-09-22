@@ -9,7 +9,7 @@ import itertools
 import json
 from copy import deepcopy
 from unittest import mock
-from unittest.mock import ANY, AsyncMock, Mock, call, patch
+from unittest.mock import MagicMock, ANY, AsyncMock, Mock, call, patch
 
 import pytest
 from elasticsearch import ApiError, BadRequestError
@@ -42,6 +42,9 @@ from connectors.protocol.connectors import (
 )
 from connectors.utils import ErrorMonitor, TooManyErrors
 from tests.commons import AsyncIterator
+from _asyncio import Future, Task
+from aioresponses.core import aioresponses
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 INDEX = "some-index"
 TIMESTAMP = datetime.datetime(year=2023, month=1, day=1)
@@ -69,23 +72,23 @@ CONTENT_EXTRACTION_ENABLED = True
 CONTENT_EXTRACTION_DISABLED = False
 
 
-def failed_bulk_action(doc_id, action, result, error=BULK_ACTION_ERROR):
+def failed_bulk_action(doc_id: int, action: str, result: str, error: str=BULK_ACTION_ERROR) -> Dict[str, Dict[str, Union[str, int]]]:
     return {action: {"_id": doc_id, "result": result, "error": error}}
 
 
-def successful_bulk_action(doc_id, action, result):
+def successful_bulk_action(doc_id: int, action: str, result: str) -> Dict[str, Dict[str, Union[str, int]]]:
     return {action: {"_id": doc_id, "result": result}}
 
 
-def successful_action_log_message(doc_id, action, result):
+def successful_action_log_message(doc_id: int, action: str, result: str) -> str:
     return f"Successfully executed '{action}' on document with id '{doc_id}'. Result: {result}"
 
 
-def successful_operation_with_non_successful_result_log_message(doc_id, action, result):
+def successful_operation_with_non_successful_result_log_message(doc_id: int, action: str, result: str) -> str:
     return f"Executed '{action}' on document with id '{doc_id}', but got non-successful result: {result}"
 
 
-def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
+def failed_action_log_message(doc_id: int, action: str, result: str, error: str=BULK_ACTION_ERROR) -> str:
     return (
         f"Failed to execute '{action}' on document with id '{doc_id}'. Error: {error}"
     )
@@ -94,8 +97,8 @@ def failed_action_log_message(doc_id, action, result, error=BULK_ACTION_ERROR):
 @patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_raise_error_when_index_creation_failed(
-    mock_responses,
-):
+    mock_responses: aioresponses,
+) -> Iterator[None]:
     index_name = "search-new-index"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
@@ -130,8 +133,8 @@ async def test_prepare_content_index_raise_error_when_index_creation_failed(
 @patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
 async def test_prepare_content_index_create_index(
-    mock_responses,
-):
+    mock_responses: aioresponses,
+) -> Iterator[None]:
     index_name = "search-new-index"
     language_code = "jp"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
@@ -181,7 +184,7 @@ async def test_prepare_content_index_create_index(
 
 @patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
-async def test_prepare_content_index(mock_responses):
+async def test_prepare_content_index(mock_responses: aioresponses) -> Iterator[None]:
     language_code = "en"
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
@@ -214,7 +217,7 @@ async def test_prepare_content_index(mock_responses):
         create_index_mock.assert_not_called()
 
 
-def set_responses(mock_responses, ts=None):
+def set_responses(mock_responses: aioresponses, ts: None=None) -> None:
     if ts is None:
         ts = datetime.datetime.now().isoformat()
     headers = {"X-Elastic-Product": "Elasticsearch"}
@@ -302,7 +305,7 @@ def set_responses(mock_responses, ts=None):
 
 @patch("connectors.es.sink.CANCELATION_TIMEOUT", -1)
 @pytest.mark.asyncio
-async def test_async_bulk(mock_responses):
+async def test_async_bulk(mock_responses: aioresponses) -> Iterator[Optional[Future]]:
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     set_responses(mock_responses)
 
@@ -359,7 +362,7 @@ async def test_async_bulk(mock_responses):
     await es.close()
 
 
-def index_operation(doc):
+def index_operation(doc: Dict[str, Union[int, datetime.datetime]]) -> Dict[str, Union[str, Dict[str, Union[datetime.datetime, str]]]]:
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
     doc_id = str(doc_copy.pop("_id"))
@@ -368,7 +371,7 @@ def index_operation(doc):
     return {"_op_type": "index", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
-def update_operation(doc):
+def update_operation(doc: Dict[str, Union[int, datetime.datetime]]) -> Dict[str, Union[str, Dict[str, Union[datetime.datetime, str]]]]:
     # deepcopy as get_docs mutates docs
     doc_copy = deepcopy(doc)
     doc_id = str(doc_copy.pop("_id"))
@@ -377,35 +380,35 @@ def update_operation(doc):
     return {"_op_type": "update", "_index": INDEX, "_id": doc_id, "doc": doc_copy}
 
 
-def delete_operation(doc):
+def delete_operation(doc: Dict[str, Union[int, datetime.datetime]]) -> Dict[str, str]:
     return {"_op_type": "delete", "_index": INDEX, "_id": str(doc["_id"])}
 
 
-def end_docs_operation():
+def end_docs_operation() -> str:
     return "END_DOCS"
 
 
-def created(doc_count):
+def created(doc_count: int) -> int:
     """Used for test readability."""
     return doc_count
 
 
-def updated(doc_count):
+def updated(doc_count: int) -> int:
     """Used for test readability."""
     return doc_count
 
 
-def deleted(doc_count):
+def deleted(doc_count: int) -> int:
     """Used for test readability."""
     return doc_count
 
 
-def total_downloads(count):
+def total_downloads(count: int) -> int:
     """Used for test readability."""
     return count
 
 
-async def queue_mock():
+async def queue_mock() -> Mock:
     queue = Mock()
     future = asyncio.Future()
     future.set_result(1)
@@ -413,7 +416,7 @@ async def queue_mock():
     return queue
 
 
-def lazy_download_fake(doc):
+def lazy_download_fake(doc: Dict[str, Union[int, datetime.datetime]]) -> Callable:
     async def lazy_download(**kwargs):
         # also deepcopy to prevent side effects as docs get mutated in get_docs
         return deepcopy(doc)
@@ -421,7 +424,7 @@ def lazy_download_fake(doc):
     return lazy_download
 
 
-def crashing_lazy_download_fake():
+def crashing_lazy_download_fake() -> Callable:
     async def lazy_download(**kwargs):
         msg = "Could not download"
         raise Exception(msg)
@@ -429,7 +432,7 @@ def crashing_lazy_download_fake():
     return lazy_download
 
 
-def queue_called_with_operations(queue, operations):
+def queue_called_with_operations(queue: Mock, operations: List[Union[Dict[str, Union[str, Dict[str, Union[datetime.datetime, str]]]], Dict[str, str], str]]) -> bool:
     expected_calls = [call(operation) for operation in operations]
     actual_calls = queue.put.call_args_list
 
@@ -438,7 +441,7 @@ def queue_called_with_operations(queue, operations):
     )
 
 
-async def basic_rule_engine_mock(return_values):
+async def basic_rule_engine_mock(return_values: Union[Tuple[()], Tuple[bool], List[Exception]]) -> Mock:
     basic_rule_engine = Mock()
     basic_rule_engine.should_ingest = (
         Mock(side_effect=list(return_values))
@@ -448,7 +451,7 @@ async def basic_rule_engine_mock(return_values):
     return basic_rule_engine
 
 
-async def lazy_downloads_mock():
+async def lazy_downloads_mock() -> Mock:
     lazy_downloads = Mock()
     future = asyncio.Future()
     future.set_result(1)
@@ -457,11 +460,11 @@ async def lazy_downloads_mock():
 
 
 async def setup_extractor(
-    queue,
-    basic_rule_engine=None,
-    sync_rules_enabled=False,
-    content_extraction_enabled=False,
-):
+    queue: Mock,
+    basic_rule_engine: Optional[Mock]=None,
+    sync_rules_enabled: bool=False,
+    content_extraction_enabled: bool=False,
+) -> Extractor:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -716,18 +719,18 @@ async def setup_extractor(
 )
 @pytest.mark.asyncio
 async def test_get_docs(
-    yield_existing_documents_metadata,
-    existing_docs,
-    docs_from_source,
-    doc_should_ingest,
-    sync_rules_enabled,
-    content_extraction_enabled,
-    expected_queue_operations,
-    expected_total_docs_updated,
-    expected_total_docs_created,
-    expected_total_docs_deleted,
-    expected_total_downloads,
-):
+    yield_existing_documents_metadata: MagicMock,
+    existing_docs: List[Union[Dict[str, Union[int, datetime.datetime]], Any]],
+    docs_from_source: List[Union[Tuple[Dict[str, Union[int, datetime.datetime]], Callable, str], Tuple[Dict[str, Union[int, datetime.datetime]], None, str], Any]],
+    doc_should_ingest: Union[Tuple[()], Tuple[bool], List[Exception]],
+    sync_rules_enabled: bool,
+    content_extraction_enabled: bool,
+    expected_queue_operations: List[Union[Dict[str, Union[str, Dict[str, Union[datetime.datetime, str]]]], Dict[str, str], str]],
+    expected_total_docs_updated: int,
+    expected_total_docs_created: int,
+    expected_total_docs_deleted: int,
+    expected_total_downloads: int,
+) -> Iterator[Optional[Awaitable]] | None:
     lazy_downloads = await lazy_downloads_mock()
 
     yield_existing_documents_metadata.return_value = AsyncIterator(
@@ -899,16 +902,16 @@ async def test_get_docs(
 )
 @pytest.mark.asyncio
 async def test_get_docs_incrementally(
-    docs_from_source,
-    doc_should_ingest,
-    sync_rules_enabled,
-    content_extraction_enabled,
-    expected_queue_operations,
-    expected_total_docs_updated,
-    expected_total_docs_created,
-    expected_total_docs_deleted,
-    expected_total_downloads,
-):
+    docs_from_source: List[Union[Tuple[Dict[str, Union[int, datetime.datetime]], Callable, str], Tuple[Dict[str, Union[int, datetime.datetime]], None, str], Any]],
+    doc_should_ingest: Union[Tuple[()], Tuple[bool], List[Exception]],
+    sync_rules_enabled: bool,
+    content_extraction_enabled: bool,
+    expected_queue_operations: List[Union[Dict[str, Union[str, Dict[str, Union[datetime.datetime, str]]]], Dict[str, str], str]],
+    expected_total_docs_updated: int,
+    expected_total_docs_created: int,
+    expected_total_docs_deleted: int,
+    expected_total_downloads: int,
+) -> Iterator[Optional[Awaitable]] | None:
     lazy_downloads = await lazy_downloads_mock()
 
     with mock.patch("connectors.utils.ConcurrentTasks", return_value=lazy_downloads):
@@ -1012,14 +1015,14 @@ async def test_get_docs_incrementally(
 )
 @pytest.mark.asyncio
 async def test_get_access_control_docs(
-    yield_existing_documents_metadata,
-    existing_docs,
-    docs_from_source,
-    expected_queue_operations,
-    expected_total_docs_updated,
-    expected_total_docs_created,
-    expected_total_docs_deleted,
-):
+    yield_existing_documents_metadata: MagicMock,
+    existing_docs: List[Union[Dict[str, Union[int, datetime.datetime]], Any]],
+    docs_from_source: List[Union[Tuple[Dict[str, Union[int, datetime.datetime]], None, None], Any]],
+    expected_queue_operations: List[Union[Dict[str, Union[str, Dict[str, Union[datetime.datetime, str]]]], Dict[str, str], str]],
+    expected_total_docs_updated: int,
+    expected_total_docs_created: int,
+    expected_total_docs_deleted: int,
+) -> Iterator[None]:
     yield_existing_documents_metadata.return_value = AsyncIterator(
         [(str(doc["_id"]), doc["_timestamp"]) for doc in existing_docs]
     )
@@ -1123,7 +1126,7 @@ FAILED_DELETE_ITEM = {"delete": {"_id": "3"}}
         ),
     ],
 )
-def test_bulk_populate_stats(res, expected_result):
+def test_bulk_populate_stats(res: Dict[str, List[Dict[str, Dict[str, str]]]], expected_result: Dict[str, int]) -> None:
     sink = Sink(
         client=None,
         queue=None,
@@ -1152,7 +1155,7 @@ def test_bulk_populate_stats(res, expected_result):
 
 
 @pytest.mark.asyncio
-async def test_batch_bulk_with_retry():
+async def test_batch_bulk_with_retry() -> Iterator[Task]:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -1187,7 +1190,7 @@ async def test_batch_bulk_with_retry():
 
 
 @pytest.mark.asyncio
-async def test_batch_bulk_with_error_monitor():
+async def test_batch_bulk_with_error_monitor() -> None:
     config = {
         "username": "elastic",
         "password": "changeme",
@@ -1300,8 +1303,8 @@ async def test_batch_bulk_with_errors(patch_logger):
 )
 @pytest.mark.asyncio
 async def test_sync_orchestrator_done_and_cleanup(
-    extractor_task, extractor_task_done, sink_task, sink_task_done, expected_result
-):
+    extractor_task: Optional[Mock], extractor_task_done: bool, sink_task: Optional[Mock], sink_task_done: bool, expected_result: bool
+) -> None:
     if extractor_task is not None:
         extractor_task.cancel = Mock()
         extractor_task.done.return_value = extractor_task_done
@@ -1329,7 +1332,7 @@ async def test_sync_orchestrator_done_and_cleanup(
 
 
 @pytest.mark.asyncio
-async def test_extractor_put_doc():
+async def test_extractor_put_doc() -> None:
     doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
@@ -1345,8 +1348,8 @@ async def test_extractor_put_doc():
 )
 @mock.patch("connectors.utils.ConcurrentTasks.cancel")
 async def test_extractor_get_docs_when_downloads_fail(
-    yield_existing_documents_metadata, concurrent_tasks_cancel
-):
+    yield_existing_documents_metadata: MagicMock, concurrent_tasks_cancel: MagicMock
+) -> Iterator[Optional[Awaitable]] | None:
     queue = await queue_mock()
 
     yield_existing_documents_metadata.return_value = AsyncIterator([])
@@ -1368,7 +1371,7 @@ async def test_extractor_get_docs_when_downloads_fail(
 
 
 @pytest.mark.asyncio
-async def test_force_canceled_extractor_put_doc():
+async def test_force_canceled_extractor_put_doc() -> None:
     doc = {"id": 123}
     queue = Mock()
     queue.put = AsyncMock()
@@ -1400,7 +1403,7 @@ async def test_force_canceled_extractor_with_other_errors(patch_logger):
 
 
 @pytest.mark.asyncio
-async def test_sink_fetch_doc():
+async def test_sink_fetch_doc() -> None:
     expected_doc = {"id": 123}
     queue = Mock()
     queue.get = AsyncMock(return_value=expected_doc)
@@ -1422,7 +1425,7 @@ async def test_sink_fetch_doc():
 
 
 @pytest.mark.asyncio
-async def test_force_canceled_sink_fetch_doc():
+async def test_force_canceled_sink_fetch_doc() -> None:
     expected_doc = {"id": 123}
     queue = Mock()
     queue.get = AsyncMock(return_value=expected_doc)
@@ -1494,7 +1497,7 @@ async def test_force_canceled_sink_with_other_errors(patch_logger):
     ],
 )
 @pytest.mark.asyncio
-async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
+async def test_cancel_sync(extractor_task_done: Union[itertools.chain, itertools.repeat], sink_task_done: Union[itertools.chain, itertools.repeat], force_cancel: bool) -> None:
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     es = SyncOrchestrator(config)
     es._extractor = Mock()
@@ -1525,7 +1528,7 @@ async def test_cancel_sync(extractor_task_done, sink_task_done, force_cancel):
 
 
 @pytest.mark.asyncio
-async def test_extractor_run_when_mem_full_is_raised():
+async def test_extractor_run_when_mem_full_is_raised() -> None:
     docs_from_source = [
         {"_id": 1},
         {"_id": 2},

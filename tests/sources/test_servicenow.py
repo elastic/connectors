@@ -24,6 +24,9 @@ from connectors.sources.servicenow import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+import connectors.protocol.connectors
+from _asyncio import Future, Task
+from typing import Awaitable, Dict, Iterator, List, Optional, Union
 
 SAMPLE_RESPONSE = b'{"batch_request_id":"1","serviced_requests":[{"id":"1", "body":"eyJyZXN1bHQiOlt7Im5hbWUiOiJzbl9zbV9qb3VybmFsMDAwMiIsImxhYmVsIjoiU2VjcmV0cyBNYW5hZ2VtZW50IEpvdXJuYWwifV19","status_code":200,"status_text":"OK","execution_time":19}],"unserviced_requests":[]}'
 ADVANCED_SNIPPET = "advanced_snippet"
@@ -45,13 +48,13 @@ async def create_service_now_source(use_text_extraction_service=False):
 class MockResponse:
     """Mock response of aiohttp get method"""
 
-    def __init__(self, res, headers):
+    def __init__(self, res: bytes, headers: Dict[str, Union[str, int]]) -> None:
         """Setup a response"""
         self._res = res
         self.headers = headers
         self.content = StreamerReader(self._res)
 
-    async def read(self):
+    async def read(self) -> bytes:
         """Method to read response"""
         return self._res
 
@@ -67,7 +70,7 @@ class MockResponse:
 class StreamerReader:
     """Mock Stream Reader"""
 
-    def __init__(self, res):
+    def __init__(self, res: bytes) -> None:
         """Setup a response"""
         self._res = res
         self._size = None
@@ -79,7 +82,7 @@ class StreamerReader:
 
 @pytest.mark.parametrize("field", ["username", "password", "services"])
 @pytest.mark.asyncio
-async def test_validate_config_missing_fields_then_raise(field):
+async def test_validate_config_missing_fields_then_raise(field: str) -> Iterator[None]:
     async with create_service_now_source() as source:
         source.configuration.get_field(field).value = ""
 
@@ -88,7 +91,7 @@ async def test_validate_config_missing_fields_then_raise(field):
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_invalid_service_then_raise():
+async def test_validate_configuration_with_invalid_service_then_raise() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["label_1", "label_3"]
 
@@ -114,7 +117,7 @@ async def test_validate_configuration_with_invalid_service_then_raise():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> Iterator[None]:
     async with create_service_now_source() as source:
         with mock.patch.object(
             ServiceNowClient,
@@ -125,7 +128,7 @@ async def test_ping_for_successful_connection():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_unsuccessful_connection_then_raise():
+async def test_ping_for_unsuccessful_connection_then_raise() -> Iterator[None]:
     async with create_service_now_source() as source:
         with mock.patch.object(
             ServiceNowClient,
@@ -137,7 +140,7 @@ async def test_ping_for_unsuccessful_connection_then_raise():
 
 
 @pytest.mark.asyncio
-async def test_tweak_bulk_options():
+async def test_tweak_bulk_options() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.concurrent_downloads = 10
         options = {"concurrent_downloads": 5}
@@ -147,7 +150,7 @@ async def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_get_data():
+async def test_get_data() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -166,7 +169,7 @@ async def test_get_data():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_data_with_retry():
+async def test_get_data_with_retry() -> Iterator[Optional[Task]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=ServerDisconnectedError
@@ -178,7 +181,7 @@ async def test_get_data_with_retry():
 
 
 @pytest.mark.asyncio
-async def test_get_table_length():
+async def test_get_table_length() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -193,7 +196,7 @@ async def test_get_table_length():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_table_length_with_retry():
+async def test_get_table_length_with_retry() -> Iterator[Optional[Task]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=ServerDisconnectedError
@@ -205,7 +208,7 @@ async def test_get_table_length_with_retry():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_data_with_empty_response():
+async def test_get_data_with_empty_response() -> Iterator[Optional[Task]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -221,7 +224,7 @@ async def test_get_data_with_empty_response():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_data_with_text_response():
+async def test_get_data_with_text_response() -> Iterator[Optional[Task]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -236,7 +239,7 @@ async def test_get_data_with_text_response():
 
 
 @pytest.mark.asyncio
-async def test_filter_services_with_exception():
+async def test_filter_services_with_exception() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["label_1", "label_3"]
 
@@ -249,7 +252,7 @@ async def test_filter_services_with_exception():
 
 
 @pytest.mark.asyncio
-async def test_filter_services_when_sysparm_fields_missing():
+async def test_filter_services_when_sysparm_fields_missing() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["Incident", "Feature", "User"]
 
@@ -275,7 +278,7 @@ async def test_filter_services_when_sysparm_fields_missing():
 
 
 @pytest.mark.asyncio
-async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table():
+async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["Incident", "Feature"]
 
@@ -303,7 +306,7 @@ async def test_filter_services_when_sysparm_fields_missing_for_unrelated_table()
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_skipping_table_data():
+async def test_get_docs_with_skipping_table_data() -> Iterator[Union[Future, Awaitable, None]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(
@@ -360,7 +363,7 @@ async def test_get_docs_with_skipping_table_data():
         ),
     ],
 )
-async def test_get_docs_with_skipping_attachment_data(dls_enabled, expected_response):
+async def test_get_docs_with_skipping_attachment_data(dls_enabled: bool, expected_response: Dict[str, Union[List[str], str]]) -> Iterator[Union[Future, Awaitable, None]]:
     async with create_service_now_source() as source:
         source._dls_enabled = Mock(return_value=dls_enabled)
         source._fetch_access_controls = mock.AsyncMock(
@@ -408,7 +411,7 @@ async def test_get_docs_with_skipping_attachment_data(dls_enabled, expected_resp
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_configured_services():
+async def test_get_docs_with_configured_services() -> Iterator[Union[Future, Awaitable, None]]:
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["custom"]
         source.servicenow_client._api_call = mock.AsyncMock(
@@ -481,7 +484,7 @@ async def test_get_docs_with_configured_services():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_doit():
+async def test_fetch_attachment_content_with_doit() -> Iterator[Optional[Future]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
@@ -505,7 +508,7 @@ async def test_fetch_attachment_content_with_doit():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_extraction_service():
+async def test_fetch_attachment_content_with_extraction_service() -> Iterator[Optional[Future]]:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -541,7 +544,7 @@ async def test_fetch_attachment_content_with_extraction_service():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_upper_extension():
+async def test_fetch_attachment_content_with_upper_extension() -> Iterator[Optional[Future]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
@@ -565,7 +568,7 @@ async def test_fetch_attachment_content_with_upper_extension():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_without_doit():
+async def test_fetch_attachment_content_without_doit() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
@@ -584,7 +587,7 @@ async def test_fetch_attachment_content_without_doit():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_exception():
+async def test_fetch_attachment_content_with_exception() -> Iterator[Optional[Future]]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             side_effect=Exception("Something went wrong")
@@ -604,7 +607,7 @@ async def test_fetch_attachment_content_with_exception():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_unsupported_extension_then_skip():
+async def test_fetch_attachment_content_with_unsupported_extension_then_skip() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
@@ -624,7 +627,7 @@ async def test_fetch_attachment_content_with_unsupported_extension_then_skip():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_without_extension_then_skip():
+async def test_fetch_attachment_content_without_extension_then_skip() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
@@ -644,7 +647,7 @@ async def test_fetch_attachment_content_without_extension_then_skip():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
+async def test_fetch_attachment_content_with_unsupported_file_size_then_skip() -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client._api_call = mock.AsyncMock(
             return_value=MockResponse(res=b"Attachment Content", headers={})
@@ -745,7 +748,7 @@ async def test_fetch_attachment_content_with_unsupported_file_size_then_skip():
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules: Union[List[Dict[str, str]], List[Dict[str, Union[List[str], str]]], List[Union[Dict[str, Union[List[str], str]], Dict[str, str]]]], expected_validation_result: SyncRuleValidationResult) -> Iterator[None]:
     async with create_service_now_source() as source:
         source.servicenow_client.get_table_length = mock.AsyncMock(return_value=2)
 
@@ -784,7 +787,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering):
+async def test_get_docs_with_advanced_rules(filtering: connectors.protocol.connectors.Filter) -> Iterator[Union[Future, Awaitable, None]]:
     async with create_service_now_source() as source:
         source.servicenow_client.services = ["custom"]
         source.servicenow_client._api_call = mock.AsyncMock(
@@ -873,7 +876,7 @@ async def test_get_docs_with_advanced_rules(filtering):
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules_pagination(filtering):
+async def test_get_docs_with_advanced_rules_pagination(filtering: connectors.protocol.connectors.Filter) -> Iterator[Union[Future, Awaitable, None]]:
     expected_filter_apis = [
         {
             "headers": [
@@ -946,7 +949,7 @@ async def test_get_docs_with_advanced_rules_pagination(filtering):
 
 
 @pytest.mark.asyncio
-async def test_get_access_control():
+async def test_get_access_control() -> Iterator[None]:
     expected_response = {
         "_id": "id_1",
         "identity": {
@@ -992,7 +995,7 @@ async def test_get_access_control():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> Iterator[None]:
     async with create_service_now_source() as source:
         source._dls_enabled = Mock(return_value=False)
 
@@ -1004,7 +1007,7 @@ async def test_get_access_control_dls_disabled():
 
 
 @pytest.mark.asyncio
-async def test_fetch_access_control():
+async def test_fetch_access_control() -> Iterator[None]:
     async with create_service_now_source() as source:
         with mock.patch.object(
             ServiceNowDataSource,
@@ -1033,7 +1036,7 @@ async def test_fetch_access_control():
 
 
 @pytest.mark.asyncio
-async def test_fetch_access_control_for_public():
+async def test_fetch_access_control_for_public() -> Iterator[None]:
     async with create_service_now_source() as source:
         with mock.patch.object(
             ServiceNowDataSource,
@@ -1080,7 +1083,7 @@ async def test_fetch_access_control_for_public():
 
 
 @pytest.mark.asyncio
-async def test_end_signal_is_added_to_queue_in_case_of_exception():
+async def test_end_signal_is_added_to_queue_in_case_of_exception() -> Iterator[None]:
     END_SIGNAL = "RECORD_TASK_FINISHED"
     async with create_service_now_source() as source:
         with patch.object(

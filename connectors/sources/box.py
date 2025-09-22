@@ -18,7 +18,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
@@ -29,8 +29,22 @@ from connectors.utils import (
     convert_to_b64,
     retryable,
 )
+from _asyncio import Future, Task
+from aiohttp.client import ClientSession
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
 
 FINISHED = "FINISHED"
+
+
+class JSONAsyncMock:
+    def __init__(self, json: Dict[str, Union[str, int, List[Dict[str, Union[int, str]]], List[Dict[str, str]]]], status: int, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._json = json
+        self.status = status
+
+    async def json(self) -> Dict[str, Union[str, int, List[Dict[str, Union[int, str]]], List[Dict[str, str]]]]:
+        return self._json
+
 
 ENDPOINTS = {
     "TOKEN": "/oauth2/token",
@@ -68,7 +82,7 @@ class NotFound(Exception):
 
 
 class AccessToken:
-    def __init__(self, configuration, http_session):
+    def __init__(self, configuration: DataSourceConfiguration, http_session: ClientSession) -> None:
         global refresh_token
         self.client_id = configuration["client_id"]
         self.client_secret = configuration["client_secret"]
@@ -79,14 +93,14 @@ class AccessToken:
         self.is_enterprise = configuration["is_enterprise"]
         self.enterprise_id = configuration["enterprise_id"]
 
-    async def get(self):
+    async def get(self) -> str:
         if cached_value := self._token_cache.get_value():
             return cached_value
         logger.debug("No token cache found; fetching new token")
         await self._set_access_token()
         return self.access_token
 
-    async def _set_access_token(self):
+    async def _set_access_token(self) -> None:
         logger.debug("Generating an access token")
         try:
             if self.is_enterprise == BOX_FREE:
@@ -136,7 +150,7 @@ class AccessToken:
 
 
 class BoxClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -151,7 +165,7 @@ class BoxClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def _put_to_sleep(self, retry_after):
+    async def _put_to_sleep(self, retry_after: int) -> Iterator[Task]:
         self._logger.debug(
             f"Connector will attempt to retry after {retry_after} seconds."
         )
@@ -159,7 +173,7 @@ class BoxClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
-    def debug_query_string(self, params):
+    def debug_query_string(self, params: Optional[Dict[str, Union[int, str]]]) -> str:
         if self._logger.isEnabledFor(logging.DEBUG):
             return (
                 "&".join(f"{key}={value}" for key, value in params.items())
@@ -167,7 +181,7 @@ class BoxClient:
                 else ""
             )
 
-    async def _handle_client_errors(self, exception):
+    async def _handle_client_errors(self, exception: ClientResponseError) -> Iterator[Task]:
         match exception.status:
             case 401:
                 await self.token._set_access_token()
@@ -187,7 +201,7 @@ class BoxClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def get(self, url, headers, params=None):
+    async def get(self, url: str, headers: Dict[str, str], params: Optional[Dict[str, Union[int, str]]]=None) -> Generator[Task, None, JSONAsyncMock]:
         self._logger.debug(
             f"Calling GET {url}?{self.debug_query_string(params=params)}"
         )
@@ -200,7 +214,7 @@ class BoxClient:
         except Exception:
             raise
 
-    async def paginated_call(self, url, params, headers):
+    async def paginated_call(self, url: str, params: Dict[str, str], headers: Dict[Any, Any]) -> Iterator[Task]:
         try:
             offset = 0
             while True:
@@ -216,10 +230,10 @@ class BoxClient:
         except Exception:
             raise
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         await self.get(url=ENDPOINTS["PING"], headers={})
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         self._sleeps.cancel()
         await self._http_session.close()
 
@@ -229,7 +243,7 @@ class BoxDataSource(BaseDataSource):
     service_type = "box"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self.configuration = configuration
         self.tasks = 0
@@ -254,7 +268,7 @@ class BoxDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Any]]:
         """Get the default configuration for Box.
 
         Returns:
@@ -310,12 +324,12 @@ class BoxDataSource(BaseDataSource):
             },
         }
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         while not self.queue.empty():
             await self.queue.get()
         await self.client.close()
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         try:
             await self.client.ping()
             self._logger.debug("Successfully connected to Box")
@@ -330,7 +344,7 @@ class BoxDataSource(BaseDataSource):
         ):
             yield user.get("id")
 
-    async def _fetch(self, doc_id, user_id=None):
+    async def _fetch(self, doc_id: Union[str, int], user_id: None=None) -> Iterator[Task]:
         self._logger.info(
             f"Fetching files and folders recursively for folder ID: {doc_id}"
         )
@@ -375,7 +389,7 @@ class BoxDataSource(BaseDataSource):
         finally:
             await self.queue.put(FINISHED)
 
-    async def _get_document_with_content(self, url, attachment_name, document, user_id):
+    async def _get_document_with_content(self, url: str, attachment_name: str, document: Dict[str, str], user_id: None) -> Generator[Future, None, Dict[str, str]]:
         file_data = await self.client.get(
             url=url, headers={"as-user": user_id} if user_id else {}
         )
@@ -400,8 +414,8 @@ class BoxDataSource(BaseDataSource):
         return document
 
     def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
-    ):
+        self, attachment_extension: str, attachment_name: str, attachment_size: int
+    ) -> bool:
         if attachment_extension == "":
             self._logger.debug(
                 f"Files without extension are not supported, skipping {attachment_name}."
@@ -421,7 +435,7 @@ class BoxDataSource(BaseDataSource):
             return False
         return True
 
-    async def get_content(self, attachment, user_id=None, timestamp=None, doit=False):
+    async def get_content(self, attachment: Dict[str, Union[int, str]], user_id: None=None, timestamp: None=None, doit: bool=False) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for Apache TIKA supported file types.
 
         Args:

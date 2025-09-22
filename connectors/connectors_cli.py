@@ -28,6 +28,7 @@ from connectors.cli.index import Index
 from connectors.cli.job import Job
 from connectors.config import _default_config
 from connectors.es import DEFAULT_LANGUAGE
+from click.core import Context, Option
 
 __all__ = ["main"]
 
@@ -163,7 +164,7 @@ language_keys = [DEFAULT_LANGUAGE]
 
 
 # Support blank values for languge
-def validate_language(ctx, param, value):
+def validate_language(ctx: Context, param: Option, value: str) -> str:
     if value not in language_keys:
         return None
 

@@ -13,7 +13,7 @@ from connectors.access_control import (
 
 
 @pytest.mark.asyncio
-async def test_access_control_query():
+async def test_access_control_query() -> None:
     access_control = ["user_1"]
     access_control_query = es_access_control_query(access_control)
 
@@ -46,21 +46,21 @@ async def test_access_control_query():
     }
 
 
-def test_prefix_identity():
+def test_prefix_identity() -> None:
     prefix = "prefix"
     identity = "identity"
 
     assert prefix_identity(prefix, identity) == f"{prefix}:{identity}"
 
 
-def test_prefix_identity_with_prefix_none():
+def test_prefix_identity_with_prefix_none() -> None:
     prefix = None
     identity = "identity"
 
     assert prefix_identity(prefix, identity) is None
 
 
-def test_prefix_identity_with_identity_none():
+def test_prefix_identity_with_identity_none() -> None:
     prefix = "prefix"
     identity = None
 

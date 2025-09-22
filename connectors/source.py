@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from functools import cache
+from functools import partial, cache
 from pydoc import locate
 
 import aiofiles
@@ -28,7 +28,7 @@ from connectors.filtering.validation import (
     BasicRulesSetSemanticValidator,
     FilteringValidator,
 )
-from connectors.logger import logger
+from connectors.logger import ExtraLogger, logger
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     convert_to_b64,
@@ -36,6 +36,13 @@ from connectors.utils import (
     get_file_extension,
     hash_id,
 )
+from _asyncio import Future
+from aiofiles.threadpool.binary import AsyncBufferedIOBase
+from typing import TYPE_CHECKING, Any, Dict, Generator, Iterator, List, Optional, Type, Union
+
+if TYPE_CHECKING:
+    from connectors.protocol.connectors import Features
+from unittest.mock import Mock
 
 CHUNK_SIZE = 1024 * 64  # 64KB default SSD page size
 CURSOR_SYNC_TIMESTAMP = "cursor_timestamp"
@@ -77,15 +84,15 @@ class ValidationTypes(Enum):
 class Field:
     def __init__(
         self,
-        name,
-        default_value=None,
-        depends_on=None,
-        label=None,
-        required=True,
-        field_type="str",
-        validations=None,
-        value=None,
-    ):
+        name: str,
+        default_value: Optional[Union[List[str], int, str]]=None,
+        depends_on: Optional[Union[List[Dict[str, str]], List[Union[Dict[str, str], Dict[str, Union[str, bool]]]], List[Dict[str, Union[str, bool]]]]]=None,
+        label: Optional[str]=None,
+        required: bool=True,
+        field_type: str="str",
+        validations: Optional[Union[List[Dict[str, Union[str, List[int]]]], List[Dict[str, Union[List[str], str]]], List[Dict[str, str]], List[Dict[str, Union[str, int]]]]]=None,
+        value: Optional[Any]=None,
+    ) -> None:
         if depends_on is None:
             depends_on = []
         if label is None:
@@ -129,7 +136,7 @@ class Field:
     def value(self, value):
         self._value = value
 
-    def _convert(self, value, field_type_):
+    def _convert(self, value: Any, field_type_: str) -> Any:
         cast_type = locate(field_type_)
         if cast_type not in TYPE_DEFAULTS:
             # unsupported type
@@ -166,7 +173,7 @@ class Field:
 
         return cast_type(value)
 
-    def is_value_empty(self):
+    def is_value_empty(self) -> bool:
         """Checks if the `value` field is empty or not.
         This always checks `value` and never `default_value`.
         """
@@ -185,7 +192,7 @@ class Field:
                 # int and bool
                 return value is None
 
-    def validate(self):
+    def validate(self) -> List[Union[Any, str]]:
         """Used to validate the `value` of a Field using its `validations`.
         If `value` is empty and the field is not required,
         the validation is run on the `default_value` instead.
@@ -263,7 +270,7 @@ class Field:
 class DataSourceConfiguration:
     """Holds the configuration needed by the source class"""
 
-    def __init__(self, config):
+    def __init__(self, config: Dict[str, Any]) -> None:
         self._raw_config = config
         self._config = {}
         self._defaults = {}
@@ -283,36 +290,36 @@ class DataSourceConfiguration:
                 else:
                     self.set_field(key, label=key.capitalize(), value=str(value))
 
-    def set_defaults(self, default_config):
+    def set_defaults(self, default_config: Dict[str, Any]) -> None:
         for name, item in default_config.items():
             self._defaults[name] = item.get("value")
             if name in self._config:
                 self._config[name].field_type = item["type"]
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Optional[Union[bool, str, int, List[str]]]:
         if key not in self._config and key in self._defaults:
             return self._defaults[key]
         return self._config[key].value
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Optional[Union[str, int, bool]]=None) -> Optional[Union[bool, str, int, List[str]]]:
         if key not in self._config:
             return self._defaults.get(key, default)
         return self._config[key].value
 
-    def has_field(self, name):
+    def has_field(self, name: str) -> bool:
         return name in self._config
 
     def set_field(
         self,
-        name,
-        default_value=None,
-        depends_on=None,
-        label=None,
-        required=True,
-        field_type="str",
-        validations=None,
-        value=None,
-    ):
+        name: str,
+        default_value: Optional[Union[List[str], int, str]]=None,
+        depends_on: Optional[Union[List[Dict[str, str]], List[Union[Dict[str, str], Dict[str, Union[str, bool]]]], List[Dict[str, Union[str, bool]]]]]=None,
+        label: Optional[str]=None,
+        required: bool=True,
+        field_type: str="str",
+        validations: Optional[Union[List[Dict[str, Union[List[str], str]]], List[Dict[str, Union[str, List[int]]]], List[Dict[str, str]], List[Dict[str, Union[str, int]]]]]=None,
+        value: Optional[Any]=None,
+    ) -> None:
         self._config[name] = Field(
             name,
             default_value,
@@ -324,19 +331,19 @@ class DataSourceConfiguration:
             value,
         )
 
-    def get_field(self, name):
+    def get_field(self, name: str) -> Field:
         return self._config[name]
 
     def get_fields(self):
         return self._config.values()
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return len(self._config) == 0
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(self._raw_config)
 
-    def check_valid(self):
+    def check_valid(self) -> None:
         """Validates every Field against its `validations`.
 
         Raises ConfigurableFieldValueError if any validation errors are found.
@@ -364,7 +371,7 @@ class DataSourceConfiguration:
             msg = f"Field validation errors: {'; '.join(validation_errors)}"
             raise ConfigurableFieldValueError(msg)
 
-    def dependencies_satisfied(self, field):
+    def dependencies_satisfied(self, field: Field) -> bool:
         """Used to check if a Field has its dependencies satisfied.
 
         Returns True if all dependencies are satisfied, or no dependencies exist.
@@ -396,7 +403,7 @@ class BaseDataSource:
     incremental_sync_enabled = False
     native_connector_api_keys_enabled = False
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         # Initialize to the global logger
         self._logger = logger
         if not isinstance(configuration, DataSourceConfiguration):
@@ -422,11 +429,11 @@ class BaseDataSource:
     def __str__(self):
         return f"Datasource `{self.__class__.name}`"
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_: Union[Mock, ExtraLogger]) -> None:
         self._logger = logger_
         self._set_internal_logger()
 
-    def _set_internal_logger(self):
+    def _set_internal_logger(self) -> None:
         # no op for BaseDataSource
         # if there are internal class (e.g. Client class) to which the logger need to be set,
         # this method needs to be implemented
@@ -437,7 +444,7 @@ class BaseDataSource:
         self.framework_config = framework_config
 
     @classmethod
-    def get_simple_configuration(cls):
+    def get_simple_configuration(cls) -> Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Optional[Union[List[Dict[str, Union[str, bool]]], str, int, bool]]], Dict[str, Optional[Union[List[Dict[str, Union[str, bool]]], str, int, bool, List[str]]]]]]:
         """Used to return the default config to Kibana"""
         res = {}
 
@@ -459,7 +466,7 @@ class BaseDataSource:
         raise NotImplementedError
 
     @classmethod
-    def basic_rules_validators(cls):
+    def basic_rules_validators(cls) -> List[Union[Type[BasicRuleAgainstSchemaValidator], Type[BasicRuleNoMatchAllRegexValidator], Type[BasicRulesSetSemanticValidator]]]:
         """Return default basic rule validators.
 
         Basic rule validators are executed in the order they appear in the list.
@@ -483,7 +490,7 @@ class BaseDataSource:
         return hash_id(_id)
 
     @classmethod
-    def features(cls):
+    def features(cls) -> Dict[str, Dict[str, Union[Dict[str, bool], bool]]]:
         """Returns features available for the data source"""
         return {
             "sync_rules": {
@@ -505,13 +512,13 @@ class BaseDataSource:
             },
         }
 
-    def set_features(self, features):
+    def set_features(self, features: "Features") -> None:
         if self._features is not None:
             self._logger.warning(f"'_features' already set in {self.__class__.name}")
         self._logger.debug(f"Setting '_features' for {self.__class__.name}")
         self._features = features
 
-    async def validate_filtering(self, filtering):
+    async def validate_filtering(self, filtering: Dict[Any, Any]) -> str:
         """Execute all basic rule and advanced rule validators."""
 
         return await FilteringValidator(
@@ -520,7 +527,7 @@ class BaseDataSource:
             self._logger,
         ).validate(filtering)
 
-    def advanced_rules_validators(self):
+    def advanced_rules_validators(self) -> List[Any]:
         """Return advanced rule validators.
 
         Advanced rules validators are data source specific so there are no default validators.
@@ -538,7 +545,7 @@ class BaseDataSource:
         """
         return True
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         """When called, validates configuration of the connector that is contained in self.configuration
 
         If connector configuration is invalid, this method will raise an exception
@@ -546,7 +553,7 @@ class BaseDataSource:
         """
         self.configuration.check_valid()
 
-    def validate_config_fields(self):
+    def validate_config_fields(self) -> None:
         """ "Checks if any fields in a configuration are missing.
         If a field is missing, raises an error.
         Ignores additional non-standard fields.
@@ -574,14 +581,14 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    async def close(self):
+    async def close(self) -> None:
         """Called when the source is closed.
 
         Can be used to close connections
         """
         pass
 
-    def access_control_query(self, access_control):
+    def access_control_query(self, access_control: List[Any]):
         raise NotImplementedError
 
     async def get_access_control(self):
@@ -591,7 +598,7 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: None=None):
         """Returns an iterator on all documents present in the backend
 
         Each document is a tuple with:
@@ -618,7 +625,7 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    async def get_docs_incrementally(self, sync_cursor, filtering=None):
+    async def get_docs_incrementally(self, sync_cursor: Dict[Any, Any], filtering: None=None):
         """Returns an iterator on all documents changed since the sync_cursor
 
         Each document is a tuple with:
@@ -646,7 +653,7 @@ class BaseDataSource:
         """
         raise NotImplementedError
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options: Dict[str, str]) -> None:
         """Receives the bulk options every time a sync happens, so they can be
         tweaked if needed.
 
@@ -655,7 +662,7 @@ class BaseDataSource:
         """
         pass
 
-    def serialize(self, doc):
+    def serialize(self, doc: Dict[str, Any]) -> Dict[str, Any]:
         """Reads each element from the document and serializes it with respect to its datatype.
 
         Args:
@@ -694,12 +701,12 @@ class BaseDataSource:
 
         return doc
 
-    def sync_cursor(self):
+    def sync_cursor(self) -> Dict[str, Union[str, Dict[str, str]]]:
         """Returns the sync cursor of the current sync"""
         return self._sync_cursor
 
     @staticmethod
-    def is_premium():
+    def is_premium() -> bool:
         """Returns True if this DataSource is a Premium (paid license gated) connector.
         Otherwise, returns False.
 
@@ -707,15 +714,15 @@ class BaseDataSource:
         """
         return False
 
-    def get_file_extension(self, filename):
+    def get_file_extension(self, filename: str) -> str:
         return get_file_extension(filename)
 
-    def can_file_be_downloaded(self, file_extension, filename, file_size):
+    def can_file_be_downloaded(self, file_extension: str, filename: str, file_size: int) -> bool:
         return self.is_valid_file_type(
             file_extension, filename
         ) and self.is_file_size_within_limit(file_size, filename)
 
-    def is_valid_file_type(self, file_extension, filename):
+    def is_valid_file_type(self, file_extension: str, filename: str) -> bool:
         if file_extension == "":
             self._logger.debug(
                 f"Files without extension are not supported, skipping {filename}."
@@ -730,7 +737,7 @@ class BaseDataSource:
 
         return True
 
-    def is_file_size_within_limit(self, file_size, filename):
+    def is_file_size_within_limit(self, file_size: int, filename: str) -> bool:
         if (
             file_size > self.framework_config.max_file_size
             and not self.configuration.get("use_text_extraction_service")
@@ -744,12 +751,12 @@ class BaseDataSource:
 
     async def download_and_extract_file(
         self,
-        doc,
-        source_filename,
-        file_extension,
-        download_func,
-        return_doc_if_failed=False,
-    ):
+        doc: Dict[str, Union[str, int, List[str]]],
+        source_filename: str,
+        file_extension: str,
+        download_func: partial,
+        return_doc_if_failed: bool=False,
+    ) -> Generator[Future, None, Optional[Union[Dict[str, Union[str, int]], Dict[str, Union[str, int, List[str]]], Dict[str, str]]]]:
         """
         Performs all the steps required for handling binary content:
         1. Make temp file
@@ -807,8 +814,8 @@ class BaseDataSource:
             await self.remove_temp_file(temp_filename)
 
     async def download_to_temp_file(
-        self, temp_filename, source_filename, async_buffer, chunked_download_func
-    ):
+        self, temp_filename: str, source_filename: str, async_buffer: AsyncBufferedIOBase, chunked_download_func: partial
+    ) -> Iterator[Future]:
         self._logger.debug(f"Download beginning for file: {source_filename}.")
         async for data in chunked_download_func():
             await async_buffer.write(data)
@@ -817,7 +824,7 @@ class BaseDataSource:
         # close tempfile here so file content is accessible within async context
         await async_buffer.close()
 
-    async def generic_chunked_download_func(self, download_func):
+    async def generic_chunked_download_func(self, download_func: partial) -> None:
         """
         This provides a wrapper for chunked download funcs that
         use `response.content.iterchunked`.
@@ -827,7 +834,7 @@ class BaseDataSource:
             async for data in response.content.iter_chunked(CHUNK_SIZE):
                 yield data
 
-    async def handle_file_content_extraction(self, doc, source_filename, temp_filename):
+    async def handle_file_content_extraction(self, doc: Dict[str, Union[str, int, List[str]]], source_filename: str, temp_filename: str) -> Generator[Future, None, Dict[str, Union[str, int, List[str], bytes]]]:
         """
         Determines if file content should be extracted locally,
         or converted to b64 for pipeline extraction.
@@ -850,7 +857,7 @@ class BaseDataSource:
 
         return doc
 
-    async def remove_temp_file(self, temp_filename):
+    async def remove_temp_file(self, temp_filename: str) -> Iterator[Future]:
         try:
             await remove(temp_filename)
         except Exception as e:
@@ -858,20 +865,20 @@ class BaseDataSource:
                 f"Could not remove downloaded temp file: {temp_filename}. Error: {e}"
             )
 
-    def last_sync_time(self):
+    def last_sync_time(self) -> str:
         default_time = epoch_timestamp_zulu()
         if not self._sync_cursor:
             return default_time
         return self._sync_cursor.get(CURSOR_SYNC_TIMESTAMP, default_time)
 
-    def update_sync_timestamp_cursor(self, timestamp):
+    def update_sync_timestamp_cursor(self, timestamp: str) -> None:
         if self._sync_cursor is None:
             self._sync_cursor = {}
         self._sync_cursor[CURSOR_SYNC_TIMESTAMP] = timestamp
 
 
 @cache
-def get_source_klass(fqn):
+def get_source_klass(fqn: str) -> Any:
     """Converts a Fully Qualified Name into a class instance."""
     module_name, klass_name = fqn.split(":")
     logger.debug(f"Importing module {module_name}")
@@ -879,7 +886,7 @@ def get_source_klass(fqn):
     return getattr(module, klass_name)
 
 
-def get_source_klasses(config):
+def get_source_klasses(config: Dict[str, Union[str, List[Dict[str, str]], Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]], Dict[str, str], Dict[str, Union[float, int, str]]]]) -> Iterator[Any]:
     """Returns an iterator of all registered sources."""
     for fqn in config["sources"].values():
         yield get_source_klass(fqn)

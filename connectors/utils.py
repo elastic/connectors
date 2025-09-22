@@ -289,7 +289,7 @@ def convert_to_b64(source, target=None, overwrite=False):
 
 class MemQueue(asyncio.Queue):
     def __init__(
-        self, maxsize=0, maxmemsize=0, refresh_interval=1.0, refresh_timeout=60
+        self, maxsize=0, maxmemsize=0, refresh_interval=1.0, refresh_timeout=60.0
     ):
         super().__init__(maxsize)
         self.maxmemsize = maxmemsize

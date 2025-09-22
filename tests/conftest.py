@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from aioresponses import aioresponses
+from asyncio.unix_events import _UnixSelectorEventLoop
+from typing import Iterator
 
 
 class Logger:
@@ -59,7 +61,7 @@ class Logger:
 
 
 @pytest.fixture
-def set_env():
+def set_env() -> Iterator[None]:
     old = os.environ.get("elasticsearch.password")
     os.environ["elasticsearch.password"] = "password"
     try:
@@ -70,7 +72,7 @@ def set_env():
 
 
 @pytest.fixture
-def catch_stdout():
+def catch_stdout() -> Iterator[io.StringIO]:
     old = sys.stdout
     new = sys.stdout = io.StringIO()
     try:
@@ -103,14 +105,14 @@ def patch_logger(silent=True):
 
 
 @pytest.fixture(scope="module")
-def event_loop():
+def event_loop() -> Iterator[_UnixSelectorEventLoop]:
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
 @pytest.fixture
-def mock_responses():
+def mock_responses() -> Iterator[aioresponses]:
     with aioresponses() as m:
         yield m
 
@@ -131,7 +133,7 @@ async def patch_sleep():
 
 
 @pytest.fixture
-def mock_aws():
+def mock_aws() -> Iterator[None]:
     if "AWS_ACCESS_KEY_ID" in os.environ:
         old_key = os.environ["AWS_ACCESS_KEY_ID"]
         os.environ["AWS_ACCESS_KEY_ID"] = "xxx"

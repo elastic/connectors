@@ -19,6 +19,8 @@ from connectors.es.client import (
     TransientElasticsearchRetrier,
     with_concurrency_control,
 )
+from _asyncio import Task
+from typing import Any, Dict, Iterator, List, Union
 
 BASIC_CONFIG = {"username": "elastic", "password": "changeme"}
 API_CONFIG = {"api_key": "foo"}
@@ -26,7 +28,7 @@ BASIC_API_CONFIG = {"username": "elastic", "password": "changeme", "api_key": "f
 
 
 @pytest.mark.asyncio
-async def test_with_concurrency_control():
+async def test_with_concurrency_control() -> None:
     mock_func = Mock()
     num_retries = 10
 
@@ -80,7 +82,7 @@ class TestESClient:
         ],
     )
     @pytest.mark.asyncio
-    async def test_has_license_enabled(self, enabled_license, licenses_enabled):
+    async def test_has_license_enabled(self, enabled_license: License, licenses_enabled: List[License]) -> None:
         es_client = ESClient(BASIC_CONFIG)
         es_client.client = AsyncMock()
         es_client.client.license.get = AsyncMock(
@@ -105,7 +107,7 @@ class TestESClient:
         ],
     )
     @pytest.mark.asyncio
-    async def test_has_licenses_disabled(self, enabled_license, licenses_disabled):
+    async def test_has_licenses_disabled(self, enabled_license: License, licenses_disabled: List[Union[Any, License]]) -> None:
         es_client = ESClient(BASIC_CONFIG)
         es_client.client = AsyncMock()
         es_client.client.license.get = AsyncMock(
@@ -117,7 +119,7 @@ class TestESClient:
             assert not is_enabled
 
     @pytest.mark.asyncio
-    async def test_has_license_disabled_with_expired_license(self):
+    async def test_has_license_disabled_with_expired_license(self) -> None:
         es_client = ESClient(BASIC_CONFIG)
         es_client.client = AsyncMock()
         es_client.client.license.get = AsyncMock(
@@ -146,11 +148,11 @@ class TestESClient:
             (BASIC_API_CONFIG, "ApiKey foo"),
         ],
     )
-    def test_es_client_with_auth(self, config, expected_auth_header):
+    def test_es_client_with_auth(self, config: Dict[str, str], expected_auth_header: str) -> None:
         es_client = ESClient(config)
         assert es_client.client._headers["Authorization"] == expected_auth_header
 
-    def test_esclient(self):
+    def test_esclient(self) -> None:
         # creating a client with a minimal config should create one with sane
         # defaults
 
@@ -217,7 +219,7 @@ class TestESClient:
         patch_logger.assert_present("missing authentication credentials")
 
     @pytest.mark.asyncio
-    async def test_es_client_no_server(self):
+    async def test_es_client_no_server(self) -> None:
         # if we can't reach the server, we need to catch it cleanly
         config = {
             "username": "elastic",
@@ -239,14 +241,14 @@ class TestESClient:
             assert not await es_client.ping()
             await es_client.close()
 
-    def test_sets_product_origin_header(self):
+    def test_sets_product_origin_header(self) -> None:
         config = {"headers": {"some-header": "some-value"}}
 
         es_client = ESClient(config)
 
         assert es_client.client._headers["X-elastic-product-origin"] == "connectors"
 
-    def test_sets_user_agent(self):
+    def test_sets_user_agent(self) -> None:
         config = {"headers": {"some-header": "some-value"}}
 
         es_client = ESClient(config)
@@ -271,7 +273,7 @@ class TestTransientElasticsearchRetrier:
         return 50
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry(self, patch_sleep):
+    async def test_execute_with_retry(self, patch_sleep: AsyncMock) -> None:
         retrier = TransientElasticsearchRetrier(
             self.logger_mock, self.max_retries, self.retry_interval
         )
@@ -284,7 +286,7 @@ class TestTransientElasticsearchRetrier:
         assert patch_sleep.not_called()
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry_429_with_recovery(self, patch_sleep):
+    async def test_execute_with_retry_429_with_recovery(self, patch_sleep: AsyncMock) -> Iterator[Task]:
         retrier = TransientElasticsearchRetrier(
             self.logger_mock, self.max_retries, self.retry_interval
         )
@@ -311,7 +313,7 @@ class TestTransientElasticsearchRetrier:
         assert patch_sleep.awaited_exactly(2)
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry_429_no_recovery(self, patch_sleep):
+    async def test_execute_with_retry_429_no_recovery(self, patch_sleep: AsyncMock) -> Iterator[Task]:
         retrier = TransientElasticsearchRetrier(
             self.logger_mock, self.max_retries, self.retry_interval
         )
@@ -330,7 +332,7 @@ class TestTransientElasticsearchRetrier:
         assert patch_sleep.awaited_exactly(self.max_retries)
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry_connection_timeout(self, patch_sleep):
+    async def test_execute_with_retry_connection_timeout(self, patch_sleep: AsyncMock) -> Iterator[Task]:
         retrier = TransientElasticsearchRetrier(
             self.logger_mock, self.max_retries, self.retry_interval
         )
@@ -348,7 +350,7 @@ class TestTransientElasticsearchRetrier:
         assert patch_sleep.awaited_exactly(self.max_retries)
 
     @pytest.mark.asyncio
-    async def test_execute_with_retry_cancelled_midway(self, patch_sleep):
+    async def test_execute_with_retry_cancelled_midway(self, patch_sleep: AsyncMock) -> Iterator[Task]:
         retrier = TransientElasticsearchRetrier(
             self.logger_mock, self.max_retries, self.retry_interval
         )

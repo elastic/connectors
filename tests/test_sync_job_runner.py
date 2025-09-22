@@ -22,6 +22,9 @@ from connectors.sync_job_runner import (
     SyncJobStartError,
 )
 from tests.commons import AsyncIterator
+import connectors.protocol.connectors
+from _asyncio import Task
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 SEARCH_INDEX_NAME = "search-mysql"
 ACCESS_CONTROL_INDEX_NAME = ".search-acl-filter-search-mysql"
@@ -29,7 +32,7 @@ TOTAL_DOCUMENT_COUNT = 100
 SYNC_CURSOR = {"foo": "bar"}
 
 
-def mock_connector():
+def mock_connector() -> Mock:
     connector = Mock()
     connector.id = "1"
     connector.index_name = SEARCH_INDEX_NAME
@@ -48,7 +51,7 @@ def mock_connector():
     return connector
 
 
-def mock_sync_job(job_type, index_name):
+def mock_sync_job(job_type: Union[str, connectors.protocol.connectors.JobType], index_name: str) -> Mock:
     sync_job = Mock()
     sync_job.id = "1"
     sync_job.configuration = {}
@@ -74,16 +77,16 @@ def mock_sync_job(job_type, index_name):
 
 
 def create_runner(
-    source_changed=True,
-    source_available=True,
-    validate_config_exception=None,
-    job_type=JobType.FULL,
-    index_name=SEARCH_INDEX_NAME,
-    sync_cursor=SYNC_CURSOR,
-    connector=None,
-    service_config=None,
-    es_config=None,
-):
+    source_changed: bool=True,
+    source_available: bool=True,
+    validate_config_exception: Optional[Exception]=None,
+    job_type: Union[str, connectors.protocol.connectors.JobType]=JobType.FULL,
+    index_name: str=SEARCH_INDEX_NAME,
+    sync_cursor: Optional[Dict[str, str]]=SYNC_CURSOR,
+    connector: Optional[Mock]=None,
+    service_config: None=None,
+    es_config: None=None,
+) -> SyncJobRunner:
     source_klass = Mock()
     data_provider = Mock()
     data_provider.tweak_bulk_options = Mock()
@@ -120,7 +123,7 @@ def create_runner(
 
 
 @pytest.fixture(autouse=True)
-def sync_orchestrator_mock():
+def sync_orchestrator_mock() -> Iterator[Mock]:
     with patch(
         "connectors.sync_job_runner.SyncOrchestrator"
     ) as sync_orchestrator_klass_mock:
@@ -140,7 +143,7 @@ def sync_orchestrator_mock():
         yield sync_orchestrator_mock
 
 
-def create_runner_yielding_docs(docs=None):
+def create_runner_yielding_docs(docs: Optional[List[Union[Tuple[Dict[str, int], None], Tuple[Dict[str, float], None], Tuple[Dict[str, str], None]]]]=None) -> SyncJobRunner:
     if docs is None:
         docs = []
 
@@ -155,7 +158,7 @@ def create_runner_yielding_docs(docs=None):
 
 
 @pytest.mark.asyncio
-async def test_connector_content_sync_starts_fail():
+async def test_connector_content_sync_starts_fail() -> None:
     sync_job_runner = create_runner()
 
     # Do nothing in the first call, and the last_sync_status is set to `in_progress` by another instance in the subsequent calls
@@ -184,7 +187,7 @@ async def test_connector_content_sync_starts_fail():
 
 
 @pytest.mark.asyncio
-async def test_connector_access_control_sync_starts_fail():
+async def test_connector_access_control_sync_starts_fail() -> None:
     sync_job_runner = create_runner(job_type=JobType.ACCESS_CONTROL)
 
     # Do nothing in the first call, and the last_access_control_sync_status is set to `in_progress` by another instance in the subsequent calls
@@ -215,7 +218,7 @@ async def test_connector_access_control_sync_starts_fail():
 
 
 @pytest.mark.asyncio
-async def test_connector_incremental_sync_job_starts_fail():
+async def test_connector_incremental_sync_job_starts_fail() -> None:
     connector = mock_connector()
     # disable incremental sync
     connector.features.incremental_sync_enabled.return_value = False
@@ -233,7 +236,7 @@ async def test_connector_incremental_sync_job_starts_fail():
 
 
 @pytest.mark.asyncio
-async def test_connector_content_claim_fails():
+async def test_connector_content_claim_fails() -> None:
     sync_job_runner = create_runner()
 
     # Do nothing in the first call, and the last_sync_status is set to `in_progress` by another instance in the subsequent calls
@@ -266,8 +269,8 @@ async def test_connector_content_claim_fails():
 )
 @pytest.mark.asyncio
 async def test_source_not_changed(
-    job_type, sync_cursor_to_claim, sync_cursor_to_update
-):
+    job_type: connectors.protocol.connectors.JobType, sync_cursor_to_claim: Optional[Dict[str, str]], sync_cursor_to_update: Optional[Dict[str, str]]
+) -> None:
     sync_job_runner = create_runner(source_changed=False, job_type=job_type)
     await sync_job_runner.execute()
 
@@ -299,7 +302,7 @@ async def test_source_not_changed(
     ],
 )
 @pytest.mark.asyncio
-async def test_source_invalid_config(job_type, sync_cursor):
+async def test_source_invalid_config(job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]]) -> None:
     sync_job_runner = create_runner(
         job_type=job_type,
         validate_config_exception=Exception(),
@@ -337,7 +340,7 @@ async def test_source_invalid_config(job_type, sync_cursor):
     ],
 )
 @pytest.mark.asyncio
-async def test_source_not_available(job_type, sync_cursor):
+async def test_source_not_available(job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]]) -> None:
     sync_job_runner = create_runner(
         job_type=job_type, source_available=False, sync_cursor=sync_cursor
     )
@@ -366,7 +369,7 @@ async def test_source_not_available(job_type, sync_cursor):
 
 @pytest.mark.parametrize("job_type", [JobType.FULL, JobType.INCREMENTAL])
 @pytest.mark.asyncio
-async def test_invalid_filtering(job_type, sync_orchestrator_mock):
+async def test_invalid_filtering(job_type: connectors.protocol.connectors.JobType, sync_orchestrator_mock: Mock) -> None:
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
@@ -395,8 +398,8 @@ async def test_invalid_filtering(job_type, sync_orchestrator_mock):
 
 @pytest.mark.asyncio
 async def test_invalid_filtering_access_control_sync_still_executed(
-    sync_orchestrator_mock,
-):
+    sync_orchestrator_mock: Mock,
+) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
@@ -431,7 +434,7 @@ async def test_invalid_filtering_access_control_sync_still_executed(
     ],
 )
 @pytest.mark.asyncio
-async def test_async_bulk_error(job_type, sync_cursor, sync_orchestrator_mock):
+async def test_async_bulk_error(job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock) -> Iterator[Task]:
     error = "something wrong"
     ingestion_stats = {
         "indexed_document_count": 0,
@@ -462,8 +465,8 @@ async def test_async_bulk_error(job_type, sync_cursor, sync_orchestrator_mock):
 
 @pytest.mark.asyncio
 async def test_access_control_sync_fails_with_insufficient_license(
-    sync_orchestrator_mock,
-):
+    sync_orchestrator_mock: Mock,
+) -> None:
     ingestion_stats = {
         "indexed_document_count": 0,
         "indexed_document_volume": 0,
@@ -504,7 +507,7 @@ async def test_access_control_sync_fails_with_insufficient_license(
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_job_runner(job_type, sync_cursor, sync_orchestrator_mock):
+async def test_sync_job_runner(job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -538,7 +541,7 @@ async def test_sync_job_runner(job_type, sync_cursor, sync_orchestrator_mock):
     ],
 )
 @pytest.mark.asyncio
-async def test_sync_job_runner_suspend(job_type, sync_cursor, sync_orchestrator_mock):
+async def test_sync_job_runner_suspend(job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 25,
         "indexed_document_volume": 30,
@@ -570,7 +573,7 @@ async def test_sync_job_runner_suspend(job_type, sync_cursor, sync_orchestrator_
 
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 1)
 @pytest.mark.asyncio
-async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_doc():
+async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_doc() -> None:
     _id_too_long = "ab"
 
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id_too_long}, None)])
@@ -587,8 +590,8 @@ async def test_prepare_docs_when_original_id_and_hashed_id_too_long_then_skip_do
 @pytest.mark.parametrize("_id", ["ab", 1, 1.5])
 @pytest.mark.asyncio
 async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_original_id(
-    _id,
-):
+    _id: Union[str, int, float],
+) -> None:
     sync_job_runner = create_runner_yielding_docs(docs=[({"_id": _id}, None)])
 
     docs = []
@@ -601,7 +604,7 @@ async def test_prepare_docs_when_original_id_below_limit_then_yield_doc_with_ori
 
 @patch("connectors.sync_job_runner.ES_ID_SIZE_LIMIT", 3)
 @pytest.mark.asyncio
-async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_limit_then_yield_doc_with_hashed_id():
+async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_limit_then_yield_doc_with_hashed_id() -> None:
     _id_too_long = "abcd"
     hashed_id = "a"
 
@@ -628,8 +631,8 @@ async def test_prepare_docs_when_original_id_above_limit_and_hashed_id_below_lim
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_reporting_metadata(
-    job_type, sync_cursor, sync_orchestrator_mock
-):
+    job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock
+) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -665,7 +668,7 @@ async def test_sync_job_runner_reporting_metadata(
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_connector_not_found(job_type, sync_orchestrator_mock):
+async def test_sync_job_runner_connector_not_found(job_type: connectors.protocol.connectors.JobType, sync_orchestrator_mock: Mock) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -707,8 +710,8 @@ async def test_sync_job_runner_connector_not_found(job_type, sync_orchestrator_m
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_sync_job_not_found(
-    job_type, sync_cursor, sync_orchestrator_mock
-):
+    job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock
+) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -741,7 +744,7 @@ async def test_sync_job_runner_sync_job_not_found(
 @pytest.mark.asyncio
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
-async def test_sync_job_runner_canceled(job_type, sync_cursor, sync_orchestrator_mock):
+async def test_sync_job_runner_canceled(job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -783,8 +786,8 @@ async def test_sync_job_runner_canceled(job_type, sync_cursor, sync_orchestrator
 @patch("connectors.sync_job_runner.JOB_REPORTING_INTERVAL", 0)
 @patch("connectors.sync_job_runner.JOB_CHECK_INTERVAL", 0)
 async def test_sync_job_runner_not_running(
-    job_type, sync_cursor, sync_orchestrator_mock
-):
+    job_type: connectors.protocol.connectors.JobType, sync_cursor: Optional[Dict[str, str]], sync_orchestrator_mock: Mock
+) -> Iterator[Task]:
     ingestion_stats = {
         "indexed_document_count": 15,
         "indexed_document_volume": 230,
@@ -817,7 +820,7 @@ async def test_sync_job_runner_not_running(
 
 
 @pytest.mark.asyncio
-async def test_sync_job_runner_sets_features_for_data_provider():
+async def test_sync_job_runner_sets_features_for_data_provider() -> Iterator[Task]:
     sync_job_runner = create_runner()
 
     await sync_job_runner.execute()
@@ -825,7 +828,7 @@ async def test_sync_job_runner_sets_features_for_data_provider():
     assert sync_job_runner.data_provider.set_features.called
 
 
-def test_skip_unchanged_documents_enabled():
+def test_skip_unchanged_documents_enabled() -> None:
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
@@ -841,7 +844,7 @@ def test_skip_unchanged_documents_enabled():
     )
 
 
-def test_skip_unchanged_documents_enabled_disabled():
+def test_skip_unchanged_documents_enabled_disabled() -> None:
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
@@ -860,7 +863,7 @@ def test_skip_unchanged_documents_enabled_disabled():
     )
 
 
-def test_skip_unchanged_documents_enabled_disabled_by_full_sync():
+def test_skip_unchanged_documents_enabled_disabled_by_full_sync() -> None:
     sync_job_runner = create_runner()
 
     class MockDataSource(BaseDataSource):
@@ -881,7 +884,7 @@ def test_skip_unchanged_documents_enabled_disabled_by_full_sync():
     Mock(return_value=True),
 )
 @pytest.mark.asyncio
-async def test_incremental_sync_with_skip_unchanged_documents_generator():
+async def test_incremental_sync_with_skip_unchanged_documents_generator() -> None:
     sync_job_runner = create_runner(job_type=JobType.INCREMENTAL)
 
     data_provider = Mock()
@@ -902,7 +905,7 @@ async def test_incremental_sync_with_skip_unchanged_documents_generator():
     Mock(return_value=False),
 )
 @pytest.mark.asyncio
-async def test_incremental_sync_without_skip_unchanged_documents_generator():
+async def test_incremental_sync_without_skip_unchanged_documents_generator() -> None:
     connector = mock_connector()
     connector.sync_cursor = {}
 
@@ -922,7 +925,7 @@ async def test_incremental_sync_without_skip_unchanged_documents_generator():
     )
 
 
-async def test_unsupported_job_type():
+async def test_unsupported_job_type() -> None:
     connector = mock_connector()
     connector.sync_cursor = {}
 

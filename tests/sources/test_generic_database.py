@@ -16,6 +16,9 @@ from connectors.sources.generic_database import (
     map_column_names,
 )
 from connectors.sources.mssql import MSSQLQueries
+from connectors.sources.oracle import OracleQueries
+from connectors.sources.database_utils import CursorSync as BaseCursorSync
+from typing import Any, List, Optional, Tuple, Union
 
 SCHEMA = "dbo"
 TABLE = "emp_table"
@@ -26,7 +29,7 @@ CUSTOMER_TABLE = "customer"
 class ConnectionSync:
     """This Class create dummy connection with database and return dummy cursor"""
 
-    def __init__(self, query_object):
+    def __init__(self, query_object: Union[OracleQueries, MSSQLQueries]) -> None:
         """Setup dummy connection"""
         self.query_object = query_object
 
@@ -42,24 +45,24 @@ class ConnectionSync:
         """This method returns dummy cursor"""
         return CursorSync(query_object=self.query_object, statement=statement)
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
-class CursorSync:
+class CursorSync(BaseCursorSync):
     """This class contains methods which returns dummy response"""
 
     def __enter__(self):
         """Make a dummy database connection and return it"""
         return self
 
-    def __init__(self, query_object, *args, **kwargs):
+    def __init__(self, query_object: MSSQLQueries, *args, **kwargs) -> None:
         """Setup dummy cursor"""
         self.first_call = True
         self.query = kwargs["statement"]
         self.query_object = query_object
 
-    def keys(self):
+    def keys(self) -> List[str]:
         """Return Columns of table
 
         Returns:
@@ -67,7 +70,7 @@ class CursorSync:
         """
         return ["ids", "names"]
 
-    def fetchmany(self, size):
+    def fetchmany(self, size: int) -> List[Union[Tuple[int, str], Tuple[str], Tuple[int]]]:
         """This method returns response of fetchmany
 
         Args:
@@ -130,14 +133,14 @@ class CursorSync:
         (["table_1", "table_2", ""], ["table_1", "table_2"]),
     ],
 )
-def test_configured_tables(tables, expected_tables):
+def test_configured_tables(tables: Union[str, List[str]], expected_tables: List[Union[str, Any]]) -> None:
     actual_tables = configured_tables(tables)
 
     assert actual_tables == expected_tables
 
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
-def test_is_wildcard(tables):
+def test_is_wildcard(tables: Union[List[str], str]) -> None:
     assert is_wildcard(tables)
 
 
@@ -156,7 +159,7 @@ COLUMN_NAMES = ["Column_1", "Column_2"]
         ("Schema", ["Table1", "Table2"], "schema_table1_table2_"),
     ],
 )
-def test_map_column_names(schema, tables, prefix):
+def test_map_column_names(schema: Optional[str], tables: Optional[List[str]], prefix: str) -> None:
     mapped_column_names = map_column_names(COLUMN_NAMES, schema, tables)
 
     for column_name, mapped_column_name in zip(
@@ -165,12 +168,12 @@ def test_map_column_names(schema, tables, prefix):
         assert f"{prefix}{column_name}".lower() == mapped_column_name
 
 
-async def get_cursor(query_object, query):
+async def get_cursor(query_object: MSSQLQueries, query: None) -> CursorSync:
     return CursorSync(query_object=query_object, statement=query)
 
 
 @pytest.mark.asyncio
-async def test_fetch():
+async def test_fetch() -> None:
     query_object = MSSQLQueries()
 
     rows = []

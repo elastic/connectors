@@ -36,6 +36,9 @@ from connectors.sources.confluence import (
 from connectors.utils import ssl_context
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+import connectors.protocol.connectors
+from _asyncio import Future, Task
+from typing import Awaitable, Dict, Iterator, List, Optional, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 HOST_URL = "http://127.0.0.1:9696"
@@ -531,7 +534,7 @@ class StreamReaderAsyncMock(AsyncMock):
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_invalid_concurrent_downloads():
+async def test_validate_configuration_with_invalid_concurrent_downloads() -> None:
     """Test validate configuration method of BaseDataSource class with invalid concurrent downloads"""
 
     # Setup
@@ -579,8 +582,8 @@ async def test_validate_configuration_with_invalid_concurrent_downloads():
     ],
 )
 async def test_validate_configuration_with_invalid_dependency_fields_raises_error(
-    configs,
-):
+    configs: Dict[str, str],
+) -> None:
     # Setup
     async with create_confluence_source() as source:
         for k, v in configs.items():
@@ -636,8 +639,8 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
     ],
 )
 async def test_validate_config_with_valid_dependency_fields_does_not_raise_error(
-    configs,
-):
+    configs: Dict[str, Union[str, bool]],
+) -> None:
     async with create_confluence_source() as source:
         source.confluence_client.ping = AsyncMock()
         for k, v in configs.items():
@@ -647,7 +650,7 @@ async def test_validate_config_with_valid_dependency_fields_does_not_raise_error
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_raise_error():
+async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_raise_error() -> Iterator[None]:
     with patch.object(ssl, "create_default_context", return_value=MockSSL()):
         async with create_confluence_source() as source:
             source.confluence_client._get_session().get = AsyncMock()
@@ -663,7 +666,7 @@ async def test_validate_config_when_ssl_enabled_and_ssl_ca_not_empty_does_not_ra
 
 
 @pytest.mark.asyncio
-async def test_tweak_bulk_options():
+async def test_tweak_bulk_options() -> None:
     """Test tweak_bulk_options method of BaseDataSource class"""
 
     # Setup
@@ -678,7 +681,7 @@ async def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session():
+async def test_close_with_client_session() -> Iterator[None]:
     """Test close method for closing the existing session"""
 
     # Setup
@@ -692,7 +695,7 @@ async def test_close_with_client_session():
 
 
 @pytest.mark.asyncio
-async def test_close_without_client_session():
+async def test_close_without_client_session() -> None:
     """Test close method when the session does not exist"""
     # Setup
     async with create_confluence_source() as source:
@@ -703,7 +706,7 @@ async def test_close_without_client_session():
 
 
 @pytest.mark.asyncio
-async def test_remote_validation_when_space_keys_are_valid():
+async def test_remote_validation_when_space_keys_are_valid() -> Iterator[None]:
     async with create_confluence_source() as source:
         source.spaces = ["DM", "ES"]
         source.confluence_client._get_session().get = AsyncMock(
@@ -714,7 +717,7 @@ async def test_remote_validation_when_space_keys_are_valid():
 
 
 @pytest.mark.asyncio
-async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception():
+async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exception() -> None:
     async with create_confluence_source() as source:
         source.spaces = ["ES", "CS"]
         async_response = AsyncMock()
@@ -734,7 +737,7 @@ async def test_remote_validation_when_space_keys_are_unavailable_then_raise_exce
 class MockSSL:
     """This class contains methods which returns dummy ssl context"""
 
-    def load_verify_locations(self, cadata):
+    def load_verify_locations(self, cadata: str) -> None:
         """This method verify locations"""
         pass
 
@@ -752,7 +755,7 @@ class MockSSL:
     ],
 )
 @pytest.mark.asyncio
-async def test_validate_configuration_for_empty_fields(field, data_source):
+async def test_validate_configuration_for_empty_fields(field: str, data_source: str) -> None:
     async with create_confluence_source() as source:
         source.confluence_client.configuration.get_field(
             "data_source"
@@ -765,7 +768,7 @@ async def test_validate_configuration_for_empty_fields(field, data_source):
 
 
 @pytest.mark.asyncio
-async def test_ping_with_ssl():
+async def test_ping_with_ssl() -> Iterator[None]:
     """Test ping method of ConfluenceDataSource class with SSL"""
 
     # Execute
@@ -786,7 +789,7 @@ async def test_ping_with_ssl():
 
 @pytest.mark.asyncio
 @patch("aiohttp.ClientSession.get")
-async def test_ping_for_failed_connection_exception(mock_get):
+async def test_ping_for_failed_connection_exception(mock_get: MagicMock) -> None:
     """Tests the ping functionality when connection can not be established to Confluence."""
 
     # Setup
@@ -800,7 +803,7 @@ async def test_ping_for_failed_connection_exception(mock_get):
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_for_ssl_enabled():
+async def test_validate_configuration_for_ssl_enabled() -> None:
     """This function tests _validate_configuration when certification is empty and ssl is enabled"""
     # Setup
     async with create_confluence_source() as source:
@@ -813,7 +816,7 @@ async def test_validate_configuration_for_ssl_enabled():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status():
+async def test_get_with_429_status() -> Iterator[Optional[Task]]:
     initial_response = ClientResponseError(None, None)
     initial_response.status = 429
     initial_response.message = "rate-limited"
@@ -836,7 +839,7 @@ async def test_get_with_429_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_429_status_without_retry_after_header():
+async def test_get_with_429_status_without_retry_after_header() -> Iterator[None]:
     payload = {"value": "Test rate limit"}
     async_mock_response = AsyncMock()
     async_mock_response.json.return_value = payload
@@ -855,7 +858,7 @@ async def test_get_with_429_status_without_retry_after_header():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_400_status():
+async def test_get_with_400_status() -> Iterator[Optional[Task]]:
     error = ClientResponseError(None, None)
     error.status = 400
 
@@ -873,7 +876,7 @@ async def test_get_with_400_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_401_status():
+async def test_get_with_401_status() -> Iterator[Optional[Task]]:
     error = ClientResponseError(None, None)
     error.status = 401
 
@@ -891,7 +894,7 @@ async def test_get_with_401_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_403_status():
+async def test_get_with_403_status() -> Iterator[Optional[Task]]:
     error = ClientResponseError(None, None)
     error.status = 403
 
@@ -908,7 +911,7 @@ async def test_get_with_403_status():
 
 
 @pytest.mark.asyncio
-async def test_get_with_404_status():
+async def test_get_with_404_status() -> Iterator[None]:
     error = ClientResponseError(None, None)
     error.status = 404
 
@@ -926,7 +929,7 @@ async def test_get_with_404_status():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_get_with_500_status():
+async def test_get_with_500_status() -> Iterator[Optional[Task]]:
     error = ClientResponseError(None, None)
     error.status = 500
 
@@ -944,7 +947,7 @@ async def test_get_with_500_status():
 
 @freeze_time("2023-01-24T04:07:19")
 @pytest.mark.asyncio
-async def test_fetch_spaces():
+async def test_fetch_spaces() -> None:
     # Setup
     async with create_confluence_source() as source:
         async_response = AsyncMock()
@@ -958,7 +961,7 @@ async def test_fetch_spaces():
 
 
 @pytest.mark.asyncio
-async def test_fetch_documents():
+async def test_fetch_documents() -> Iterator[None]:
     # Setup
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
@@ -972,7 +975,7 @@ async def test_fetch_documents():
 
 
 @pytest.mark.asyncio
-async def test_fetch_attachments():
+async def test_fetch_attachments() -> Iterator[None]:
     # Setup
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
@@ -990,7 +993,7 @@ async def test_fetch_attachments():
 
 
 @pytest.mark.asyncio
-async def test_search_by_query():
+async def test_search_by_query() -> Iterator[None]:
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_SEARCH_RESULT)
@@ -1007,7 +1010,7 @@ async def test_search_by_query():
 
 
 @pytest.mark.asyncio
-async def test_search_by_query_for_datacenter():
+async def test_search_by_query_for_datacenter() -> Iterator[None]:
     async with create_confluence_source() as source:
         source.confluence_client.data_source_type = "confluence_data_center"
         source.confluence_client._get_session().get = AsyncMock(
@@ -1024,7 +1027,7 @@ async def test_search_by_query_for_datacenter():
 
 
 @pytest.mark.asyncio
-async def test_download_attachment():
+async def test_download_attachment() -> Iterator[Optional[Future]]:
     # Setup
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
@@ -1046,7 +1049,7 @@ async def test_download_attachment():
 
 
 @pytest.mark.asyncio
-async def test_download_attachment_with_upper_extension():
+async def test_download_attachment_with_upper_extension() -> Iterator[Optional[Future]]:
     # Setup
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
@@ -1071,7 +1074,7 @@ async def test_download_attachment_with_upper_extension():
 
 
 @pytest.mark.asyncio
-async def test_download_attachment_when_filesize_is_large_then_download_skips():
+async def test_download_attachment_when_filesize_is_large_then_download_skips() -> None:
     """Tests the download attachments method for file size greater than max limit."""
     # Setup
     async with create_confluence_source() as source:
@@ -1097,7 +1100,7 @@ async def test_download_attachment_when_filesize_is_large_then_download_skips():
 
 
 @pytest.mark.asyncio
-async def test_download_attachment_when_unsupported_filetype_used_then_fail_download_skips():
+async def test_download_attachment_when_unsupported_filetype_used_then_fail_download_skips() -> None:
     """Tests the download attachments method for file type is not supported"""
     # Setup
     async with create_confluence_source() as source:
@@ -1126,7 +1129,7 @@ async def test_download_attachment_when_unsupported_filetype_used_then_fail_down
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_download_attachment_with_text_extraction_enabled_adds_body():
+async def test_download_attachment_with_text_extraction_enabled_adds_body() -> Iterator[Optional[Future]]:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -1184,7 +1187,7 @@ async def test_download_attachment_with_text_extraction_enabled_adds_body():
     return_value=AsyncIterator([[copy(EXPECTED_CONTENT)]]),
 )
 @freeze_time("2024-04-02T09:53:15.818621+00:00")
-async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_patch):
+async def test_get_docs(spaces_patch: AsyncMock, pages_patch: MagicMock, attachment_patch: MagicMock, content_patch: MagicMock) -> Iterator[Union[Future, Awaitable]]:
     """Tests the get_docs method"""
 
     # Setup
@@ -1209,7 +1212,7 @@ async def test_get_docs(spaces_patch, pages_patch, attachment_patch, content_pat
 @pytest.mark.parametrize(
     "data_source_type", [CONFLUENCE_CLOUD, CONFLUENCE_DATA_CENTER, CONFLUENCE_SERVER]
 )
-async def test_get_session(data_source_type):
+async def test_get_session(data_source_type: str) -> Iterator[None]:
     async with create_confluence_source(data_source=data_source_type) as source:
         try:
             source.confluence_client._get_session()
@@ -1220,7 +1223,7 @@ async def test_get_session(data_source_type):
 
 
 @pytest.mark.asyncio
-async def test_get_session_multiple_calls_return_same_instance():
+async def test_get_session_multiple_calls_return_same_instance() -> Iterator[None]:
     async with create_confluence_source() as source:
         first_instance = source.confluence_client._get_session()
         second_instance = source.confluence_client._get_session()
@@ -1228,14 +1231,14 @@ async def test_get_session_multiple_calls_return_same_instance():
 
 
 @pytest.mark.asyncio
-async def test_get_session_raise_on_invalid_data_source_type():
+async def test_get_session_raise_on_invalid_data_source_type() -> None:
     async with create_confluence_source(data_source="invalid") as source:
         with pytest.raises(InvalidConfluenceDataSourceTypeError):
             source.confluence_client._get_session()
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> None:
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -1248,7 +1251,7 @@ async def test_get_access_control_dls_disabled():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19")
-async def test_get_access_control_dls_enabled():
+async def test_get_access_control_dls_enabled() -> Iterator[Awaitable]:
     mock_users = [
         {
             # Indexable: The user is active and atlassian user.
@@ -1357,7 +1360,7 @@ async def test_get_access_control_dls_enabled():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19")
-async def test_get_access_control_dls_enabled_for_datacenter():
+async def test_get_access_control_dls_enabled_for_datacenter() -> None:
     mock_users = [
         {
             "username": "user1",
@@ -1405,7 +1408,7 @@ async def test_get_access_control_dls_enabled_for_datacenter():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-24T04:07:19")
-async def test_get_access_control_dls_enabled_for_server():
+async def test_get_access_control_dls_enabled_for_server() -> None:
     mock_users = [
         {
             "fullName": "user1",
@@ -1452,7 +1455,7 @@ async def test_get_access_control_dls_enabled_for_server():
 
 
 @pytest.mark.asyncio
-async def test_fetch_confluence_server_users():
+async def test_fetch_confluence_server_users() -> None:
     async with create_confluence_source() as source:
         async_response = AsyncMock()
         async_response.json.return_value = {"start": 0, "users": []}
@@ -1535,8 +1538,8 @@ async def test_fetch_confluence_server_users():
 )
 @freeze_time("2024-04-02T09:53:15.818621+00:00")
 async def test_get_docs_dls_enabled(
-    spaces_patch, pages_patch, attachment_patch, content_patch
-):
+    spaces_patch: AsyncMock, pages_patch: MagicMock, attachment_patch: MagicMock, content_patch: MagicMock
+) -> Iterator[Union[Future, Awaitable]]:
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.confluence_client.data_source_type = "confluence_cloud"
@@ -1580,7 +1583,7 @@ async def test_get_docs_dls_enabled(
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering, expected_docs):
+async def test_get_docs_with_advanced_rules(filtering: connectors.protocol.connectors.Filter, expected_docs: List[Dict[str, Union[str, int]]]) -> None:
     async with create_confluence_source() as source:
         with patch.object(
             ConfluenceDataSource,
@@ -1602,7 +1605,7 @@ async def test_get_docs_with_advanced_rules(filtering, expected_docs):
 
 
 @pytest.mark.asyncio
-async def test_extract_identities_for_datacenter():
+async def test_extract_identities_for_datacenter() -> None:
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
         response = {
@@ -1630,7 +1633,7 @@ async def test_extract_identities_for_datacenter():
 
 
 @pytest.mark.asyncio
-async def test_fetch_server_space_permission():
+async def test_fetch_server_space_permission() -> None:
     async with create_confluence_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
         payload = {
@@ -1664,7 +1667,7 @@ async def test_fetch_server_space_permission():
 
 
 @pytest.mark.asyncio
-async def test_api_call_for_exception(patch_sleep):
+async def test_api_call_for_exception(patch_sleep: AsyncMock) -> None:
     """This function test _api_call when credentials are incorrect"""
     async with create_confluence_source() as source:
         source.confluence_client.retry_count = 1
@@ -1676,7 +1679,7 @@ async def test_api_call_for_exception(patch_sleep):
 
 
 @pytest.mark.asyncio
-async def test_get_permission():
+async def test_get_permission() -> None:
     async with create_confluence_source() as source:
         actual_permission = {"users": ["admin"], "groups": ["group"]}
         permisssions = source.get_permission(permission=actual_permission)
@@ -1692,13 +1695,13 @@ async def test_get_permission():
     ],
 )
 @pytest.mark.asyncio
-async def test_page_blog_coro(fetch_documents):
+async def test_page_blog_coro(fetch_documents: MagicMock) -> None:
     async with create_confluence_source() as source:
         await source._page_blog_coro("api_query", "target")
 
 
 @pytest.mark.asyncio
-async def test_end_signal_is_added_to_queue_in_case_of_exception():
+async def test_end_signal_is_added_to_queue_in_case_of_exception() -> None:
     END_SIGNAL = "FINISHED_TASK"
     async with create_confluence_source() as source:
         with patch.object(
@@ -1712,7 +1715,7 @@ async def test_end_signal_is_added_to_queue_in_case_of_exception():
 
 
 @pytest.mark.asyncio
-async def test_fetch_page_blog_documents_with_labels():
+async def test_fetch_page_blog_documents_with_labels() -> Iterator[None]:
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_PAGE)
@@ -1745,7 +1748,7 @@ async def test_fetch_page_blog_documents_with_labels():
 
 
 @pytest.mark.asyncio
-async def test_fetch_documents_with_html():
+async def test_fetch_documents_with_html() -> Iterator[None]:
     async with create_confluence_source() as source:
         source.confluence_client._get_session().get = AsyncMock(
             return_value=JSONAsyncMock(RESPONSE_PAGE_WITH_HTML)

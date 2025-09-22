@@ -15,6 +15,9 @@ from connectors.logger import logger
 from connectors.sources.slack import SlackClient, SlackDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from _asyncio import Task
+from aioresponses.core import aioresponses
+from typing import Iterator
 
 configuration = {
     "token": "fake_token",
@@ -44,7 +47,7 @@ async def slack_data_source():
 
 
 @pytest.mark.asyncio
-async def test_slack_client_list_channels(slack_client, mock_responses):
+async def test_slack_client_list_channels(slack_client: SlackClient, mock_responses: aioresponses) -> None:
     page1 = {
         "ok": True,
         "channels": [{"name": "channel1", "is_member": True}],
@@ -75,7 +78,7 @@ async def test_slack_client_list_channels(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_slack_client_list_messages(slack_client, mock_responses):
+async def test_slack_client_list_messages(slack_client: SlackClient, mock_responses: aioresponses) -> None:
     timestamp1 = 1690674765
     timestamp2 = 1690665000
     timestamp3 = 1690761165
@@ -119,7 +122,7 @@ async def test_slack_client_list_messages(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_slack_client_list_users(slack_client, mock_responses):
+async def test_slack_client_list_users(slack_client: SlackClient, mock_responses: aioresponses) -> None:
     response_data = {"ok": True, "members": [{"id": "user1"}]}
     mock_responses.get(
         "https://slack.com/api/users.list?limit=200",
@@ -136,7 +139,7 @@ async def test_slack_client_list_users(slack_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_handle_throttled_error(slack_client, mock_responses):
+async def test_handle_throttled_error(slack_client: SlackClient, mock_responses: aioresponses) -> Iterator[Task]:
     channel = {"id": 1, "name": "test"}
     error_response_data = {"ok": False, "error": "rate_limited"}
     response_data = {"ok": True, "messages": [{"text": "message", "type": "message"}]}
@@ -161,7 +164,7 @@ async def test_handle_throttled_error(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_ping(slack_client, mock_responses):
+async def test_ping(slack_client: SlackClient, mock_responses: aioresponses) -> None:
     response_data = {"ok": True}
     mock_responses.get(
         "https://slack.com/api/auth.test",
@@ -173,7 +176,7 @@ async def test_ping(slack_client, mock_responses):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_bad_ping(slack_client, mock_responses):
+async def test_bad_ping(slack_client: SlackClient, mock_responses: aioresponses) -> Iterator[Task]:
     response_data = {"ok": False, "error": "not_authed"}
     mock_responses.get(
         "https://slack.com/api/auth.test",
@@ -188,7 +191,7 @@ async def test_bad_ping(slack_client, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
+async def test_slack_data_source_get_docs(slack_data_source: SlackDataSource, mock_responses: aioresponses) -> Iterator[None]:
     users_response = [{"id": "user1"}]
     channels_response = [{"id": "1", "name": "channel1", "is_member": True}]
     messages_response = [{"text": "message1", "type": "message", "ts": 123456}]
@@ -225,7 +228,7 @@ async def test_slack_data_source_get_docs(slack_data_source, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_slack_data_source_convert_usernames(slack_data_source):
+async def test_slack_data_source_convert_usernames(slack_data_source: SlackDataSource) -> None:
     usernames = {"USERID1": "user_one"}
     message = {"text": "<@USERID1> Hello, <@USERID2>", "ts": 1}
     channel = {"id": 12345, "name": "channel"}

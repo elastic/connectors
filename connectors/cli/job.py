@@ -18,25 +18,27 @@ from connectors.protocol import (
     Sort,
     SyncJobIndex,
 )
+from connectors.protocol.connectors import SyncJob
+from typing import Any, Dict, List, Optional, Union
 
 
 class Job:
-    def __init__(self, config):
+    def __init__(self, config: Dict[str, str]) -> None:
         self.config = config
         self.cli_client = CLIClient(self.config)
         self.sync_job_index = SyncJobIndex(self.config)
         self.connector_index = ConnectorIndex(self.config)
 
-    def list_jobs(self, connector_id=None, index_name=None, job_id=None):
+    def list_jobs(self, connector_id: Optional[str]=None, index_name: None=None, job_id: None=None) -> List[Union[Any, SyncJob]]:
         return asyncio.run(self.__async_list_jobs(connector_id, index_name, job_id))
 
-    def cancel(self, connector_id=None, index_name=None, job_id=None):
+    def cancel(self, connector_id: None=None, index_name: None=None, job_id: Optional[str]=None) -> bool:
         return asyncio.run(self.__async_cancel_jobs(connector_id, index_name, job_id))
 
-    def start(self, connector_id, job_type):
+    def start(self, connector_id: str, job_type: str) -> str:
         return asyncio.run(self.__async_start(connector_id, job_type))
 
-    def job(self, job_id):
+    def job(self, job_id: str) -> SyncJob:
         return asyncio.run(self.__async_job(job_id))
 
     async def __async_job(self, job_id):

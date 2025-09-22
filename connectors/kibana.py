@@ -17,6 +17,7 @@ from connectors.logger import set_extra_logger
 from connectors.protocol import ConnectorIndex
 from connectors.source import get_source_klass
 from connectors.utils import validate_index_name
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 CONNECTORS_INDEX = ".elastic-connectors-v1"
 JOBS_INDEX = ".elastic-connectors-sync-jobs-v1"
@@ -47,7 +48,7 @@ logger = logging.getLogger("kibana-fake")
 set_extra_logger(logger, log_level=logging.DEBUG, prefix="KBN-FAKE")
 
 
-async def prepare(service_type, index_name, config, connector_definition=None):
+async def prepare(service_type: str, index_name: str, config: Dict[str, Union[str, List[Dict[str, str]], Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]], Dict[str, str], Dict[str, Union[float, int, str]]]], connector_definition: Optional[Dict[str, Any]]=None) -> Iterator[None]:
     klass = get_source_klass(config["sources"][service_type])
     es = ESManagementClient(config["elasticsearch"])
     connector_index = ConnectorIndex(config["elasticsearch"])
@@ -100,7 +101,7 @@ async def prepare(service_type, index_name, config, connector_definition=None):
         await es.close()
 
 
-async def upsert_index(es, index):
+async def upsert_index(es: ESManagementClient, index: str) -> None:
     """Override the index with new mappings and settings.
 
     If the index with such name exists, it's deleted and then created again
@@ -124,7 +125,7 @@ async def upsert_index(es, index):
     await es.create_content_index(index, DEFAULT_LANGUAGE)
 
 
-def _parser():
+def _parser() -> ArgumentParser:
     parser = ArgumentParser(
         prog="fake-kibana", formatter_class=ArgumentDefaultsHelpFormatter
     )
@@ -156,7 +157,7 @@ def _parser():
     return parser
 
 
-def main(args=None):
+def main(args: Optional[List[str]]=None) -> int:
     parser = _parser()
     args = parser.parse_args(args=args)
 

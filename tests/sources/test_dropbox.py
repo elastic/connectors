@@ -34,6 +34,9 @@ from connectors.sources.dropbox import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+import connectors.protocol.connectors
+from _asyncio import Future, Task
+from typing import Dict, Iterator, List, Optional, Union
 
 PATH = "/"
 DUMMY_VALUES = "abc#123"
@@ -571,7 +574,7 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
-def get_json_mock(mock_response, status):
+def get_json_mock(mock_response: Dict[str, Union[List[Dict[str, str]], str, bool, Dict[str, str]]], status: int) -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(json=mock_response, status=status)
@@ -579,13 +582,13 @@ def get_json_mock(mock_response, status):
     return async_mock
 
 
-def get_stream_reader():
+def get_stream_reader() -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(return_value=StreamReaderAsyncMock())
     return async_mock
 
 
-def setup_dropbox(source):
+def setup_dropbox(source: DropboxDataSource) -> None:
     # Set up default config with default values
     source.configuration.get_field("app_key").value = "abc#123"
     source.configuration.get_field("app_secret").value = "abc#123"
@@ -614,7 +617,7 @@ async def create_dropbox_source(
     "field",
     ["app_key", "app_secret", "refresh_token"],
 )
-async def test_validate_configuration_with_empty_fields_then_raise_exception(field):
+async def test_validate_configuration_with_empty_fields_then_raise_exception(field: str) -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.configuration.get_field(field).value = ""
@@ -624,7 +627,7 @@ async def test_validate_configuration_with_empty_fields_then_raise_exception(fie
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_with_valid_path():
+async def test_validate_configuration_with_valid_path() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.configuration.get_field("path").value = "/shared"
@@ -639,7 +642,7 @@ async def test_validate_configuration_with_valid_path():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_validate_configuration_with_invalid_path_then_raise_exception():
+async def test_validate_configuration_with_invalid_path_then_raise_exception() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.path = "/abc"
@@ -662,7 +665,7 @@ async def test_validate_configuration_with_invalid_path_then_raise_exception():
 
 
 @pytest.mark.asyncio
-async def test_set_access_token():
+async def test_set_access_token() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         with patch.object(
@@ -676,7 +679,7 @@ async def test_set_access_token():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_set_access_token_with_incorrect_app_key_then_raise_exception():
+async def test_set_access_token_with_incorrect_app_key_then_raise_exception() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
 
@@ -696,7 +699,7 @@ async def test_set_access_token_with_incorrect_app_key_then_raise_exception():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception():
+async def test_set_access_token_with_incorrect_refresh_token_then_raise_exception() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
 
@@ -715,7 +718,7 @@ async def test_set_access_token_with_incorrect_refresh_token_then_raise_exceptio
 
 
 @pytest.mark.asyncio
-async def test_tweak_bulk_options():
+async def test_tweak_bulk_options() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.concurrent_downloads = 10
@@ -726,7 +729,7 @@ async def test_tweak_bulk_options():
 
 
 @pytest.mark.asyncio
-async def test_close_with_client_session():
+async def test_close_with_client_session() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         _ = source.dropbox_client._get_session
@@ -736,7 +739,7 @@ async def test_close_with_client_session():
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -750,7 +753,7 @@ async def test_ping():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
-async def test_ping_when_server_timeout_error_raises():
+async def test_ping_when_server_timeout_error_raises() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -763,7 +766,7 @@ async def test_ping_when_server_timeout_error_raises():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
-async def test_ping_when_client_response_error_occurs():
+async def test_ping_when_client_response_error_occurs() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -785,7 +788,7 @@ async def test_ping_when_client_response_error_occurs():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
-async def test_ping_when_client_response_error_occur_with_unexpected_url():
+async def test_ping_when_client_response_error_occur_with_unexpected_url() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -807,7 +810,7 @@ async def test_ping_when_client_response_error_occur_with_unexpected_url():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox.RETRY_INTERVAL", 0)
-async def test_api_call_negative():
+async def test_api_call_negative() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.retry_count = 4
@@ -839,7 +842,7 @@ async def test_api_call_negative():
 
 
 @pytest.mark.asyncio
-async def test_api_call():
+async def test_api_call() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -872,7 +875,7 @@ async def test_api_call():
 
 
 @pytest.mark.asyncio
-async def test_paginated_api_call_when_skipping_api_call():
+async def test_paginated_api_call_when_skipping_api_call() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.retry_count = 1
@@ -894,7 +897,7 @@ async def test_paginated_api_call_when_skipping_api_call():
 
 
 @pytest.mark.asyncio
-async def test_set_access_token_when_token_expires_at_is_str():
+async def test_set_access_token_when_token_expires_at_is_str() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.token_expiration_time = "2023-02-10T09:02:23.629821"
@@ -916,7 +919,7 @@ def patch_default_wait_multiplier():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_api_call_when_token_is_expired():
+async def test_api_call_when_token_is_expired() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
 
@@ -948,7 +951,7 @@ async def test_api_call_when_token_is_expired():
 
 
 @pytest.mark.asyncio
-async def test_api_call_when_status_429_exception():
+async def test_api_call_when_status_429_exception() -> Iterator[Optional[Task]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -982,7 +985,7 @@ async def test_api_call_when_status_429_exception():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.dropbox.DEFAULT_RETRY_AFTER", 0)
-async def test_api_call_when_status_429_exception_without_retry_after_header():
+async def test_api_call_when_status_429_exception_without_retry_after_header() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.retry_count = 1
@@ -1026,8 +1029,8 @@ async def test_api_call_when_status_429_exception_without_retry_after_header():
     ],
 )
 async def test_get_content_when_is_downloadable_is_true(
-    attachment, is_shared, expected_content
-):
+    attachment: Dict[str, Union[str, int, bool]], is_shared: bool, expected_content: Optional[Dict[str, str]]
+) -> Iterator[Optional[Future]]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -1046,7 +1049,7 @@ async def test_get_content_when_is_downloadable_is_true(
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_is_downloadable_is_true_with_extraction_service():
+async def test_get_content_when_is_downloadable_is_true_with_extraction_service() -> Iterator[Optional[Future]]:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -1075,7 +1078,7 @@ async def test_get_content_when_is_downloadable_is_true_with_extraction_service(
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-01T06:06:06")
-async def test_fetch_files_folders():
+async def test_fetch_files_folders() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.path = "/"
@@ -1096,7 +1099,7 @@ async def test_fetch_files_folders():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-01T06:06:06")
-async def test_fetch_shared_files():
+async def test_fetch_shared_files() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.path = "/"
@@ -1124,7 +1127,7 @@ async def test_fetch_shared_files():
 
 @pytest.mark.asyncio
 @freeze_time("2023-01-01T06:06:06")
-async def test_search_files():
+async def test_search_files() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         rule = {
@@ -1186,7 +1189,7 @@ async def test_search_files():
     "ping",
     return_value=JSONAsyncMock(MOCK_AUTHENTICATED_ADMIN, 200),
 )
-async def test_get_docs(files_folders_patch, shared_files_patch, ping_patch):
+async def test_get_docs(files_folders_patch: AsyncMock, shared_files_patch: MagicMock, ping_patch: MagicMock) -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         expected_responses = [*EXPECTED_FILES_FOLDERS, *EXPECTED_SHARED_FILES]
@@ -1222,8 +1225,8 @@ async def test_get_docs(files_folders_patch, shared_files_patch, ping_patch):
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation_with_invalid_repos(
-    advanced_rules, expected_validation_result
-):
+    advanced_rules: List[Dict[str, Union[str, Dict[str, Union[str, Dict[str, str]]]]]], expected_validation_result: SyncRuleValidationResult
+) -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.check_path = AsyncMock(side_effect=InvalidPathException())
@@ -1293,8 +1296,8 @@ async def test_advanced_rules_validation_with_invalid_repos(
 )
 @pytest.mark.asyncio
 async def test_get_docs_with_advanced_rules(
-    received_files_patch, files_folders_patch, ping_patch, filtering
-):
+    received_files_patch: AsyncMock, files_folders_patch: MagicMock, ping_patch: MagicMock, filtering: connectors.protocol.connectors.Filter
+) -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.get_content = Mock(return_value=EXPECTED_CONTENT)
@@ -1324,7 +1327,7 @@ async def test_get_docs_with_advanced_rules(
 
 
 @pytest.mark.asyncio
-async def test_get_team_folder_id():
+async def test_get_team_folder_id() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client.path = "/"
@@ -1346,7 +1349,7 @@ async def test_get_team_folder_id():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control():
+async def test_get_access_control() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
@@ -1364,7 +1367,7 @@ async def test_get_access_control():
 
 
 @pytest.mark.asyncio
-async def test_ping_dls_enabled():
+async def test_ping_dls_enabled() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
@@ -1378,7 +1381,7 @@ async def test_ping_dls_enabled():
 
 
 @pytest.mark.asyncio
-async def test_get_permission_list_for_file():
+async def test_get_permission_list_for_file() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
@@ -1407,7 +1410,7 @@ async def test_get_permission_list_for_file():
 
 
 @pytest.mark.asyncio
-async def test_get_permission_list_for_folder():
+async def test_get_permission_list_for_folder() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
@@ -1436,7 +1439,7 @@ async def test_get_permission_list_for_folder():
 
 
 @pytest.mark.asyncio
-async def test_get_account_details():
+async def test_get_account_details() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.dropbox_client._set_access_token = AsyncMock()
@@ -1450,12 +1453,12 @@ async def test_get_account_details():
             assert actual_response == ("dbid:123", "dbmid:123-456")
 
 
-async def create_fake_coroutine(data):
+async def create_fake_coroutine(data: List[str]) -> List[str]:
     return data
 
 
 @pytest.mark.asyncio
-async def test_get_docs_for_dls():
+async def test_get_docs_for_dls() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
@@ -1474,7 +1477,7 @@ async def test_get_docs_for_dls():
 
 
 @pytest.mark.asyncio
-async def test_remote_validation_with_dls():
+async def test_remote_validation_with_dls() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._dls_enabled = MagicMock(return_value=True)
@@ -1491,7 +1494,7 @@ async def test_remote_validation_with_dls():
 
 
 @pytest.mark.asyncio
-async def test_add_document_to_list():
+async def test_add_document_to_list() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source.include_inherited_users_and_groups = True
@@ -1517,7 +1520,7 @@ async def test_add_document_to_list():
 
 
 @pytest.mark.asyncio
-async def test_add_document_to_list_with_exclude_inherited_users_and_groups():
+async def test_add_document_to_list_with_exclude_inherited_users_and_groups() -> Iterator[None]:
     async with create_source(DropboxDataSource) as source:
         setup_dropbox(source)
         source._fetch_files_folders = Mock(

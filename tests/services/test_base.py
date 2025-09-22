@@ -14,13 +14,19 @@ import pytest
 
 from connectors.config import load_config
 from connectors.services.base import BaseService, MultiService, get_services
+from _asyncio import Future, Task
+from connectors.services.access_control_sync_job_execution import AccessControlSyncJobExecutionService
+from connectors.services.content_sync_job_execution import ContentSyncJobExecutionService
+from connectors.services.job_cleanup import JobCleanUpService
+from connectors.services.job_scheduling import JobSchedulingService
+from typing import Awaitable, Dict, Iterator, List, Optional, Type, Union
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "..", "fixtures"))
 CONFIG_FILE = os.path.join(FIXTURES_DIR, "config.yml")
 
 
-def create_service(service_klass, config=None, config_file=None, idling=None):
+def create_service(service_klass: Union[Type[JobSchedulingService], Type[AccessControlSyncJobExecutionService], Type[ContentSyncJobExecutionService], Type[JobCleanUpService]], config: Optional[Dict[str, Union[Dict[str, str], Dict[str, int], List[str]]]]=None, config_file: Optional[str]=None, idling: None=None) -> Union[AccessControlSyncJobExecutionService, JobCleanUpService, ContentSyncJobExecutionService, JobSchedulingService]:
     if config is None:
         config = load_config(config_file) if config_file else {}
     service = service_klass(config)
@@ -29,7 +35,7 @@ def create_service(service_klass, config=None, config_file=None, idling=None):
     return service
 
 
-async def run_service_with_stop_after(service, stop_after=0):
+async def run_service_with_stop_after(service: Union[AccessControlSyncJobExecutionService, JobCleanUpService, ContentSyncJobExecutionService, JobSchedulingService], stop_after: Union[float, int]=0) -> Iterator[Awaitable]:
     def _stop_running_service_without_cancelling():
         service.running = False
 
@@ -50,14 +56,14 @@ async def run_service_with_stop_after(service, stop_after=0):
 
 
 async def create_and_run_service(
-    service_klass, config=None, config_file=CONFIG_FILE, stop_after=0
-):
+    service_klass: Union[Type[JobCleanUpService], Type[JobSchedulingService], Type[AccessControlSyncJobExecutionService], Type[ContentSyncJobExecutionService]], config: Optional[Dict[str, Union[Dict[str, str], Dict[str, int], List[str]]]]=None, config_file: str=CONFIG_FILE, stop_after: Union[float, int]=0
+) -> Iterator[Awaitable]:
     service = create_service(service_klass, config=config, config_file=config_file)
     await run_service_with_stop_after(service, stop_after)
 
 
 class StubService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.running = False
         self.cancelled = False
         self.exploding = False
@@ -65,7 +71,7 @@ class StubService:
         self.stopped = False
         self.handle_cancellation = True
 
-    async def run(self):
+    async def run(self) -> Iterator[Optional[Future]]:
         if self.handle_cancellation:
             try:
                 await self._run()
@@ -75,7 +81,7 @@ class StubService:
         else:
             await self._run()
 
-    async def _run(self):
+    async def _run(self) -> Iterator[Optional[Future]]:
         self.running = True
         while self.running:
             if self.exploding:
@@ -83,16 +89,16 @@ class StubService:
                 raise Exception(msg)
             await asyncio.sleep(self.run_sleep_delay)
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
         self.stopped = True
 
-    def explode(self):
+    def explode(self) -> None:
         self.exploding = True
 
 
 @pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_one_raises_exception():
+async def test_multiservice_run_stops_all_services_when_one_raises_exception() -> Iterator[Union[Future, Task]]:
     service_1 = StubService()
     service_2 = StubService()
     service_3 = StubService()
@@ -109,7 +115,7 @@ async def test_multiservice_run_stops_all_services_when_one_raises_exception():
 
 
 @pytest.mark.asyncio
-async def test_multiservice_run_stops_all_services_when_shutdown_happens():
+async def test_multiservice_run_stops_all_services_when_shutdown_happens() -> Iterator[Future]:
     service_1 = StubService()
     service_2 = StubService()
     service_3 = StubService()
@@ -128,7 +134,7 @@ async def test_multiservice_run_stops_all_services_when_shutdown_happens():
 
 
 @pytest.mark.asyncio
-async def test_registry():
+async def test_registry() -> Iterator[Future]:
     ran = []
 
     # creating a class using the BaseService as its base
@@ -158,7 +164,7 @@ async def test_registry():
 
 
 @pytest.mark.asyncio
-async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to_run():
+async def test_multiservice_stop_gracefully_stops_service_that_takes_too_long_to_run() -> Iterator[Future]:
     service_1 = StubService()
 
     service_2 = StubService()
@@ -185,13 +191,13 @@ config = {
 }
 
 
-def test_parse_connectors_with_no_connectors():
+def test_parse_connectors_with_no_connectors() -> None:
     local_config = deepcopy(config)
     service = BaseService(local_config, "mock_service")
     assert not service.connectors
 
 
-def test_parse_connectors():
+def test_parse_connectors() -> None:
     local_config = deepcopy(config)
     local_config["connectors"] = [
         {"connector_id": "foo", "service_type": "bar"},
@@ -205,7 +211,7 @@ def test_parse_connectors():
     assert service.connectors["baz"]["service_type"] == "qux"
 
 
-def test_parse_connectors_with_duplicate_connectors():
+def test_parse_connectors_with_duplicate_connectors() -> None:
     local_config = deepcopy(config)
     local_config["connectors"] = [
         {"connector_id": "foo", "service_type": "bar"},
@@ -218,7 +224,7 @@ def test_parse_connectors_with_duplicate_connectors():
     assert service.connectors["foo"]["service_type"] == "baz"
 
 
-def test_parse_connectors_with_incomplete_connector():
+def test_parse_connectors_with_incomplete_connector() -> None:
     local_config = deepcopy(config)
     local_config["connectors"] = [
         {"connector_id": "foo", "service_type": "bar"},
@@ -231,7 +237,7 @@ def test_parse_connectors_with_incomplete_connector():
     assert service.connectors["foo"]["service_type"] == "bar"
 
 
-def test_parse_connectors_with_deprecated_config_and_new_config():
+def test_parse_connectors_with_deprecated_config_and_new_config() -> None:
     local_config = deepcopy(config)
     local_config["connectors"] = [{"connector_id": "foo", "service_type": "bar"}]
     local_config["connector_id"] = "deprecated"
@@ -244,7 +250,7 @@ def test_parse_connectors_with_deprecated_config_and_new_config():
     assert "deprecated" not in service.connectors
 
 
-def test_parse_connectors_with_deprecated_config():
+def test_parse_connectors_with_deprecated_config() -> None:
     local_config = deepcopy(config)
     local_config["connector_id"] = "deprecated"
     local_config["service_type"] = "deprecated"
@@ -255,7 +261,7 @@ def test_parse_connectors_with_deprecated_config():
     assert service.connectors["deprecated"]["service_type"] == "deprecated"
 
 
-def test_override_es_config():
+def test_override_es_config() -> None:
     connector_api_key = "connector_api_key"
     config = {
         "elasticsearch": {

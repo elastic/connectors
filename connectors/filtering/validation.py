@@ -9,8 +9,13 @@ from enum import Enum
 import fastjsonschema
 
 from connectors.filtering.basic_rule import BasicRule, Policy, Rule
-from connectors.logger import logger
+from connectors.logger import ExtraLogger, logger
 from connectors.utils import Format
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
+
+if TYPE_CHECKING:
+    from connectors.protocol.connectors import Filter
+from unittest.mock import _ANY
 
 
 class InvalidFilteringError(Exception):
@@ -22,18 +27,18 @@ class SyncRuleValidationResult:
 
     ADVANCED_RULES = "advanced_snippet"
 
-    def __init__(self, rule_id, is_valid, validation_message):
+    def __init__(self, rule_id: Optional[Union[str, int]], is_valid: bool, validation_message: Union[_ANY, str]) -> None:
         self.rule_id = rule_id
         self.is_valid = is_valid
         self.validation_message = validation_message
 
     @classmethod
-    def valid_result(cls, rule_id):
+    def valid_result(cls, rule_id: Union[str, int]) -> "SyncRuleValidationResult":
         return SyncRuleValidationResult(
             rule_id=rule_id, is_valid=True, validation_message="Valid rule"
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: Union[int, "SyncRuleValidationResult"]) -> bool:
         if not isinstance(other, SyncRuleValidationResult):
             msg = f"Can't compare SyncRuleValidationResult with {type(other)}"
             raise TypeError(msg)
@@ -52,7 +57,7 @@ class FilterValidationError:
     not in the context of each other) -> both rules belong to one error.
     """
 
-    def __init__(self, ids=None, messages=None):
+    def __init__(self, ids: Optional[List[Union[Any, int]]]=None, messages: Optional[Union[List[str], str]]=None) -> None:
         if ids is None:
             ids = []
         if messages is None:
@@ -61,13 +66,13 @@ class FilterValidationError:
         self.ids = ids
         self.messages = messages
 
-    def __eq__(self, other):
+    def __eq__(self, other: Optional["FilterValidationError"]) -> bool:
         if other is None:
             return False
 
         return self.ids == other.ids and self.messages == other.messages
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"(ids: {self.ids}, messages: {self.messages})"
 
 
@@ -77,7 +82,7 @@ class FilteringValidationState(Enum):
     EDITED = "edited"
 
     @classmethod
-    def to_s(cls, value):
+    def to_s(cls, value: "FilteringValidationState") -> str:
         match value:
             case FilteringValidationState.VALID:
                 return "valid"
@@ -94,14 +99,14 @@ class FilteringValidationResult:
     These errors will be derived from a single SyncRuleValidationResult which can be added to a FilteringValidationResult.
     """
 
-    def __init__(self, state=FilteringValidationState.VALID, errors=None):
+    def __init__(self, state: FilteringValidationState=FilteringValidationState.VALID, errors: Optional[Union[List[str], List[FilterValidationError]]]=None) -> None:
         if errors is None:
             errors = []
 
         self.state = state
         self.errors = errors
 
-    def __add__(self, other):
+    def __add__(self, other: Optional[SyncRuleValidationResult]) -> "FilteringValidationResult":
         if other is None:
             return self
 
@@ -122,13 +127,13 @@ class FilteringValidationResult:
             msg = f"Result of type '{type(other)}' cannot be added to '{type(FilteringValidationResult)}'"
             raise NotImplementedError(msg)
 
-    def __eq__(self, other):
+    def __eq__(self, other: Optional["FilteringValidationResult"]) -> bool:
         if other is None:
             return False
 
         return self.state == other.state and self.errors == other.errors
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Union[str, List[Dict[str, Union[str, List[int]]]]]]:
         return {
             "state": FilteringValidationState.to_s(self.state),
             "errors": [vars(error) for error in self.errors],
@@ -143,8 +148,8 @@ class FilteringValidator:
     """
 
     def __init__(
-        self, basic_rules_validators=None, advanced_rules_validators=None, logger_=None
-    ):
+        self, basic_rules_validators: Optional[List[Union[Type["BasicRulesSetValidator"], Type["BasicRuleAgainstSchemaValidator"], Type["BasicRuleNoMatchAllRegexValidator"], Type["BasicRulesSetSemanticValidator"]]]]=None, advanced_rules_validators: Optional[List[Any]]=None, logger_: Optional[ExtraLogger]=None
+    ) -> None:
         self.basic_rules_validators = (
             [] if basic_rules_validators is None else basic_rules_validators
         )
@@ -153,7 +158,7 @@ class FilteringValidator:
         )
         self._logger = logger_ or logger
 
-    async def validate(self, filtering):
+    async def validate(self, filtering: "Filter") -> FilteringValidationResult:
         def _is_valid_str(result):
             if result is None:
                 return "Unknown (check validator implementation as it should never return 'None')"
@@ -228,7 +233,7 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
     """
 
     @classmethod
-    def validate(cls, rules):
+    def validate(cls, rules: List[Dict[str, Union[str, int]]]) -> List[SyncRuleValidationResult]:
         rules_dict = {}
 
         for rule in rules:
@@ -254,7 +259,7 @@ class BasicRulesSetSemanticValidator(BasicRulesSetValidator):
         ]
 
     @classmethod
-    def semantic_duplicates_validation_results(cls, basic_rule, semantic_duplicate):
+    def semantic_duplicates_validation_results(cls, basic_rule: BasicRule, semantic_duplicate: BasicRule) -> List[SyncRuleValidationResult]:
         def semantic_duplicate_msg(rule_one, rule_two):
             return f"{format(rule_one, Format.SHORT.value)} is semantically equal to {format(rule_two, Format.SHORT.value)}."
 
@@ -291,7 +296,7 @@ class BasicRuleNoMatchAllRegexValidator(BasicRuleValidator):
     MATCH_ALL_REGEXPS = [".*", "(.*)"]
 
     @classmethod
-    def validate(cls, basic_rule_json):
+    def validate(cls, basic_rule_json: Dict[str, Union[str, int]]) -> SyncRuleValidationResult:
         basic_rule = BasicRule.from_json(basic_rule_json)
         # default rule uses match all regex, which is intended
         if basic_rule.is_default_rule():
@@ -336,7 +341,7 @@ class BasicRuleAgainstSchemaValidator(BasicRuleValidator):
     )
 
     @classmethod
-    def validate(cls, rule):
+    def validate(cls, rule: Dict[str, Optional[Union[str, int]]]) -> SyncRuleValidationResult:
         try:
             BasicRuleAgainstSchemaValidator.SCHEMA(rule)
 

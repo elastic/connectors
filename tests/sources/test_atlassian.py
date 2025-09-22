@@ -19,6 +19,8 @@ from connectors.sources.atlassian import (
 )
 from connectors.sources.jira import JiraClient, JiraDataSource
 from tests.sources.support import create_source
+from aioresponses.core import aioresponses
+from typing import Dict, Iterator, List, Union
 
 
 @pytest.mark.parametrize(
@@ -91,7 +93,7 @@ from tests.sources.support import create_source
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules: Union[List[Dict[str, str]], Dict[str, List[str]]], expected_validation_result: SyncRuleValidationResult) -> None:
     validation_result = await AtlassianAdvancedRulesValidator(
         AdvancedRulesValidator
     ).validate(advanced_rules)
@@ -139,7 +141,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
     ],
 )
 @pytest.mark.asyncio
-async def test_active_atlassian_user(user_info, result):
+async def test_active_atlassian_user(user_info: Dict[str, Union[bool, str]], result: bool) -> None:
     async with create_source(
         JiraDataSource, jira_url="https://127.0.0.1:8080/test"
     ) as source:
@@ -186,7 +188,7 @@ user_response = """
 
 
 @pytest.mark.asyncio
-async def test_fetch_all_users(mock_responses):
+async def test_fetch_all_users(mock_responses: aioresponses) -> Iterator[None]:
     jira_host = "https://127.0.0.1:8080"
     users_path = "rest/api/3/users/search"
 

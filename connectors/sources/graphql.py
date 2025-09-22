@@ -13,17 +13,20 @@ from functools import cached_property
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 from graphql import parse, visit
-from graphql.language.ast import VariableNode
+from graphql.language.ast import DocumentNode, FieldNode, VariableNode
 from graphql.language.visitor import Visitor
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
     iso_utc,
     retryable,
 )
+from _asyncio import Task
+from typing import Dict, Iterator, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -53,7 +56,7 @@ class FieldVisitor(Visitor):
     fields_dict = {}
     variables_dict = {}
 
-    def enter_field(self, node, *args):
+    def enter_field(self, node: FieldNode, *args) -> None:
         self.fields_dict[node.name.value] = []
         self.variables_dict[node.name.value] = {}
         if node.arguments:
@@ -70,7 +73,7 @@ class UnauthorizedException(Exception):
 
 
 class GraphQLClient:
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -120,7 +123,7 @@ class GraphQLClient:
                 raise_for_status=True,
             )
 
-    def extract_graphql_data_items(self, data):
+    def extract_graphql_data_items(self, data: Dict[str, Union[List[Dict[str, str]], List[Dict[str, Union[str, Dict[str, str]]]], Dict[str, Dict[str, str]], Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, bool]]]], Dict[str, str]]]) -> Iterator[Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, bool]]]]]:
         """Returns sub objects from the response based on graphql_object_to_id_map
 
         Args:
@@ -155,7 +158,7 @@ class GraphQLClient:
                     doc["_id"] = doc.get(field_id)
                     yield doc
 
-    def extract_pagination_info(self, data):
+    def extract_pagination_info(self, data: Dict[str, Union[Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, bool]]]], Dict[str, Dict[str, str]]]]) -> Tuple[bool, str, str]:
         pagination_key_path = self.pagination_key.split(".")
         for key in pagination_key_path:
             if isinstance(data, dict):
@@ -181,7 +184,7 @@ class GraphQLClient:
             msg = "Pagination is enabled but the query is missing 'pageInfo'. Please include 'pageInfo { hasNextPage endCursor }' in the query to support pagination."
             raise ConfigurableFieldValueError(msg)
 
-    def validate_paginated_query(self, graphql_query, visitor):
+    def validate_paginated_query(self, graphql_query: str, visitor: FieldVisitor) -> None:
         graphql_object = self.pagination_key.split(".")[-1]
         self._logger.debug(f"Finding pageInfo field in {graphql_object}.")
         if not (
@@ -191,7 +194,7 @@ class GraphQLClient:
             msg = f"Pagination is enabled but 'pageInfo' not found. Please include 'pageInfo' field inside '{graphql_object}' and 'after' argument in '{graphql_object}'."
             raise ConfigurableFieldValueError(msg)
 
-    async def paginated_call(self, graphql_query):
+    async def paginated_call(self, graphql_query: str):
         if self.pagination_model == CURSOR_PAGINATION:
             ast = parse(graphql_query)  # pyright: ignore
             visitor = FieldVisitor()
@@ -228,7 +231,7 @@ class GraphQLClient:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def make_request(self, graphql_query):
+    async def make_request(self, graphql_query: str) -> Union[Dict[str, Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, bool]]]]], Dict[str, List[Dict[str, Union[str, Dict[str, str]]]]], AsyncMock]:
         try:
             if self.http_method == GET:
                 return await self.get(graphql_query=graphql_query)
@@ -243,7 +246,7 @@ class GraphQLClient:
         except Exception:
             raise
 
-    async def get(self, graphql_query):
+    async def get(self, graphql_query: str) -> Dict[str, str]:
         params = {"query": graphql_query}
         async with self.session.get(url=self.url, params=params) as response:
             json_response = await response.json()
@@ -253,7 +256,7 @@ class GraphQLClient:
             msg = f"Error while executing query. Exception: {json_response['errors']}"
             raise Exception(msg)
 
-    async def post(self, graphql_query):
+    async def post(self, graphql_query: str) -> Dict[str, str]:
         """Invoke GraphQL request to fetch response.
 
         Args:
@@ -279,12 +282,12 @@ class GraphQLClient:
             msg = f"Error while executing query. Exception: {json_response['errors']}"
             raise Exception(msg)
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         self._sleeps.cancel()
         await self.session.close()
         del self.session
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         await self.make_request(graphql_query=PING_QUERY)
 
 
@@ -294,7 +297,7 @@ class GraphQLDataSource(BaseDataSource):
     name = "GraphQL"
     service_type = "graphql"
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the GraphQL instance.
 
         Args:
@@ -307,7 +310,7 @@ class GraphQLDataSource(BaseDataSource):
         self.graphql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[int, str, List[Dict[str, str]], bool, List[str]]]]:
         """Get the default configuration for GraphQL.
 
         Returns:
@@ -421,7 +424,7 @@ class GraphQLDataSource(BaseDataSource):
             },
         }
 
-    def is_query(self, ast):
+    def is_query(self, ast: DocumentNode) -> bool:
         for definition in ast.definitions:  # pyright: ignore
             if (
                 hasattr(definition, "operation")
@@ -430,14 +433,14 @@ class GraphQLDataSource(BaseDataSource):
                 return False
         return True
 
-    def validate_endpoints(self):
+    def validate_endpoints(self) -> bool:
         if re.match(URL_REGEX, self.graphql_client.url):
             return True
         return False
 
     def check_field_existence(
-        self, ast, field_path, graphql_field_id=None, check_id=False
-    ):
+        self, ast: DocumentNode, field_path: str, graphql_field_id: Optional[str]=None, check_id: bool=False
+    ) -> Tuple[bool, bool]:
         def traverse(selections, path):
             for selection in selections:
                 if selection.name.value == path[0]:
@@ -544,10 +547,10 @@ class GraphQLDataSource(BaseDataSource):
                 )
                 raise ConfigurableFieldValueError(msg)
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         await self.graphql_client.close()
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Task]:
         try:
             await self.graphql_client.ping()
             self._logger.debug("Successfully connected to GraphQL Instance.")
@@ -555,7 +558,7 @@ class GraphQLDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to GraphQL Instance.")
             raise
 
-    def yield_dict(self, documents):
+    def yield_dict(self, documents: Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, bool]]]]) -> Iterator[Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, bool]]]]]:
         if isinstance(documents, dict):
             yield documents
         elif isinstance(documents, list):
@@ -563,7 +566,7 @@ class GraphQLDataSource(BaseDataSource):
                 if isinstance(document, dict):
                     yield document
 
-    async def fetch_data(self, graphql_query):
+    async def fetch_data(self, graphql_query: str):
         if self.graphql_client.pagination_model == NO_PAGINATION:
             data = await self.graphql_client.make_request(graphql_query=graphql_query)
             for documents in self.graphql_client.extract_graphql_data_items(data=data):
@@ -576,7 +579,7 @@ class GraphQLDataSource(BaseDataSource):
                 for document in self.yield_dict(data):
                     yield document
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: None=None):
         """Executes the logic to fetch GraphQL response in async manner.
 
         Args:

@@ -12,10 +12,12 @@ from connectors.es.management_client import ESManagementClient
 from connectors.logger import logger
 from connectors.protocol import CONCRETE_CONNECTORS_INDEX, CONCRETE_JOBS_INDEX
 from connectors.utils import CancellableSleeps
+from _asyncio import Task
+from typing import Any, Dict, Generator, Iterator, Optional, Tuple
 
 
 class PreflightCheck:
-    def __init__(self, config, version):
+    def __init__(self, config: Dict[str, Any], version: str) -> None:
         self.version = version
         self.config = config
         self.elastic_config = config["elasticsearch"]
@@ -29,7 +31,7 @@ class PreflightCheck:
         self._sleeps = CancellableSleeps()
         self.running = False
 
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
         self._sleeps.cancel()
         if self.es_management_client is not None:
@@ -39,7 +41,7 @@ class PreflightCheck:
         logger.info(f"Caught {sig.name}. Graceful shutdown.")
         self.stop()
 
-    async def run(self):
+    async def run(self) -> Generator[Optional[Task], None, Tuple[bool, bool]]:
         try:
             logger.info("Running preflight checks")
             self.running = True
@@ -58,7 +60,7 @@ class PreflightCheck:
             if self.es_management_client is not None:
                 await self.es_management_client.close()
 
-    async def _check_es_server(self):
+    async def _check_es_server(self) -> Generator[Optional[Task], None, Tuple[bool, bool]]:
         """
         Returns two values:
 
@@ -84,7 +86,7 @@ class PreflightCheck:
         versions_compatible = await self._versions_compatible(version.get("number"))
         return versions_compatible, is_serverless
 
-    async def _versions_compatible(self, es_version):
+    async def _versions_compatible(self, es_version: str) -> bool:
         """
         Checks if the Connector and ES versions are compatible
         """
@@ -128,7 +130,7 @@ class PreflightCheck:
         )
         return True
 
-    async def _check_local_extraction_setup(self):
+    async def _check_local_extraction_setup(self) -> Iterator[None]:
         if self.extraction_config is None:
             logger.info(
                 "Extraction service is not configured, skipping its preflight check."
@@ -161,7 +163,7 @@ class PreflightCheck:
         finally:
             await session.close()
 
-    async def _check_system_indices_with_retries(self):
+    async def _check_system_indices_with_retries(self) -> Generator[Task, None, bool]:
         attempts = 0
         while self.running:
             try:
@@ -189,7 +191,7 @@ class PreflightCheck:
                     await self._sleeps.sleep(self.preflight_idle)
         return False
 
-    def _validate_configuration(self):
+    def _validate_configuration(self) -> bool:
         # "Native" mode
         configured_native_types = "native_service_types" in self.config
         force_allowed_native = self.config.get("_force_allow_native", False)

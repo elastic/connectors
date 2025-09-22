@@ -21,8 +21,9 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format
+from typing import Any, Dict, Iterator, List, Union
 
 
 class MongoAdvancedRulesValidator(AdvancedRulesValidator):
@@ -75,7 +76,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Dict[str, Any]) -> SyncRuleValidationResult:
         try:
             MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
 
@@ -97,7 +98,7 @@ class MongoDataSource(BaseDataSource):
     service_type = "mongodb"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
 
         self.client = None
@@ -110,7 +111,7 @@ class MongoDataSource(BaseDataSource):
         self.collection = None
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, List[Dict[str, Union[bool, str]]], int, List[str], bool]]]:
         return {
             "host": {
                 "label": "Server hostname",
@@ -172,7 +173,7 @@ class MongoDataSource(BaseDataSource):
         }
 
     @contextmanager
-    def get_client(self):
+    def get_client(self) -> Iterator[AsyncIOMotorClient]:
         certfile = ""
         try:
             client_params = {}
@@ -212,7 +213,7 @@ class MongoDataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [MongoAdvancedRulesValidator()]
 
-    async def ping(self):
+    async def ping(self) -> None:
         with self.get_client() as client:
             await client.admin.command("ping")
 
@@ -227,7 +228,7 @@ class MongoDataSource(BaseDataSource):
                 )
 
     # TODO: That's a lot of work. Find a better way
-    def serialize(self, doc):
+    def serialize(self, doc: Dict[str, Any]) -> Dict[str, Any]:
         def _serialize(value):
             if isinstance(value, ObjectId):
                 value = str(value)
@@ -285,7 +286,7 @@ class MongoDataSource(BaseDataSource):
                 async for doc in collection.find():
                     yield self.serialize(doc), None
 
-    def check_conflicting_values(self, value):
+    def check_conflicting_values(self, value: str):
         if value == "true":
             value = True
         elif value == "false":
@@ -297,7 +298,7 @@ class MongoDataSource(BaseDataSource):
             msg = "The value of SSL/TLS must be the same in the hostname and configuration field."
             raise ConfigurableFieldValueError(msg)
 
-    async def validate_config(self):
+    async def validate_config(self) -> None:
         await super().validate_config()
         parsed_url = urllib.parse.urlparse(self.host)
         query_params = urllib.parse.parse_qs(parsed_url.query)

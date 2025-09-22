@@ -7,7 +7,7 @@
 
 from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -17,6 +17,8 @@ from freezegun import freeze_time
 from connectors.source import ConfigurableFieldValueError
 from connectors.sources.zoom import TokenError, ZoomDataSource
 from tests.sources.support import create_source
+from _asyncio import Future, Task
+from typing import Any, Dict, Iterator, Optional, Union
 
 # Access token document
 SAMPLE_ACCESS_TOKEN_RESPONSE = {"access_token": "token#123", "expires_in": 3599}
@@ -400,7 +402,7 @@ class ZoomAsyncMock(mock.AsyncMock):
         return self._data
 
 
-def get_mock(mock_response):
+def get_mock(mock_response: Any) -> AsyncMock:
     async_mock = mock.AsyncMock()
     async_mock.__aenter__ = mock.AsyncMock(
         return_value=ZoomAsyncMock(data=mock_response)
@@ -424,7 +426,7 @@ async def create_zoom_source(
         yield source
 
 
-def mock_zoom_apis(url, headers):
+def mock_zoom_apis(url: str, headers: Dict[str, str]) -> AsyncMock:
     # Users APIS
     if url == "https://api.zoom.us/v2/users?page_size=300":
         return get_mock(mock_response=SAMPLE_USER_PAGE1)
@@ -510,12 +512,12 @@ def mock_zoom_apis(url, headers):
         return get_mock(mock_response=None)
 
 
-def mock_token_response():
+def mock_token_response() -> AsyncMock:
     return get_mock(mock_response=SAMPLE_ACCESS_TOKEN_RESPONSE)
 
 
 @pytest.mark.asyncio
-async def test_fetch_for_successful_call():
+async def test_fetch_for_successful_call() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -533,7 +535,7 @@ async def test_fetch_for_successful_call():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_for_unsuccessful_call():
+async def test_fetch_for_unsuccessful_call() -> Iterator[Optional[Task]]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -551,7 +553,7 @@ async def test_fetch_for_unsuccessful_call():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_for_unauthorized_error():
+async def test_fetch_for_unauthorized_error() -> Iterator[Optional[Task]]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -575,7 +577,7 @@ async def test_fetch_for_unauthorized_error():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_for_notfound_error():
+async def test_fetch_for_notfound_error() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -599,7 +601,7 @@ async def test_fetch_for_notfound_error():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_for_other_client_error():
+async def test_fetch_for_other_client_error() -> Iterator[Optional[Task]]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -622,7 +624,7 @@ async def test_fetch_for_other_client_error():
 
 
 @pytest.mark.asyncio
-async def test_content_for_successful_call():
+async def test_content_for_successful_call() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -640,7 +642,7 @@ async def test_content_for_successful_call():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_content_for_unsuccessful_call():
+async def test_content_for_unsuccessful_call() -> Iterator[Optional[Task]]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -657,7 +659,7 @@ async def test_content_for_unsuccessful_call():
 
 
 @pytest.mark.asyncio
-async def test_scroll_for_successful_response():
+async def test_scroll_for_successful_response() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -676,7 +678,7 @@ async def test_scroll_for_successful_response():
 
 
 @pytest.mark.asyncio
-async def test_scroll_for_empty_response():
+async def test_scroll_for_empty_response() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -695,7 +697,7 @@ async def test_scroll_for_empty_response():
 
 
 @pytest.mark.asyncio
-async def test_validate_config():
+async def test_validate_config() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -710,7 +712,7 @@ async def test_validate_config():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field", ["account_id", "client_id", "client_secret"])
-async def test_validate_config_missing_fields_then_raise(field):
+async def test_validate_config_missing_fields_then_raise(field: str) -> Iterator[None]:
     async with create_zoom_source() as source:
         source.configuration.get_field(field).value = ""
 
@@ -719,7 +721,7 @@ async def test_validate_config_missing_fields_then_raise(field):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection():
+async def test_ping_for_successful_connection() -> Iterator[None]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -734,7 +736,7 @@ async def test_ping_for_successful_connection():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_ping_for_unsuccessful_connection():
+async def test_ping_for_unsuccessful_connection() -> Iterator[Optional[Task]]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -755,7 +757,7 @@ async def test_ping_for_unsuccessful_connection():
         (FILE_WITH_UNSUPPORTED_EXTENSION, True, None),
     ],
 )
-async def test_get_content(attachment, doit, expected_content):
+async def test_get_content(attachment: Dict[str, Union[int, str]], doit: bool, expected_content: Optional[Dict[str, str]]) -> Iterator[Optional[Future]]:
     async with create_zoom_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -773,7 +775,7 @@ async def test_get_content(attachment, doit, expected_content):
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_extraction_service():
+async def test_get_content_with_extraction_service() -> Iterator[Optional[Future]]:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -802,7 +804,7 @@ async def test_get_content_with_extraction_service():
 
 @pytest.mark.asyncio
 @freeze_time("2023-03-09T00:00:00")
-async def test_get_docs():
+async def test_get_docs() -> Iterator[Optional[Future]]:
     document_without_attachment = []
     document_with_attachment = []
     async with create_zoom_source(fetch_past_meeting_details=True) as source:

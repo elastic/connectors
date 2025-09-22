@@ -29,13 +29,16 @@ from connectors.logger import logger, set_logger
 from connectors.preflight_check import PreflightCheck
 from connectors.services import get_services
 from connectors.source import get_source_klass, get_source_klasses
+from asyncio.unix_events import _UnixSelectorEventLoop
+from typing import Any, Dict, Generator, Optional, Tuple, Union
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 __all__ = ["main"]
 
 from connectors.utils import sleeps_for_retryable
 
 
-async def _start_service(actions, config, loop):
+async def _start_service(actions: Tuple[str, str, str, str], config: Dict[str, Any], loop: Union[_UnixSelectorEventLoop, Mock]) -> Generator[None, None, AsyncMock]:
     """Starts the service.
 
     Steps:
@@ -80,7 +83,7 @@ def _get_uvloop():
     return uvloop
 
 
-def get_event_loop(uvloop=False):
+def get_event_loop(uvloop: bool=False) -> Union[MagicMock, _UnixSelectorEventLoop]:
     if uvloop:
         # activate uvloop if lib is present
         try:
@@ -102,7 +105,7 @@ def get_event_loop(uvloop=False):
     return loop
 
 
-def run(action, config_file, log_level, filebeat, service_type, uvloop):
+def run(action: Union[Tuple[str], Tuple[str, str], Tuple[str, str, str, str]], config_file: str, log_level: Optional[str], filebeat: bool, service_type: Optional[str], uvloop: bool) -> int:
     """Loads the config file, sets the logger and executes an action.
 
     Actions:

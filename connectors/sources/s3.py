@@ -19,8 +19,11 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import hash_id
+from _asyncio import Future
+from typing import Any, Dict, Generator, Iterator, List, Optional, Union
+from unittest.mock import MagicMock
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
@@ -36,7 +39,7 @@ else:
 class S3Client:
     """Amazon S3 client to handle method calls made to S3"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self.configuration = configuration
         self._logger = logger
         self.session = aioboto3.Session(
@@ -54,7 +57,7 @@ class S3Client:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def client(self, region=None):
+    async def client(self, region: None=None):
         """This method creates context manager and client session object for s3.
         Args:
             region (str): Name of bucket region. Defaults to None
@@ -83,17 +86,17 @@ class S3Client:
         self.clients[region_name] = s3_client
         return self.clients[region_name]
 
-    async def close_client(self):
+    async def close_client(self) -> None:
         """Closes unclosed client session"""
         for context in self.client_context:
             await context.aclose()
 
-    async def fetch_buckets(self):
+    async def fetch_buckets(self) -> Iterator[Future]:
         """This method used to list all the buckets from Amazon S3"""
         s3 = await self.client()
         await s3.list_buckets()
 
-    async def get_bucket_list(self):
+    async def get_bucket_list(self) -> List[str]:
         """Returns bucket list from list_buckets response
 
         Returns:
@@ -142,7 +145,7 @@ class S3Client:
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
 
-    async def get_bucket_region(self, bucket_name):
+    async def get_bucket_region(self, bucket_name: str) -> None:
         """This method return the name of region for a bucket.
         Args
             bucket_name (str): Name of bucket
@@ -178,10 +181,10 @@ class S3AdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "S3DataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -206,7 +209,7 @@ class S3DataSource(BaseDataSource):
     service_type = "s3"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the connection to the Amazon S3.
 
         Args:
@@ -221,7 +224,7 @@ class S3DataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [S3AdvancedRulesValidator(self)]
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Future] | None:
         """Verify the connection with AWS"""
         try:
             await self.s3_client.fetch_buckets()
@@ -230,7 +233,7 @@ class S3DataSource(BaseDataSource):
             self._logger.exception("Error while connecting to AWS.")
             raise
 
-    async def format_document(self, bucket_name, bucket_object):
+    async def format_document(self, bucket_name: str, bucket_object: Any) -> Dict[str, Union[str, int]]:
         """Prepare document for bucket object.
 
         Args:
@@ -305,7 +308,7 @@ class S3DataSource(BaseDataSource):
                         ),
                     )
 
-    async def get_content(self, doc, s3_client, timestamp=None, doit=None):
+    async def get_content(self, doc: Dict[str, Union[str, int]], s3_client: Union[MagicMock, str], timestamp: None=None, doit: Optional[Union[bool, int]]=None) -> Generator[Future, None, Optional[Union[Dict[str, str], Dict[str, Union[str, bytes]]]]]:
         if not (doit):
             return
 
@@ -335,12 +338,12 @@ class S3DataSource(BaseDataSource):
 
         return document
 
-    async def close(self):
+    async def close(self) -> None:
         """Closes unclosed client session"""
         await self.s3_client.close_client()
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[int, str, bool, List[str]]]]:
         """Get the default configuration for Amazon S3.
 
         Returns:

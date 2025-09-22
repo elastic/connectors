@@ -5,7 +5,7 @@
 #
 import asyncio
 import datetime
-from unittest.mock import ANY, AsyncMock, MagicMock, Mock, patch
+from unittest.mock import _ANY, ANY, AsyncMock, MagicMock, Mock, patch
 
 import aiomysql
 import pytest
@@ -25,9 +25,12 @@ from connectors.sources.mysql import (
 from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+import connectors.protocol.connectors
+from _asyncio import Future, Task
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 
-def immutable_doc(**kwargs):
+def immutable_doc(**kwargs) -> frozenset:
     return frozenset(kwargs.items())
 
 
@@ -81,14 +84,14 @@ TIMESTAMP = datetime.datetime(
 )
 
 
-def future_with_result(result):
+def future_with_result(result: Mock) -> Future:
     future = asyncio.Future()
     future.set_result(result)
 
     return future
 
 
-def as_async_context_manager_mock(obj):
+def as_async_context_manager_mock(obj: Union[MySqlDataSource, MagicMock]) -> MagicMock:
     context_manager = MagicMock()
     context_manager.__aenter__.return_value = obj
     context_manager.__aexit__.return_value = None
@@ -97,12 +100,12 @@ def as_async_context_manager_mock(obj):
 
 
 def mocked_mysql_client(
-    pk_cols=None,
-    table_cols=None,
-    last_update_times=None,
-    documents=None,
-    custom_query=False,
-):
+    pk_cols: Optional[List[Union[str, List[str]]]]=None,
+    table_cols: Optional[List[str]]=None,
+    last_update_times: Optional[List[Optional[str]]]=None,
+    documents: Optional[List[Union[Dict[str, str], List[str]]]]=None,
+    custom_query: bool=False,
+) -> MagicMock:
     client = MagicMock()
 
     client.get_primary_key_column_names = AsyncMock(side_effect=pk_cols)
@@ -119,13 +122,13 @@ def mocked_mysql_client(
 
 
 @pytest.fixture
-def patch_ping():
+def patch_ping() -> Iterator[AsyncMock]:
     with patch.object(MySqlDataSource, "ping", return_value=AsyncMock()) as ping:
         yield ping
 
 
 @pytest.fixture
-def patch_row2doc():
+def patch_row2doc() -> Iterator[MagicMock]:
     with patch("connectors.sources.mysql.row2doc", return_value=MagicMock()) as row2doc:
         yield row2doc
 
@@ -207,7 +210,7 @@ class Connection:
         """Make a dummy database connection and return it"""
         return self
 
-    async def ping(self):
+    async def ping(self) -> bool:
         """This method returns object of Result class"""
         return True
 
@@ -240,7 +243,7 @@ async def mock_mysql_response():
     return mock_response
 
 
-async def mock_connection(mock_cursor):
+async def mock_connection(mock_cursor: MagicMock) -> MagicMock:
     mock_conn = MagicMock(spec=aiomysql.Connection)
     mock_conn.cursor.return_value = mock_cursor
     mock_conn.__aenter__.return_value = mock_conn
@@ -259,7 +262,7 @@ def mock_cursor_fetchmany(rows_per_batch=None):
     return mock_cursor
 
 
-def mock_cursor_fetchall():
+def mock_cursor_fetchall() -> MagicMock:
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
     mock_cursor.fetchall.side_effect = AsyncMock(
         return_value=[DOC_ONE, DOC_TWO, DOC_THREE]
@@ -270,7 +273,7 @@ def mock_cursor_fetchall():
 
 
 @pytest.mark.asyncio
-async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool):
+async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool: Mock) -> None:
     client = await setup_mysql_client()
 
     async with client:
@@ -281,7 +284,7 @@ async def test_client_when_aexit_called_then_cancel_sleeps(patch_connection_pool
 
 
 @pytest.mark.asyncio
-async def test_client_get_tables(patch_connection_pool):
+async def test_client_get_tables(patch_connection_pool: Mock) -> None:
     table_1 = "table_1"
     table_2 = "table_2"
 
@@ -322,8 +325,8 @@ async def test_client_get_tables(patch_connection_pool):
 )
 @pytest.mark.asyncio
 async def test_client_get_column_names_for_table(
-    patch_connection_pool, column_tuples, expected_column_names
-):
+    patch_connection_pool: Mock, column_tuples: List[Union[Any, Tuple[str]]], expected_column_names: List[Union[Any, str]]
+) -> None:
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
     mock_cursor.description = column_tuples
     mock_cursor.__aenter__.return_value = mock_cursor
@@ -338,7 +341,7 @@ async def test_client_get_column_names_for_table(
 
 
 @pytest.mark.asyncio
-async def test_client_get_column_names_for_query(patch_connection_pool):
+async def test_client_get_column_names_for_query(patch_connection_pool: Mock) -> None:
     columns = [("id",), ("class",)]
 
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
@@ -357,7 +360,7 @@ async def test_client_get_column_names_for_query(patch_connection_pool):
 
 
 @pytest.mark.asyncio
-async def test_client_get_last_update_time(patch_connection_pool):
+async def test_client_get_last_update_time(patch_connection_pool: Mock) -> None:
     last_update_time = iso_utc()
 
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
@@ -373,7 +376,7 @@ async def test_client_get_last_update_time(patch_connection_pool):
 
 
 @pytest.mark.asyncio
-async def test_client_yield_rows_for_table(patch_connection_pool):
+async def test_client_yield_rows_for_table(patch_connection_pool: Mock) -> Iterator[Task]:
     rows = [DOC_ONE, DOC_TWO, DOC_THREE]
     mock_cursor = mock_cursor_fetchall()
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)
@@ -393,7 +396,7 @@ async def test_client_yield_rows_for_table(patch_connection_pool):
 
 
 @pytest.mark.asyncio
-async def test_client_yield_rows_for_query(patch_connection_pool):
+async def test_client_yield_rows_for_query(patch_connection_pool: Mock) -> Iterator[Task]:
     rows = [DOC_ONE, DOC_TWO, DOC_THREE]
     mock_cursor = mock_cursor_fetchall()
     mock_cursor.fetchone = AsyncMock(return_value=(3, None))
@@ -437,7 +440,7 @@ async def test_client_ping_negative(patch_logger):
 
 @freeze_time(TIME)
 @pytest.mark.asyncio
-async def test_fetch_documents(patch_connection_pool):
+async def test_fetch_documents(patch_connection_pool: Mock) -> None:
     primary_key_col = "pk"
     column = "column"
     document = ["table1"]
@@ -463,8 +466,8 @@ async def test_fetch_documents(patch_connection_pool):
 @freeze_time(TIME)
 @pytest.mark.asyncio
 async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
-    patch_connection_pool, patch_row2doc
-):
+    patch_connection_pool: Mock, patch_row2doc: MagicMock
+) -> None:
     primary_key_col = ["cd", "ab"]
     column = "column"
 
@@ -517,8 +520,8 @@ async def test_fetch_documents_when_used_custom_query_then_sort_pk_cols(
 @freeze_time(TIME)
 @pytest.mark.asyncio
 async def test_fetch_documents_when_custom_query_used_and_update_time_none(
-    patch_connection_pool, patch_row2doc
-):
+    patch_connection_pool: Mock, patch_row2doc: MagicMock
+) -> None:
     primary_key_col = ["cd", "ab"]
     column = "column"
 
@@ -569,7 +572,7 @@ async def test_fetch_documents_when_custom_query_used_and_update_time_none(
 
 
 @pytest.mark.asyncio
-async def test_get_docs(patch_connection_pool):
+async def test_get_docs(patch_connection_pool: Mock) -> None:
     async with create_source(MySqlDataSource) as source:
         await setup_mysql_source(source, DATABASE)
         source.mysql_client = MagicMock()
@@ -581,7 +584,7 @@ async def test_get_docs(patch_connection_pool):
             assert doc == {"a": 1, "b": 2}
 
 
-async def setup_mysql_client():
+async def setup_mysql_client() -> MySQLClient:
     client = MySQLClient(
         host="host",
         port=123,
@@ -595,7 +598,7 @@ async def setup_mysql_client():
     return client
 
 
-async def setup_mysql_source(source, database="", client=None):
+async def setup_mysql_source(source: MySqlDataSource, database: str="", client: None=None) -> MySqlDataSource:
     if client is None:
         client = MagicMock()
 
@@ -607,7 +610,7 @@ async def setup_mysql_source(source, database="", client=None):
     return source
 
 
-def setup_available_docs(advanced_snippet):
+def setup_available_docs(advanced_snippet: List[Dict[str, Union[List[str], str]]]) -> List[frozenset]:
     available_docs = []
 
     for tables_query in advanced_snippet:
@@ -663,7 +666,7 @@ def setup_available_docs(advanced_snippet):
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering, expected_docs):
+async def test_get_docs_with_advanced_rules(filtering: connectors.protocol.connectors.Filter, expected_docs: Set[frozenset]) -> Iterator[Task]:
     async with create_source(MySqlDataSource) as source:
         await setup_mysql_source(source)
         docs_in_db = setup_available_docs(filtering.get_advanced_rules())
@@ -677,7 +680,7 @@ async def test_get_docs_with_advanced_rules(filtering, expected_docs):
 
 
 @pytest.mark.asyncio
-async def test_validate_config_when_host_empty_then_raise_error():
+async def test_validate_config_when_host_empty_then_raise_error() -> None:
     async with create_source(MySqlDataSource, host="") as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()
@@ -870,12 +873,12 @@ async def test_validate_config_when_host_empty_then_raise_error():
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation_when_id_in_source_available(
-    tables_present_in_source,
-    advanced_rules,
-    id_in_source,
-    expected_validation_result,
-    patch_ping,
-):
+    tables_present_in_source: List[Union[Any, str]],
+    advanced_rules: Union[List[List[Any]], List[Dict[str, Union[List[str], str, bool]]], List[Dict[str, List[str]]], List[Dict[str, Union[List[str], str]]], List[str]],
+    id_in_source: Optional[Union[List[Dict[str, Union[List[str], str]]], List[str]]],
+    expected_validation_result: SyncRuleValidationResult,
+    patch_ping: AsyncMock,
+) -> None:
     async with create_source(MySqlDataSource) as source:
         client = await setup_mysql_source(source, DATABASE)
         client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
@@ -1007,11 +1010,11 @@ async def test_advanced_rules_validation_when_id_in_source_available(
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation(
-    tables_present_in_source,
-    advanced_rules,
-    expected_validation_result,
-    patch_ping,
-):
+    tables_present_in_source: List[Union[Any, str]],
+    advanced_rules: Union[List[List[Any]], List[Dict[str, str]], List[Dict[str, Union[List[str], str, bool]]], List[Dict[str, List[str]]], List[Dict[str, Union[List[str], str]]]],
+    expected_validation_result: SyncRuleValidationResult,
+    patch_ping: AsyncMock,
+) -> None:
     async with create_source(MySqlDataSource) as source:
         client = await setup_mysql_source(source, DATABASE)
         client.get_all_table_names = AsyncMock(return_value=tables_present_in_source)
@@ -1027,7 +1030,7 @@ async def test_advanced_rules_validation(
 
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
-async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables):
+async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables: Union[str, List[str]]) -> None:
     async with create_source(MySqlDataSource) as source:
         source.tables = tables
 
@@ -1042,7 +1045,7 @@ async def test_get_tables_when_wildcard_configured_then_fetch_all_tables(tables)
 
 
 @pytest.mark.asyncio
-async def test_validate_database_accessible_when_accessible_then_no_error_raised():
+async def test_validate_database_accessible_when_accessible_then_no_error_raised() -> None:
     async with create_source(MySqlDataSource) as source:
         source.database = "test_database"
 
@@ -1054,7 +1057,7 @@ async def test_validate_database_accessible_when_accessible_then_no_error_raised
 
 
 @pytest.mark.asyncio
-async def test_validate_database_accessible_when_not_accessible_then_error_raised():
+async def test_validate_database_accessible_when_not_accessible_then_error_raised() -> None:
     async with create_source(MySqlDataSource) as source:
         cursor = AsyncMock()
         cursor.execute.side_effect = aiomysql.Error("Error")
@@ -1064,7 +1067,7 @@ async def test_validate_database_accessible_when_not_accessible_then_error_raise
 
 
 @pytest.mark.asyncio
-async def test_validate_tables_accessible_when_accessible_then_no_error_raised():
+async def test_validate_tables_accessible_when_accessible_then_no_error_raised() -> None:
     async with create_source(MySqlDataSource) as source:
         source.tables = ["table_1", "table_2", "table_3"]
 
@@ -1088,8 +1091,8 @@ async def test_validate_tables_accessible_when_accessible_then_no_error_raised()
 @pytest.mark.parametrize("tables", ["*", ["*"]])
 @pytest.mark.asyncio
 async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_error_raised(
-    tables,
-):
+    tables: Union[List[str], str],
+) -> None:
     async with create_source(MySqlDataSource) as source:
         source.tables = tables
         source.get_tables_to_fetch = AsyncMock(
@@ -1105,7 +1108,7 @@ async def test_validate_tables_accessible_when_accessible_and_wildcard_then_no_e
 
 
 @pytest.mark.asyncio
-async def test_validate_tables_accessible_when_not_accessible_then_error_raised():
+async def test_validate_tables_accessible_when_not_accessible_then_error_raised() -> None:
     async with create_source(MySqlDataSource) as source:
         source.tables = ["table1"]
         source.get_tables_to_fetch = AsyncMock(return_value=["table1"])
@@ -1142,7 +1145,7 @@ async def test_validate_tables_accessible_when_not_accessible_then_error_raised(
         ),
     ],
 )
-def test_generate_id(tables, row, primary_key_columns, expected_id):
+def test_generate_id(tables: Union[str, List[str]], row: Dict[str, int], primary_key_columns: List[str], expected_id: str) -> None:
     row_id = generate_id(tables, row, primary_key_columns)
 
     assert row_id == expected_id
@@ -1186,8 +1189,8 @@ def test_generate_id(tables, row, primary_key_columns, expected_id):
 )
 @freeze_time(TIME)
 def test_row2doc(
-    row, column_names, primary_key_columns, tables, timestamp, expected_doc
-):
+    row: Tuple[int, str, int], column_names: List[str], primary_key_columns: List[str], tables: Union[str, List[str]], timestamp: Optional[datetime.datetime], expected_doc: Dict[str, Union[_ANY, str, int, List[str], datetime.datetime]]
+) -> None:
     doc = row2doc(
         row=row,
         column_names=column_names,
@@ -1225,7 +1228,7 @@ def test_row2doc(
         ),
     ],
 )
-async def test_update_query_with_pagination_attributes(query, updated_query):
+async def test_update_query_with_pagination_attributes(query: str, updated_query: str) -> None:
     client = await setup_mysql_client()
     expected_updated_query = client._update_query_with_pagination_attributes(
         query=query, offset=0, primary_key_columns=["id"]
@@ -1234,7 +1237,7 @@ async def test_update_query_with_pagination_attributes(query, updated_query):
 
 
 @pytest.mark.asyncio
-async def test_get_table_row_count_for_query(patch_connection_pool):
+async def test_get_table_row_count_for_query(patch_connection_pool: Mock) -> None:
     table_row_count_for_query = 100
     custom_query = "SELECT id, name FROM my_table WHERE marks > 100;"
     mock_cursor = MagicMock(spec=aiomysql.Cursor)
@@ -1253,7 +1256,7 @@ async def test_get_table_row_count_for_query(patch_connection_pool):
 
 
 @pytest.mark.asyncio
-async def test_yield_docs_custom_query_with_no_primary_key(patch_connection_pool):
+async def test_yield_docs_custom_query_with_no_primary_key(patch_connection_pool: Mock) -> None:
     async with create_source(MySqlDataSource) as source:
         mock_cursor = mock_cursor_fetchall()
         mock_cursor.fetchall = AsyncMock(return_value=[])
@@ -1269,7 +1272,7 @@ async def test_yield_docs_custom_query_with_no_primary_key(patch_connection_pool
 
 
 @pytest.mark.asyncio
-async def test_get_primary_key_column_names(patch_connection_pool):
+async def test_get_primary_key_column_names(patch_connection_pool: Mock) -> None:
     mock_cursor = mock_cursor_fetchall()
     mock_cursor.fetchall = AsyncMock(return_value=[("id1", None), ("id2", None)])
     patch_connection_pool.acquire.return_value = await mock_connection(mock_cursor)

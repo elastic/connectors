@@ -10,6 +10,9 @@ from asyncpg.exceptions._base import InternalClientError
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.utils import RetryStrategy, retryable
+from _asyncio import Task
+from functools import partial
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 WILDCARD = "*"
 
@@ -18,7 +21,7 @@ DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
 
-def configured_tables(tables):
+def configured_tables(tables: Union[List[str], str]) -> List[Union[str, Any]]:
     """Split a string containing a comma-seperated list of tables by comma and strip the table names.
 
     Filter out `None` and zero-length values from the tables.
@@ -43,11 +46,11 @@ def configured_tables(tables):
     )
 
 
-def is_wildcard(tables):
+def is_wildcard(tables: Union[List[str], str]) -> bool:
     return tables in (WILDCARD, [WILDCARD])
 
 
-def map_column_names(column_names, schema=None, tables=None):
+def map_column_names(column_names: List[Union[str, Any]], schema: Optional[str]=None, tables: Optional[List[str]]=None) -> List[Union[str, Any]]:
     prefix = ""
     if schema and len(schema.strip()) > 0:
         prefix += schema.strip() + "_"
@@ -56,7 +59,7 @@ def map_column_names(column_names, schema=None, tables=None):
     return [f"{prefix}{column}".lower() for column in column_names]
 
 
-def hash_id(tables, row, primary_key_columns):
+def hash_id(tables: List[str], row: Dict[str, Union[int, str]], primary_key_columns: List[str]) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:
@@ -75,11 +78,11 @@ def hash_id(tables, row, primary_key_columns):
 
 
 async def fetch(
-    cursor_func,
-    fetch_columns=False,
-    fetch_size=DEFAULT_FETCH_SIZE,
-    retry_count=DEFAULT_RETRY_COUNT,
-):
+    cursor_func: partial,
+    fetch_columns: bool=False,
+    fetch_size: int=DEFAULT_FETCH_SIZE,
+    retry_count: int=DEFAULT_RETRY_COUNT,
+) -> Iterator[Task]:
     @retryable(
         retries=retry_count,
         interval=DEFAULT_WAIT_MULTIPLIER,

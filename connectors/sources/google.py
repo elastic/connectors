@@ -11,9 +11,11 @@ from aiogoogle import Aiogoogle, AuthError, HTTPError
 from aiogoogle.auth.creds import ServiceAccountCreds
 from aiogoogle.sessions.aiohttp_session import AiohttpSession
 
-from connectors.logger import logger
+from connectors.logger import ExtraLogger, logger
 from connectors.source import ConfigurableFieldValueError
 from connectors.utils import RetryStrategy, retryable
+from _asyncio import Future, Task
+from typing import Any, Awaitable, Callable, Dict, Generator, Iterator, List, Optional, Union
 
 # Google Service Account JSON includes "universe_domain" key. That argument is not
 # supported in aiogoogle library in version 5.3.0. The "universe_domain" key is allowed in
@@ -57,11 +59,11 @@ class RetryableAiohttpSession(AiohttpSession):
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def send(self, *args, **kwargs):
+    async def send(self, *args, **kwargs) -> Generator[Awaitable, None, Dict[str, Any]]:
         return await super().send(*args, **kwargs)
 
 
-def load_service_account_json(service_account_credentials_json, google_service):
+def load_service_account_json(service_account_credentials_json: str, google_service: str) -> Dict[str, str]:
     """
     Load and parse a Google service account JSON configuration.
 
@@ -101,7 +103,7 @@ def load_service_account_json(service_account_credentials_json, google_service):
         raise ConfigurableFieldValueError(msg)
 
 
-def validate_service_account_json(service_account_credentials, google_service):
+def validate_service_account_json(service_account_credentials: str, google_service: str) -> None:
     """Validates whether service account JSON is a valid JSON string and
     checks for unexpected keys.
 
@@ -122,7 +124,7 @@ def validate_service_account_json(service_account_credentials, google_service):
 class GoogleServiceAccountClient:
     """A Google client to handle api calls made to the Google Workspace APIs using a service account."""
 
-    def __init__(self, json_credentials, api, api_version, scopes, api_timeout):
+    def __init__(self, json_credentials: Dict[str, str], api: str, api_version: str, scopes: List[Union[Any, str]], api_timeout: int) -> None:
         """Initialize the ServiceAccountCreds class using which api calls will be made.
         Args:
             json_credentials (dict): Service account credentials json.
@@ -136,15 +138,15 @@ class GoogleServiceAccountClient:
         self.api_timeout = api_timeout
         self._logger = logger
 
-    def set_logger(self, logger_):
+    def set_logger(self, logger_: ExtraLogger) -> None:
         self._logger = logger_
 
     async def api_call_paged(
         self,
-        resource,
-        method,
+        resource: str,
+        method: str,
         **kwargs,
-    ):
+    ) -> Iterator[Awaitable]:
         """Make a paged GET call to a Google Workspace API.
         Args:
             resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
@@ -171,10 +173,10 @@ class GoogleServiceAccountClient:
 
     async def api_call(
         self,
-        resource,
-        method,
+        resource: str,
+        method: str,
         **kwargs,
-    ):
+    ) -> Generator[Optional[Union[Awaitable, Task]], None, Union[str, Future]]:
         """Make a non-paged GET call to Google Workspace API.
         Args:
             resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
@@ -192,7 +194,7 @@ class GoogleServiceAccountClient:
 
         return await anext(self._execute_api_call(resource, method, _call_api, kwargs))
 
-    async def _execute_api_call(self, resource, method, call_api_func, kwargs):
+    async def _execute_api_call(self, resource: str, method: str, call_api_func: Callable, kwargs: Dict[str, Union[str, int]]) -> Iterator[Union[Awaitable, Task, None]]:
         """Execute the API call with common try/except logic.
         Args:
             resource (aiogoogle.resource.Resource): Resource name for which the API call will be made.
@@ -247,13 +249,13 @@ class GoogleServiceAccountClient:
             raise
 
 
-def remove_universe_domain(json_credentials):
+def remove_universe_domain(json_credentials: Dict[str, str]) -> None:
     if "universe_domain" in json_credentials:
         json_credentials.pop("universe_domain")
 
 
 class GoogleDirectoryClient:
-    def __init__(self, json_credentials, customer_id, subject, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, json_credentials: Dict[str, str], customer_id: str, subject: str, timeout: int=DEFAULT_TIMEOUT) -> None:
         remove_universe_domain(json_credentials)
 
         json_credentials["subject"] = subject
@@ -269,7 +271,7 @@ class GoogleDirectoryClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self._client.api_call(
                 resource="users",
@@ -295,7 +297,7 @@ class GoogleDirectoryClient:
 
 
 class GMailClient:
-    def __init__(self, json_credentials, customer_id, subject, timeout=DEFAULT_TIMEOUT):
+    def __init__(self, json_credentials: Dict[str, str], customer_id: str, subject: str, timeout: int=DEFAULT_TIMEOUT) -> None:
         remove_universe_domain(json_credentials)
 
         # This override is needed to be able to fetch the messages for the corresponding user, otherwise we get a 403 Forbidden (see: https://issuetracker.google.com/issues/290567932)
@@ -313,7 +315,7 @@ class GMailClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self._client.api_call(
                 resource="users", method="getProfile", userId=self.user
@@ -338,7 +340,7 @@ class GMailClient:
             for message in page.get("messages", []):
                 yield message
 
-    async def message(self, id_):
+    async def message(self, id_: str) -> Dict[str, str]:
         fields = "raw,internalDate"
 
         return await self._client.api_call(

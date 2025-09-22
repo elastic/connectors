@@ -7,7 +7,7 @@ from connectors import __version__
 from connectors.es.cli_client import CLIClient
 
 
-def test_overrides_user_agent_header():
+def test_overrides_user_agent_header() -> None:
     config = {
         "username": "elastic",
         "password": "changeme",

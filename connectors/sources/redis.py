@@ -17,8 +17,9 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format, hash_id, iso_utc
+from typing import Dict, List, Set, Tuple, Union
 
 PAGE_SIZE = 1000
 
@@ -35,7 +36,7 @@ class KeyType(Enum):
 class RedisClient:
     """Redis client to handle method calls made to Redis"""
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self.configuration = configuration
         self._logger = logger
         self.host = self.configuration["host"]
@@ -54,7 +55,7 @@ class RedisClient:
     def set_logger(self, logger_):
         self._logger = logger_
 
-    def store_ssl_key(self, key, suffix):
+    def store_ssl_key(self, key: str, suffix: str) -> str:
         if suffix == ".key":
             pem_certificates = get_pem_format(
                 key=key, postfix="-----END RSA PRIVATE KEY-----"
@@ -65,7 +66,7 @@ class RedisClient:
             cert.write(pem_certificates)
             return cert.name
 
-    def remove_temp_files(self):
+    def remove_temp_files(self) -> None:
         for file_path in [self.cert_file, self.key_file]:
             if os.path.exists(file_path):
                 try:
@@ -99,12 +100,12 @@ class RedisClient:
             )
         return self._redis_client
 
-    async def close(self):
+    async def close(self) -> None:
         if self._redis_client:
             await self._client.aclose()  # pyright: ignore
         self.remove_temp_files()
 
-    async def validate_database(self, db):
+    async def validate_database(self, db: int) -> bool:
         try:
             await self._client.execute_command("SELECT", db)
             return True
@@ -112,7 +113,7 @@ class RedisClient:
             self._logger.warning(f"Database {db} not found. Error: {exception}")
             return False
 
-    async def get_databases(self):
+    async def get_databases(self) -> None:
         """Returns number of databases from config_get response
 
         Returns:
@@ -149,7 +150,7 @@ class RedisClient:
         ):
             yield key
 
-    async def get_key_value(self, key, key_type):
+    async def get_key_value(self, key: str, key_type: str) -> Union[str, Dict[str, str], List[int], Set[int]]:
         """Fetch value of key for database.
 
         Args:
@@ -188,13 +189,13 @@ class RedisClient:
             )
             return ""
 
-    async def get_key_metadata(self, key):
+    async def get_key_metadata(self, key: str) -> Tuple[str, str, int]:
         key_type = await self._client.type(key)
         key_value = await self.get_key_value(key=key, key_type=key_type)
         key_size = await self._client.memory_usage(key)
         return key_type, key_value, key_size
 
-    async def ping(self):
+    async def ping(self) -> None:
         await self._client.ping()
 
 
@@ -221,17 +222,17 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "RedisDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[List[Dict[str, int]], Dict[str, List[str]], Dict[str, int], Dict[str, Union[str, int]], List[Dict[str, Union[str, int]]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             )
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules):
+    async def _remote_validation(self, advanced_rules: Union[List[Dict[str, int]], Dict[str, List[str]], Dict[str, int], Dict[str, Union[str, int]], List[Dict[str, Union[str, int]]]]) -> SyncRuleValidationResult:
         try:
             RedisAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -265,12 +266,12 @@ class RedisDataSource(BaseDataSource):
     service_type = "redis"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self.client = RedisClient(configuration=configuration)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[Dict[str, Union[bool, str]]]]]]:
         return {
             "host": {"label": "Host", "order": 1, "type": "str"},
             "port": {"label": "Port", "order": 2, "type": "int"},
@@ -336,7 +337,7 @@ class RedisDataSource(BaseDataSource):
     def advanced_rules_validators(self):
         return [RedisAdvancedRulesValidator(self)]
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client.close()
 
     async def _remote_validation(self):
@@ -375,7 +376,7 @@ class RedisDataSource(BaseDataSource):
         await super().validate_config()
         await self._remote_validation()
 
-    async def format_document(self, **kwargs):
+    async def format_document(self, **kwargs) -> Dict[str, Union[str, int]]:
         """Prepare document for database records.
 
         Returns:
@@ -393,7 +394,7 @@ class RedisDataSource(BaseDataSource):
         }
         return document
 
-    async def ping(self):
+    async def ping(self) -> None:
         try:
             await self.client.ping()
             self._logger.info("Successfully connected to Redis.")

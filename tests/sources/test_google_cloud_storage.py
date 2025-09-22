@@ -18,6 +18,9 @@ from aiogoogle.models import Request, Response
 from connectors.source import ConfigurableFieldValueError, DataSourceConfiguration
 from connectors.sources.google_cloud_storage import GoogleCloudStorageDataSource
 from tests.sources.support import create_source
+from _asyncio import Future, Task
+from io import StringIO
+from typing import Awaitable, Dict, Iterator, List, Optional, Union
 
 SERVICE_ACCOUNT_CREDENTIALS = '{"project_id": "dummy123"}'
 API_NAME = "storage"
@@ -36,7 +39,7 @@ async def create_gcs_source(use_text_extraction_service=False):
 
 
 @pytest.mark.asyncio
-async def test_empty_configuration():
+async def test_empty_configuration() -> None:
     """Tests the validity of the configurations passed to the Google Cloud source class."""
 
     configuration = DataSourceConfiguration({"service_account_credentials": ""})
@@ -50,7 +53,7 @@ async def test_empty_configuration():
 
 
 @pytest.mark.asyncio
-async def test_raise_on_invalid_configuration():
+async def test_raise_on_invalid_configuration() -> None:
     configuration = DataSourceConfiguration(
         {"service_account_credentials": "{'abc':'bcd','cd'}"}
     )
@@ -64,7 +67,7 @@ async def test_raise_on_invalid_configuration():
 
 
 @pytest.mark.asyncio
-async def test_ping_for_successful_connection(catch_stdout):
+async def test_ping_for_successful_connection(catch_stdout: StringIO) -> Iterator[Awaitable]:
     """Tests the ping functionality for ensuring connection to Google Cloud Storage."""
 
     expected_response = {
@@ -83,7 +86,7 @@ async def test_ping_for_successful_connection(catch_stdout):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_ping_for_failed_connection(catch_stdout):
+async def test_ping_for_failed_connection(catch_stdout: StringIO) -> Iterator[Optional[Task]]:
     """Tests the ping functionality when connection can not be established to Google Cloud Storage."""
 
     async with create_gcs_source() as source:
@@ -135,7 +138,7 @@ async def test_ping_for_failed_connection(catch_stdout):
         )
     ],
 )
-async def test_get_blob_document(previous_documents_list, updated_documents_list):
+async def test_get_blob_document(previous_documents_list: List[Dict[str, Union[List[Dict[str, str]], str]]], updated_documents_list: List[Dict[str, Optional[str]]]) -> None:
     """Tests the function which modifies the fetched blobs and maps the values to keys.
 
     Args:
@@ -150,7 +153,7 @@ async def test_get_blob_document(previous_documents_list, updated_documents_list
 
 
 @pytest.mark.asyncio
-async def test_fetch_buckets():
+async def test_fetch_buckets() -> Iterator[Union[Awaitable, Task]]:
     """Tests the method which lists the storage buckets available in Google Cloud Storage."""
 
     async with create_gcs_source() as source:
@@ -199,7 +202,7 @@ async def test_fetch_buckets():
 
 
 @pytest.mark.asyncio
-async def test_fetch_blobs():
+async def test_fetch_blobs() -> Iterator[Union[Awaitable, Task]]:
     """Tests the method responsible to yield blobs from Google Cloud Storage bucket."""
 
     async with create_gcs_source() as source:
@@ -246,7 +249,7 @@ async def test_fetch_blobs():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_fetch_blobs_negative():
+async def test_fetch_blobs_negative() -> Iterator[Optional[Task]]:
     """Tests the method responsible to yield blobs(negative) from Google Cloud Storage bucket."""
 
     bucket_response = {
@@ -271,7 +274,7 @@ async def test_fetch_blobs_negative():
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> Iterator[Union[Awaitable, Task]]:
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     async with create_gcs_source() as source:
@@ -322,7 +325,7 @@ async def test_get_docs():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_specific_bucket():
+async def test_get_docs_with_specific_bucket() -> Iterator[Union[Awaitable, Task]]:
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage."""
 
     async with create_gcs_source() as source:
@@ -373,7 +376,7 @@ async def test_get_docs_with_specific_bucket():
 
 
 @pytest.mark.asyncio
-async def test_get_docs_when_no_buckets_present():
+async def test_get_docs_when_no_buckets_present() -> None:
     """Tests the module responsible to fetch and yield blobs documents from Google Cloud Storage. When
     Cloud storage does not have any buckets.
     """
@@ -453,7 +456,7 @@ async def test_get_docs_when_no_buckets_present():
         ),
     ],
 )
-async def test_get_content(blob_document, expected_blob_document):
+async def test_get_content(blob_document: Dict[str, Optional[str]], expected_blob_document: Dict[str, str]) -> Iterator[Union[Future, Awaitable, Task]]:
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     async with create_gcs_source() as source:
@@ -481,7 +484,7 @@ async def test_get_content(blob_document, expected_blob_document):
     "connectors.content_extraction.ContentExtraction._check_configured",
     lambda *_: True,
 )
-async def test_get_content_with_text_extraction_enabled_adds_body():
+async def test_get_content_with_text_extraction_enabled_adds_body() -> Iterator[Union[Future, Awaitable, Task]]:
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     with (
@@ -537,7 +540,7 @@ async def test_get_content_with_text_extraction_enabled_adds_body():
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_upper_extension():
+async def test_get_content_with_upper_extension() -> Iterator[Union[Future, Awaitable, Task]]:
     """Test the module responsible for fetching the content of the file if it is extractable."""
 
     async with create_gcs_source() as source:
@@ -583,7 +586,7 @@ async def test_get_content_with_upper_extension():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_type_not_supported():
+async def test_get_content_when_type_not_supported() -> Iterator[Union[Awaitable, Task]]:
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     async with create_gcs_source() as source:
@@ -625,7 +628,7 @@ async def test_get_content_when_type_not_supported():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_file_size_is_large(catch_stdout):
+async def test_get_content_when_file_size_is_large(catch_stdout: StringIO) -> Iterator[Union[Awaitable, Task]]:
     """Test the module responsible for fetching the content of the file if it is not extractable or doit is not true."""
 
     async with create_gcs_source() as source:
@@ -668,7 +671,7 @@ async def test_get_content_when_file_size_is_large(catch_stdout):
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_api_call_for_attribute_error(catch_stdout):
+async def test_api_call_for_attribute_error(catch_stdout: StringIO) -> Iterator[Optional[Task]]:
     """Tests the api_call method when resource attribute is not present in the getattr."""
 
     async with create_gcs_source() as source:

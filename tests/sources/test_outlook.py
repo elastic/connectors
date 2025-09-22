@@ -24,6 +24,8 @@ from connectors.sources.outlook import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from _asyncio import Future, Task
+from typing import Dict, Iterator, List, Optional, Type, Union
 
 RESPONSE_CONTENT = bytes("# This is the dummy file", "utf-8")
 EXPECTED_CONTENT = {
@@ -158,27 +160,12 @@ EXPECTED_RESPONSE = [
 
 
 class MockException(Exception):
-    def __init__(self, status, message=None):
+    def __init__(self, status: int, message: None=None) -> None:
         super().__init__(message)
         self.status = status
 
-
-class CustomPath:
-    def __truediv__(self, path):
-        # Simulate hierarchy navigation and return a list of dictionaries
-        if path == "Top of Information Store":
-            return self
-        elif path == "Archive":
-            return MockOutlookObject(object_type=MAIL)
-        elif path == "Contacts":
-            return MockOutlookObject(object_type=CONTACT)
-        else:
-            msg = "Unsupported path element"
-            raise ValueError(msg)
-
-
 class MockAttachmentId:
-    def __init__(self, id):  # noqa
+    def __init__(self, id: str) -> None:  # noqa
         self.id = id
 
 
@@ -254,7 +241,7 @@ class CalendarDocument:
 
 
 class AllObjects:
-    def __init__(self, object_type):
+    def __init__(self, object_type: str) -> None:
         self.object_type = object_type
 
     def only(self, *args):
@@ -270,16 +257,16 @@ class AllObjects:
 
 
 class MockOutlookObject:
-    def __init__(self, object_type):
+    def __init__(self, object_type: str) -> None:
         self.object_type = object_type
         self.children = [self]
 
-    def all(self):  # noqa
+    def all(self) -> AllObjects:  # noqa
         return AllObjects(object_type=self.object_type)
 
 
 class MockAccount:
-    def __init__(self):
+    def __init__(self) -> None:
         self.default_timezone = "UTC"
 
         self.inbox = MockOutlookObject(object_type=MAIL)
@@ -293,7 +280,7 @@ class MockAccount:
 
 
 class MockAttachment:
-    def __init__(self, attachment_id, name, size, last_modified_time, content):
+    def __init__(self, attachment_id: MockAttachmentId, name: str, size: int, last_modified_time: str, content: bytes) -> None:
         self.attachment_id = attachment_id
         self.name = name
         self.size = size
@@ -368,6 +355,22 @@ class StreamReaderAsyncMock(AsyncMock):
         self.content = StreamReader
 
 
+class CustomPath:
+    def __truediv__(self, path: str) -> Union[MockOutlookObject, "CustomPath"]:
+        # Simulate hierarchy navigation and return a list of dictionaries
+        if path == "Top of Information Store":
+            return self
+        elif path == "Archive":
+            return MockOutlookObject(object_type=MAIL)
+        elif path == "Contacts":
+            return MockOutlookObject(object_type=CONTACT)
+        else:
+            msg = "Unsupported path element"
+            raise ValueError(msg)
+
+
+
+
 @asynccontextmanager
 async def create_outlook_source(
     data_source=OUTLOOK_CLOUD,
@@ -401,7 +404,7 @@ async def create_outlook_source(
         yield source
 
 
-def get_json_mock(mock_response, status):
+def get_json_mock(mock_response: Dict[str, Union[str, List[Dict[str, str]]]], status: int) -> AsyncMock:
     async_mock = AsyncMock()
     async_mock.__aenter__ = AsyncMock(
         return_value=JSONAsyncMock(json=mock_response, status=status)
@@ -415,7 +418,7 @@ def get_stream_reader():
     return async_mock
 
 
-def side_effect_function(url, headers):
+def side_effect_function(url: str, headers: Dict[str, str]) -> AsyncMock | None:
     """Dynamically changing return values for API calls
     Args:
         url, ssl: Params required for get call
@@ -467,8 +470,8 @@ def side_effect_function(url, headers):
     ],
 )
 async def test_validate_configuration_with_invalid_dependency_fields_raises_error(
-    extras,
-):
+    extras: Dict[str, str],
+) -> Iterator[None]:
     # Setup
     async with create_outlook_source(**extras) as source:
         # Execute
@@ -505,15 +508,15 @@ async def test_validate_configuration_with_invalid_dependency_fields_raises_erro
     ],
 )
 async def test_validate_config_with_valid_dependency_fields_does_not_raise_error(
-    extras,
-):
+    extras: Dict[str, Union[str, bool]],
+) -> Iterator[None]:
     async with create_outlook_source(**extras) as source:
         await source.validate_config()
 
 
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.Connection")
-async def test_ping_for_server(mock_connection):
+async def test_ping_for_server(mock_connection: MagicMock) -> None:
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
         True,
@@ -529,7 +532,7 @@ async def test_ping_for_server(mock_connection):
 
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.Connection")
-async def test_ping_for_server_for_failed_connection(mock_connection):
+async def test_ping_for_server_for_failed_connection(mock_connection: MagicMock) -> None:
     mock_connection_instance = mock_connection.return_value
     mock_connection_instance.search.return_value = (
         False,
@@ -545,7 +548,7 @@ async def test_ping_for_server_for_failed_connection(mock_connection):
 
 
 @pytest.mark.asyncio
-async def test_ping_for_cloud():
+async def test_ping_for_cloud() -> Iterator[None]:
     async with create_outlook_source() as source:
         with mock.patch(
             "aiohttp.ClientSession.post",
@@ -572,8 +575,8 @@ async def test_ping_for_cloud():
 )
 @mock.patch("connectors.utils.time_to_sleep_between_retries")
 async def test_ping_for_cloud_for_failed_connection(
-    mock_time_to_sleep_between_retries, raised_exception, side_effect_exception
-):
+    mock_time_to_sleep_between_retries: MagicMock, raised_exception: Union[Type[UnauthorizedException], Type[Forbidden], Type[NotFound]], side_effect_exception: MockException
+) -> Iterator[Optional[Task]]:
     mock_time_to_sleep_between_retries.return_value = 0
     async with create_outlook_source() as source:
         with mock.patch(
@@ -589,7 +592,7 @@ async def test_ping_for_cloud_for_failed_connection(
 
 
 @pytest.mark.asyncio
-async def test_get_users_for_cloud():
+async def test_get_users_for_cloud() -> Iterator[None]:
     async with create_outlook_source() as source:
         users = []
         with mock.patch(
@@ -610,7 +613,7 @@ async def test_get_users_for_cloud():
 
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.Connection")
-async def test_fetch_admin_users_negative(mock_connection):
+async def test_fetch_admin_users_negative(mock_connection: MagicMock) -> None:
     async with create_outlook_source() as source:
         mock_connection_instance = mock_connection.return_value
         mock_connection_instance.search.return_value = (
@@ -629,7 +632,7 @@ async def test_fetch_admin_users_negative(mock_connection):
 
 @pytest.mark.asyncio
 @patch("connectors.sources.outlook.Connection")
-async def test_fetch_admin_users(mock_connection):
+async def test_fetch_admin_users(mock_connection: MagicMock) -> None:
     async with create_outlook_source() as source:
         users = []
         mock_connection_instance = mock_connection.return_value
@@ -658,7 +661,7 @@ async def test_fetch_admin_users(mock_connection):
         (MOCK_ATTACHMENT_WITH_UNSUPPORTED_EXTENSION, None),
     ],
 )
-async def test_get_content(attachment, expected_content):
+async def test_get_content(attachment: MockAttachment, expected_content: Optional[Dict[str, str]]) -> Iterator[Optional[Future]]:
     async with create_outlook_source() as source:
         response = await source.get_content(
             attachment=attachment,
@@ -669,7 +672,7 @@ async def test_get_content(attachment, expected_content):
 
 
 @pytest.mark.asyncio
-async def test_get_content_with_extraction_service():
+async def test_get_content_with_extraction_service() -> Iterator[Optional[Future]]:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -698,7 +701,7 @@ async def test_get_content_with_extraction_service():
     ],
 )
 @patch("connectors.sources.outlook.Account", return_value="account")
-async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
+async def test_get_user_accounts_for_cloud(account: MagicMock, is_cloud: bool, user_response: Dict[str, Union[List[Dict[str, str]], str, Dict[str, str]]]) -> Iterator[Optional[Future]]:
     async with create_outlook_source() as source:
         source.client.is_cloud = is_cloud
         source.client._get_user_instance.get_users = AsyncIterator([user_response])
@@ -710,7 +713,7 @@ async def test_get_user_accounts_for_cloud(account, is_cloud, user_response):
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> Iterator[Optional[Future]]:
     async with create_outlook_source() as source:
         source.client._get_user_instance.get_user_accounts = AsyncIterator(
             [MockAccount()]
@@ -724,7 +727,7 @@ async def test_get_docs():
     "is_cloud, user_response",
     [(True, {"value": [{"mail": "dummy.user@gmail.com"}]})],
 )
-async def test_get_access_control(is_cloud, user_response):
+async def test_get_access_control(is_cloud: bool, user_response: Dict[str, List[Dict[str, str]]]) -> Iterator[None]:
     async with create_outlook_source() as source:
         source.client.is_cloud = is_cloud
         source.client._get_user_instance.get_users = AsyncIterator([user_response])
@@ -749,7 +752,7 @@ async def test_get_access_control(is_cloud, user_response):
         },
     ],
 )
-async def test_get_access_control_for_server(user_response):
+async def test_get_access_control_for_server(user_response: Dict[str, Union[str, Dict[str, str]]]) -> None:
     async with create_outlook_source() as source:
         source.configuration.get_field("data_source").value = "outlook_server"
         source.client._get_user_instance.get_users = AsyncIterator([user_response])

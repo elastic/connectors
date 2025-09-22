@@ -18,6 +18,7 @@ from connectors.filtering.basic_rule import (
     parse,
 )
 from connectors.utils import Format
+from typing import Dict, List, Optional, Tuple, Union
 
 BASIC_RULE_ONE_ID = "1"
 BASIC_RULE_ONE_ORDER = 1
@@ -168,7 +169,7 @@ NON_MATCHING_EXCLUDE_RULE = BasicRule(
     "increments, expected_count",
     [([1, 2, 3], 6), ([None, None, None], 0), ([2, None], 2)],
 )
-def test_rule_match_stats_increment(increments, expected_count):
+def test_rule_match_stats_increment(increments: List[Optional[int]], expected_count: int) -> None:
     rule_match_stats = RuleMatchStats(Policy.INCLUDE, 0)
 
     for increment in increments:
@@ -186,7 +187,7 @@ def test_rule_match_stats_increment(increments, expected_count):
         ([RuleMatchStats(Policy.INCLUDE, 1), RuleMatchStats(Policy.EXCLUDE, 2)], False),
     ],
 )
-def test_rule_match_stats_eq(rule_match_stats, should_equal):
+def test_rule_match_stats_eq(rule_match_stats: List[RuleMatchStats], should_equal: bool) -> None:
     if should_equal:
         assert all(stats == rule_match_stats[0] for stats in rule_match_stats[1:])
     else:
@@ -294,7 +295,7 @@ def test_rule_match_stats_eq(rule_match_stats, should_equal):
         ),
     ],
 )
-def test_engine_should_ingest(documents_should_ingest_tuples, rules, expected_stats):
+def test_engine_should_ingest(documents_should_ingest_tuples: List[Tuple[Dict[str, Union[str, float, int, datetime.datetime]], bool]], rules: Optional[Union[List[BasicRule], List[None]]], expected_stats: Dict[str, RuleMatchStats]) -> None:
     engine = BasicRuleEngine(rules)
 
     for document_should_ingest_tuple in documents_should_ingest_tuples:
@@ -310,7 +311,7 @@ def test_engine_should_ingest(documents_should_ingest_tuples, rules, expected_st
     )
 
 
-def basic_rule_one_policy_and_rule_uppercase():
+def basic_rule_one_policy_and_rule_uppercase() -> Dict[str, Union[int, str]]:
     basic_rule_uppercase = BASIC_RULE_ONE_JSON
 
     basic_rule_uppercase["rule"] = basic_rule_uppercase["rule"].upper()
@@ -319,11 +320,11 @@ def basic_rule_one_policy_and_rule_uppercase():
     return basic_rule_uppercase
 
 
-def contains_rule_one(basic_rules):
+def contains_rule_one(basic_rules: List[BasicRule]) -> bool:
     return any(is_rule_one(basic_rule) for basic_rule in basic_rules)
 
 
-def contains_rule_two(basic_rules):
+def contains_rule_two(basic_rules: List[BasicRule]) -> bool:
     return any(is_rule_two(basic_rule) for basic_rule in basic_rules)
 
 
@@ -331,11 +332,11 @@ def contains_rule_three(basic_rules):
     return any(is_rule_three(basic_rule) for basic_rule in basic_rules)
 
 
-def contains_default_rule(basic_rules):
+def contains_default_rule(basic_rules: List[BasicRule]) -> bool:
     return any(is_default_rule(basic_rule) for basic_rule in basic_rules)
 
 
-def is_rule_one(basic_rule):
+def is_rule_one(basic_rule: BasicRule) -> bool:
     return (
         basic_rule.id_ == BASIC_RULE_ONE_ID
         and basic_rule.order == BASIC_RULE_ONE_ORDER
@@ -346,7 +347,7 @@ def is_rule_one(basic_rule):
     )
 
 
-def is_rule_two(basic_rule):
+def is_rule_two(basic_rule: BasicRule) -> bool:
     return (
         basic_rule.id_ == BASIC_RULE_TWO_ID
         and basic_rule.order == BASIC_RULE_TWO_ORDER
@@ -357,7 +358,7 @@ def is_rule_two(basic_rule):
     )
 
 
-def is_rule_three(basic_rule):
+def is_rule_three(basic_rule: BasicRule) -> bool:
     return (
         basic_rule.id_ == BASIC_RULE_THREE_ID
         and basic_rule.order == BASIC_RULE_THREE_ORDER
@@ -368,7 +369,7 @@ def is_rule_three(basic_rule):
     )
 
 
-def is_default_rule(basic_rule):
+def is_default_rule(basic_rule: BasicRule) -> bool:
     return (
         basic_rule.id_ == BASIC_RULE_DEFAULT_ID
         and basic_rule.order == BASIC_RULE_DEFAULT_ORDER
@@ -390,7 +391,7 @@ def is_default_rule(basic_rule):
         ("eXcLuDe", Policy.EXCLUDE),
     ],
 )
-def test_from_string_policy_factory_method(policy_string, expected_parsed_policy):
+def test_from_string_policy_factory_method(policy_string: str, expected_parsed_policy: Policy) -> None:
     assert Policy.from_string(policy_string) == expected_parsed_policy
 
 
@@ -408,7 +409,7 @@ def test_from_string_policy_factory_method(policy_string, expected_parsed_policy
         ("exclusion", False),
     ],
 )
-def test_string_is_policy(policy_string, is_policy):
+def test_string_is_policy(policy_string: str, is_policy: bool) -> None:
     if is_policy:
         assert Policy.is_string_policy(policy_string)
     else:
@@ -437,7 +438,7 @@ def test_string_is_policy(policy_string, is_policy):
         ("sTaRtS_wItH", Rule.STARTS_WITH),
     ],
 )
-def test_from_string_rule_factory_method(rule_string, expected_parsed_rule):
+def test_from_string_rule_factory_method(rule_string: str, expected_parsed_rule: Rule) -> None:
     assert Rule.from_string(rule_string) == expected_parsed_rule
 
 
@@ -466,42 +467,42 @@ def test_from_string_rule_factory_method(rule_string, expected_parsed_rule):
         ("ends with", False),
     ],
 )
-def test_is_string_rule(rule_string, is_rule):
+def test_is_string_rule(rule_string: str, is_rule: bool) -> None:
     if is_rule:
         assert Rule.is_string_rule(rule_string)
     else:
         assert not Rule.is_string_rule(rule_string)
 
 
-def test_raise_value_error_if_argument_cannot_be_parsed_to_policy():
+def test_raise_value_error_if_argument_cannot_be_parsed_to_policy() -> None:
     with pytest.raises(ValueError):
         Policy.from_string("unknown")
 
 
-def test_raise_value_error_if_argument_cannot_be_parsed_to_rule():
+def test_raise_value_error_if_argument_cannot_be_parsed_to_rule() -> None:
     with pytest.raises(ValueError):
         Rule.from_string("unknown")
 
 
-def test_from_json():
+def test_from_json() -> None:
     basic_rule = BasicRule.from_json(BASIC_RULE_ONE_JSON)
 
     assert is_rule_one(basic_rule)
 
 
-def test_parse_none_to_empty_array():
+def test_parse_none_to_empty_array() -> None:
     raw_basic_rules = None
 
     assert len(parse(raw_basic_rules)) == 0
 
 
-def test_parse_empty_basic_rules_to_empty_array():
+def test_parse_empty_basic_rules_to_empty_array() -> None:
     raw_basic_rules = []
 
     assert len(parse(raw_basic_rules)) == 0
 
 
-def test_parse_one_raw_basic_rule_with_policy_and_rule_lowercase():
+def test_parse_one_raw_basic_rule_with_policy_and_rule_lowercase() -> None:
     raw_basic_rules = [BASIC_RULE_ONE_JSON]
 
     parsed_basic_rules = parse(raw_basic_rules)
@@ -510,7 +511,7 @@ def test_parse_one_raw_basic_rule_with_policy_and_rule_lowercase():
     assert contains_rule_one(parsed_basic_rules)
 
 
-def test_parse_one_raw_basic_rule_with_policy_and_rule_uppercase():
+def test_parse_one_raw_basic_rule_with_policy_and_rule_uppercase() -> None:
     raw_basic_rules = [basic_rule_one_policy_and_rule_uppercase()]
 
     parsed_basic_rules = parse(raw_basic_rules)
@@ -519,7 +520,7 @@ def test_parse_one_raw_basic_rule_with_policy_and_rule_uppercase():
     assert contains_rule_one(parsed_basic_rules)
 
 
-def test_parses_multiple_rules_correctly():
+def test_parses_multiple_rules_correctly() -> None:
     raw_basic_rules = [BASIC_RULE_ONE_JSON, BASIC_RULE_TWO_JSON]
 
     parsed_basic_rules = parse(raw_basic_rules)
@@ -529,7 +530,7 @@ def test_parses_multiple_rules_correctly():
     assert contains_rule_two(parsed_basic_rules)
 
 
-def test_parser_rejects_default_rule():
+def test_parser_rejects_default_rule() -> None:
     raw_basic_rules = [BASIC_RULE_DEFAULT_JSON, BASIC_RULE_ONE_JSON]
 
     parsed_basic_rules = parse(raw_basic_rules)
@@ -539,7 +540,7 @@ def test_parser_rejects_default_rule():
     assert not contains_default_rule(parsed_basic_rules)
 
 
-def test_rules_are_ordered_ascending_with_respect_to_the_order_property():
+def test_rules_are_ordered_ascending_with_respect_to_the_order_property() -> None:
     raw_basic_rules = [BASIC_RULE_ONE_JSON, BASIC_RULE_THREE_JSON, BASIC_RULE_TWO_JSON]
 
     parsed_basic_rules = parse(raw_basic_rules)
@@ -553,7 +554,7 @@ def test_rules_are_ordered_ascending_with_respect_to_the_order_property():
     assert is_rule_three(third_rule)
 
 
-def test_no_field_leads_to_no_match():
+def test_no_field_leads_to_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -566,7 +567,7 @@ def test_no_field_leads_to_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_starts_with_string_matches():
+def test_starts_with_string_matches() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -579,7 +580,7 @@ def test_starts_with_string_matches():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_starts_with_string_no_match():
+def test_starts_with_string_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -592,7 +593,7 @@ def test_starts_with_string_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_ends_with_string_matches():
+def test_ends_with_string_matches() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -605,7 +606,7 @@ def test_ends_with_string_matches():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_ends_with_string_no_match():
+def test_ends_with_string_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -618,7 +619,7 @@ def test_ends_with_string_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_contains_with_string_matches():
+def test_contains_with_string_matches() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -631,7 +632,7 @@ def test_contains_with_string_matches():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_contains_with_string_no_match():
+def test_contains_with_string_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -644,7 +645,7 @@ def test_contains_with_string_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_regex_matches():
+def test_regex_matches() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -657,7 +658,7 @@ def test_regex_matches():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_regex_no_match():
+def test_regex_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -670,7 +671,7 @@ def test_regex_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_string_match():
+def test_less_than_string_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -683,7 +684,7 @@ def test_less_than_string_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_string_no_match_string_is_smaller_lexicographically():
+def test_less_than_string_no_match_string_is_smaller_lexicographically() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -696,7 +697,7 @@ def test_less_than_string_no_match_string_is_smaller_lexicographically():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_string_no_match_string_is_the_same():
+def test_less_than_string_no_match_string_is_the_same() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -709,7 +710,7 @@ def test_less_than_string_no_match_string_is_the_same():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_integer_match():
+def test_less_than_integer_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -722,7 +723,7 @@ def test_less_than_integer_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_integer_no_match_numbers_are_the_same():
+def test_less_than_integer_no_match_numbers_are_the_same() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -735,7 +736,7 @@ def test_less_than_integer_no_match_numbers_are_the_same():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_integer_no_match_document_value_is_greater():
+def test_less_than_integer_no_match_document_value_is_greater() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -748,7 +749,7 @@ def test_less_than_integer_no_match_document_value_is_greater():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_float_match():
+def test_less_than_float_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -761,7 +762,7 @@ def test_less_than_float_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_float_no_match_numbers_are_the_same():
+def test_less_than_float_no_match_numbers_are_the_same() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -774,7 +775,7 @@ def test_less_than_float_no_match_numbers_are_the_same():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_float_no_match_document_value_is_greater():
+def test_less_than_float_no_match_document_value_is_greater() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -787,7 +788,7 @@ def test_less_than_float_no_match_document_value_is_greater():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_datetime_match():
+def test_less_than_datetime_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -800,7 +801,7 @@ def test_less_than_datetime_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_datetime_no_match_same_time():
+def test_less_than_datetime_no_match_same_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -813,7 +814,7 @@ def test_less_than_datetime_no_match_same_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_datetime_no_match_later_time():
+def test_less_than_datetime_no_match_later_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -826,7 +827,7 @@ def test_less_than_datetime_no_match_later_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_date_match():
+def test_less_than_date_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -839,7 +840,7 @@ def test_less_than_date_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_date_no_match_same_time():
+def test_less_than_date_no_match_same_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -852,7 +853,7 @@ def test_less_than_date_no_match_same_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_less_than_date_no_match_later_time():
+def test_less_than_date_no_match_later_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -865,7 +866,7 @@ def test_less_than_date_no_match_later_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_string_match():
+def test_greater_than_string_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -878,7 +879,7 @@ def test_greater_than_string_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_string_no_match_string_is_greater_lexicographically():
+def test_greater_than_string_no_match_string_is_greater_lexicographically() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -891,7 +892,7 @@ def test_greater_than_string_no_match_string_is_greater_lexicographically():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_string_no_match_string_is_the_same():
+def test_greater_than_string_no_match_string_is_the_same() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -904,7 +905,7 @@ def test_greater_than_string_no_match_string_is_the_same():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_integer_match():
+def test_greater_than_integer_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -917,7 +918,7 @@ def test_greater_than_integer_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_integer_no_match_numbers_are_the_same():
+def test_greater_than_integer_no_match_numbers_are_the_same() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -930,7 +931,7 @@ def test_greater_than_integer_no_match_numbers_are_the_same():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_integer_no_match_document_value_is_less():
+def test_greater_than_integer_no_match_document_value_is_less() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -943,7 +944,7 @@ def test_greater_than_integer_no_match_document_value_is_less():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_float_match():
+def test_greater_than_float_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -956,7 +957,7 @@ def test_greater_than_float_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_float_no_match_numbers_are_the_same():
+def test_greater_than_float_no_match_numbers_are_the_same() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -969,7 +970,7 @@ def test_greater_than_float_no_match_numbers_are_the_same():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_float_no_match_document_value_is_greater():
+def test_greater_than_float_no_match_document_value_is_greater() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -982,7 +983,7 @@ def test_greater_than_float_no_match_document_value_is_greater():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_datetime_match():
+def test_greater_than_datetime_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -995,7 +996,7 @@ def test_greater_than_datetime_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_datetime_no_match_same_time():
+def test_greater_than_datetime_no_match_same_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1008,7 +1009,7 @@ def test_greater_than_datetime_no_match_same_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_datetime_no_match_earlier_time():
+def test_greater_than_datetime_no_match_earlier_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1021,7 +1022,7 @@ def test_greater_than_datetime_no_match_earlier_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_date_match():
+def test_greater_than_date_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1034,7 +1035,7 @@ def test_greater_than_date_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_date_no_match_same_time():
+def test_greater_than_date_no_match_same_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1047,7 +1048,7 @@ def test_greater_than_date_no_match_same_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_greater_than_date_no_match_earlier_time():
+def test_greater_than_date_no_match_earlier_time() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1060,7 +1061,7 @@ def test_greater_than_date_no_match_earlier_time():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_integer_match():
+def test_equals_integer_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1073,7 +1074,7 @@ def test_equals_integer_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_integer_no_match():
+def test_equals_integer_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1086,7 +1087,7 @@ def test_equals_integer_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_float_match():
+def test_equals_float_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1099,7 +1100,7 @@ def test_equals_float_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_float_no_match():
+def test_equals_float_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1112,7 +1113,7 @@ def test_equals_float_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_string_match():
+def test_equals_string_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1125,7 +1126,7 @@ def test_equals_string_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_string_no_match():
+def test_equals_string_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1138,7 +1139,7 @@ def test_equals_string_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_datetime_match():
+def test_equals_datetime_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1151,7 +1152,7 @@ def test_equals_datetime_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_datetime_no_match():
+def test_equals_datetime_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1164,7 +1165,7 @@ def test_equals_datetime_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_date_match():
+def test_equals_date_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1177,7 +1178,7 @@ def test_equals_date_match():
     assert basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_equals_date_no_match():
+def test_equals_date_no_match() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1190,7 +1191,7 @@ def test_equals_date_no_match():
     assert not basic_rule.matches(DOCUMENT_ONE)
 
 
-def test_coerce_rule_value_to_str():
+def test_coerce_rule_value_to_str() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1208,7 +1209,7 @@ def test_coerce_rule_value_to_str():
     assert coerced_rule_value == "string"
 
 
-def test_coerce_rule_value_to_float():
+def test_coerce_rule_value_to_float() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1224,7 +1225,7 @@ def test_coerce_rule_value_to_float():
     assert coerced_rule_value == 1.0
 
 
-def test_coerce_rule_value_to_float_if_it_is_an_int():
+def test_coerce_rule_value_to_float_if_it_is_an_int() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1240,7 +1241,7 @@ def test_coerce_rule_value_to_float_if_it_is_an_int():
     assert coerced_rule_value == 1.0
 
 
-def test_coerce_rule_value_to_bool():
+def test_coerce_rule_value_to_bool() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1256,7 +1257,7 @@ def test_coerce_rule_value_to_bool():
     assert bool(coerced_rule_value)
 
 
-def test_coerce_rule_value_to_datetime_date_if_it_is_datetime():
+def test_coerce_rule_value_to_datetime_date_if_it_is_datetime() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1274,7 +1275,7 @@ def test_coerce_rule_value_to_datetime_date_if_it_is_datetime():
     assert coerced_rule_value == datetime.datetime(year=2022, month=1, day=1)
 
 
-def test_coerce_rule_value_to_datetime_date_if_it_is_date():
+def test_coerce_rule_value_to_datetime_date_if_it_is_date() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1292,7 +1293,7 @@ def test_coerce_rule_value_to_datetime_date_if_it_is_date():
     assert coerced_rule_value == datetime.datetime(year=2022, month=1, day=1)
 
 
-def test_coerce_rule_to_default_if_type_is_not_registered():
+def test_coerce_rule_to_default_if_type_is_not_registered() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1311,7 +1312,7 @@ def test_coerce_rule_to_default_if_type_is_not_registered():
     assert coerced_rule_value == "something"
 
 
-def test_coerce_rule_to_default_if_doc_value_type_not_matching_rule_value_type():
+def test_coerce_rule_to_default_if_doc_value_type_not_matching_rule_value_type() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1327,7 +1328,7 @@ def test_coerce_rule_to_default_if_doc_value_type_not_matching_rule_value_type()
     assert coerced_rule_value == "something"
 
 
-def test_is_include_for_include_policy():
+def test_is_include_for_include_policy() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1340,7 +1341,7 @@ def test_is_include_for_include_policy():
     assert basic_rule.is_include()
 
 
-def test_is_not_include_for_exclude_policy():
+def test_is_not_include_for_exclude_policy() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1353,7 +1354,7 @@ def test_is_not_include_for_exclude_policy():
     assert not basic_rule.is_include()
 
 
-def test_basic_rule_str():
+def test_basic_rule_str() -> None:
     basic_rule = BasicRule(
         id_=1,
         order=1,
@@ -1369,7 +1370,7 @@ def test_basic_rule_str():
     )
 
 
-def test_basic_rule_format():
+def test_basic_rule_format() -> None:
     basic_rule = BasicRule(
         id_=str(uuid.UUID.bytes),
         order=1,

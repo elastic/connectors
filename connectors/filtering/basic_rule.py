@@ -12,70 +12,10 @@ from dateutil.parser import ParserError, parser
 
 from connectors.logger import logger
 from connectors.utils import Format, shorten_str
+from typing import Any, Dict, List, Optional, Union
 
 IS_BOOL_FALSE = re.compile("^(false|f|no|n|off)$", re.I)
 IS_BOOL_TRUE = re.compile("^(true|t|yes|y|on)$", re.I)
-
-
-def parse(basic_rules_json):
-    """Parse a basic rules json array to BasicRule objects.
-
-    Arguments:
-    - `basic_rules_json`: an array of dicts or an empty array
-
-    The parser works in the following way:
-      - Map every raw basic rule in the json array to the corresponding BasicRule object
-      - Filter out every basic rule, which returns true for is_default_rule()
-      - Sort the result in ascending order according to their basic rule order (rules are executed in ascending order)
-    """
-    if not basic_rules_json:
-        return []
-
-    map_to_basic_rules_list = [
-        BasicRule.from_json(basic_rule_json) for basic_rule_json in basic_rules_json
-    ]
-
-    return sorted(
-        filter(
-            lambda basic_rule: not basic_rule.is_default_rule(),
-            map_to_basic_rules_list,
-        ),
-        key=lambda basic_rule: basic_rule.order,
-    )
-
-
-def to_float(value):
-    try:
-        return float(value)
-    except ValueError:
-        return value
-
-
-def to_datetime(value):
-    try:
-        date_parser = parser()
-        parsed_date_or_datetime = date_parser.parse(timestr=value)
-
-        if isinstance(parsed_date_or_datetime, datetime.datetime):
-            return parsed_date_or_datetime
-        elif isinstance(parsed_date_or_datetime, datetime.date):
-            # adds 00:00 to the date and returns datetime
-            return datetime.datetime.combine(parsed_date_or_datetime, datetime.time.min)
-
-        return value
-
-    except ParserError:
-        return value
-
-
-def to_bool(value):
-    if len(value) == 0 or IS_BOOL_FALSE.match(value):
-        return False
-
-    if IS_BOOL_TRUE.match(value):
-        return True
-
-    return value
 
 
 class RuleMatchStats:
@@ -84,11 +24,11 @@ class RuleMatchStats:
     It's an internal class and is not expected to be used outside the module.
     """
 
-    def __init__(self, policy, matches_count):
+    def __init__(self, policy: "Policy", matches_count: int) -> None:
         self.policy = policy
         self.matches_count = matches_count
 
-    def __add__(self, other):
+    def __add__(self, other: Optional[int]) -> "RuleMatchStats":
         if other is None:
             return self
 
@@ -100,7 +40,7 @@ class RuleMatchStats:
             msg = f"__add__ is not implemented for '{type(other)}'"
             raise NotImplementedError(msg)
 
-    def __eq__(self, other):
+    def __eq__(self, other: "RuleMatchStats") -> bool:
         return self.policy == other.policy and self.matches_count == other.matches_count
 
 
@@ -114,13 +54,13 @@ class BasicRuleEngine:
     It also records stats, which basic rule matched how many documents with a certain policy.
     """
 
-    def __init__(self, rules):
+    def __init__(self, rules: Optional[Union[List[None], List["BasicRule"]]]) -> None:
         self.rules = rules
         self.rules_match_stats = {
             BasicRule.DEFAULT_RULE_ID: RuleMatchStats(Policy.INCLUDE, 0)
         }
 
-    def should_ingest(self, document):
+    def should_ingest(self, document: Dict[str, Union[str, float, int, datetime.datetime]]) -> bool:
         """Check, whether a document should be ingested or not.
 
         By default, the document will be ingested, if it doesn't match any rule.
@@ -172,7 +112,7 @@ class Rule(Enum):
     RULES = [EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS, REGEX, GREATER_THAN, LESS_THAN]
 
     @classmethod
-    def is_string_rule(cls, string):
+    def is_string_rule(cls, string: str) -> bool:
         try:
             cls.from_string(string)
             return True
@@ -180,7 +120,7 @@ class Rule(Enum):
             return False
 
     @classmethod
-    def from_string(cls, string):
+    def from_string(cls, string: str) -> "Rule":
         match string.casefold():
             case "equals":
                 return Rule.EQUALS
@@ -212,7 +152,7 @@ class Policy(Enum):
     POLICIES = [INCLUDE, EXCLUDE]
 
     @classmethod
-    def is_string_policy(cls, string):
+    def is_string_policy(cls, string: str) -> bool:
         try:
             cls.from_string(string)
             return True
@@ -220,7 +160,7 @@ class Policy(Enum):
             return False
 
     @classmethod
-    def from_string(cls, string):
+    def from_string(cls, string: str) -> "Policy":
         match string.casefold():
             case "include":
                 return Policy.INCLUDE
@@ -237,7 +177,7 @@ class BasicRule:
     DEFAULT_RULE_ID = "DEFAULT"
     SHORTEN_UUID_BY = 26  # UUID: 32 random chars + 4 hyphens; keep 10 characters
 
-    def __init__(self, id_, order, policy, field, rule, value):
+    def __init__(self, id_: Union[str, int], order: int, policy: Policy, field: str, rule: Rule, value: Union[str, int, float]) -> None:
         self.id_ = id_
         self.order = order
         self.policy = policy
@@ -246,7 +186,7 @@ class BasicRule:
         self.value = value
 
     @classmethod
-    def from_json(cls, basic_rule_json):
+    def from_json(cls, basic_rule_json: Dict[str, Union[str, int]]) -> "BasicRule":
         return cls(
             id_=basic_rule_json["id"],
             order=basic_rule_json["order"],
@@ -256,7 +196,7 @@ class BasicRule:
             value=basic_rule_json["value"],
         )
 
-    def matches(self, document):
+    def matches(self, document: Dict[str, Union[str, float, int, datetime.datetime]]) -> bool:
         """Check whether a document matches the basic rule.
 
         A basic rule matches or doesn't match a document based on the following comparisons:
@@ -301,13 +241,13 @@ class BasicRule:
             case Rule.EQUALS:
                 return document_value == coerced_rule_value
 
-    def is_default_rule(self):
+    def is_default_rule(self) -> bool:
         return self.id_ == BasicRule.DEFAULT_RULE_ID
 
-    def is_include(self):
+    def is_include(self) -> bool:
         return self.policy == Policy.INCLUDE
 
-    def coerce_rule_value_based_on_document_value(self, doc_value):
+    def coerce_rule_value_based_on_document_value(self, doc_value: Any) -> Union[str, datetime.datetime, float]:
         """Coerce the value inside the basic rule.
 
         This method tries to coerce the value inside the basic rule to the type used in the document.
@@ -334,7 +274,7 @@ class BasicRule:
             )
             return str(self.value)
 
-    def __str__(self):
+    def __str__(self) -> str:
         def _format_field(key, value):
             if isinstance(value, Enum):
                 return f"{key}: {value.value}"
@@ -345,8 +285,70 @@ class BasicRule:
         ]
         return "Basic rule: " + ", ".join(formatted_fields)
 
-    def __format__(self, format_spec):
+    def __format__(self, format_spec: str) -> str:
         if format_spec == Format.SHORT.value:
             # order uses 0 based indexing
             return f"Basic rule {self.order + 1} (id: '{shorten_str(self.id_, BasicRule.SHORTEN_UUID_BY)}')"
         return str(self)
+
+
+
+def parse(basic_rules_json: Optional[List[Dict[str, Union[str, int]]]]) -> List[Union[Any, BasicRule]]:
+    """Parse a basic rules json array to BasicRule objects.
+
+    Arguments:
+    - `basic_rules_json`: an array of dicts or an empty array
+
+    The parser works in the following way:
+      - Map every raw basic rule in the json array to the corresponding BasicRule object
+      - Filter out every basic rule, which returns true for is_default_rule()
+      - Sort the result in ascending order according to their basic rule order (rules are executed in ascending order)
+    """
+    if not basic_rules_json:
+        return []
+
+    map_to_basic_rules_list = [
+        BasicRule.from_json(basic_rule_json) for basic_rule_json in basic_rules_json
+    ]
+
+    return sorted(
+        filter(
+            lambda basic_rule: not basic_rule.is_default_rule(),
+            map_to_basic_rules_list,
+        ),
+        key=lambda basic_rule: basic_rule.order,
+    )
+
+
+def to_float(value):
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def to_datetime(value: str) -> datetime.datetime:
+    try:
+        date_parser = parser()
+        parsed_date_or_datetime = date_parser.parse(timestr=value)
+
+        if isinstance(parsed_date_or_datetime, datetime.datetime):
+            return parsed_date_or_datetime
+        elif isinstance(parsed_date_or_datetime, datetime.date):
+            # adds 00:00 to the date and returns datetime
+            return datetime.datetime.combine(parsed_date_or_datetime, datetime.time.min)
+
+        return value
+
+    except ParserError:
+        return value
+
+
+def to_bool(value: str) -> bool:
+    if len(value) == 0 or IS_BOOL_FALSE.match(value):
+        return False
+
+    if IS_BOOL_TRUE.match(value):
+        return True
+
+    return value

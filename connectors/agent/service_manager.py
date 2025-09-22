@@ -13,6 +13,10 @@ from connectors.services.base import (
     get_services,
 )
 from connectors.utils import CancellableSleeps
+from _asyncio import Future
+from connectors.agent.config import ConnectorsAgentConfigurationWrapper
+from typing import Iterator, Union
+from unittest.mock import Mock
 
 logger = get_logger("service_manager")
 
@@ -28,7 +32,7 @@ class ConnectorServiceManager:
 
     """
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: Union[Mock, ConnectorsAgentConfigurationWrapper]) -> None:
         """Inits ConnectorServiceManager with shared ConnectorsAgentConfigurationWrapper.
 
         This service is supposed to be ran once, and after it's stopped or finished running it's not
@@ -41,7 +45,7 @@ class ConnectorServiceManager:
         self._running = False
         self._sleeps = CancellableSleeps()
 
-    async def run(self):
+    async def run(self) -> Iterator[Future]:
         """Starts the running loop of the service.
 
         Once started, the service attempts to run all needed connector subservices
@@ -81,7 +85,7 @@ class ConnectorServiceManager:
         finally:
             logger.info("Finished running, exiting")
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the service manager and all running subservices.
 
         Running stop attempts to gracefully shutdown all subservices currently running.
@@ -92,7 +96,7 @@ class ConnectorServiceManager:
         if self._multi_service:
             self._multi_service.shutdown(None)
 
-    def restart(self):
+    def restart(self) -> None:
         """Restart the service manager and all running subservices.
 
         Running restart attempts to gracefully shutdown all subservices currently running.

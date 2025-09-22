@@ -10,12 +10,13 @@ import pytest
 
 from connectors.es.management_client import ESManagementClient
 from connectors.kibana import main, upsert_index
+from aioresponses.core import aioresponses
 
 HERE = os.path.dirname(__file__)
 FIXTURES_DIR = os.path.abspath(os.path.join(HERE, "fixtures"))
 
 
-def mock_index_creation(index, mock_responses, hidden=True):
+def mock_index_creation(index: str, mock_responses: aioresponses, hidden: bool=True) -> None:
     url = f"http://nowhere.com:9200/{index}"
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.head(
@@ -73,7 +74,7 @@ def test_main(patch_logger, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_upsert_index(mock_responses):
+async def test_upsert_index(mock_responses: aioresponses) -> None:
     config = {"host": "http://nowhere.com:9200", "user": "tarek", "password": "blah"}
     headers = {"X-Elastic-Product": "Elasticsearch"}
     mock_responses.post(

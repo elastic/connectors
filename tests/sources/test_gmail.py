@@ -24,6 +24,7 @@ from connectors.sources.google import MessageFields, UserFields
 from connectors.utils import iso_utc
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+from typing import Dict, List, Optional, Union
 
 TIME = "2023-01-24T04:07:19"
 
@@ -36,15 +37,15 @@ DATE = "2023-01-24T04:07:19+00:00"
 JSON_CREDENTIALS = {"project_id": "dummy123"}
 
 
-def dls_feature_enabled(value):
+def dls_feature_enabled(value: Optional[bool]) -> Optional[bool]:
     return value
 
 
-def dls_rcf_enabled(value):
+def dls_rcf_enabled(value: bool) -> bool:
     return value
 
 
-def dls_enabled(value):
+def dls_enabled(value: bool) -> bool:
     return value
 
 
@@ -104,7 +105,7 @@ class TestGMailAdvancedRulesValidator:
             ),
         ],
     )
-    async def test_advanced_rules_validator(self, advanced_rules, is_valid):
+    async def test_advanced_rules_validator(self, advanced_rules: Dict[str, Union[List[str], List[int]]], is_valid: bool) -> None:
         validation_result = await GMailAdvancedRulesValidator().validate(advanced_rules)
         assert validation_result.is_valid == is_valid
 
@@ -141,13 +142,13 @@ CREATION_DATE = "2023-01-01T13:37:00"
     ],
 )
 @freeze_time(DATE)
-def test_message_doc(message, expected_doc):
+def test_message_doc(message: Dict[str, Optional[Union[int, str]]], expected_doc: Dict[str, Optional[Union[int, str]]]) -> None:
     assert _message_doc(message) == expected_doc
 
 
 async def setup_messages_and_users_apis(
-    patch_gmail_client, patch_google_directory_client, messages, users
-):
+    patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock, messages: List[Dict[str, str]], users: List[Dict[str, str]]
+) -> None:
     patch_google_directory_client.users = AsyncIterator(users)
     patch_gmail_client.messages = AsyncIterator(messages)
     patch_gmail_client.message = AsyncMock(side_effect=messages)
@@ -172,8 +173,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_ping_successful(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock()
             patch_google_directory_client.ping = AsyncMock()
@@ -186,8 +187,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_ping_gmail_client_fails(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock(
                 side_effect=Exception("Something went wrong")
@@ -199,8 +200,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_ping_google_directory_client_fails(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock()
             patch_google_directory_client.ping = AsyncMock(side_effect=Exception)
@@ -210,8 +211,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         valid_json = '{"project_id": "dummy123"}'
 
         async with create_gmail_source() as source:
@@ -231,7 +232,7 @@ class TestGMailDataSource:
                 raise AssertionError(msg) from None
 
     @pytest.mark.asyncio
-    async def test_validate_config_invalid_service_account_credentials(self):
+    async def test_validate_config_invalid_service_account_credentials(self) -> None:
         async with create_gmail_source() as source:
             source.configuration.get_field(
                 "service_account_credentials"
@@ -241,7 +242,7 @@ class TestGMailDataSource:
                 await source.validate_config()
 
     @pytest.mark.asyncio
-    async def test_validate_config_invalid_subject(self):
+    async def test_validate_config_invalid_subject(self) -> None:
         async with create_gmail_source() as source:
             source.configuration.get_field("subject").value = "invalid address"
 
@@ -250,8 +251,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid_gmail_auth(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         async with create_gmail_source() as source:
             patch_gmail_client.ping = AsyncMock(
                 side_effect=AuthError("some auth error")
@@ -266,8 +267,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid_google_directory_auth(
-        self, patch_google_directory_client
-    ):
+        self, patch_google_directory_client: AsyncMock
+    ) -> None:
         async with create_gmail_source() as source:
             patch_google_directory_client.ping = AsyncMock(
                 side_effect=AuthError("some auth error")
@@ -281,8 +282,8 @@ class TestGMailDataSource:
 
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_disabled(
-        self, patch_google_directory_client
-    ):
+        self, patch_google_directory_client: AsyncMock
+    ) -> None:
         users = [{UserFields.EMAIL.value: "user@google.com"}]
         patch_google_directory_client.users = AsyncIterator(users)
 
@@ -298,8 +299,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_access_control_with_dls_enabled(
-        self, patch_google_directory_client
-    ):
+        self, patch_google_directory_client: AsyncMock
+    ) -> None:
         email = "user@google.com"
         creation_date = iso_utc()
         users = [
@@ -328,8 +329,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_without_dls_without_filtering(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         users = [{UserFields.EMAIL.value: "user@google.com"}]
         message = {
             MessageFields.ID.value: "1",
@@ -359,8 +360,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_without_dls_with_filtering(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         users = [{UserFields.EMAIL.value: "user@google.com"}]
         message = {
             MessageFields.ID.value: "1",
@@ -398,8 +399,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_with_dls_without_filtering(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         email = "user@google.com"
         users = [{UserFields.EMAIL.value: email}]
         message = {
@@ -433,8 +434,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_with_dls_with_filtering(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         email = "user@google.com"
         users = [{UserFields.EMAIL.value: email}]
         message = {
@@ -477,8 +478,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_without_filtering_and_include_spam_and_trash(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         email = "user@google.com"
         users = [{UserFields.EMAIL.value: email}]
         message = {
@@ -512,8 +513,8 @@ class TestGMailDataSource:
     @freeze_time(TIME)
     @pytest.mark.asyncio
     async def test_get_docs_with_filtering_and_include_spam_and_trash(
-        self, patch_gmail_client, patch_google_directory_client
-    ):
+        self, patch_gmail_client: AsyncMock, patch_google_directory_client: AsyncMock
+    ) -> None:
         email = "user@google.com"
         users = [{UserFields.EMAIL.value: email}]
         message = {
@@ -562,7 +563,7 @@ class TestGMailDataSource:
         ],
     )
     @pytest.mark.asyncio
-    async def test_dls_enabled(self, feature_enabled_, rcf_enabled_, dls_enabled_):
+    async def test_dls_enabled(self, feature_enabled_: Optional[bool], rcf_enabled_: bool, dls_enabled_: bool) -> None:
         async with create_gmail_source(dls_enabled=rcf_enabled_) as source:
             # `dls_enabled` sets both the feature flag and the config value in create_gmail_source
             # -> set dls feature flag after instantiation again

@@ -21,6 +21,10 @@ from connectors.sources.notion import (
 )
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+import connectors.protocol.connectors
+from _asyncio import Task
+from _pytest.logging import LogCaptureFixture
+from typing import Dict, Iterator, List, Optional, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 DATABASE = {
@@ -208,7 +212,7 @@ URL = "https://some_example_file_url"
 
 @pytest.mark.asyncio
 @patch("connectors.sources.notion.NotionClient", autospec=True)
-async def test_ping(mock_notion_client):
+async def test_ping(mock_notion_client: MagicMock) -> None:
     mock_notion_client.return_value.fetch_owner.return_value = None
     async with create_source(
         NotionDataSource,
@@ -220,7 +224,7 @@ async def test_ping(mock_notion_client):
 
 @pytest.mark.asyncio
 @patch("connectors.sources.notion.NotionClient", autospec=True)
-async def test_ping_negative(mock_notion_client):
+async def test_ping_negative(mock_notion_client: MagicMock) -> None:
     mock_notion_client.return_value.fetch_owner.side_effect = APIResponseError(
         message="Invalid API key",
         code=401,
@@ -240,7 +244,7 @@ async def test_ping_negative(mock_notion_client):
 
 
 @pytest.mark.asyncio
-async def test_close_with_client():
+async def test_close_with_client() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="5678",
@@ -268,8 +272,8 @@ async def test_close_with_client():
 )
 @patch("connectors.sources.notion.NotionClient", autospec=True)
 async def test_get_entities(
-    mock_notion_client, entity_type, entity_titles, mock_search_results
-):
+    mock_notion_client: MagicMock, entity_type: str, entity_titles: List[str], mock_search_results: List[Dict[str, Union[Dict[str, Dict[str, List[Dict[str, Dict[str, str]]]]], List[Dict[str, str]]]]]
+) -> None:
     mock_notion_client.return_value.fetch_by_query = AsyncIterator(mock_search_results)
     async with create_source(
         NotionDataSource,
@@ -290,8 +294,8 @@ async def test_get_entities(
 )
 @patch("connectors.sources.notion.NotionClient")
 async def test_get_entities_entity_not_found(
-    mock_notion_client, entity_type, entity_titles, configuration_key
-):
+    mock_notion_client: MagicMock, entity_type: str, entity_titles: List[str], configuration_key: str
+) -> None:
     mock_search_results = {"results": []}
 
     async def mock_make_request(*args, **kwargs):
@@ -307,7 +311,7 @@ async def test_get_entities_entity_not_found(
 
 
 @pytest.mark.asyncio
-async def test_get_entities_exception():
+async def test_get_entities_exception() -> Iterator[None]:
     async with create_source(NotionDataSource) as source:
         with patch.object(NotionClient, "fetch_by_query", side_effect=Exception()):
             with pytest.raises(Exception):
@@ -315,7 +319,7 @@ async def test_get_entities_exception():
 
 
 @pytest.mark.asyncio
-async def test_get_content():
+async def test_get_content() -> Iterator[None]:
     mock_get_via_session = AsyncMock(return_value=MagicMock())
     mock_download_extract = AsyncMock(return_value=MagicMock())
     mock_file_metadata = AsyncMock(return_value=MagicMock())
@@ -332,7 +336,7 @@ async def test_get_content():
 
 
 @pytest.mark.asyncio
-async def test_get_content_when_url_is_empty():
+async def test_get_content_when_url_is_empty() -> Iterator[None]:
     async with create_source(NotionDataSource) as source:
         content = await source.get_content(FILE_BLOCK, None)
     assert content is None
@@ -347,7 +351,7 @@ async def test_get_content_when_url_is_empty():
         ("some/file/with/slashes"),
     ],
 )
-async def test_get_file_metadata(file_name):
+async def test_get_file_metadata(file_name: str) -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_get_file_metadata_key",
@@ -369,7 +373,7 @@ async def test_get_file_metadata(file_name):
 
 
 @pytest.mark.asyncio
-async def test_retrieve_and_process_blocks():
+async def test_retrieve_and_process_blocks() -> Iterator[None]:
     expected_responses_ids = [
         USER.get("id"),
         BLOCK.get("id"),
@@ -392,7 +396,7 @@ async def test_retrieve_and_process_blocks():
         assert response_ids == expected_responses_ids
 
 
-def test_generate_query():
+def test_generate_query() -> None:
     configuration = DataSourceConfiguration({})
     source = NotionDataSource(configuration=configuration)
     source.pages = ["page1", "*"]
@@ -408,7 +412,7 @@ def test_generate_query():
 
 
 @pytest.mark.asyncio
-async def test_fetch_users():
+async def test_fetch_users() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_fetch_users_key",
@@ -423,7 +427,7 @@ async def test_fetch_users():
 
 
 @pytest.mark.asyncio
-async def test_fetch_child_blocks():
+async def test_fetch_child_blocks() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_fetch_child_blocks_key",
@@ -443,7 +447,7 @@ async def test_fetch_child_blocks():
 
 
 @pytest.mark.asyncio
-async def test_fetch_comments():
+async def test_fetch_comments() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_fetch_comments_key",
@@ -461,7 +465,7 @@ async def test_fetch_comments():
 
 
 @pytest.mark.asyncio
-async def test_fetch_by_query():
+async def test_fetch_by_query() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_fetch_by_query_key",
@@ -482,7 +486,7 @@ async def test_fetch_by_query():
 
 
 @pytest.mark.asyncio
-async def test_query_database():
+async def test_query_database() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_query_database_key",
@@ -501,7 +505,7 @@ async def test_query_database():
 
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_get_via_session_client_response_error():
+async def test_get_via_session_client_response_error() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_get_via_session_client_response_error_key",
@@ -522,7 +526,7 @@ async def test_get_via_session_client_response_error():
 
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_get_via_session_with_429_status():
+async def test_get_via_session_with_429_status() -> Iterator[Optional[Task]]:
     retried_response = AsyncMock()
 
     async with create_source(
@@ -547,7 +551,7 @@ async def test_get_via_session_with_429_status():
 
 
 @pytest.mark.asyncio
-async def test_fetch_children_recursively():
+async def test_fetch_children_recursively() -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="test_fetch_children_recursively_key",
@@ -598,7 +602,7 @@ async def test_fetch_children_recursively():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering):
+async def test_get_docs_with_advanced_rules(filtering: connectors.protocol.connectors.Filter) -> Iterator[None]:
     async with create_source(
         NotionDataSource,
         notion_secret_key="secert_key",
@@ -763,7 +767,7 @@ async def test_get_docs_with_advanced_rules(filtering):
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules: Dict[str, Union[List[Dict[str, Dict[str, str]]], List[Dict[str, Union[Dict[str, List[Dict[str, Union[str, Dict[str, str]]]]], str]]], List[Dict[str, Union[str, Dict[str, str]]]], List[Dict[str, Union[Dict[str, Union[str, Dict[str, str]]], str]]], List[Dict[str, str]]]], expected_validation_result: SyncRuleValidationResult) -> Iterator[None]:
     async with create_source(
         NotionDataSource, notion_secret_key="secret_key"
     ) as source:
@@ -784,7 +788,7 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 
 
 @pytest.mark.asyncio
-async def test_async_iterate_paginated_api():
+async def test_async_iterate_paginated_api() -> Iterator[None]:
     async def mock_function(**kwargs):
         return {
             "results": [{"name": "John"}, {"name": "Alice"}],
@@ -808,7 +812,7 @@ async def test_async_iterate_paginated_api():
 
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_fetch_results_rate_limit_exceeded():
+async def test_fetch_results_rate_limit_exceeded() -> Iterator[Optional[Task]]:
     async def mock_function_with_429(**kwargs):
         mock_function_with_429.call_count += 1
 
@@ -838,7 +842,7 @@ async def test_fetch_results_rate_limit_exceeded():
 
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
 @pytest.mark.asyncio
-async def test_fetch_results_other_errors_not_retried():
+async def test_fetch_results_other_errors_not_retried() -> Iterator[Optional[Task]]:
     async def mock_function_with_other_error(**kwargs):
         raise APIResponseError(
             code="object_not_found",
@@ -865,7 +869,7 @@ async def test_fetch_results_other_errors_not_retried():
 
 
 @pytest.mark.asyncio
-async def test_original_async_iterate_paginated_api_not_called():
+async def test_original_async_iterate_paginated_api_not_called() -> Iterator[None]:
     with patch.object(NotionClient, "async_iterate_paginated_api"):
         with patch(
             "notion_client.helpers.async_iterate_paginated_api"
@@ -878,7 +882,7 @@ async def test_original_async_iterate_paginated_api_not_called():
 
 
 @pytest.mark.asyncio
-async def test_fetch_child_blocks_for_external_object_instance_page(caplog):
+async def test_fetch_child_blocks_for_external_object_instance_page(caplog: LogCaptureFixture) -> Iterator[None]:
     block_id = "block_id"
     caplog.set_level("WARNING")
     with patch(
@@ -903,7 +907,7 @@ async def test_fetch_child_blocks_for_external_object_instance_page(caplog):
 
 
 @pytest.mark.asyncio
-async def test_is_connected_property_block():
+async def test_is_connected_property_block() -> Iterator[None]:
     mocked_connected_property_block = {
         "object": "page",
         "id": "12345678-1234-1234-1234-123456789012",
@@ -943,7 +947,7 @@ async def test_is_connected_property_block():
 
 
 @pytest.mark.asyncio
-async def test_fetch_child_blocks_with_not_found_object(caplog):
+async def test_fetch_child_blocks_with_not_found_object(caplog: LogCaptureFixture) -> Iterator[None]:
     block_id = "block_id"
     caplog.set_level("WARNING")
     with patch(

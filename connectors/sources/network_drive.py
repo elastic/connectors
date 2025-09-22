@@ -44,12 +44,16 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import (
     RetryStrategy,
     iso_utc,
     retryable,
 )
+from _asyncio import Future
+from connectors.protocol.connectors import Filter
+from typing import Any, Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
+from unittest.mock import Mock
 
 ACCESS_ALLOWED_TYPE = 0
 ACCESS_DENIED_TYPE = 1
@@ -93,11 +97,11 @@ class NoLogonServerException(Exception):
     pass
 
 
-def _prefix_user(user):
+def _prefix_user(user: str) -> str:
     return prefix_identity("user", user)
 
 
-def _prefix_rid(rid):
+def _prefix_rid(rid: str) -> str:
     return prefix_identity("rid", rid)
 
 
@@ -118,10 +122,10 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source):
+    def __init__(self, source: "NASDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -129,7 +133,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
 
         return await self.validate_pattern(advanced_rules)
 
-    async def validate_pattern(self, advanced_rules):
+    async def validate_pattern(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
         try:
             NetworkDriveAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -159,7 +163,7 @@ class NetworkDriveAdvancedRulesValidator(AdvancedRulesValidator):
 
 
 class SecurityInfo:
-    def __init__(self, user, password, server):
+    def __init__(self, user: str, password: str, server: str) -> None:
         self.username = user
         self.server_ip = server
         self.password = password
@@ -195,7 +199,7 @@ class SecurityInfo:
             server_cert_validation="ignore",
         )
 
-    def parse_output(self, raw_output):
+    def parse_output(self, raw_output: Mock) -> Dict[str, str]:
         """
         Formats and extracts key-value pairs from raw output data.
 
@@ -243,16 +247,16 @@ class SecurityInfo:
 
         return formatted_result
 
-    def fetch_users(self):
+    def fetch_users(self) -> Dict[str, str]:
         users = self.session.run_ps(GET_USERS_COMMAND)
         return self.parse_output(users)
 
-    def fetch_groups(self):
+    def fetch_groups(self) -> Dict[str, str]:
         groups = self.session.run_ps(GET_GROUPS_COMMAND)
 
         return self.parse_output(groups)
 
-    def fetch_members(self, group_name):
+    def fetch_members(self, group_name: str) -> Dict[str, str]:
         members = self.session.run_ps(GET_GROUP_MEMBERS.format(name=group_name))
 
         return self.parse_output(members)
@@ -261,7 +265,7 @@ class SecurityInfo:
 class SMBSession:
     _connection = None
 
-    def __init__(self, server_ip, username, password, port):
+    def __init__(self, server_ip: str, username: str, password: str, port: None) -> None:
         self.server_ip = server_ip
         self.username = username
         self.password = password
@@ -281,7 +285,7 @@ class SMBSession:
         except SMBResponseException as exception:
             self.handle_smb_response_errors(exception=exception)
 
-    def handle_smb_response_errors(self, exception):
+    def handle_smb_response_errors(self, exception: SMBResponseException):
         msg = ""
         if exception.status == STATUS_INVALID_WORKSTATION:
             msg = f"Client does not have permission to access server: ({self.server_ip}:{self.port})."
@@ -321,7 +325,7 @@ class NASDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the connection to the Network Drive
 
         Args:
@@ -345,7 +349,7 @@ class NASDataSource(BaseDataSource):
         return SMBSession(self.server_ip, self.username, self.password, self.port)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Any]]:
         """Get the default configuration for Network Drive.
 
         Returns:
@@ -424,7 +428,7 @@ class NASDataSource(BaseDataSource):
             },
         }
 
-    def format_document(self, file):
+    def format_document(self, file: Mock) -> Dict[str, str]:
         file_details = file._dir_info.fields
         document = {
             "path": file.path,
@@ -443,7 +447,7 @@ class NASDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[SMBOSError, SMBException],
     )
-    async def traverse_diretory(self, path):
+    async def traverse_diretory(self, path: str) -> Iterator[Future]:
         self._logger.debug(
             "Fetching the directory tree from remote server and content of directory on path"
         )
@@ -484,8 +488,8 @@ class NASDataSource(BaseDataSource):
                 continue
 
     def is_match_with_previous_rules(
-        self, file_path, indexed_rules, match_with_previous_rules
-    ):
+        self, file_path: str, indexed_rules: Set[str], match_with_previous_rules: bool
+    ) -> bool:
         # Check if the file is matched with any of the previous indexed rules
         for indexed_rule in indexed_rules:
             if not match_with_previous_rules:
@@ -502,7 +506,7 @@ class NASDataSource(BaseDataSource):
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=[SMBOSError, SMBException],
     )
-    async def traverse_directory_for_syncrule(self, path, glob_pattern, indexed_rules):
+    async def traverse_directory_for_syncrule(self, path: str, glob_pattern: str, indexed_rules: Set[str]) -> Iterator[Future]:
         self._logger.debug(
             "Fetching the directory tree from remote server and content of directory on path"
         )
@@ -546,14 +550,14 @@ class NASDataSource(BaseDataSource):
                 )
                 continue
 
-    def get_base_path(self, pattern):
+    def get_base_path(self, pattern: str) -> str:
         wildcards = ["*", "?", "[", "{", "!", "^"]
         for i, char in enumerate(pattern):
             if char in wildcards:
                 return rf"\\{self.server_ip}/{pattern[:i].rsplit('/', 1)[0]}/"
         return rf"\\{self.server_ip}/{pattern}"
 
-    async def fetch_filtered_directory(self, advanced_rules):
+    async def fetch_filtered_directory(self, advanced_rules: List[Dict[str, str]]) -> Iterator[Future]:
         """
         Fetch file and folder based on advanced rules.
 
@@ -596,14 +600,14 @@ class NASDataSource(BaseDataSource):
             message = f"SMB Path:{path} should not start with '/' in the beginning."
             raise ConfigurableFieldValueError(message)
 
-    async def ping(self):
+    async def ping(self) -> Iterator[Future]:
         """Verify the connection with Network Drive"""
 
         await asyncio.to_thread(self.smb_connection.create_connection)
         await self.close()
         self._logger.info("Successfully connected to the Network Drive")
 
-    async def close(self):
+    async def close(self) -> Iterator[Future]:
         """Close all the open smb sessions"""
         if self.smb_connection.session is None:
             return
@@ -615,7 +619,7 @@ class NASDataSource(BaseDataSource):
             ),
         )
 
-    async def fetch_file_content(self, path):
+    async def fetch_file_content(self, path: str) -> None:
         """Fetches the file content from the given drive path
 
         Args:
@@ -641,7 +645,7 @@ class NASDataSource(BaseDataSource):
                 f"Cannot read the contents of file on path:{path}. Error {error}"
             )
 
-    async def get_content(self, file, timestamp=None, doit=None):
+    async def get_content(self, file: Dict[str, Union[int, str]], timestamp: None=None, doit: Optional[bool]=None) -> Optional[Dict[str, str]]:
         """Get the content for a given file
 
         Args:
@@ -676,7 +680,7 @@ class NASDataSource(BaseDataSource):
             partial(self.fetch_file_content, path=file["path"]),
         )
 
-    def list_file_permission(self, file_path, file_type, mode, access):
+    def list_file_permission(self, file_path: str, file_type: str, mode: str, access: str) -> Optional[List[str]]:
         try:
             with smbclient.open_file(
                 file_path,
@@ -695,7 +699,7 @@ class NASDataSource(BaseDataSource):
                 f"Cannot read the contents of file on path:{file_path}. Error {error}"
             )
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         if (
             self._features is None
             or not self._features.document_level_security_enabled()
@@ -705,8 +709,8 @@ class NASDataSource(BaseDataSource):
         return self.configuration["use_document_level_security"]
 
     async def _decorate_with_access_control(
-        self, document, file_path, file_type, groups_info
-    ):
+        self, document: Dict[str, str], file_path: str, file_type: str, groups_info: Dict[str, Dict[str, str]]
+    ) -> Generator[Future, None, Dict[str, Union[List[str], str]]]:
         if self._dls_enabled():
             allow_permissions, deny_permissions = await self.get_entity_permission(
                 file_path=file_path, file_type=file_type, groups_info=groups_info
@@ -717,7 +721,7 @@ class NASDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_access_control_doc(self, user, sid, groups_info=None):
+    async def _user_access_control_doc(self, user: str, sid: str, groups_info: Optional[List[str]]=None) -> Dict[str, Union[str, Dict[str, str], Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]]:
         rid = str(sid).split("-")[-1]
         prefixed_username = _prefix_user(user)
         rid_user = _prefix_rid(rid)
@@ -737,7 +741,7 @@ class NASDataSource(BaseDataSource):
             "created_at": iso_utc(),
         } | es_access_control_query(access_control)
 
-    def read_user_info_csv(self):
+    def read_user_info_csv(self) -> List[Union[Dict[str, Union[List[str], str]], Dict[str, str], Any]]:
         with open(self.identity_mappings, encoding="utf-8") as file:
             user_info = []
             try:
@@ -757,7 +761,7 @@ class NASDataSource(BaseDataSource):
                 )
             return user_info
 
-    async def fetch_groups_info(self):
+    async def fetch_groups_info(self) -> Generator[Future, None, Dict[str, Dict[str, str]]]:
         self._logger.info(
             f"Fetching all groups and members for drive at path '{self.drive_path}'"
         )
@@ -772,7 +776,7 @@ class NASDataSource(BaseDataSource):
 
         return groups_members
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -809,7 +813,7 @@ class NASDataSource(BaseDataSource):
                 msg = "Something went wrong"
                 raise requests.exceptions.ConnectionError(msg) from exception
 
-    async def get_entity_permission(self, file_path, file_type, groups_info):
+    async def get_entity_permission(self, file_path: str, file_type: str, groups_info: Dict[str, Dict[str, str]]) -> Generator[Future, None, Union[Tuple[List[str], List[str]], Tuple[List[str], List[Any]]]]:
         """Processes permissions for a network drive, focusing on key terms:
 
         - SID (Security Identifier): The unique identifier for a user or group, it undergoes revision.
@@ -871,7 +875,7 @@ class NASDataSource(BaseDataSource):
 
         return allow_permissions, deny_permissions
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: Optional[Filter]=None) -> Iterator[Future]:
         """Executes the logic to fetch files and folders in async manner.
         Yields:
             dictionary: Dictionary containing the Network Drive files and folders as documents

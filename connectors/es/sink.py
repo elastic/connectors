@@ -31,7 +31,7 @@ from connectors.config import (
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.management_client import ESManagementClient
 from connectors.filtering.basic_rule import BasicRuleEngine, parse
-from connectors.logger import logger, tracer
+from connectors.logger import ExtraLogger, logger, tracer
 from connectors.protocol import Filter, JobType
 from connectors.protocol.connectors import (
     DELETED_DOCUMENT_COUNT,
@@ -56,6 +56,14 @@ from connectors.utils import (
     retryable,
     sanitize,
 )
+import connectors.protocol.connectors
+from _asyncio import Future, Task
+from asyncio.queues import QueueFull
+from asyncio.tasks import _GatheringFuture
+from datetime import datetime
+from tests.commons import AsyncIterator
+from typing import Any, Callable, Dict, Generator, Iterator, List, Optional, Tuple, Union
+from unittest.mock import AsyncMock, Mock
 
 __all__ = ["SyncOrchestrator"]
 EXTRACTOR_ERROR = "EXTRACTOR_ERROR"
@@ -107,7 +115,7 @@ class ContentIndexDoesNotExistError(Exception):
 
 
 class ElasticsearchOverloadedError(Exception):
-    def __init__(self, cause=None):
+    def __init__(self, cause: Optional[QueueFull]=None) -> None:
         msg = "Connector was unable to ingest data into overloaded Elasticsearch. Make sure Elasticsearch instance is healthy, has enough resources and content index is healthy."
         super().__init__(msg)
         self.__cause__ = cause
@@ -135,18 +143,18 @@ class Sink:
 
     def __init__(
         self,
-        client,
-        queue,
-        chunk_size,
-        pipeline,
-        chunk_mem_size,
-        max_concurrency,
-        max_retries,
-        retry_interval,
-        error_monitor,
-        logger_=None,
-        enable_bulk_operations_logging=False,
-    ):
+        client: Optional[Union[ESManagementClient, Mock]],
+        queue: Optional[Union[MemQueue, Mock]],
+        chunk_size: int,
+        pipeline: Optional[Union[Dict[str, str], connectors.protocol.connectors.Pipeline]],
+        chunk_mem_size: int,
+        max_concurrency: int,
+        max_retries: int,
+        retry_interval: int,
+        error_monitor: Union[ErrorMonitor, Mock],
+        logger_: Optional[ExtraLogger]=None,
+        enable_bulk_operations_logging: bool=False,
+    ) -> None:
         self.client = client
         self.queue = queue
         self.chunk_size = chunk_size
@@ -162,7 +170,7 @@ class Sink:
         self._enable_bulk_operations_logging = enable_bulk_operations_logging
         self.counters = Counters()
 
-    def _bulk_op(self, doc, operation=OP_INDEX):
+    def _bulk_op(self, doc: Dict[str, Union[str, Dict[str, str]]], operation: str=OP_INDEX) -> List[Dict[str, Union[str, Dict[str, str]]]]:
         doc_id = doc["_id"]
         index = doc["_index"]
 
@@ -179,7 +187,7 @@ class Sink:
         raise TypeError(operation)
 
     @tracer.start_as_current_span("_bulk API call", slow_log=1.0)
-    async def _batch_bulk(self, operations, stats):
+    async def _batch_bulk(self, operations: List[Union[Dict[str, Dict[str, str]], Dict[str, str], Any]], stats: Dict[str, Union[Dict[str, int], Dict[Any, Any]]]) -> Generator[Task, None, Any]:
         # TODO: make this retry policy work with unified retry strategy
         @retryable(retries=self.max_retires, interval=self.retry_interval)
         async def _bulk_api_call():
@@ -214,7 +222,7 @@ class Sink:
 
         return res
 
-    def _map_id_to_op(self, operations):
+    def _map_id_to_op(self, operations: List[Union[Dict[str, Dict[str, str]], Dict[str, str], Any]]) -> Dict[str, str]:
         """
         Takes operations like: [{operation: {"_index": index, "_id": doc_id}}, doc["doc"]]
         and turns them into { doc_id : operation }
@@ -231,7 +239,7 @@ class Sink:
                         result[doc["_id"]] = op
         return result
 
-    async def _process_bulk_response(self, res, ids_to_ops, do_log=False):
+    async def _process_bulk_response(self, res: Any, ids_to_ops: Dict[str, str], do_log: bool=False) -> None:
         for item in res.get("items", []):
             if OP_INDEX in item:
                 action_item = OP_INDEX
@@ -302,7 +310,7 @@ class Sink:
                     )
                 self.counters.increment(RESULT_SUCCESS)
 
-    def _populate_stats(self, stats, res):
+    def _populate_stats(self, stats: Dict[str, Union[Dict[str, int], Dict[Any, Any]]], res: Any) -> None:
         for item in res["items"]:
             for op, data in item.items():
                 # "result" is only present in successful operations
@@ -327,16 +335,16 @@ class Sink:
             f"Sink stats - no. of docs indexed: {self.counters.get(INDEXED_DOCUMENT_COUNT)}, volume of docs indexed: {round(self.counters.get(INDEXED_DOCUMENT_VOLUME))} bytes, no. of docs deleted: {self.counters.get(DELETED_DOCUMENT_COUNT)}"
         )
 
-    def force_cancel(self):
+    def force_cancel(self) -> None:
         self._canceled = True
 
-    async def fetch_doc(self):
+    async def fetch_doc(self) -> Generator[Future, None, Union[Tuple[int, Dict[str, Union[str, Dict[str, str]]]], Tuple[int, Dict[str, str]], Dict[str, int], Tuple[int, str]]]:
         if self._canceled:
             raise ForceCanceledError
 
         return await self.queue.get()
 
-    async def run(self):
+    async def run(self) -> Iterator[Optional[Future]]:
         try:
             await self._run()
         except asyncio.CancelledError:
@@ -352,7 +360,7 @@ class Sink:
                 return
             raise
 
-    async def _run(self):
+    async def _run(self) -> Iterator[Optional[Future]]:
         """Creates batches of bulk calls given a queue of items.
 
         An item is a (size, object) tuple. Exits when the
@@ -438,17 +446,17 @@ class Extractor:
 
     def __init__(
         self,
-        client,
-        queue,
-        index,
-        filter_=None,
-        sync_rules_enabled=False,
-        content_extraction_enabled=True,
-        display_every=DEFAULT_DISPLAY_EVERY,
-        concurrent_downloads=DEFAULT_CONCURRENT_DOWNLOADS,
-        logger_=None,
-        skip_unchanged_documents=False,
-    ):
+        client: Optional[Union[ESManagementClient, AsyncMock]],
+        queue: Union[MemQueue, Mock],
+        index: str,
+        filter_: Optional[Union[Mock, connectors.protocol.connectors.Filter]]=None,
+        sync_rules_enabled: bool=False,
+        content_extraction_enabled: bool=True,
+        display_every: int=DEFAULT_DISPLAY_EVERY,
+        concurrent_downloads: int=DEFAULT_CONCURRENT_DOWNLOADS,
+        logger_: Optional[ExtraLogger]=None,
+        skip_unchanged_documents: bool=False,
+    ) -> None:
         if filter_ is None:
             filter_ = Filter()
         self.client = client
@@ -468,7 +476,7 @@ class Extractor:
         self._canceled = False
         self.skip_unchanged_documents = skip_unchanged_documents
 
-    async def _deferred_index(self, lazy_download, doc_id, doc, operation):
+    async def _deferred_index(self, lazy_download: Callable, doc_id: str, doc: Dict[str, Union[datetime, str]], operation: str) -> None:
         try:
             data = await lazy_download(doit=True, timestamp=doc[TIMESTAMP_FIELD])
 
@@ -495,16 +503,16 @@ class Extractor:
                 f"Failed to do deferred index operation for doc {doc_id}: {ex}"
             )
 
-    def force_cancel(self):
+    def force_cancel(self) -> None:
         self._canceled = True
 
-    async def put_doc(self, doc):
+    async def put_doc(self, doc: Union[str, Dict[str, Union[str, Dict[str, Union[datetime, str]]]], Dict[str, str], Dict[str, Union[str, Dict[str, str]]], Dict[str, int]]) -> None:
         if self._canceled:
             raise ForceCanceledError
 
         await self.queue.put(doc)
 
-    async def run(self, generator, job_type):
+    async def run(self, generator: Union[AsyncMock, AsyncIterator], job_type: connectors.protocol.connectors.JobType) -> Iterator[Optional[_GatheringFuture]]:
         sanitized_generator = (
             (sanitize(doc), *other) async for doc, *other in generator
         )
@@ -648,7 +656,7 @@ class Extractor:
         await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc(END_DOCS)
 
-    async def _load_existing_docs(self):
+    async def _load_existing_docs(self) -> Dict[str, Union[datetime, str]]:
         start = time.time()
         self._logger.info("Collecting local document ids")
 
@@ -798,7 +806,7 @@ class Extractor:
         await self.enqueue_docs_to_delete(existing_ids)
         await self.put_doc(END_DOCS)
 
-    async def enqueue_docs_to_delete(self, existing_ids):
+    async def enqueue_docs_to_delete(self, existing_ids: Dict[str, Union[datetime, str]]) -> None:
         self._logger.debug(f"Delete {len(existing_ids)} docs from index '{self.index}'")
         for doc_id in existing_ids.keys():
             await self.put_doc(
@@ -812,7 +820,7 @@ class Extractor:
 
     def _log_progress(
         self,
-    ):
+    ) -> None:
         self._logger.info(
             "Sync progress -- "
             f"created: {self.counters.get(CREATES_QUEUED)} | "
@@ -840,7 +848,7 @@ class SyncOrchestrator:
     - once they are both over, returns totals
     """
 
-    def __init__(self, elastic_config, logger_=None):
+    def __init__(self, elastic_config: Dict[str, str], logger_: None=None) -> None:
         self._logger = logger_ or logger
         self._logger.debug(f"SyncOrchestrator connecting to {elastic_config['host']}")
         self.es_management_client = ESManagementClient(elastic_config)
@@ -854,7 +862,7 @@ class SyncOrchestrator:
         error_monitor_config = elastic_config.get("bulk", {}).get("error_monitor", {})
         self.error_monitor = ErrorMonitor(error_monitor_config)
 
-    async def close(self):
+    async def close(self) -> Iterator[None]:
         await self.es_management_client.close()
         await self.cancel()
 
@@ -865,7 +873,7 @@ class SyncOrchestrator:
     def extract_index_or_alias(self, get_index_response, expected_index_name):
         return None
 
-    async def prepare_content_index(self, index_name, language_code=None):
+    async def prepare_content_index(self, index_name: str, language_code: Optional[str]=None) -> None:
         """Creates the index, given a mapping/settings if it does not exist."""
         self._logger.debug(f"Checking index {index_name}")
 
@@ -884,7 +892,7 @@ class SyncOrchestrator:
             )
             self._logger.info(f"Content index successfully created:  {index_name}")
 
-    def done(self):
+    def done(self) -> bool:
         """
         An async task (which this mimics) should be "done" if:
          - it was canceled
@@ -903,13 +911,13 @@ class SyncOrchestrator:
         sink_done = True if self._sink_task is None or self._sink_task.done() else False
         return extractor_done and sink_done
 
-    def _sink_task_running(self):
+    def _sink_task_running(self) -> bool:
         return self._sink_task is not None and not self._sink_task.done()
 
-    def _extractor_task_running(self):
+    def _extractor_task_running(self) -> bool:
         return self._extractor_task is not None and not self._extractor_task.done()
 
-    async def cancel(self):
+    async def cancel(self) -> None:
         if self._sink_task_running():
             self._logger.info(
                 f"Canceling the Sink task: {self._sink_task.get_name()}"  # pyright: ignore
@@ -955,7 +963,7 @@ class SyncOrchestrator:
         self._sink.force_cancel()
         self._extractor.force_cancel()
 
-    def ingestion_stats(self):
+    def ingestion_stats(self) -> Dict[str, int]:
         stats = {}
         if self._extractor is not None:
             stats.update(self._extractor.counters.to_dict())
@@ -966,7 +974,7 @@ class SyncOrchestrator:
             )  # return indexed_document_volume in number of MiB
         return stats
 
-    def get_error(self):
+    def get_error(self) -> None:
         return (
             None
             if self._extractor is None
@@ -1068,7 +1076,7 @@ class SyncOrchestrator:
         )
         self._sink_task.add_done_callback(functools.partial(self.sink_task_callback))
 
-    def sink_task_callback(self, task):
+    def sink_task_callback(self, task: Task) -> None:
         if task.cancelled():
             self._logger.warning(
                 f"{type(self._sink).__name__}: {task.get_name()} was cancelled before completion"
@@ -1080,7 +1088,7 @@ class SyncOrchestrator:
             )
             self.error = task.exception()
 
-    def extractor_task_callback(self, task):
+    def extractor_task_callback(self, task: Task) -> None:
         if task.cancelled():
             self._logger.warning(
                 f"{type(self._extractor).__name__}: {task.get_name()} was cancelled before completion"

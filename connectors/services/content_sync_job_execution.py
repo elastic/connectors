@@ -8,12 +8,14 @@ from functools import cached_property
 
 from connectors.protocol import JobStatus, JobType
 from connectors.services.job_execution import JobExecutionService
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
 
 class ContentSyncJobExecutionService(JobExecutionService):
     name = "sync_content"
 
-    def __init__(self, config):
+    def __init__(self, config: Dict[str, Union[List[Dict[str, str]], str, Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]], Dict[str, Union[float, int, str]], Dict[str, str]]]) -> None:
         super().__init__(config, "content_sync_job_execution_service")
 
     @cached_property
@@ -32,7 +34,7 @@ class ContentSyncJobExecutionService(JobExecutionService):
     def max_concurrency(self):
         return self.service_config.get("max_concurrent_content_syncs")
 
-    def should_execute(self, connector, sync_job):
+    def should_execute(self, connector: Mock, sync_job: Mock) -> bool:
         if connector.last_sync_status == JobStatus.IN_PROGRESS:
             sync_job.log_debug("Connector is still syncing content, skip the job...")
             return False

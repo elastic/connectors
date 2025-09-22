@@ -11,15 +11,16 @@ from connectors.agent.connector_record_manager import (
     ConnectorRecordManager,
 )
 from connectors.protocol import ConnectorIndex
+from typing import Dict, List, Union
 
 
 @pytest.fixture
-def mock_connector_index():
+def mock_connector_index() -> AsyncMock:
     return AsyncMock(ConnectorIndex)
 
 
 @pytest.fixture
-def mock_agent_config():
+def mock_agent_config() -> Dict[str, Union[Dict[str, str], List[Dict[str, str]]]]:
     return {
         "elasticsearch": {"host": "http://localhost:9200", "api_key": "dummy_key"},
         "connectors": [{"connector_id": "1", "service_type": "service1"}],
@@ -27,7 +28,7 @@ def mock_agent_config():
 
 
 @pytest.fixture
-def connector_record_manager(mock_connector_index):
+def connector_record_manager(mock_connector_index: AsyncMock) -> ConnectorRecordManager:
     manager = ConnectorRecordManager()
     manager.connector_index = mock_connector_index
     return manager
@@ -35,8 +36,8 @@ def connector_record_manager(mock_connector_index):
 
 @pytest.mark.asyncio
 async def test_ensure_connector_records_exist_creates_connectors_if_not_exist(
-    connector_record_manager, mock_agent_config
-):
+    connector_record_manager: ConnectorRecordManager, mock_agent_config: Dict[str, Union[Dict[str, str], List[Dict[str, str]]]]
+) -> None:
     random_connector_name_id = "1234"
 
     with patch(
@@ -60,8 +61,8 @@ async def test_ensure_connector_records_exist_creates_connectors_if_not_exist(
 
 @pytest.mark.asyncio
 async def test_ensure_connector_records_exist_connector_already_exists(
-    connector_record_manager, mock_agent_config
-):
+    connector_record_manager: ConnectorRecordManager, mock_agent_config: Dict[str, Union[Dict[str, str], List[Dict[str, str]]]]
+) -> None:
     connector_record_manager.connector_index.connector_exists = AsyncMock(
         return_value=True
     )
@@ -71,8 +72,8 @@ async def test_ensure_connector_records_exist_connector_already_exists(
 
 @pytest.mark.asyncio
 async def test_ensure_connector_records_raises_on_non_404_error(
-    connector_record_manager, mock_agent_config
-):
+    connector_record_manager: ConnectorRecordManager, mock_agent_config: Dict[str, Union[Dict[str, str], List[Dict[str, str]]]]
+) -> None:
     connector_record_manager.connector_index.connector_exists = AsyncMock(
         side_effect=Exception("Unexpected error")
     )
@@ -86,8 +87,8 @@ async def test_ensure_connector_records_raises_on_non_404_error(
 
 @pytest.mark.asyncio
 async def test_ensure_connector_records_exist_agent_config_not_ready(
-    connector_record_manager,
-):
+    connector_record_manager: ConnectorRecordManager,
+) -> None:
     invalid_config = {"connectors": []}
     await connector_record_manager.ensure_connector_records_exist(invalid_config)
     assert connector_record_manager.connector_index.connector_put.call_count == 0
@@ -95,8 +96,8 @@ async def test_ensure_connector_records_exist_agent_config_not_ready(
 
 @pytest.mark.asyncio
 async def test_ensure_connector_records_exist_exception_on_create(
-    connector_record_manager, mock_agent_config
-):
+    connector_record_manager: ConnectorRecordManager, mock_agent_config: Dict[str, Union[Dict[str, str], List[Dict[str, str]]]]
+) -> None:
     connector_record_manager.connector_index.connector_exists = AsyncMock(
         return_value=False
     )
@@ -108,15 +109,15 @@ async def test_ensure_connector_records_exist_exception_on_create(
 
 
 def test_agent_config_ready_with_valid_config(
-    connector_record_manager, mock_agent_config
-):
+    connector_record_manager: ConnectorRecordManager, mock_agent_config: Dict[str, Union[Dict[str, str], List[Dict[str, str]]]]
+) -> None:
     ready, _ = connector_record_manager._check_agent_config_ready(mock_agent_config)
     assert ready is True
 
 
 def test_agent_config_ready_with_invalid_config_missing_connectors(
-    connector_record_manager,
-):
+    connector_record_manager: ConnectorRecordManager,
+) -> None:
     invalid_config = {
         "elasticsearch": {"host": "http://localhost:9200", "api_key": "dummy_key"}
     }
@@ -125,8 +126,8 @@ def test_agent_config_ready_with_invalid_config_missing_connectors(
 
 
 def test_agent_config_ready_with_invalid_config_missing_elasticsearch(
-    connector_record_manager,
-):
+    connector_record_manager: ConnectorRecordManager,
+) -> None:
     invalid_config = {"connectors": [{"connector_id": "1", "service_type": "service1"}]}
     ready, _ = connector_record_manager._check_agent_config_ready(invalid_config)
     assert ready is False

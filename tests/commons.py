@@ -8,6 +8,7 @@ from functools import cached_property
 from random import choices
 
 from faker import Faker
+from typing import Any, List
 
 
 class AsyncIterator:
@@ -15,7 +16,7 @@ class AsyncIterator:
     Async documents generator fake class, which records the args and kwargs it was called with.
     """
 
-    def __init__(self, items, reusable=False):
+    def __init__(self, items: List[Any], reusable: bool=False) -> None:
         """
         AsyncIterator is a test-only abstraction to mock async iterables.
         By default it's usable only once: once iterated over, he iterator will not
@@ -30,10 +31,10 @@ class AsyncIterator:
         self.call_count = 0
         self.reusable = reusable
 
-    def __aiter__(self):
+    def __aiter__(self) -> "AsyncIterator":
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> Any:
         if self.i >= len(self.items):
             if self.reusable:
                 self.i = 0
@@ -43,7 +44,7 @@ class AsyncIterator:
         self.i += 1
         return item
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> "AsyncIterator":
         self.call_count += 1
 
         if args:
@@ -54,17 +55,17 @@ class AsyncIterator:
 
         return self
 
-    def assert_not_called(self):
+    def assert_not_called(self) -> None:
         if self.call_count != 0:
             msg = f"Expected zero calls. Actual number of calls: {self.call_count}."
             raise AssertionError(msg)
 
-    def assert_called_once(self):
+    def assert_called_once(self) -> None:
         if self.call_count != 1:
             msg = f"Expected one call. Actual number of calls: {self.call_count}."
             raise AssertionError(msg)
 
-    def assert_called_once_with(self, *args, **kwargs):
+    def assert_called_once_with(self, *args, **kwargs) -> None:
         self.assert_called_once()
 
         if len(self.call_args) > 0 and self.call_args[0] != args:

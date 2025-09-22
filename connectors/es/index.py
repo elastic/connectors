@@ -9,6 +9,10 @@ from elasticsearch import ApiError
 
 from connectors.es import ESClient
 from connectors.logger import logger
+from _asyncio import Task
+from elastic_transport import ApiResponse, ObjectApiResponse
+from typing import Any, Dict, Generator, Iterator, Optional, Union
+from unittest.mock import AsyncMock
 
 DEFAULT_PAGE_SIZE = 100
 
@@ -24,7 +28,7 @@ class TemporaryConnectorApiWrapper(ESClient):
     this class will be removed.
     """
 
-    def __init__(self, elastic_config):
+    def __init__(self, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
         super().__init__(elastic_config)
 
     async def connector_get(self, connector_id, include_deleted):
@@ -37,23 +41,23 @@ class TemporaryConnectorApiWrapper(ESClient):
 
 
 class ESApi(ESClient):
-    def __init__(self, elastic_config):
+    def __init__(self, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
         super().__init__(elastic_config)
         self._api_wrapper = TemporaryConnectorApiWrapper(elastic_config)
 
-    async def connector_check_in(self, connector_id):
+    async def connector_check_in(self, connector_id: str) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(self.client.connector.check_in, connector_id=connector_id)
         )
 
-    async def connector_get(self, connector_id, include_deleted=False):
+    async def connector_get(self, connector_id: str, include_deleted: bool=False) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(self._api_wrapper.connector_get, connector_id, include_deleted)
         )
 
     async def connector_put(
-        self, connector_id, service_type, connector_name, index_name, is_native
-    ):
+        self, connector_id: str, service_type: str, connector_name: str, index_name: str, is_native: bool
+    ) -> Union[ApiResponse, AsyncMock]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.put,
@@ -65,7 +69,7 @@ class ESApi(ESClient):
             )
         )
 
-    async def connector_update_scheduling(self, connector_id, scheduling):
+    async def connector_update_scheduling(self, connector_id: str, scheduling: Dict[str, Union[Dict[str, Union[bool, str]], str]]) -> Union[ApiResponse, AsyncMock]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.update_scheduling,
@@ -74,7 +78,7 @@ class ESApi(ESClient):
             )
         )
 
-    async def connector_update_configuration(self, connector_id, configuration, values):
+    async def connector_update_configuration(self, connector_id: str, configuration: Dict[str, Union[str, Dict[str, Union[str, int]], Dict[str, Union[str, bool, int]]]], values: None) -> Union[ApiResponse, AsyncMock]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.update_configuration,
@@ -85,8 +89,8 @@ class ESApi(ESClient):
         )
 
     async def connector_update_filtering_draft_validation(
-        self, connector_id, validation_result
-    ):
+        self, connector_id: str, validation_result: Dict[str, str]
+    ) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.update_filtering_validation,
@@ -95,14 +99,14 @@ class ESApi(ESClient):
             )
         )
 
-    async def connector_activate_filtering_draft(self, connector_id):
+    async def connector_activate_filtering_draft(self, connector_id: str) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.update_active_filtering, connector_id=connector_id
             )
         )
 
-    async def connector_sync_job_claim(self, sync_job_id, worker_hostname, sync_cursor):
+    async def connector_sync_job_claim(self, sync_job_id: str, worker_hostname: str, sync_cursor: Dict[str, str]) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.sync_job_claim,
@@ -112,7 +116,7 @@ class ESApi(ESClient):
             )
         )
 
-    async def connector_sync_job_create(self, connector_id, job_type, trigger_method):
+    async def connector_sync_job_create(self, connector_id: str, job_type: str, trigger_method: str) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.sync_job_post,
@@ -123,8 +127,8 @@ class ESApi(ESClient):
         )
 
     async def connector_sync_job_update_stats(
-        self, sync_job_id, ingestion_stats, metadata
-    ):
+        self, sync_job_id: str, ingestion_stats: Dict[str, str], metadata: Optional[Dict[str, str]]
+    ) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.connector.sync_job_update_stats,
@@ -147,7 +151,7 @@ class ESIndex(ESClient):
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
-    def __init__(self, index_name, elastic_config):
+    def __init__(self, index_name: str, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
         # initialize elasticsearch client
         super().__init__(elastic_config)
         self.api = ESApi(elastic_config)
@@ -157,7 +161,7 @@ class ESIndex(ESClient):
         self.index_name = index_name
         self.elastic_config = elastic_config
 
-    def _create_object(self, doc):
+    def _create_object(self, doc: Dict[str, int]):
         """
         The method must be implemented in all successor classes
 
@@ -168,11 +172,11 @@ class ESIndex(ESClient):
         """
         raise NotImplementedError
 
-    async def fetch_by_id(self, doc_id):
+    async def fetch_by_id(self, doc_id: str) -> Any:
         resp_body = await self.fetch_response_by_id(doc_id)
         return self._create_object(resp_body)
 
-    async def fetch_response_by_id(self, doc_id):
+    async def fetch_response_by_id(self, doc_id: str) -> Generator[Task, None, Dict[str, Union[str, int]]]:
         try:
             if not self.serverless:
                 await self._retrier.execute_with_retry(
@@ -192,7 +196,7 @@ class ESIndex(ESClient):
 
         return resp.body
 
-    async def index(self, doc):
+    async def index(self, doc: Dict[Any, Any]) -> ObjectApiResponse:
         return await self._retrier.execute_with_retry(
             partial(self.client.index, index=self.index_name, document=doc)
         )
@@ -208,7 +212,7 @@ class ESIndex(ESClient):
             )
         )
 
-    async def update(self, doc_id, doc, if_seq_no=None, if_primary_term=None):
+    async def update(self, doc_id: str, doc: Dict[Any, Any], if_seq_no: Optional[int]=None, if_primary_term: Optional[int]=None) -> ApiResponse:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.update,
@@ -220,7 +224,7 @@ class ESIndex(ESClient):
             )
         )
 
-    async def update_by_script(self, doc_id, script):
+    async def update_by_script(self, doc_id: str, script: Dict[str, str]) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.update,
@@ -230,7 +234,7 @@ class ESIndex(ESClient):
             )
         )
 
-    async def get_all_docs(self, query=None, sort=None, page_size=DEFAULT_PAGE_SIZE):
+    async def get_all_docs(self, query: None=None, sort: None=None, page_size: int=DEFAULT_PAGE_SIZE) -> Iterator[Task]:
         """
         Lookup for elasticsearch documents using {query}
 

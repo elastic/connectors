@@ -6,6 +6,9 @@
 from contextlib import asynccontextmanager
 
 from connectors.source import DEFAULT_CONFIGURATION, DataSourceConfiguration
+from typing import Type
+
+from connectors.sources.directory import DirectoryDataSource
 
 
 @asynccontextmanager
@@ -24,7 +27,7 @@ async def create_source(klass, **extras):
         await source.close()
 
 
-async def assert_basics(klass, field, value):
+async def assert_basics(klass: Type[DirectoryDataSource], field: str, value: str) -> None:
     config = DataSourceConfiguration(klass.get_default_configuration())
     assert config[field] == value
     async with create_source(klass) as source:

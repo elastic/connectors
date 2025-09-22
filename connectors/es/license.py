@@ -4,9 +4,11 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from connectors.protocol import JobType
+from typing import Type, Union
+from unittest.mock import Mock
 
 
-def requires_platinum_license(sync_job, connector, source_klass):
+def requires_platinum_license(sync_job: Mock, connector: Mock, source_klass: type) -> Union[bool, Mock]:
     """Returns whether this scenario requires a Platinum license"""
     return (
         sync_job.job_type == JobType.ACCESS_CONTROL

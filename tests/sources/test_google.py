@@ -24,25 +24,25 @@ CUSTOMER_ID = "customer_id"
 SUBJECT = "subject@domain.com"
 
 
-def setup_gmail_client(json_credentials=None):
+def setup_gmail_client(json_credentials: None=None) -> GMailClient:
     if json_credentials is None:
         json_credentials = JSON_CREDENTIALS
 
     return GMailClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
-def setup_google_directory_client(json_credentials=None):
+def setup_google_directory_client(json_credentials: None=None) -> GoogleDirectoryClient:
     if json_credentials is None:
         json_credentials = JSON_CREDENTIALS
 
     return GoogleDirectoryClient(json_credentials, CUSTOMER_ID, SUBJECT)
 
 
-def setup_google_service_account_client():
+def setup_google_service_account_client() -> GoogleServiceAccountClient:
     return GoogleServiceAccountClient(JSON_CREDENTIALS, "some api", "v1", [], 60)
 
 
-def test_remove_universe_domain():
+def test_remove_universe_domain() -> None:
     universe_domain = "universe_domain"
     json_credentials = {universe_domain: "some_value", "key": "value"}
     remove_universe_domain(json_credentials)
@@ -50,7 +50,7 @@ def test_remove_universe_domain():
     assert universe_domain not in json_credentials
 
 
-def test_validate_service_account_json_when_valid():
+def test_validate_service_account_json_when_valid() -> None:
     valid_service_account_credentials = '{"project_id": "dummy123"}'
 
     try:
@@ -62,7 +62,7 @@ def test_validate_service_account_json_when_valid():
         raise AssertionError(msg) from None
 
 
-def test_validate_service_account_json_when_invalid():
+def test_validate_service_account_json_when_invalid() -> None:
     invalid_service_account_credentials = '{"invalid_key": "dummy123"}'
 
     with pytest.raises(ConfigurableFieldValueError):
@@ -71,7 +71,7 @@ def test_validate_service_account_json_when_invalid():
         )
 
 
-def test_load_service_account_json_valid_unescaped():
+def test_load_service_account_json_valid_unescaped() -> None:
     valid_unescaped_service_account_credentials = '{"project_id": "dummy123"}'
 
     json_credentials = load_service_account_json(
@@ -81,7 +81,7 @@ def test_load_service_account_json_valid_unescaped():
     assert isinstance(json_credentials, dict)
 
 
-def test_load_service_account_json_valid_escaped():
+def test_load_service_account_json_valid_escaped() -> None:
     valid_unescaped_service_account_credentials = '"{\\"project_id\\": \\"dummy123\\"}"'
 
     json_credentials = load_service_account_json(
@@ -91,7 +91,7 @@ def test_load_service_account_json_valid_escaped():
     assert isinstance(json_credentials, dict)
 
 
-def test_load_service_account_json_not_valid():
+def test_load_service_account_json_not_valid() -> None:
     valid_unescaped_service_account_credentials = "xd"
 
     with pytest.raises(ConfigurableFieldValueError):
@@ -118,7 +118,7 @@ class TestGoogleServiceAccountClient:
             yield aiogoogle_client
 
     @pytest.mark.asyncio
-    async def test_api_call_paged(self, patch_service_account_creds, patch_aiogoogle):
+    async def test_api_call_paged(self, patch_service_account_creds: MagicMock, patch_aiogoogle: AsyncMock) -> None:
         items = ["a", "b", "c"]
         first_page_mock = AsyncIterator(items)
         first_page_mock.content = items
@@ -146,7 +146,7 @@ class TestGoogleServiceAccountClient:
         assert actual_items == items
 
     @pytest.mark.asyncio
-    async def test_execute_api_call(self, patch_service_account_creds, patch_aiogoogle):
+    async def test_execute_api_call(self, patch_service_account_creds: MagicMock, patch_aiogoogle: AsyncMock) -> None:
         items = ["a", "b", "c"]
 
         async def _call_api_func(*args):
@@ -175,7 +175,7 @@ class TestGoogleServiceAccountClient:
         assert actual_items == items
 
     @pytest.mark.asyncio
-    async def test_api_call(self, patch_service_account_creds, patch_aiogoogle):
+    async def test_api_call(self, patch_service_account_creds: MagicMock, patch_aiogoogle: AsyncMock) -> None:
         item = "a"
 
         google_service_account_client = setup_google_service_account_client()
@@ -206,7 +206,7 @@ class TestGoogleDirectoryClient:
             yield client
 
     @pytest.mark.asyncio
-    async def test_ping_successful(self, patch_google_service_account_client):
+    async def test_ping_successful(self, patch_google_service_account_client: AsyncMock) -> None:
         google_directory_client = setup_google_directory_client()
         patch_google_service_account_client.api_call = AsyncMock()
 
@@ -217,7 +217,7 @@ class TestGoogleDirectoryClient:
             raise AssertionError(msg) from None
 
     @pytest.mark.asyncio
-    async def test_ping_failed(self, patch_google_service_account_client):
+    async def test_ping_failed(self, patch_google_service_account_client: AsyncMock) -> None:
         google_directory_client = setup_google_directory_client()
         patch_google_service_account_client.api_call = AsyncMock(
             side_effect=Exception()
@@ -227,7 +227,7 @@ class TestGoogleDirectoryClient:
             await google_directory_client.ping()
 
     @pytest.mark.asyncio
-    async def test_users(self, patch_google_service_account_client):
+    async def test_users(self, patch_google_service_account_client: AsyncMock) -> None:
         google_directory_client = setup_google_directory_client()
 
         users = [
@@ -250,8 +250,8 @@ class TestGoogleDirectoryClient:
         assert actual_users == users[0]["users"]
 
     def test_subject_added_to_service_account_credentials(
-        self, patch_google_service_account_client
-    ):
+        self, patch_google_service_account_client: AsyncMock
+    ) -> None:
         json_credentials = {}
         setup_google_directory_client(json_credentials=json_credentials)
 
@@ -269,7 +269,7 @@ class TestGMailClient:
             yield client
 
     @pytest.mark.asyncio
-    async def test_ping_successful(self, patch_google_service_account_client):
+    async def test_ping_successful(self, patch_google_service_account_client: AsyncMock) -> None:
         gmail_client = setup_gmail_client()
         patch_google_service_account_client.api_call = AsyncMock()
 
@@ -280,7 +280,7 @@ class TestGMailClient:
             raise AssertionError(msg) from None
 
     @pytest.mark.asyncio
-    async def test_ping_failed(self, patch_google_service_account_client):
+    async def test_ping_failed(self, patch_google_service_account_client: AsyncMock) -> None:
         gmail_client = setup_gmail_client()
         patch_google_service_account_client.api_call = AsyncMock(
             side_effect=Exception()
@@ -290,7 +290,7 @@ class TestGMailClient:
             await gmail_client.ping()
 
     @pytest.mark.asyncio
-    async def test_messages(self, patch_google_service_account_client):
+    async def test_messages(self, patch_google_service_account_client: AsyncMock) -> None:
         gmail_client = setup_gmail_client()
 
         messages = [
@@ -314,7 +314,7 @@ class TestGMailClient:
         assert actual_messages == messages[0]["messages"]
 
     @pytest.mark.asyncio
-    async def test_message(self, patch_google_service_account_client):
+    async def test_message(self, patch_google_service_account_client: AsyncMock) -> None:
         gmail_client = setup_gmail_client()
 
         message = {"raw": "some content", "internalDate": "some date"}
@@ -325,8 +325,8 @@ class TestGMailClient:
         assert actual_message == message
 
     def test_subject_added_to_service_account_credentials(
-        self, patch_google_service_account_client
-    ):
+        self, patch_google_service_account_client: AsyncMock
+    ) -> None:
         json_credentials = {}
         setup_gmail_client(json_credentials=json_credentials)
 

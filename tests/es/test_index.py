@@ -9,6 +9,9 @@ import pytest
 from elasticsearch import ApiError, ConflictError
 
 from connectors.es.index import DocumentNotFoundError, ESApi, ESIndex
+from _asyncio import Task
+from aioresponses.core import aioresponses
+from typing import Dict, Iterator, Optional
 
 headers = {"X-Elastic-Product": "Elasticsearch"}
 config = {
@@ -20,7 +23,7 @@ index_name = "fake_index"
 
 
 @pytest.mark.asyncio
-async def test_es_index_create_object_error(mock_responses):
+async def test_es_index_create_object_error(mock_responses: aioresponses) -> Iterator[None]:
     index = ESIndex(index_name, config)
     mock_responses.post(
         f"http://nowhere.com:9200/{index_name}/_refresh", headers=headers, status=200
@@ -44,12 +47,12 @@ class FakeDocument:
 
 
 class FakeIndex(ESIndex):
-    def _create_object(self, doc):
+    def _create_object(self, doc: Dict[str, str]) -> FakeDocument:
         return FakeDocument()
 
 
 @pytest.mark.asyncio
-async def test_fetch_by_id(mock_responses):
+async def test_fetch_by_id(mock_responses: aioresponses) -> Iterator[None]:
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -70,7 +73,7 @@ async def test_fetch_by_id(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_fetch_response_by_id(mock_responses):
+async def test_fetch_response_by_id(mock_responses: aioresponses) -> Iterator[None]:
     doc_id = "1"
     index = ESIndex(index_name, config)
     doc_source = {
@@ -98,7 +101,7 @@ async def test_fetch_response_by_id(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_fetch_response_by_id_not_found(mock_responses):
+async def test_fetch_response_by_id_not_found(mock_responses: aioresponses) -> Iterator[None]:
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -118,7 +121,7 @@ async def test_fetch_response_by_id_not_found(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_fetch_response_by_id_api_error(mock_responses, patch_sleep):
+async def test_fetch_response_by_id_api_error(mock_responses: aioresponses, patch_sleep: AsyncMock) -> Iterator[Optional[Task]]:
     doc_id = "1"
     index = FakeIndex(index_name, config)
     mock_responses.post(
@@ -139,7 +142,7 @@ async def test_fetch_response_by_id_api_error(mock_responses, patch_sleep):
 
 
 @pytest.mark.asyncio
-async def test_index(mock_responses):
+async def test_index(mock_responses: aioresponses) -> Iterator[None]:
     doc_id = "1"
     index = ESIndex(index_name, config)
     mock_responses.post(
@@ -156,7 +159,7 @@ async def test_index(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_update(mock_responses):
+async def test_update(mock_responses: aioresponses) -> Iterator[None]:
     doc_id = "1"
     index = ESIndex(index_name, config)
     mock_responses.post(
@@ -172,7 +175,7 @@ async def test_update(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_update_with_concurrency_control(mock_responses):
+async def test_update_with_concurrency_control(mock_responses: aioresponses) -> Iterator[None]:
     doc_id = "1"
     index = ESIndex(index_name, config)
     mock_responses.post(
@@ -188,7 +191,7 @@ async def test_update_with_concurrency_control(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_update_by_script():
+async def test_update_by_script() -> None:
     doc_id = "1"
     script = {"source": ""}
     index = ESIndex(index_name, config)
@@ -226,7 +229,7 @@ async def test_get_all_docs_with_error(mock_responses, patch_logger, patch_sleep
 
 
 @pytest.mark.asyncio
-async def test_get_all_docs(mock_responses):
+async def test_get_all_docs(mock_responses: aioresponses) -> Iterator[None]:
     index = FakeIndex(index_name, config)
     total = 3
     mock_responses.post(
@@ -258,7 +261,7 @@ async def test_get_all_docs(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_check_in():
+async def test_es_api_connector_check_in() -> None:
     connector_id = "id"
 
     es_api = ESApi(elastic_config=config)
@@ -270,7 +273,7 @@ async def test_es_api_connector_check_in():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_put():
+async def test_es_api_connector_put() -> None:
     connector_id = "id"
     service_type = "service_type"
     connector_name = "connector_name"
@@ -294,7 +297,7 @@ async def test_es_api_connector_put():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_update_scheduling():
+async def test_es_api_connector_update_scheduling() -> None:
     connector_id = "id"
     scheduling = {"enabled": "true", "interval": "0 4 5 1 *"}
 
@@ -309,7 +312,7 @@ async def test_es_api_connector_update_scheduling():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_update_configuration():
+async def test_es_api_connector_update_configuration() -> None:
     connector_id = "id"
     configuration = {"config_key": "config_value"}
     values = {}
@@ -325,7 +328,7 @@ async def test_es_api_connector_update_configuration():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_update_filtering_draft_validation():
+async def test_es_api_connector_update_filtering_draft_validation() -> None:
     connector_id = "id"
     validation_result = {"validation": "result"}
 
@@ -342,7 +345,7 @@ async def test_es_api_connector_update_filtering_draft_validation():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_activate_filtering_draft():
+async def test_es_api_connector_activate_filtering_draft() -> None:
     connector_id = "id"
 
     es_api = ESApi(elastic_config=config)
@@ -356,7 +359,7 @@ async def test_es_api_connector_activate_filtering_draft():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_sync_job_create():
+async def test_es_api_connector_sync_job_create() -> None:
     connector_id = "id"
     job_type = "full"
     trigger_method = "on_demand"
@@ -372,7 +375,7 @@ async def test_es_api_connector_sync_job_create():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_get():
+async def test_es_api_connector_get() -> None:
     connector_id = "id"
     include_deleted = False
 
@@ -387,7 +390,7 @@ async def test_es_api_connector_get():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_sync_job_claim():
+async def test_es_api_connector_sync_job_claim() -> None:
     sync_job_id = "sync_job_id_test"
     worker_hostname = "workerhostname"
     sync_cursor = {"foo": "bar"}
@@ -405,7 +408,7 @@ async def test_es_api_connector_sync_job_claim():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_sync_job_update_stats_with_metadata():
+async def test_es_api_connector_sync_job_update_stats_with_metadata() -> None:
     sync_job_id = "sync_job_id_test"
     ingestion_stats = {"ingestion": "stat"}
     metadata = {"meta": "data"}
@@ -421,7 +424,7 @@ async def test_es_api_connector_sync_job_update_stats_with_metadata():
 
 
 @pytest.mark.asyncio
-async def test_es_api_connector_sync_job_update_stats_metadata_as_none():
+async def test_es_api_connector_sync_job_update_stats_metadata_as_none() -> None:
     sync_job_id = "sync_job_id_test"
     ingestion_stats = {"ingestion": "stat"}
     metadata = None  # make sure metadata gets passed as '{}' if undefined

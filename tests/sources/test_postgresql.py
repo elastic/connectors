@@ -24,6 +24,10 @@ from connectors.sources.postgresql import (
 )
 from connectors.utils import iso_utc
 from tests.sources.support import create_source
+import connectors.protocol.connectors
+from _asyncio import Task
+from sqlalchemy.sql.elements import TextClause
+from typing import Any, Dict, Iterator, List, Tuple, Union
 
 ADVANCED_SNIPPET = "advanced_snippet"
 POSTGRESQL_CONNECTION_STRING = (
@@ -56,7 +60,7 @@ async def create_postgresql_source():
 class MockSsl:
     """This class contains methods which returns dummy ssl context"""
 
-    def load_verify_locations(self, cadata):
+    def load_verify_locations(self, cadata: str) -> None:
         """This method verify locations"""
         pass
 
@@ -64,15 +68,15 @@ class MockSsl:
 class ConnectionAsync:
     """This class creates dummy connection with database and return dummy cursor"""
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ConnectionAsync":
         """Make a dummy database connection and return it"""
         return self
 
-    async def __aexit__(self, exception_type, exception_value, exception_traceback):
+    async def __aexit__(self, exception_type: None, exception_value: None, exception_traceback: None) -> None:
         """Make sure the dummy database connection gets closed"""
         pass
 
-    async def execute(self, query):
+    async def execute(self, query: TextClause) -> "CursorAsync":
         """This method returns dummy cursor"""
         return CursorAsync(query=query)
 
@@ -84,12 +88,12 @@ class CursorAsync:
         """Make a dummy database connection and return it"""
         return self
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, **kw) -> None:
         """Setup dummy cursor"""
         self.query = kw["query"]
         self.first_call = True
 
-    def keys(self):
+    def keys(self) -> List[str]:
         """Return Columns of table
 
         Returns:
@@ -97,7 +101,7 @@ class CursorAsync:
         """
         return ["ids", "names"]
 
-    def fetchmany(self, size):
+    def fetchmany(self, size: int) -> List[Union[Tuple[int, str], Tuple[str], Tuple[int]]]:
         """This method returns response of fetchmany
 
         Args:
@@ -155,7 +159,7 @@ class CursorAsync:
         pass
 
 
-def test_get_connect_args():
+def test_get_connect_args() -> None:
     """This function test _get_connect_args with dummy certificate"""
     # Setup
     client = PostgreSQLClient(
@@ -177,7 +181,7 @@ def test_get_connect_args():
 
 
 @pytest.mark.asyncio
-async def test_postgresql_ping():
+async def test_postgresql_ping() -> None:
     # Setup
     async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
@@ -187,7 +191,7 @@ async def test_postgresql_ping():
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> None:
     async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
             await source.ping()
@@ -195,7 +199,7 @@ async def test_ping():
 
 @pytest.mark.asyncio
 @patch("connectors.utils.time_to_sleep_between_retries", Mock(return_value=0))
-async def test_ping_negative():
+async def test_ping_negative() -> Iterator[Task]:
     with pytest.raises(Exception):
         async with create_source(PostgreSQLDataSource, port=5432) as source:
             with patch.object(AsyncEngine, "connect", side_effect=Exception()):
@@ -285,7 +289,7 @@ async def test_ping_negative():
     ],
 )
 @pytest.mark.asyncio
-async def test_advanced_rules_validation(advanced_rules, expected_validation_result):
+async def test_advanced_rules_validation(advanced_rules: Union[List[Dict[str, Union[List[str], str]]], List[Dict[str, str]]], expected_validation_result: SyncRuleValidationResult) -> None:
     async with create_source(
         PostgreSQLDataSource, database="xe", tables="*", schema="public", port=5432
     ) as source:
@@ -406,8 +410,8 @@ async def test_advanced_rules_validation(advanced_rules, expected_validation_res
 )
 @pytest.mark.asyncio
 async def test_advanced_rules_validation_when_id_in_source_available(
-    advanced_rules, id_in_source, expected_validation_result
-):
+    advanced_rules: List[Dict[str, Union[List[str], str]]], id_in_source: List[Union[str, Any]], expected_validation_result: SyncRuleValidationResult
+) -> None:
     async with create_source(
         PostgreSQLDataSource, database="xe", tables="*", schema="public", port=5432
     ) as source:
@@ -421,7 +425,7 @@ async def test_advanced_rules_validation_when_id_in_source_available(
 
 @freeze_time(TIME)
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> None:
     # Setup
     async with create_postgresql_source() as source:
         with patch.object(AsyncEngine, "connect", return_value=ConnectionAsync()):
@@ -552,7 +556,7 @@ async def test_get_docs():
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_with_advanced_rules(filtering, expected_response):
+async def test_get_docs_with_advanced_rules(filtering: connectors.protocol.connectors.Filter, expected_response: List[Dict[str, Union[int, str, List[str]]]]) -> None:
     async with create_source(
         PostgreSQLDataSource,
         database="xe",
@@ -569,7 +573,7 @@ async def test_get_docs_with_advanced_rules(filtering, expected_response):
             assert actual_response == expected_response
 
 
-def test_table_primary_key_query():
+def test_table_primary_key_query() -> None:
     """Test that the table_primary_key method generates the correct SQL query"""
     # Setup
     queries = PostgreSQLQueries()
@@ -594,7 +598,7 @@ def test_table_primary_key_query():
     assert query == expected_query
 
 
-def test_table_primary_key_query_with_special_characters():
+def test_table_primary_key_query_with_special_characters() -> None:
     """Test that the table_primary_key method handles special characters in schema and table names"""
     # Setup
     queries = PostgreSQLQueries()
@@ -620,7 +624,7 @@ def test_table_primary_key_query_with_special_characters():
 
 
 @pytest.mark.asyncio
-async def test_get_table_primary_key():
+async def test_get_table_primary_key() -> None:
     """Test that the get_table_primary_key method correctly processes query results"""
     # Setup
     async with create_postgresql_source() as source:

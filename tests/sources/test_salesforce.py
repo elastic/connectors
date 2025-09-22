@@ -34,6 +34,11 @@ from connectors.sources.salesforce import (
     _prefix_user_id,
 )
 from tests.sources.support import create_source
+import aioresponses.core
+import connectors.protocol.connectors
+from _asyncio import Future, Task
+from typing import Any, Dict, Iterator, List, Optional, Union
+from yarl import URL
 
 TEST_DOMAIN = "fake"
 CONTENT_VERSION_ID = "content_version_id"
@@ -680,7 +685,7 @@ async def create_salesforce_source(
         yield source
 
 
-def salesforce_query_callback(url, **kwargs):
+def salesforce_query_callback(url: URL, **kwargs) -> aioresponses.core.CallbackResult:
     """Dynamically returns a payload based on query
     and adds ContentDocumentLinks to each payload
     """
@@ -749,7 +754,7 @@ def generate_account_doc(identifier):
     }
 
 
-def test_get_default_configuration():
+def test_get_default_configuration() -> None:
     config = DataSourceConfiguration(SalesforceDataSource.get_default_configuration())
     expected_fields = [
         "client_id",
@@ -798,8 +803,8 @@ def test_get_default_configuration():
     ],
 )
 async def test_validate_config_missing_fields_then_raise(
-    domain, client_id, client_secret, standard_objects_to_sync, sync_custom_objects
-):
+    domain: str, client_id: str, client_secret: str, standard_objects_to_sync: Union[List[str], str], sync_custom_objects: Union[bool, str]
+) -> Iterator[None]:
     async with create_source(
         SalesforceDataSource,
         domain=domain,
@@ -813,7 +818,7 @@ async def test_validate_config_missing_fields_then_raise(
 
 
 @pytest.mark.asyncio
-async def test_ping_with_successful_connection(mock_responses):
+async def test_ping_with_successful_connection(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         mock_responses.head(TEST_BASE_URL, status=200)
 
@@ -821,7 +826,7 @@ async def test_ping_with_successful_connection(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_generate_token_with_successful_connection(mock_responses):
+async def test_generate_token_with_successful_connection(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         response_payload = {
             "access_token": "foo",
@@ -841,8 +846,8 @@ async def test_generate_token_with_successful_connection(mock_responses):
 
 @pytest.mark.asyncio
 async def test_generate_token_with_bad_domain_raises_error(
-    patch_sleep, mock_responses, patch_cancellable_sleeps
-):
+    patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses, patch_cancellable_sleeps: AsyncMock
+) -> Iterator[None]:
     async with create_salesforce_source(mock_token=False) as source:
         mock_responses.post(
             f"{TEST_BASE_URL}/services/oauth2/token", status=500, repeat=True
@@ -853,8 +858,8 @@ async def test_generate_token_with_bad_domain_raises_error(
 
 @pytest.mark.asyncio
 async def test_generate_token_with_bad_credentials_raises_error(
-    patch_sleep, mock_responses, patch_cancellable_sleeps
-):
+    patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses, patch_cancellable_sleeps: AsyncMock
+) -> Iterator[None]:
     async with create_salesforce_source(mock_token=False) as source:
         mock_responses.post(
             f"{TEST_BASE_URL}/services/oauth2/token",
@@ -875,8 +880,8 @@ async def test_generate_token_with_bad_credentials_raises_error(
 
 @pytest.mark.asyncio
 async def test_generate_token_with_unexpected_error_retries(
-    patch_sleep, mock_responses, patch_cancellable_sleeps
-):
+    patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses, patch_cancellable_sleeps: AsyncMock
+) -> Iterator[None]:
     async with create_salesforce_source() as source:
         response_payload = {
             "access_token": "foo",
@@ -913,7 +918,7 @@ async def test_generate_token_with_unexpected_error_retries(
     "connectors.sources.salesforce.RELEVANT_SOBJECTS",
     ["FooField", "BarField", "ArghField"],
 )
-async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
+async def test_get_queryable_sobjects(mock_responses: aioresponses.core.aioresponses, sobject: str, expected_result: bool) -> Iterator[None]:
     async with create_salesforce_source(mock_queryables=False) as source:
         response_payload = {
             "sobjects": [
@@ -944,7 +949,7 @@ async def test_get_queryable_sobjects(mock_responses, sobject, expected_result):
     "connectors.sources.salesforce.RELEVANT_SOBJECT_FIELDS",
     ["FooField", "BarField", "ArghField"],
 )
-async def test_get_queryable_fields(mock_responses):
+async def test_get_queryable_fields(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source(mock_queryables=False) as source:
         expected_fields = [
             {
@@ -971,7 +976,7 @@ async def test_get_queryable_fields(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_execute_non_paginated_query(mock_responses):
+async def test_execute_non_paginated_query(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         with mock.patch.object(
             source.salesforce_client, "_get_json", return_value=ACCOUNT_RESPONSE_PAYLOAD
@@ -983,7 +988,7 @@ async def test_execute_non_paginated_query(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_accounts_when_success(mock_responses):
+async def test_get_accounts_when_success(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
         expected_record = payload["records"][0]
@@ -1048,7 +1053,7 @@ async def test_get_accounts_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
+async def test_get_accounts_when_paginated_yields_all_pages(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         response_page_1 = {
             "done": False,
@@ -1087,7 +1092,7 @@ async def test_get_accounts_when_paginated_yields_all_pages(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
+async def test_get_accounts_when_invalid_request(patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source(mock_queryables=False) as source:
         response_payload = [
             {"message": "Unable to process query.", "errorCode": "INVALID_FIELD"}
@@ -1105,7 +1110,7 @@ async def test_get_accounts_when_invalid_request(patch_sleep, mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
+async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_accounts():
@@ -1113,7 +1118,7 @@ async def test_get_accounts_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_contacts_when_not_queryable_yields_nothing(mock_responses):
+async def test_get_contacts_when_not_queryable_yields_nothing(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_contacts():
@@ -1121,7 +1126,7 @@ async def test_get_contacts_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_leads_when_not_queryable_yields_nothing(mock_responses):
+async def test_get_leads_when_not_queryable_yields_nothing(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_leads():
@@ -1129,7 +1134,7 @@ async def test_get_leads_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_opportunities_when_not_queryable_yields_nothing(mock_responses):
+async def test_get_opportunities_when_not_queryable_yields_nothing(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_opportunities():
@@ -1137,7 +1142,7 @@ async def test_get_opportunities_when_not_queryable_yields_nothing(mock_response
 
 
 @pytest.mark.asyncio
-async def test_get_campaigns_when_not_queryable_yields_nothing(mock_responses):
+async def test_get_campaigns_when_not_queryable_yields_nothing(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_campaigns():
@@ -1145,7 +1150,7 @@ async def test_get_campaigns_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_cases_when_not_queryable_yields_nothing(mock_responses):
+async def test_get_cases_when_not_queryable_yields_nothing(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._is_queryable = mock.AsyncMock(return_value=False)
         async for record in source.salesforce_client.get_cases():
@@ -1153,7 +1158,7 @@ async def test_get_cases_when_not_queryable_yields_nothing(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_opportunities_when_success(mock_responses):
+async def test_get_opportunities_when_success(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "opportunity_id",
@@ -1191,7 +1196,7 @@ async def test_get_opportunities_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_contacts_when_success(mock_responses):
+async def test_get_contacts_when_success(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         payload = deepcopy(CONTACT_RESPONSE_PAYLOAD)
         expected_record = payload["records"][0]
@@ -1240,7 +1245,7 @@ async def test_get_contacts_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_leads_when_success(mock_responses):
+async def test_get_leads_when_success(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         payload = deepcopy(LEAD_RESPONSE_PAYLOAD)
         expected_record = payload["records"][0]
@@ -1295,7 +1300,7 @@ async def test_get_leads_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_campaigns_when_success(mock_responses):
+async def test_get_campaigns_when_success(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "campaign_id",
@@ -1344,7 +1349,7 @@ async def test_get_campaigns_when_success(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_cases_when_success(mock_responses):
+async def test_get_cases_when_success(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         payload = deepcopy(CASE_RESPONSE_PAYLOAD)
         expected_record = payload["records"][0]
@@ -1525,8 +1530,8 @@ async def test_get_cases_when_success(mock_responses):
     ],
 )
 async def test_get_all_with_content_docs_when_success(
-    mock_responses, response_status, response_body, expected_attachment
-):
+    mock_responses: aioresponses.core.aioresponses, response_status: int, response_body: Optional[bytes], expected_attachment: Optional[str]
+) -> Iterator[Optional[Future]]:
     async with create_salesforce_source() as source:
         expected_doc = {
             "_id": "content_document_id",
@@ -1580,7 +1585,7 @@ async def test_get_all_with_content_docs_when_success(
 
 
 @pytest.mark.asyncio
-async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
+async def test_get_all_with_content_docs_and_extraction_service(mock_responses: aioresponses.core.aioresponses) -> Iterator[Optional[Future]]:
     with (
         patch(
             "connectors.content_extraction.ContentExtraction.extract_text",
@@ -1661,7 +1666,7 @@ async def test_get_all_with_content_docs_and_extraction_service(mock_responses):
         ),
     ],
 )
-async def test_modify_query(soql_query, modified_query):
+async def test_modify_query(soql_query: str, modified_query: str) -> Iterator[None]:
     async with create_salesforce_source() as source:
         query = source.salesforce_client.modify_soql_query(soql_query)
         assert query == modified_query
@@ -1681,7 +1686,7 @@ async def test_modify_query(soql_query, modified_query):
         ),
     ],
 )
-async def test_add_last_modified_date(soql_query, modified_query):
+async def test_add_last_modified_date(soql_query: str, modified_query: str) -> Iterator[None]:
     async with create_salesforce_source() as source:
         query = source.salesforce_client._add_last_modified_date(soql_query)
         assert query == modified_query
@@ -1698,7 +1703,7 @@ async def test_add_last_modified_date(soql_query, modified_query):
         ),
     ],
 )
-async def test_add_id(soql_query, modified_query):
+async def test_add_id(soql_query: str, modified_query: str) -> Iterator[None]:
     async with create_salesforce_source() as source:
         query = source.salesforce_client._add_id(soql_query)
         assert query == modified_query
@@ -1740,7 +1745,7 @@ async def test_add_id(soql_query, modified_query):
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_for_soql_query(mock_responses, filtering, expected_docs):
+async def test_get_docs_for_soql_query(mock_responses: aioresponses.core.aioresponses, filtering: connectors.protocol.connectors.Filter, expected_docs: List[Union[Any, Dict[str, Union[str, Dict[str, str], Dict[str, Union[str, Dict[str, str]]], Dict[str, Union[int, bool, List[Dict[str, Union[str, Dict[str, str]]]]]], Dict[str, Union[str, int]], Dict[str, List[Dict[str, Union[Dict[str, str], str, Dict[str, Union[Dict[str, str], str, int, Dict[str, Union[str, Dict[str, str]]], List[str]]]]]]]]], Dict[str, Union[str, int, List[str]]]]]) -> Iterator[Optional[Future]]:
     async with create_salesforce_source() as source:
         mock_responses.get(
             TEST_FILE_DOWNLOAD_URL,
@@ -1776,7 +1781,7 @@ async def test_get_docs_for_soql_query(mock_responses, filtering, expected_docs)
     ],
 )
 @pytest.mark.asyncio
-async def test_get_docs_for_sosl_query(mock_responses, filtering):
+async def test_get_docs_for_sosl_query(mock_responses: aioresponses.core.aioresponses, filtering: connectors.protocol.connectors.Filter) -> Iterator[Optional[Future]]:
     async with create_salesforce_source() as source:
         mock_responses.get(
             TEST_FILE_DOWNLOAD_URL,
@@ -1798,7 +1803,7 @@ async def test_get_docs_for_sosl_query(mock_responses, filtering):
 
 
 @pytest.mark.asyncio
-async def test_remote_validation(mock_responses):
+async def test_remote_validation(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         filtering = [{"query": "SELECT Id, Name FROM Account", "language": "SOQL"}]
         mock_responses.get(
@@ -1816,7 +1821,7 @@ async def test_remote_validation(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_remote_validation_negative():
+async def test_remote_validation_negative() -> Iterator[None]:
     async with create_salesforce_source() as source:
         filtering = [
             {
@@ -1831,7 +1836,7 @@ async def test_remote_validation_negative():
 
 
 @pytest.mark.asyncio
-async def test_prepare_sobject_cache(mock_responses):
+async def test_prepare_sobject_cache(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         sobjects = {
             "records": [
@@ -1853,7 +1858,7 @@ async def test_prepare_sobject_cache(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_responses):
+async def test_request_when_token_invalid_refetches_token(patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses) -> Iterator[Optional[Task]]:
     async with create_salesforce_source(mock_token=False) as source:
         payload = deepcopy(ACCOUNT_RESPONSE_PAYLOAD)
         expected_record = payload["records"][0]
@@ -1894,7 +1899,7 @@ async def test_request_when_token_invalid_refetches_token(patch_sleep, mock_resp
 
 
 @pytest.mark.asyncio
-async def test_request_when_rate_limited_raises_error_no_retries(mock_responses):
+async def test_request_when_rate_limited_raises_error_no_retries(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         response_payload = [
             {
@@ -1923,8 +1928,8 @@ async def test_request_when_rate_limited_raises_error_no_retries(mock_responses)
     ],
 )
 async def test_request_when_invalid_query_raises_error_no_retries(
-    mock_responses, error_code
-):
+    mock_responses: aioresponses.core.aioresponses, error_code: str
+) -> Iterator[None]:
     async with create_salesforce_source() as source:
         response_payload = [
             {
@@ -1945,8 +1950,8 @@ async def test_request_when_invalid_query_raises_error_no_retries(
 
 @pytest.mark.asyncio
 async def test_request_when_generic_400_raises_error_with_retries(
-    patch_sleep, mock_responses
-):
+    patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses
+) -> Iterator[Optional[Task]]:
     async with create_salesforce_source() as source:
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1961,8 +1966,8 @@ async def test_request_when_generic_400_raises_error_with_retries(
 
 @pytest.mark.asyncio
 async def test_request_when_generic_500_raises_error_with_retries(
-    patch_sleep, mock_responses
-):
+    patch_sleep: AsyncMock, mock_responses: aioresponses.core.aioresponses
+) -> Iterator[Optional[Task]]:
     async with create_salesforce_source() as source:
         mock_responses.get(
             TEST_QUERY_MATCH_URL,
@@ -1976,7 +1981,7 @@ async def test_request_when_generic_500_raises_error_with_retries(
 
 
 @pytest.mark.asyncio
-async def test_build_soql_query_with_fields():
+async def test_build_soql_query_with_fields() -> None:
     expected_columns = [
         "Id",
         "CreatedDate",
@@ -2017,7 +2022,7 @@ async def test_build_soql_query_with_fields():
 
 
 @pytest.mark.asyncio
-async def test_combine_duplicate_content_docs_with_duplicates():
+async def test_combine_duplicate_content_docs_with_duplicates() -> Iterator[None]:
     async with create_salesforce_source(mock_queryables=False) as source:
         content_docs = [
             {
@@ -2044,25 +2049,25 @@ async def test_combine_duplicate_content_docs_with_duplicates():
     "user, result",
     [("Alex Wilber", "user:Alex Wilber"), ("", None)],
 )
-async def test_prefix_user(user, result):
+async def test_prefix_user(user: str, result: Optional[str]) -> None:
     prefixed_user = _prefix_user(user=user)
     assert prefixed_user == result
 
 
 @pytest.mark.asyncio
-async def test_prefix_user_id():
+async def test_prefix_user_id() -> None:
     prefixed_user_id = _prefix_user_id(user_id="ae34fad12")
     assert prefixed_user_id == "user_id:ae34fad12"
 
 
 @pytest.mark.asyncio
-async def test_prefix_email():
+async def test_prefix_email() -> None:
     prefixed_email = _prefix_email(email="alex.wilber@gmail.com")
     assert prefixed_email == "email:alex.wilber@gmail.com"
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_disabled():
+async def test_get_access_control_dls_disabled() -> Iterator[None]:
     async with create_salesforce_source() as source:
         source._dls_enabled = MagicMock(return_value=False)
 
@@ -2074,7 +2079,7 @@ async def test_get_access_control_dls_disabled():
 
 
 @pytest.mark.asyncio
-async def test_get_access_control_dls_enabled(mock_responses):
+async def test_get_access_control_dls_enabled(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     expected_user_doc = {
         "_id": "user_id",
         "identity": {
@@ -2105,7 +2110,7 @@ async def test_get_access_control_dls_enabled(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_dls_enabled(mock_responses):
+async def test_get_docs_with_dls_enabled(mock_responses: aioresponses.core.aioresponses) -> Iterator[Optional[Future]]:
     async with create_salesforce_source() as source:
         source._dls_enabled = MagicMock(return_value=True)
         source.salesforce_client._custom_objects = AsyncMock(
@@ -2125,7 +2130,7 @@ async def test_get_docs_with_dls_enabled(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
+async def test_get_docs_with_configured_list_of_sobjects(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client.standard_objects_to_sync = ["Account", "Contact"]
         source.salesforce_client.sync_custom_objects = False
@@ -2149,7 +2154,7 @@ async def test_get_docs_with_configured_list_of_sobjects(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_get_docs_sync_custom_objects(mock_responses):
+async def test_get_docs_sync_custom_objects(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     async with create_salesforce_source() as source:
         source.salesforce_client._custom_objects = AsyncMock(
             return_value=["CustomObject", "Connector__c"]
@@ -2174,7 +2179,7 @@ async def test_get_docs_sync_custom_objects(mock_responses):
 
 
 @pytest.mark.asyncio
-async def test_queryable_sobject_fields_performance_optimization(mock_responses):
+async def test_queryable_sobject_fields_performance_optimization(mock_responses: aioresponses.core.aioresponses) -> Iterator[None]:
     """
     Test the performance optimization that reduces API calls from O(n*14) to O(14)
 

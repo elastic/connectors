@@ -20,6 +20,11 @@ from connectors.source import ConfigurableFieldValueError
 from connectors.sources.mongo import MongoAdvancedRulesValidator, MongoDataSource
 from tests.commons import AsyncIterator
 from tests.sources.support import create_source
+import bson.binary
+import bson.dbref
+import bson.objectid
+from _asyncio import Future
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 DEFAULT_DATABASE = "db"
 DEFAULT_COLLECTION = "col"
@@ -137,7 +142,7 @@ async def create_mongo_source(
         ),
     ],
 )
-async def test_advanced_rules_validator(advanced_rules, is_valid):
+async def test_advanced_rules_validator(advanced_rules: Dict[str, Any], is_valid: bool) -> None:
     validation_result = await MongoAdvancedRulesValidator().validate(advanced_rules)
     assert validation_result.is_valid == is_valid
 
@@ -165,7 +170,7 @@ def build_resp():
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
-async def test_get_docs(*args):
+async def test_get_docs(*args) -> Iterator[Future]:
     async with create_mongo_source() as source:
         num = 0
         async for doc, _ in source.get_docs():
@@ -182,7 +187,7 @@ async def test_get_docs(*args):
 @mock.patch(
     "pymongo.mongo_client.MongoClient._run_operation", lambda *xi, **kw: build_resp()
 )
-async def test_ping_when_called_then_does_not_raise(*args):
+async def test_ping_when_called_then_does_not_raise(*args) -> None:
     admin_mock = Mock()
     command_mock = AsyncMock()
     admin_mock.command = command_mock
@@ -204,7 +209,7 @@ async def test_ping_when_called_then_does_not_raise(*args):
 
 
 @pytest.mark.asyncio
-async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
+async def test_mongo_data_source_get_docs_when_advanced_rules_find_present() -> None:
     async with create_mongo_source() as source:
         filtering = Filter(
             {
@@ -245,7 +250,7 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_find_present():
 
 
 @pytest.mark.asyncio
-async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present():
+async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present() -> None:
     async with create_mongo_source() as source:
         filtering = Filter(
             {
@@ -284,7 +289,7 @@ async def test_mongo_data_source_get_docs_when_advanced_rules_aggregate_present(
             )
 
 
-def future_with_result(result):
+def future_with_result(result: Optional[List[str]]) -> Future:
     future = asyncio.Future()
     future.set_result(result)
 
@@ -297,8 +302,8 @@ def future_with_result(result):
     side_effect=OperationFailure("Unauthorized"),
 )
 async def test_validate_config_when_database_name_invalid_then_raises_exception(
-    patch_validate_collection,
-):
+    patch_validate_collection: MagicMock,
+) -> None:
     server_database_names = ["hello", "world"]
     configured_database_name = "something"
 
@@ -325,8 +330,8 @@ async def test_validate_config_when_database_name_invalid_then_raises_exception(
     side_effect=OperationFailure("Unauthorized"),
 )
 async def test_validate_config_when_collection_name_invalid_then_raises_exception(
-    patch_validate_collection,
-):
+    patch_validate_collection: MagicMock,
+) -> None:
     server_database_names = ["hello"]
     server_collection_names = ["first", "second"]
     configured_database_name = "hello"
@@ -369,8 +374,8 @@ async def test_validate_config_when_collection_name_invalid_then_raises_exceptio
     return_value=future_with_result(["first"]),
 )
 async def test_validate_config_when_collection_access_unauthorized(
-    patch_validate_collection, patch_list_database_names, patch_list_collection_names
-):
+    patch_validate_collection: MagicMock, patch_list_database_names: MagicMock, patch_list_collection_names: MagicMock
+) -> None:
     configured_database_name = "hello"
     configured_collection_name = "second"
 
@@ -394,8 +399,8 @@ async def test_validate_config_when_collection_access_unauthorized(
     side_effect=OperationFailure("Unauthorized"),
 )
 async def test_validate_config_when_collection_access_unauthorized_and_no_admin_access(
-    patch_validate_collection, patch_list_database_names
-):
+    patch_validate_collection: MagicMock, patch_list_database_names: MagicMock
+) -> None:
     configured_database_name = "hello"
     configured_collection_name = "second"
 
@@ -415,8 +420,8 @@ async def test_validate_config_when_collection_access_unauthorized_and_no_admin_
     return_value=future_with_result(None),
 )
 async def test_validate_config_when_configuration_valid_then_does_not_raise(
-    patch_validate_connection,
-):
+    patch_validate_connection: MagicMock,
+) -> None:
     configured_database_name = "hello"
     configured_collection_name = "second"
 
@@ -459,7 +464,7 @@ async def test_validate_config_when_configuration_valid_then_does_not_raise(
         ),
     ],
 )
-async def test_serialize(raw, output):
+async def test_serialize(raw: Dict[str, Union[bson.dbref.DBRef, bson.objectid.ObjectId, bson.binary.Binary, Decimal128, UUID]], output: Dict[str, Optional[Union[float, str, Dict[str, str], UUID]]]) -> None:
     async with create_mongo_source() as source:
         assert source.serialize(raw) == output
 
@@ -486,8 +491,8 @@ async def test_serialize(raw, output):
     side_effect=OperationFailure("Unauthorized"),
 )
 async def test_ssl_successful_connection(
-    patch_validate_collection, mock_ssl, certificate_value, tls_insecure
-):
+    patch_validate_collection: MagicMock, mock_ssl: MagicMock, certificate_value: str, tls_insecure: bool
+) -> None:
     mock_ssl.return_value = True
     async with create_mongo_source(
         ssl_enabled=True, ssl_ca=certificate_value, tls_insecure=tls_insecure
@@ -513,7 +518,7 @@ async def test_ssl_successful_connection(
         ("mongodb://127.0.0.1:27021/?ssl=false", True),
     ],
 )
-async def test_get_client_when_pass_conflicting_values(host_value, ssl_value):
+async def test_get_client_when_pass_conflicting_values(host_value: str, ssl_value: bool) -> None:
     async with create_mongo_source(host=host_value, ssl_enabled=ssl_value) as source:
         with pytest.raises(ConfigurableFieldValueError):
             await source.validate_config()

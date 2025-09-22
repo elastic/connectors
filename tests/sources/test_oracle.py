@@ -6,7 +6,7 @@
 """Tests the Oracle Database source class methods"""
 
 from contextlib import contextmanager
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.engine import Engine
@@ -14,6 +14,8 @@ from sqlalchemy.engine import Engine
 from connectors.sources.oracle import OracleClient, OracleDataSource, OracleQueries
 from tests.sources.support import create_source
 from tests.sources.test_generic_database import ConnectionSync
+from _asyncio import Future
+from typing import Iterator
 
 DSN_SID = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(SID=xe)))"
 DSN_SERVICE_NAME = "oracle+oracledb://admin:Password_123@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=127.0.0.1)(PORT=9090))(CONNECT_DATA=(service_name=xe)))"
@@ -22,7 +24,7 @@ SERVICE_NAME = "service_name"
 
 
 @contextmanager
-def oracle_client(**extras):
+def oracle_client(**extras) -> Iterator[OracleClient]:
     arguments = {
         "host": "127.0.0.1",
         "port": 9090,
@@ -53,7 +55,7 @@ def oracle_client(**extras):
         (SERVICE_NAME, DSN_SERVICE_NAME),
     ],
 )
-def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
+def test_engine_in_thin_mode(mock_fun: MagicMock, connection_source: str, DSN: str) -> None:
     """Test engine method of OracleClient class in thin mode"""
     # Setup
     with oracle_client() as client:
@@ -73,7 +75,7 @@ def test_engine_in_thin_mode(mock_fun, connection_source, DSN):
         (SERVICE_NAME, DSN_SERVICE_NAME),
     ],
 )
-def test_engine_in_thick_mode(mock_fun, connection_source, DSN):
+def test_engine_in_thick_mode(mock_fun: MagicMock, connection_source: str, DSN: str) -> None:
     """Test engine method of OracleClient class in thick mode"""
     oracle_home = "/home/devuser"
     config_file_path = {"lib_dir": f"{oracle_home}/lib", "config_dir": ""}
@@ -91,7 +93,7 @@ def test_engine_in_thick_mode(mock_fun, connection_source, DSN):
 
 
 @pytest.mark.asyncio
-async def test_ping():
+async def test_ping() -> Iterator[Future] | None:
     async with create_source(OracleDataSource) as source:
         with patch.object(
             Engine, "connect", return_value=ConnectionSync(OracleQueries())
@@ -100,7 +102,7 @@ async def test_ping():
 
 
 @pytest.mark.asyncio
-async def test_get_docs():
+async def test_get_docs() -> Iterator[Future] | None:
     # Setup
     async with create_source(
         OracleDataSource,

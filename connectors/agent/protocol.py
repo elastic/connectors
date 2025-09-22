@@ -10,6 +10,11 @@ from elastic_agent_client.handler.checkin import BaseCheckinHandler
 
 from connectors.agent.connector_record_manager import ConnectorRecordManager
 from connectors.agent.logger import get_logger
+from connectors.agent.config import ConnectorsAgentConfigurationWrapper
+from connectors.agent.service_manager import ConnectorServiceManager
+from elastic_agent_client_pb2 import ActionRequest
+from typing import Union
+from unittest.mock import MagicMock, Mock
 
 logger = get_logger("protocol")
 
@@ -49,10 +54,10 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
 
     def __init__(
         self,
-        client,
-        agent_connectors_config_wrapper,
-        service_manager,
-    ):
+        client: Union[Mock, MagicMock],
+        agent_connectors_config_wrapper: Union[Mock, ConnectorsAgentConfigurationWrapper],
+        service_manager: Union[Mock, ConnectorServiceManager],
+    ) -> None:
         """Inits the class.
 
         Initing this class should not produce side-effects.
@@ -62,7 +67,7 @@ class ConnectorCheckinHandler(BaseCheckinHandler):
         self.service_manager = service_manager
         self.connector_record_manager = ConnectorRecordManager()
 
-    async def apply_from_client(self):
+    async def apply_from_client(self) -> None:
         """Implementation of BaseCheckinHandler.apply_from_client
 
         This method is called by the Agent Protocol handlers when there's a check-in event

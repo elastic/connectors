@@ -9,7 +9,11 @@ from functools import partial
 
 from azure.storage.blob.aio import BlobServiceClient, ContainerClient
 
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
+import azure.storage.blob.aio._container_client_async
+from _asyncio import Future
+from datetime import datetime
+from typing import Dict, Generator, Iterator, List, Optional, Union
 
 BLOB_SCHEMA = {
     "title": "name",
@@ -31,7 +35,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
     service_type = "azure_blob_storage"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration):
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the connection to the azure base client
 
         Args:
@@ -44,7 +48,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         self.containers = self.configuration["containers"]
         self.container_clients = {}
 
-    def tweak_bulk_options(self, options):
+    def tweak_bulk_options(self, options: Dict[str, int]) -> None:
         """Tweak bulk options as per concurrent downloads support by azure blob storage
 
         Args:
@@ -56,7 +60,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
         options["concurrent_downloads"] = self.concurrent_downloads
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[int, str, bool, List[str], List[Dict[str, Union[int, str]]]]]]:
         """Get the default configuration for Azure Blob Storage
 
         Returns:
@@ -116,7 +120,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             },
         }
 
-    def _configure_connection_string(self):
+    def _configure_connection_string(self) -> str:
         """Generates connection string for ABS
 
         Returns:
@@ -125,7 +129,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
 
         return f'AccountName={self.configuration["account_name"]};AccountKey={self.configuration["account_key"]};BlobEndpoint={self.configuration["blob_endpoint"]}'
 
-    async def ping(self):
+    async def ping(self) -> Iterator[None]:
         """Verify the connection with Azure Blob Storage"""
         self._logger.info("Generating connection string...")
         self.connection_string = self._configure_connection_string()
@@ -139,14 +143,14 @@ class AzureBlobStorageDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the Azure Blob Storage.")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         if not self.container_clients:
             return
         for container_client in self.container_clients.values():
             await container_client.close()
         self.container_clients = {}
 
-    def prepare_blob_doc(self, blob, container_metadata):
+    def prepare_blob_doc(self, blob: Dict[str, Union[str, Dict[str, str], datetime, int]], container_metadata: Dict[str, str]) -> Dict[str, Union[int, str]]:
         """Prepare key mappings to blob document
 
         Args:
@@ -169,7 +173,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             document[elasticsearch_field] = blob[azure_blob_storage_field]
         return document
 
-    async def get_content(self, blob, timestamp=None, doit=None):
+    async def get_content(self, blob: Dict[str, Union[int, str]], timestamp: None=None, doit: Optional[bool]=None) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Get blob content via specific blob client
 
         Args:
@@ -203,7 +207,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             partial(self.blob_download_func, filename, blob["container"], file_size),
         )
 
-    def _get_container_client(self, container_name):
+    def _get_container_client(self, container_name: str) -> azure.storage.blob.aio._container_client_async.ContainerClient:
         if self.container_clients.get(container_name) is None:
             try:
                 self.container_clients[container_name] = (
@@ -238,7 +242,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
             file_size = file_size - length
             yield content
 
-    async def get_container(self, container_list):
+    async def get_container(self, container_list: List[str]) -> Iterator[None]:
         """Get containers from Azure Blob Storage via azure base client
         Args:
             container_list (list): List of containers
@@ -272,7 +276,7 @@ class AzureBlobStorageDataSource(BaseDataSource):
                     f"Something went wrong while fetching containers. Error: {exception}"
                 )
 
-    async def get_blob(self, container):
+    async def get_blob(self, container: Dict[str, Union[str, Dict[str, str]]]) -> None:
         """Get blobs for a specific container from Azure Blob Storage via container client
 
         Args:

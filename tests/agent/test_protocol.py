@@ -15,7 +15,7 @@ from connectors.agent.protocol import ConnectorActionHandler, ConnectorCheckinHa
 
 
 @pytest.fixture(autouse=True)
-def input_mock():
+def input_mock() -> Mock:
     unit_mock = Mock()
     unit_mock.unit_type = proto.UnitType.INPUT
 
@@ -34,7 +34,7 @@ def input_mock():
 
 
 @pytest.fixture(autouse=True)
-def connector_record_manager_mock():
+def connector_record_manager_mock() -> Mock:
     connector_record_manager_mock = Mock()
     connector_record_manager_mock.ensure_connector_records_exist = AsyncMock(
         return_value=True
@@ -44,7 +44,7 @@ def connector_record_manager_mock():
 
 class TestConnectorActionHandler:
     @pytest.mark.asyncio
-    async def test_handle_action(self):
+    async def test_handle_action(self) -> None:
         action_handler = ConnectorActionHandler()
 
         with pytest.raises(NotImplementedError):
@@ -54,8 +54,8 @@ class TestConnectorActionHandler:
 class TestConnectorCheckingHandler:
     @pytest.mark.asyncio
     async def test_apply_from_client_when_no_units_received(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper_mock = Mock()
         service_manager_mock = Mock()
@@ -76,8 +76,8 @@ class TestConnectorCheckingHandler:
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_no_output(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper_mock = Mock()
         service_manager_mock = Mock()
@@ -100,8 +100,8 @@ class TestConnectorCheckingHandler:
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_output_and_non_updating_config(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper_mock = Mock()
 
@@ -128,8 +128,8 @@ class TestConnectorCheckingHandler:
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_output_and_updating_config(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper_mock = Mock()
 
@@ -157,8 +157,8 @@ class TestConnectorCheckingHandler:
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_multiple_outputs_and_updating_config(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper_mock = Mock()
 
@@ -197,8 +197,8 @@ class TestConnectorCheckingHandler:
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_multiple_mixed_outputs_and_updating_config(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper_mock = Mock()
 
@@ -242,8 +242,8 @@ class TestConnectorCheckingHandler:
 
     @pytest.mark.asyncio
     async def test_apply_from_client_when_units_with_output_and_updating_log_level(
-        self, connector_record_manager_mock, input_mock
-    ):
+        self, connector_record_manager_mock: Mock, input_mock: Mock
+    ) -> None:
         client_mock = Mock()
         config_wrapper = ConnectorsAgentConfigurationWrapper()
 
