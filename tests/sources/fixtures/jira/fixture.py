@@ -61,14 +61,18 @@ def get_projects():
     return projects
 
 
-@app.route("/rest/api/2/search", methods=["GET"])
+@app.route("/rest/api/3/search/jql", methods=["GET"])
 def get_all_issues():
     """Function to get all issues with pagination
     Returns:
         all_issues (dict): Dictionary of all issues
     """
     args = request.args
-    all_issues = {"startAt": 0, "maxResults": 100, "total": 2000, "issues": []}
+    max_results = int(args.get("maxResults", 100))
+    next_page_token = args.get("nextPageToken", "null")
+
+    all_issues = {"maxResults": max_results, "issues": []}
+
     fields = {
         "issuetype": {"name": "Task"},
         "project": {"key": "DP", "name": "Demo Project"},
@@ -89,15 +93,15 @@ def get_all_issues():
         "reporter": {"emailAddress": "test.user@gmail.com", "displayName": "Test User"},
     }
 
-    if args["maxResults"] == "100" and args["startAt"] != "":
-        start_at = int(args["startAt"])
-        all_issues["startAt"] = start_at
-        if start_at + int(args["maxResults"]) > all_issues["total"]:
-            return all_issues
-        for i in range(start_at + 1, start_at + 101):
+    if next_page_token == "null" or next_page_token is None:
+        for i in range(1, max_results + 1):
             all_issues["issues"].append(
                 {"id": f"issue-{i}", "key": f"DP-{i}", "fields": fields}
             )
+        all_issues["nextPageToken"] = "second_page_token"
+    elif next_page_token == "second_page_token":
+        all_issues["issues"] = [{"id": "issue-101", "key": "DP-101", "fields": fields}]
+
     return all_issues
 
 
