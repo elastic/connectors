@@ -232,7 +232,6 @@ class MySQLClient:
     async def yield_rows_for_table(self, table, primary_keys, table_row_count):
         offset = 0
         while offset < table_row_count:
-
             primary_keys_str = ", ".join(f"`{pk}`" for pk in primary_keys)
             pk_query = f"SELECT {primary_keys_str} FROM `{self.database}`.`{table}` ORDER BY {primary_keys_str} LIMIT {self.fetch_size} OFFSET {offset}"
 
