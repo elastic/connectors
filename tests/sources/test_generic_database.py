@@ -9,7 +9,6 @@ from functools import partial
 from typing import Tuple, Union, List, Optional, Sized
 
 import pytest
-from pyre_extensions import PyreReadOnly
 
 from connectors.sources.generic_database import (
     configured_tables,
@@ -160,7 +159,7 @@ COLUMN_NAMES = ["Column_1", "Column_2"]
     ],
 )
 def test_map_column_names(
-    schema, tables: Optional[PyreReadOnly[Sized]], prefix
+    schema, tables: Optional[Sized], prefix
 ) -> None:
     mapped_column_names = map_column_names(COLUMN_NAMES, schema, tables)
 

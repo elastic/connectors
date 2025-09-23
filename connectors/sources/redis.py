@@ -8,7 +8,7 @@ import os
 from enum import Enum
 from functools import cached_property
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, List, Union
+from typing import Set, Tuple, Any, Dict, List, Union
 
 import fastjsonschema
 import redis.asyncio as redis
@@ -18,7 +18,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format, hash_id, iso_utc
 
 PAGE_SIZE = 1000
@@ -36,7 +36,7 @@ class KeyType(Enum):
 class RedisClient:
     """Redis client to handle method calls made to Redis"""
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self.configuration = configuration
         self._logger = logger
         self.host = self.configuration["host"]
@@ -55,7 +55,7 @@ class RedisClient:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def store_ssl_key(self, key: str, suffix) -> str:
+    def store_ssl_key(self, key: str, suffix: str) -> str:
         if suffix == ".key":
             pem_certificates = get_pem_format(
                 key=key, postfix="-----END RSA PRIVATE KEY-----"
@@ -105,7 +105,7 @@ class RedisClient:
             await self._client.aclose()  # pyright: ignore
         self.remove_temp_files()
 
-    async def validate_database(self, db) -> bool:
+    async def validate_database(self, db: int) -> bool:
         try:
             await self._client.execute_command("SELECT", db)
             return True
@@ -113,7 +113,7 @@ class RedisClient:
             self._logger.warning(f"Database {db} not found. Error: {exception}")
             return False
 
-    async def get_databases(self):
+    async def get_databases(self) -> None:
         """Returns number of databases from config_get response
 
         Returns:
@@ -150,7 +150,7 @@ class RedisClient:
         ):
             yield key
 
-    async def get_key_value(self, key, key_type):
+    async def get_key_value(self, key: str, key_type: str) -> Union[str, Set[int], Dict[str, str], List[int]]:
         """Fetch value of key for database.
 
         Args:
@@ -189,7 +189,7 @@ class RedisClient:
             )
             return ""
 
-    async def get_key_metadata(self, key):
+    async def get_key_metadata(self, key: str) -> Tuple[str, str, int]:
         key_type = await self._client.type(key)
         key_value = await self.get_key_value(key=key, key_type=key_type)
         key_size = await self._client.memory_usage(key)
@@ -222,17 +222,17 @@ class RedisAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source) -> None:
+    def __init__(self, source: "RedisDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
+    async def validate(self, advanced_rules: Union[List[Dict[str, int]], Dict[str, int], Dict[str, List[str]], Dict[str, Union[str, int]], List[Dict[str, Union[str, int]]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
             )
         return await self._remote_validation(advanced_rules)
 
-    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
+    async def _remote_validation(self, advanced_rules: Union[List[Dict[str, int]], Dict[str, int], Dict[str, List[str]], Dict[str, Union[str, int]], List[Dict[str, Union[str, int]]]]) -> SyncRuleValidationResult:
         try:
             RedisAdvancedRulesValidator.SCHEMA(advanced_rules)
         except fastjsonschema.JsonSchemaValueException as e:
@@ -266,7 +266,7 @@ class RedisDataSource(BaseDataSource):
     service_type = "redis"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self.client = RedisClient(configuration=configuration)
 

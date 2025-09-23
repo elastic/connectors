@@ -18,7 +18,7 @@ from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Sized, Tuple
+from typing import Any, Dict, List, Set, Type, Union, Optional, Sized, Tuple
 
 from elasticsearch import (
     ApiError,
@@ -26,7 +26,6 @@ from elasticsearch import (
 from elasticsearch import (
     NotFoundError as ElasticNotFoundError,
 )
-from pyre_extensions import PyreReadOnly
 
 from connectors.es import ESDocument, ESIndex
 from connectors.es.client import with_concurrency_control
@@ -37,6 +36,7 @@ from connectors.filtering.validation import (
 from connectors.logger import logger
 from connectors.source import (
     DEFAULT_CONFIGURATION,
+    BaseDataSource,
     DataSourceConfiguration,
     get_source_klass,
 )
@@ -50,6 +50,7 @@ from connectors.utils import (
     parse_datetime_string,
     with_utc_tz,
 )
+from unittest.mock import MagicMock, Mock
 
 __all__ = [
     "CONNECTORS_INDEX",
@@ -158,7 +159,7 @@ class ProtocolError(Exception):
 
 
 class ConnectorIndex(ESIndex):
-    def __init__(self, elastic_config) -> None:
+    def __init__(self, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
         logger.debug(f"ConnectorIndex connecting to {elastic_config['host']}")
         # initialize ESIndex instance
         super().__init__(index_name=CONNECTORS_INDEX, elastic_config=elastic_config)
@@ -171,10 +172,10 @@ class ConnectorIndex(ESIndex):
 
     async def connector_put(
         self,
-        connector_id,
-        service_type,
-        connector_name=None,
-        index_name=None,
+        connector_id: str,
+        service_type: str,
+        connector_name: Optional[str]=None,
+        index_name: Optional[str]=None,
         is_native: bool = False,
     ) -> None:
         await self.api.connector_put(
@@ -186,7 +187,7 @@ class ConnectorIndex(ESIndex):
         )
 
     async def connector_exists(
-        self, connector_id, include_deleted: bool = False
+        self, connector_id: str, include_deleted: bool = False
     ) -> bool:
         try:
             doc = await self.api.connector_get(
@@ -202,7 +203,7 @@ class ConnectorIndex(ESIndex):
             raise e
 
     async def connector_update_scheduling(
-        self, connector_id, full=None, incremental=None, access_control=None
+        self, connector_id: str, full: Optional[Dict[str, Union[bool, str]]]=None, incremental: None=None, access_control: None=None
     ) -> None:
         scheduling = {}
 
@@ -220,7 +221,7 @@ class ConnectorIndex(ESIndex):
         )
 
     async def connector_update_configuration(
-        self, connector_id, schema=None, values=None
+        self, connector_id: str, schema: Optional[Dict[str, Dict[str, Union[str, bool, int]]]]=None, values: None=None
     ) -> None:
         await self.api.connector_update_configuration(
             connector_id=connector_id, configuration=schema, values=values
@@ -228,9 +229,9 @@ class ConnectorIndex(ESIndex):
 
     async def supported_connectors(
         self,
-        native_service_types: Optional[PyreReadOnly[Sized]] = None,
-        connector_ids: Optional[PyreReadOnly[Sized]] = None,
-    ):
+        native_service_types: Optional[Sized] = None,
+        connector_ids: Optional[Sized] = None,
+    ) -> None:
         if native_service_types is None:
             native_service_types = []
         if connector_ids is None:
@@ -269,13 +270,13 @@ class ConnectorIndex(ESIndex):
         async for connector in self.get_all_docs(query=query):
             yield connector
 
-    def _create_object(self, doc_source) -> "Connector":
+    def _create_object(self, doc_source: Dict[str, Union[Dict[str, str], str, Dict[str, Optional[Union[Dict[str, Dict[str, str]], Dict[str, Union[bool, str]], str]]]]]) -> "Connector":
         return Connector(
             self,
             doc_source,
         )
 
-    async def get_connector_by_index(self, index_name):
+    async def get_connector_by_index(self, index_name: str) -> "Connector":
         connectors = [
             connector
             async for connector in self.get_all_docs(
@@ -295,7 +296,7 @@ class ConnectorIndex(ESIndex):
             yield connector
 
 
-def filter_ingestion_stats(ingestion_stats):
+def filter_ingestion_stats(ingestion_stats: Optional[Dict[str, int]]) -> Dict[str, int]:
     if ingestion_stats is None:
         return {}
 
@@ -310,23 +311,23 @@ class SyncJob(ESDocument):
         return JobStatus(self.get("status"))
 
     @property
-    def error(self):
+    def error(self) -> str:
         return self.get("error")
 
     @property
-    def connector_id(self):
+    def connector_id(self) -> Optional[str]:
         return self.get("connector", "id")
 
     @property
-    def index_name(self):
+    def index_name(self) -> Optional[str]:
         return self.get("connector", "index_name")
 
     @property
-    def language(self):
+    def language(self) -> str:
         return self.get("connector", "language")
 
     @property
-    def service_type(self):
+    def service_type(self) -> Optional[str]:
         return self.get("connector", "service_type")
 
     @property
@@ -342,7 +343,7 @@ class SyncJob(ESDocument):
         return Pipeline(self.get("connector", "pipeline"))
 
     @property
-    def sync_cursor(self):
+    def sync_cursor(self) -> Dict[str, str]:
         return self.get("connector", "sync_cursor")
 
     @property
@@ -350,19 +351,19 @@ class SyncJob(ESDocument):
         return self.status in (JobStatus.ERROR, JobStatus.COMPLETED, JobStatus.CANCELED)
 
     @property
-    def indexed_document_count(self):
+    def indexed_document_count(self) -> int:
         return self.get(INDEXED_DOCUMENT_COUNT, default=0)
 
     @property
-    def indexed_document_volume(self):
+    def indexed_document_volume(self) -> int:
         return self.get(INDEXED_DOCUMENT_VOLUME, default=0)
 
     @property
-    def deleted_document_count(self):
+    def deleted_document_count(self) -> int:
         return self.get(DELETED_DOCUMENT_COUNT, default=0)
 
     @property
-    def total_document_count(self):
+    def total_document_count(self) -> int:
         return self.get(TOTAL_DOCUMENT_COUNT, default=0)
 
     @property
@@ -372,14 +373,14 @@ class SyncJob(ESDocument):
     def is_content_sync(self) -> bool:
         return self.job_type in (JobType.FULL, JobType.INCREMENTAL)
 
-    async def validate_filtering(self, validator) -> None:
+    async def validate_filtering(self, validator: Mock) -> None:
         validation_result = await validator.validate_filtering(self.filtering)
 
         if validation_result.state != FilteringValidationState.VALID:
             msg = f"Filtering in state {validation_result.state}, errors: {validation_result.errors}."
             raise InvalidFilteringError(msg)
 
-    def _wrap_errors(self, operation_name, e):
+    def _wrap_errors(self, operation_name: str, e: TypeError):
         if isinstance(e, ApiError):
             reason = None
             if e.info is not None and "error" in e.info and "reason" in e.info["error"]:
@@ -390,7 +391,7 @@ class SyncJob(ESDocument):
             msg = f"Failed to {operation_name} for job {self.id} because of {e.__class__.__name__}: {str(e)}"
             raise ProtocolError(msg) from e
 
-    async def claim(self, sync_cursor=None) -> None:
+    async def claim(self, sync_cursor: Optional[Dict[str, str]]=None) -> None:
         try:
             if self.index.feature_use_connectors_api:
                 await self.index.api.connector_sync_job_claim(
@@ -412,8 +413,8 @@ class SyncJob(ESDocument):
 
     async def update_metadata(
         self,
-        ingestion_stats=None,
-        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+        ingestion_stats: Optional[Dict[str, int]]=None,
+        connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
             ingestion_stats = filter_ingestion_stats(ingestion_stats)
@@ -439,8 +440,8 @@ class SyncJob(ESDocument):
 
     async def done(
         self,
-        ingestion_stats=None,
-        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+        ingestion_stats: None=None,
+        connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
             await self._terminate(
@@ -451,9 +452,9 @@ class SyncJob(ESDocument):
 
     async def fail(
         self,
-        error,
-        ingestion_stats=None,
-        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+        error: Union[str, int, Exception],
+        ingestion_stats: None=None,
+        connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
             if isinstance(error, str):
@@ -472,8 +473,8 @@ class SyncJob(ESDocument):
 
     async def cancel(
         self,
-        ingestion_stats=None,
-        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+        ingestion_stats: None=None,
+        connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
             await self._terminate(
@@ -484,8 +485,8 @@ class SyncJob(ESDocument):
 
     async def suspend(
         self,
-        ingestion_stats=None,
-        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+        ingestion_stats: None=None,
+        connector_metadata: Optional[Sized] = None,
     ) -> None:
         try:
             await self._terminate(
@@ -496,10 +497,10 @@ class SyncJob(ESDocument):
 
     async def _terminate(
         self,
-        status,
-        error=None,
-        ingestion_stats=None,
-        connector_metadata: Optional[PyreReadOnly[Sized]] = None,
+        status: JobStatus,
+        error: Optional[str]=None,
+        ingestion_stats: None=None,
+        connector_metadata: Optional[Sized] = None,
     ) -> None:
         ingestion_stats = filter_ingestion_stats(ingestion_stats)
         if connector_metadata is None:
@@ -522,7 +523,7 @@ class SyncJob(ESDocument):
     def _prefix(self) -> str:
         return f"[Connector id: {self.connector_id}, index name: {self.index_name}, Sync job id: {self.id}]"
 
-    def _extra(self):
+    def _extra(self) -> Dict[str, Optional[str]]:
         return {
             "labels.sync_job_id": self.id,
             "labels.connector_id": self.connector_id,
@@ -534,7 +535,7 @@ class SyncJob(ESDocument):
 class Filtering:
     DEFAULT_DOMAIN = "DEFAULT"
 
-    def __init__(self, filtering=None) -> None:
+    def __init__(self, filtering: Optional[Union[List[Union[Dict[str, Union[str, Dict[str, Union[Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]], List[Dict[str, int]], Dict[str, str]]], Dict[str, str]]], Dict[str, Union[Dict[str, str], str]]]], List[Union[Dict[str, Union[str, Dict[str, Union[Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]], List[Dict[str, int]], Dict[str, str]]]]], Dict[str, Union[str, Dict[str, Union[str, List[Dict[str, List[str]]]]]]]]]]]=None) -> None:
         if filtering is None:
             filtering = []
 
@@ -558,12 +559,12 @@ class Filtering:
             Filter(),
         )
 
-    def to_list(self):
+    def to_list(self) -> List[Dict[str, Union[str, Dict[str, Union[Dict[str, Dict[str, Dict[str, Dict[Any, Any]]]], List[Dict[str, int]], Dict[str, str]]], Dict[str, Union[str, List[Dict[str, List[str]]]]]]]]:
         return list(self.filtering)
 
 
 class Filter(dict):
-    def __init__(self, filter_=None) -> None:
+    def __init__(self, filter_: Optional[Any]=None) -> None:
         if filter_ is None:
             filter_ = {}
 
@@ -575,17 +576,17 @@ class Filter(dict):
             "validation", {"state": FilteringValidationState.VALID.value, "errors": []}
         )
 
-    def get_advanced_rules(self):
+    def get_advanced_rules(self) -> Any:
         return self.advanced_rules.get("value", {})
 
     def has_advanced_rules(self) -> bool:
         advanced_rules = self.get_advanced_rules()
         return advanced_rules is not None and len(advanced_rules) > 0
 
-    def has_validation_state(self, validation_state) -> bool:
+    def has_validation_state(self, validation_state: FilteringValidationState) -> bool:
         return FilteringValidationState(self.validation["state"]) == validation_state
 
-    def transform_filtering(self):
+    def transform_filtering(self) -> Union[Dict[str, Union[Dict[Any, Any], List[Any]]],"Filter"]:
         """
         Transform the filtering in .elastic-connectors to filtering ready-to-use in .elastic-connectors-sync-jobs
         """
@@ -606,7 +607,7 @@ PIPELINE_DEFAULT = {
 
 
 class Pipeline(UserDict):
-    def __init__(self, data) -> None:
+    def __init__(self, data: Dict[str, Union[bool, str]]) -> None:
         if data is None:
             data = {}
         default = PIPELINE_DEFAULT.copy()
@@ -626,18 +627,18 @@ class Features:
 
     NATIVE_CONNECTOR_API_KEYS = "native_connector_api_keys"
 
-    def __init__(self, features=None) -> None:
+    def __init__(self, features: Optional[Any]=None) -> None:
         if features is None:
             features = {}
 
         self.features = features
 
-    def incremental_sync_enabled(self):
+    def incremental_sync_enabled(self) -> bool:
         return nested_get_from_dict(
             self.features, ["incremental_sync", "enabled"], default=False
         )
 
-    def document_level_security_enabled(self):
+    def document_level_security_enabled(self) -> bool:
         return nested_get_from_dict(
             self.features, ["document_level_security", "enabled"], default=False
         )
@@ -657,7 +658,7 @@ class Features:
             ]
         )
 
-    def feature_enabled(self, feature):
+    def feature_enabled(self, feature: str) -> bool:
         match feature:
             case Features.BASIC_RULES_NEW:
                 return nested_get_from_dict(
@@ -681,27 +682,27 @@ class Connector(ESDocument):
         return Status(self.get("status"))
 
     @property
-    def service_type(self):
+    def service_type(self) -> Optional[str]:
         return self.get("service_type")
 
     @property
-    def last_seen(self):
+    def last_seen(self) -> Optional[datetime]:
         return self._property_as_datetime("last_seen")
 
     @property
-    def native(self):
+    def native(self) -> bool:
         return self.get("is_native", default=False)
 
     @property
-    def full_sync_scheduling(self):
+    def full_sync_scheduling(self) -> Dict[str, Union[bool, str]]:
         return self.get("scheduling", "full", default={})
 
     @property
-    def incremental_sync_scheduling(self):
+    def incremental_sync_scheduling(self) -> Dict[str, Union[bool, str]]:
         return self.get("scheduling", "incremental", default={})
 
     @property
-    def access_control_sync_scheduling(self):
+    def access_control_sync_scheduling(self) -> Dict[str, Union[bool, str]]:
         return self.get("scheduling", "access_control", default={})
 
     @property
@@ -709,11 +710,11 @@ class Connector(ESDocument):
         return DataSourceConfiguration(self.get("configuration"))
 
     @property
-    def index_name(self):
+    def index_name(self) -> Optional[str]:
         return self.get("index_name")
 
     @property
-    def language(self):
+    def language(self) -> str:
         return self.get("language")
 
     @property
@@ -736,7 +737,7 @@ class Connector(ESDocument):
     def last_access_control_sync_status(self) -> JobStatus:
         return JobStatus(self.get("last_access_control_sync_status"))
 
-    def _property_as_datetime(self, key):
+    def _property_as_datetime(self, key: str) -> Optional[datetime]:
         value = self.get(key)
         if value is not None:
             value = parse_datetime_string(value)  # pyright: ignore
@@ -746,15 +747,15 @@ class Connector(ESDocument):
         return value
 
     @property
-    def last_sync_scheduled_at(self):
+    def last_sync_scheduled_at(self) -> datetime:
         return self._property_as_datetime("last_sync_scheduled_at")
 
     @property
-    def last_incremental_sync_scheduled_at(self):
+    def last_incremental_sync_scheduled_at(self) -> datetime:
         return self._property_as_datetime("last_incremental_sync_scheduled_at")
 
     @property
-    def last_access_control_sync_scheduled_at(self):
+    def last_access_control_sync_scheduled_at(self) -> datetime:
         return self._property_as_datetime("last_access_control_sync_scheduled_at")
 
     def last_sync_scheduled_at_by_job_type(self, job_type):
@@ -770,14 +771,14 @@ class Connector(ESDocument):
                 raise ValueError(msg)
 
     @property
-    def sync_cursor(self):
+    def sync_cursor(self) -> Dict[str, str]:
         return self.get("sync_cursor")
 
     @property
-    def api_key_secret_id(self):
+    def api_key_secret_id(self) -> str:
         return self.get("api_key_secret_id")
 
-    async def heartbeat(self, interval, force: bool = False) -> None:
+    async def heartbeat(self, interval: int, force: bool = False) -> None:
         if (
             force
             or self.last_seen is None
@@ -786,7 +787,7 @@ class Connector(ESDocument):
             self.log_debug("Sending heartbeat")
             await self.index.heartbeat(doc_id=self.id)
 
-    def next_sync(self, job_type, now):
+    def next_sync(self, job_type: JobType, now: datetime) -> Optional[str]:
         """Returns the datetime in UTC timezone when the next sync for a given job type will run, return None if it's disabled."""
 
         match job_type:
@@ -804,7 +805,7 @@ class Connector(ESDocument):
             return None
         return next_run(scheduling_property.get("interval"), now)
 
-    async def _update_datetime(self, field, new_ts: Optional[datetime]) -> None:
+    async def _update_datetime(self, field: str, new_ts: Optional[datetime]) -> None:
         await self.index.update(
             doc_id=self.id,
             doc={field: iso_utc(new_ts)},
@@ -812,7 +813,7 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def update_last_sync_scheduled_at_by_job_type(self, job_type, new_ts) -> None:
+    async def update_last_sync_scheduled_at_by_job_type(self, job_type: JobType, new_ts: datetime) -> None:
         match job_type:
             case JobType.ACCESS_CONTROL:
                 await self._update_datetime(
@@ -828,7 +829,7 @@ class Connector(ESDocument):
                 msg = f"Unknown job type: {job_type}"
                 raise ValueError(msg)
 
-    async def sync_starts(self, job_type) -> None:
+    async def sync_starts(self, job_type: JobType) -> None:
         if job_type == JobType.ACCESS_CONTROL:
             last_sync_information = {
                 "last_access_control_sync_status": JobStatus.IN_PROGRESS.value,
@@ -855,7 +856,7 @@ class Connector(ESDocument):
             if_primary_term=self._primary_term,
         )
 
-    async def error(self, error) -> None:
+    async def error(self, error: str) -> None:
         doc = {
             "status": Status.ERROR.value,
             "error": str(error),
@@ -866,7 +867,7 @@ class Connector(ESDocument):
         doc = {"status": Status.CONNECTED.value, "error": None}
         await self.index.update(doc_id=self.id, doc=doc)
 
-    async def sync_done(self, job, cursor=None) -> None:
+    async def sync_done(self, job: Optional[Mock], cursor: Optional[Dict[str, str]]=None) -> None:
         job_status = JobStatus.ERROR if job is None else job.status
         job_error = JOB_NOT_FOUND_ERROR if job is None else job.error
         job_type = job.job_type if job is not None else None
@@ -918,7 +919,7 @@ class Connector(ESDocument):
         await self.index.update(doc_id=self.id, doc=doc)
 
     @with_concurrency_control()
-    async def prepare(self, config, sources) -> None:
+    async def prepare(self, config: Dict[str, str], sources: Dict[str, str]) -> None:
         """Prepares the connector, given a configuration
         If the connector id and the service type is in the config, we want to
         populate the service type and then sets the default configuration.
@@ -993,7 +994,7 @@ class Connector(ESDocument):
         )
         await self.reload()
 
-    def validated_doc(self, source_klass):
+    def validated_doc(self, source_klass: Type[BaseDataSource]) -> Dict[str, Union[Dict[str, Dict[str, Optional[Union[str, int, bool]]]], str]]:
         simple_config = source_klass.get_simple_configuration()
         current_config = self.configuration.to_dict()
 
@@ -1028,8 +1029,8 @@ class Connector(ESDocument):
         return doc
 
     def updated_configuration_fields(
-        self, missing_keys, current_config, simple_default_config
-    ):
+        self, missing_keys: Union[List[str], Set[str]], current_config: Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Union[str, int]], Dict[str, Union[str, bool, int]]]], simple_default_config: Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Union[str, int]], Dict[str, Union[str, bool, int]]]]
+    ) -> Dict[str, Union[Dict[str, Optional[Union[str, int, bool]]], Dict[str, Union[str, bool, int]], Dict[str, str], Dict[str, int]]]:
         self.log_warning(
             f"Detected an existing connector: {self.id} ({self.service_type}) that was previously {Status.CONNECTED.value} but is now missing configuration: {missing_keys}. Values for the new fields will be automatically set. Please review these configuration values as part of your upgrade."
         )
@@ -1049,8 +1050,8 @@ class Connector(ESDocument):
         return draft_config
 
     def updated_configuration_field_properties(
-        self, fields_missing_properties, simple_config
-    ):
+        self, fields_missing_properties: Dict[str, Dict[str, str]], simple_config: Dict[str, Dict[str, Optional[Union[str, int, bool]]]]
+    ) -> Dict[str, Dict[str, Optional[Union[str, int, bool]]]]:
         """Checks the field properties for every field in a configuration.
         If a field is missing field properties, add those field properties
         with default values.
@@ -1068,7 +1069,7 @@ class Connector(ESDocument):
         return deep_merge_dicts(filtered_simple_config, fields_missing_properties)
 
     @with_concurrency_control()
-    async def validate_filtering(self, validator) -> None:
+    async def validate_filtering(self, validator: Mock) -> None:
         await self.reload()
         draft_filter = self.filtering.get_draft_filter()
         if not draft_filter.has_validation_state(FilteringValidationState.EDITED):
@@ -1109,7 +1110,7 @@ class Connector(ESDocument):
             )
         await self.reload()
 
-    async def document_count(self):
+    async def document_count(self) -> int:
         if not self.index.serverless:
             await self.index.client.indices.refresh(
                 index=self.index_name, ignore_unavailable=True
@@ -1122,7 +1123,7 @@ class Connector(ESDocument):
     def _prefix(self) -> str:
         return f"[Connector id: {self.id}, index name: {self.index_name}]"
 
-    def _extra(self):
+    def _extra(self) -> Dict[str, Optional[str]]:
         return {
             "labels.connector_id": self.id,
             "labels.index_name": self.index_name,
@@ -1141,7 +1142,7 @@ class SyncJobIndex(ESIndex):
         elastic_config (dict): Elasticsearch configuration and credentials
     """
 
-    def __init__(self, elastic_config) -> None:
+    def __init__(self, elastic_config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]) -> None:
         super().__init__(index_name=JOBS_INDEX, elastic_config=elastic_config)
 
     def _create_object(self, doc_source) -> SyncJob:
@@ -1156,7 +1157,7 @@ class SyncJobIndex(ESIndex):
             doc_source=doc_source,
         )
 
-    async def create(self, connector, trigger_method, job_type):
+    async def create(self, connector: Mock, trigger_method: JobTriggerMethod, job_type: JobType) -> MagicMock:
         if self.feature_use_connectors_api:
             response = await self.api.connector_sync_job_create(
                 connector_id=connector.id,
@@ -1194,7 +1195,7 @@ class SyncJobIndex(ESIndex):
 
             return api_response["_id"]
 
-    async def pending_jobs(self, connector_ids, job_types):
+    async def pending_jobs(self, connector_ids: List[int], job_types: Optional[str]) -> None:
         if not job_types:
             return
         if not isinstance(job_types, list):

@@ -11,6 +11,7 @@ from connectors.es.index import DocumentNotFoundError
 from connectors.es.management_client import ESManagementClient
 from connectors.protocol import ConnectorIndex, SyncJobIndex
 from connectors.services.base import BaseService
+from typing import Dict, List, Union
 
 IDLE_JOB_ERROR = "The job has not seen any update for some time."
 
@@ -18,7 +19,7 @@ IDLE_JOB_ERROR = "The job has not seen any update for some time."
 class JobCleanUpService(BaseService):
     name = "cleanup"
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Dict[str, Union[Dict[str, str], Dict[str, int], List[str]]]) -> None:
         super().__init__(config, "job_cleanup_service")
         self.idling = int(self.service_config.get("job_cleanup_interval", 60 * 5))
         self.native_service_types = self.config.get("native_service_types", []) or []

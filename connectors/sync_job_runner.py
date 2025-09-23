@@ -32,6 +32,10 @@ from connectors.protocol.connectors import (
 )
 from connectors.source import BaseDataSource
 from connectors.utils import truncate_id
+import connectors.protocol.connectors
+from _asyncio import Future
+from typing import Any, Dict, Iterator, Optional, Union
+from unittest.mock import Mock
 
 UTF_8 = "utf-8"
 
@@ -45,7 +49,7 @@ class SyncJobRunningError(Exception):
 
 
 class InsufficientESLicenseError(Exception):
-    def __init__(self, required_license, actual_license) -> None:
+    def __init__(self, required_license: License, actual_license: License) -> None:
         super().__init__(
             f"Minimum required Elasticsearch license: '{required_license.value}'. Actual license: '{actual_license.value}'."
         )
@@ -56,12 +60,12 @@ class SyncJobStartError(Exception):
 
 
 class ConnectorNotFoundError(Exception):
-    def __init__(self, connector_id) -> None:
+    def __init__(self, connector_id: str) -> None:
         super().__init__(f"Connector is not found for connector ID {connector_id}.")
 
 
 class ConnectorJobNotFoundError(Exception):
-    def __init__(self, job_id) -> None:
+    def __init__(self, job_id: str) -> None:
         super().__init__(f"Connector job is not found for job ID {job_id}.")
 
 
@@ -70,7 +74,7 @@ class ConnectorJobCanceledError(Exception):
 
 
 class ConnectorJobNotRunningError(Exception):
-    def __init__(self, job_id, status) -> None:
+    def __init__(self, job_id: str, status: connectors.protocol.connectors.JobStatus) -> None:
         super().__init__(
             f"Connector job (ID: {job_id}) is not running but in status of {status}."
         )
@@ -96,11 +100,11 @@ class SyncJobRunner:
 
     def __init__(
         self,
-        source_klass,
-        sync_job,
-        connector,
-        es_config,
-        service_config,
+        source_klass: Mock,
+        sync_job: Mock,
+        connector: Mock,
+        es_config: Dict[Any, Any],
+        service_config: Dict[Any, Any],
     ) -> None:
         self.source_klass = source_klass
         self.data_provider = None
@@ -217,13 +221,13 @@ class SyncJobRunner:
             if self.data_provider is not None:
                 await self.data_provider.close()
 
-    def _data_source_framework_config(self):
+    def _data_source_framework_config(self) -> DataSourceFrameworkConfig:
         builder = DataSourceFrameworkConfig.Builder().with_max_file_size(
             self.service_config.get("max_file_download_size")
         )
         return builder.build()
 
-    async def _execute_access_control_sync_job(self, job_type, bulk_options) -> None:
+    async def _execute_access_control_sync_job(self, job_type: connectors.protocol.connectors.JobType, bulk_options: Dict[Any, Any]) -> None:
         if requires_platinum_license(self.sync_job, self.connector, self.source_klass):
             (
                 is_platinum_license_enabled,
@@ -246,7 +250,7 @@ class SyncJobRunner:
             enable_bulk_operations_logging=self._enable_bulk_operations_logging,
         )
 
-    def _skip_unchanged_documents_enabled(self, job_type, data_provider) -> bool:
+    def _skip_unchanged_documents_enabled(self, job_type: connectors.protocol.connectors.JobType, data_provider: Mock) -> bool:
         """
         Check if timestamp optimization is enabled for the current data source.
         Timestamp optimization can be enabled only for incremental jobs.
@@ -265,7 +269,7 @@ class SyncJobRunner:
             is BaseDataSource.get_docs_incrementally
         )
 
-    async def _execute_content_sync_job(self, job_type, bulk_options) -> None:
+    async def _execute_content_sync_job(self, job_type: connectors.protocol.connectors.JobType, bulk_options: Dict[Any, Any]) -> None:
         if (
             self.sync_job.job_type == JobType.INCREMENTAL
             and not self.connector.features.incremental_sync_enabled()
@@ -300,7 +304,7 @@ class SyncJobRunner:
             enable_bulk_operations_logging=self._enable_bulk_operations_logging,
         )
 
-    async def _sync_done(self, sync_status, sync_error=None) -> None:
+    async def _sync_done(self, sync_status: connectors.protocol.connectors.JobStatus, sync_error: Optional[Any]=None) -> None:
         if self.job_reporting_task is not None and not self.job_reporting_task.done():
             self.job_reporting_task.cancel()
             try:
@@ -362,7 +366,7 @@ class SyncJobRunner:
         )
         self.log_counters(ingestion_stats)
 
-    def log_counters(self, counters) -> None:
+    def log_counters(self, counters: Dict[str, int]) -> None:
         """
         Logs out a dump of everything in "counters"
 
@@ -414,7 +418,7 @@ class SyncJobRunner:
         except Exception as e:
             raise SyncJobStartError from e
 
-    async def prepare_docs(self):
+    async def prepare_docs(self) -> None:
         self.sync_job.log_debug(f"Using pipeline {self.sync_job.pipeline}")
 
         async for doc, lazy_download, operation in self.generator():
@@ -446,7 +450,7 @@ class SyncJobRunner:
             doc["_run_ml_inference"] = self.sync_job.pipeline["run_ml_inference"]
             yield doc, lazy_download, operation
 
-    async def generator(self):
+    async def generator(self) -> None:
         skip_unchanged_documents = self._skip_unchanged_documents_enabled(
             self.sync_job.job_type, self.data_provider
         )
@@ -478,7 +482,7 @@ class SyncJobRunner:
             case _:
                 raise UnsupportedJobType
 
-    async def update_ingestion_stats(self, interval):
+    async def update_ingestion_stats(self, interval: int) -> Iterator[Optional[Future]]:
         while True:
             await asyncio.sleep(interval)
 
@@ -522,7 +526,7 @@ class SyncJobRunner:
             self.connector.log_error("Couldn't reload connector")
             return False
 
-    def _content_extraction_enabled(self, sync_job_config, pipeline_config) -> bool:
+    def _content_extraction_enabled(self, sync_job_config: Dict[str, Union[bool, str]], pipeline_config: Union[connectors.protocol.connectors.Pipeline, Dict[str, bool], Dict[str, str]]) -> bool:
         if sync_job_config.get("use_text_extraction_service"):
             logger.debug(
                 f"Binary content extraction via local extraction service is enabled for connector {self.connector.id} during sync job {self.sync_job.id}."

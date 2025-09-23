@@ -11,10 +11,10 @@ from functools import cached_property, partial
 from urllib.parse import quote
 
 from asyncpg.exceptions._base import InternalClientError
-from sqlalchemy import create_engine, text
+from sqlalchemy import CursorResult, create_engine, text
 from sqlalchemy.exc import ProgrammingError
 
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -25,6 +25,9 @@ from connectors.sources.generic_database import (
     map_column_names,
 )
 from connectors.utils import iso_utc
+from _asyncio import Future
+from connectors.logger import ExtraLogger
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_ORACLE_HOME = ""
@@ -69,18 +72,18 @@ class OracleQueries(Queries):
 class OracleClient:
     def __init__(
         self,
-        host,
-        port,
-        user,
-        password,
-        connection_source,
-        sid,
-        service_name,
-        tables,
-        protocol,
-        oracle_home,
-        wallet_config,
-        logger_,
+        host: str,
+        port: Optional[int],
+        user: str,
+        password: str,
+        connection_source: str,
+        sid: str,
+        service_name: str,
+        tables: Union[str, List[str]],
+        protocol: str,
+        oracle_home: str,
+        wallet_config: str,
+        logger_: Optional[ExtraLogger],
         retry_count: int = DEFAULT_RETRY_COUNT,
         fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
@@ -131,7 +134,7 @@ class OracleClient:
         else:
             return create_engine(connection_string)
 
-    async def get_cursor(self, query: str):
+    async def get_cursor(self, query: str) -> CursorResult[Any]:
         """Executes the passed query on the Non-Async supported Database server and return cursor.
 
         Args:
@@ -159,7 +162,7 @@ class OracleClient:
             )
             raise
 
-    async def ping(self):
+    async def ping(self) -> Generator[Future, None, Tuple[int, str]]:
         return await anext(
             fetch(
                 cursor_func=partial(self.get_cursor, self.queries.ping()),
@@ -190,7 +193,7 @@ class OracleClient:
             for table in tables:
                 yield table
 
-    async def get_table_row_count(self, table):
+    async def get_table_row_count(self, table: str) -> Generator[Future, None, int]:
         [row_count] = await anext(
             fetch(
                 cursor_func=partial(
@@ -205,7 +208,7 @@ class OracleClient:
         )
         return row_count
 
-    async def get_table_primary_key(self, table):
+    async def get_table_primary_key(self, table: str) -> Generator[Future, None, List[str]]:
         self._logger.debug(f"Extracting primary keys for table '{table}'")
         primary_keys = [
             key
@@ -224,7 +227,7 @@ class OracleClient:
         self._logger.debug(f"Found primary keys for table '{table}'")
         return primary_keys
 
-    async def get_table_last_update_time(self, table):
+    async def get_table_last_update_time(self, table: str) -> Generator[Future, None, str]:
         self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
@@ -276,7 +279,7 @@ class OracleDataSource(BaseDataSource):
     name = "Oracle Database"
     service_type = "oracle"
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup connection to the Oracle database-server configured by user
 
         Args:
@@ -309,7 +312,7 @@ class OracleDataSource(BaseDataSource):
         self.oracle_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[Dict[str, str]], List[str]]]]:
         return {
             "host": {
                 "label": "Host",

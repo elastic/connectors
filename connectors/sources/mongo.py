@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Optional, Union
+from typing import Any, Iterator, Dict, List, Optional, Union
 
 import fastjsonschema
 from bson import OLD_UUID_SUBTYPE, Binary, DBRef, Decimal128, ObjectId
@@ -22,7 +22,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.utils import get_pem_format
 
 
@@ -76,7 +76,7 @@ class MongoAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
+    async def validate(self, advanced_rules: Dict[str, Any]) -> SyncRuleValidationResult:
         try:
             MongoAdvancedRulesValidator.SCHEMA(advanced_rules)
 
@@ -98,7 +98,7 @@ class MongoDataSource(BaseDataSource):
     service_type = "mongodb"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
 
         self.client = None
@@ -182,7 +182,7 @@ class MongoDataSource(BaseDataSource):
         }
 
     @contextmanager
-    def get_client(self):
+    def get_client(self) -> Iterator[AsyncIOMotorClient]:
         certfile = ""
         try:
             client_params = {}
@@ -247,7 +247,7 @@ class MongoDataSource(BaseDataSource):
                 )
 
     # TODO: That's a lot of work. Find a better way
-    def serialize(self, doc):
+    def serialize(self, doc: Dict[str, Any]) -> Dict[str, Any]:
         def _serialize(value):
             if isinstance(value, ObjectId):
                 value = str(value)

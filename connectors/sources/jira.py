@@ -9,7 +9,7 @@ import asyncio
 from copy import copy
 from datetime import datetime
 from functools import partial
-from typing import Dict, List, Union
+from typing import Any, Generator, Iterator, Optional, Dict, List, Union
 from urllib import parse
 
 import aiohttp
@@ -18,7 +18,7 @@ from aiohttp.client_exceptions import ClientResponseError, ServerConnectionError
 
 from connectors.access_control import ACCESS_CONTROL
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.sources.atlassian import (
     AtlassianAccessControl,
     AtlassianAdvancedRulesValidator,
@@ -35,6 +35,8 @@ from connectors.utils import (
     retryable,
     ssl_context,
 )
+from _asyncio import Future, Task
+from aiohttp.client import ClientSession
 
 FINISHED = "FINISHED"
 WILDCARD = "*"
@@ -115,7 +117,7 @@ class EmptyResponseError(Exception):
 class JiraClient:
     """Jira client to handle API calls made to Jira"""
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -138,7 +140,7 @@ class JiraClient:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    def _get_session(self):
+    def _get_session(self) -> ClientSession:
         """Generate and return base client session with configuration fields
 
         Returns:
@@ -192,7 +194,7 @@ class JiraClient:
         await self.session.close()
         self.session = None
 
-    async def _handle_client_errors(self, url, exception: Union[TypeError, ValueError]):
+    async def _handle_client_errors(self, url: str, exception: Union[TypeError, ValueError]) -> Iterator[Task]:
         if exception.status == 429:
             response_headers = exception.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -226,7 +228,7 @@ class JiraClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def api_call(self, url_name=None, **url_kwargs):
+    async def api_call(self, url_name: Optional[str]=None, **url_kwargs) -> Iterator[Optional[Task]]:
         """Make a GET call for Atlassian API using the passed url_name with retry for the failed API calls.
 
         Args:
@@ -401,7 +403,7 @@ class JiraClient:
         ):
             yield response
 
-    async def get_timezone(self):
+    async def get_timezone(self) -> str:
         async for response in self.api_call(url_name=PING):
             timezone = await response.json()
             return timezone.get("timeZone")
@@ -445,7 +447,7 @@ class JiraDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the Jira
 
         Args:
@@ -603,7 +605,7 @@ class JiraDataSource(BaseDataSource):
             },
         }
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
         Returns:
@@ -617,14 +619,14 @@ class JiraDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(self, document: Dict[str, Union[str, Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[str, List[Dict[str, str]]]]]], Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[Any, Any]]]], Dict[str, str], int]], access_control: Union[str, List[str]]) -> Dict[str, Any]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
             )
         return document
 
-    async def _project_access_control(self, project):
+    async def _project_access_control(self, project: Dict[str, str]) -> List[Union[Any, str]]:
         if not self._dls_enabled():
             return []
 
@@ -656,7 +658,7 @@ class JiraDataSource(BaseDataSource):
                     )
         return list(access_control)
 
-    async def _cache_project_access_control(self, project):
+    async def _cache_project_access_control(self, project: Dict[str, str]) -> List[Union[Any, str]]:
         project_key = project.get("key")
         if project_key in self.project_permission_cache.keys():
             project_access_controls = self.project_permission_cache.get(project_key)
@@ -667,7 +669,7 @@ class JiraDataSource(BaseDataSource):
             self.project_permission_cache[project_key] = project_access_controls
         return project_access_controls
 
-    async def _issue_access_control(self, issue_key, project):
+    async def _issue_access_control(self, issue_key: str, project: Dict[str, str]) -> List[Union[Any, str]]:
         if not self._dls_enabled():
             return []
 
@@ -741,7 +743,7 @@ class JiraDataSource(BaseDataSource):
                 return project_access_controls
         return list(access_control)
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         """Get access control documents for active Atlassian users.
 
         This method fetches access control documents for active Atlassian users when document level security (DLS)
@@ -787,7 +789,7 @@ class JiraDataSource(BaseDataSource):
     def advanced_rules_validators(self) -> List[AtlassianAdvancedRulesValidator]:
         return [AtlassianAdvancedRulesValidator(self)]
 
-    def tweak_bulk_options(self, options) -> None:
+    def tweak_bulk_options(self, options: Dict[str, int]) -> None:
         """Tweak bulk options as per concurrent downloads support by jira
 
         Args:
@@ -800,8 +802,8 @@ class JiraDataSource(BaseDataSource):
         await self.jira_client.close_session()
 
     async def get_content(
-        self, issue_key, attachment, timestamp=None, doit: bool = False
-    ):
+        self, issue_key: str, attachment: Dict[str, Union[str, int]], timestamp: None=None, doit: bool = False
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for allowed file types.
 
         Args:
@@ -861,7 +863,7 @@ class JiraDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to the Jira")
             raise
 
-    async def _put_projects(self, project, timestamp) -> None:
+    async def _put_projects(self, project: Dict[str, str], timestamp: str) -> None:
         """Store project documents to queue
 
         Args:
@@ -903,7 +905,7 @@ class JiraDataSource(BaseDataSource):
                 f"Skipping data for type: {PROJECT}. Error: {exception}"
             )
 
-    async def _put_issue(self, issue) -> None:
+    async def _put_issue(self, issue: Dict[str, Union[str, Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[str, List[Dict[str, str]]]]]], Dict[str, Union[Dict[str, str], str, List[Dict[str, Union[str, int]]], Dict[str, Dict[Any, Any]]]]]]) -> None:
         """Put specific issue as per the given issue_key in a queue
 
         Args:
@@ -987,7 +989,7 @@ class JiraDataSource(BaseDataSource):
             self.tasks += 1
         await self.queue.put("FINISHED")  # pyright: ignore
 
-    async def _put_attachment(self, attachments, issue_key, access_control) -> None:
+    async def _put_attachment(self, attachments: List[Dict[str, Union[str, int]]], issue_key: str, access_control: Union[str, List[str]]) -> None:
         """Put attachments of a specific issue in a queue
 
         Args:

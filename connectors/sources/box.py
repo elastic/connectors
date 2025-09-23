@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
-from typing import Dict, List, Optional, Union
+from typing import Any, Generator, Iterator, Dict, List, Optional, Union
 
 import aiofiles
 import aiohttp
@@ -19,7 +19,7 @@ from aiofiles.tempfile import NamedTemporaryFile
 from aiohttp.client_exceptions import ClientResponseError
 
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import (
     TIKA_SUPPORTED_FILETYPES,
     CacheWithTimeout,
@@ -30,6 +30,8 @@ from connectors.utils import (
     convert_to_b64,
     retryable,
 )
+from _asyncio import Future, Task
+from aiohttp.client import ClientSession
 
 FINISHED = "FINISHED"
 
@@ -69,7 +71,7 @@ class NotFound(Exception):
 
 
 class AccessToken:
-    def __init__(self, configuration, http_session) -> None:
+    def __init__(self, configuration: DataSourceConfiguration, http_session: ClientSession) -> None:
         global refresh_token
         self.client_id = configuration["client_id"]
         self.client_secret = configuration["client_secret"]
@@ -80,7 +82,7 @@ class AccessToken:
         self.is_enterprise = configuration["is_enterprise"]
         self.enterprise_id = configuration["enterprise_id"]
 
-    async def get(self):
+    async def get(self) -> str:
         if cached_value := self._token_cache.get_value():
             return cached_value
         logger.debug("No token cache found; fetching new token")
@@ -137,7 +139,7 @@ class AccessToken:
 
 
 class BoxClient:
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -152,7 +154,7 @@ class BoxClient:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def _put_to_sleep(self, retry_after):
+    async def _put_to_sleep(self, retry_after: int) -> Iterator[Task]:
         self._logger.debug(
             f"Connector will attempt to retry after {retry_after} seconds."
         )
@@ -160,7 +162,7 @@ class BoxClient:
         msg = "Rate limit exceeded."
         raise Exception(msg)
 
-    def debug_query_string(self, params) -> Optional[str]:
+    def debug_query_string(self, params: Optional[Dict[str, Union[int, str]]]) -> Optional[str]:
         if self._logger.isEnabledFor(logging.DEBUG):
             return (
                 "&".join(f"{key}={value}" for key, value in params.items())
@@ -168,7 +170,7 @@ class BoxClient:
                 else ""
             )
 
-    async def _handle_client_errors(self, exception) -> None:
+    async def _handle_client_errors(self, exception: ClientResponseError) -> None:
         match exception.status:
             case 401:
                 await self.token._set_access_token()
@@ -188,7 +190,7 @@ class BoxClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def get(self, url, headers, params=None):
+    async def get(self, url: str, headers: Dict[str, str], params: Optional[Dict[str, Union[int, str]]]=None) -> Iterator[Task]:
         self._logger.debug(
             f"Calling GET {url}?{self.debug_query_string(params=params)}"
         )
@@ -201,7 +203,7 @@ class BoxClient:
         except Exception:
             raise
 
-    async def paginated_call(self, url, params, headers):
+    async def paginated_call(self, url: str, params: Dict[str, str], headers: Dict[Any, Any]) -> Iterator[Task]:
         try:
             offset = 0
             while True:
@@ -230,7 +232,7 @@ class BoxDataSource(BaseDataSource):
     service_type = "box"
     incremental_sync_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
         self.configuration = configuration
         self.tasks = 0
@@ -340,7 +342,7 @@ class BoxDataSource(BaseDataSource):
         ):
             yield user.get("id")
 
-    async def _fetch(self, doc_id, user_id=None) -> None:
+    async def _fetch(self, doc_id: Union[str, int], user_id: None=None) -> None:
         self._logger.info(
             f"Fetching files and folders recursively for folder ID: {doc_id}"
         )
@@ -385,7 +387,7 @@ class BoxDataSource(BaseDataSource):
         finally:
             await self.queue.put(FINISHED)
 
-    async def _get_document_with_content(self, url, attachment_name, document, user_id):
+    async def _get_document_with_content(self, url: str, attachment_name: str, document: Dict[str, str], user_id: None) -> Generator[Future, None, Dict[str, str]]:
         file_data = await self.client.get(
             url=url, headers={"as-user": user_id} if user_id else {}
         )
@@ -410,7 +412,7 @@ class BoxDataSource(BaseDataSource):
         return document
 
     def _pre_checks_for_get_content(
-        self, attachment_extension, attachment_name, attachment_size
+        self, attachment_extension: str, attachment_name: str, attachment_size: int
     ) -> bool:
         if attachment_extension == "":
             self._logger.debug(
@@ -432,8 +434,8 @@ class BoxDataSource(BaseDataSource):
         return True
 
     async def get_content(
-        self, attachment, user_id=None, timestamp=None, doit: bool = False
-    ):
+        self, attachment: Dict[str, Union[int, str]], user_id: None=None, timestamp: None=None, doit: bool = False
+    ) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for Apache TIKA supported file types.
 
         Args:

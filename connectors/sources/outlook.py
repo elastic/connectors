@@ -10,7 +10,7 @@ import os
 from copy import copy
 from datetime import date
 from functools import cached_property, partial
-from typing import Any, Dict, List, Optional, Union
+from typing import Iterator, Any, Dict, List, Optional, Union
 
 import aiofiles
 import aiohttp
@@ -37,7 +37,7 @@ from connectors.access_control import (
     prefix_identity,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import (
     CancellableSleeps,
     RetryStrategy,
@@ -48,6 +48,7 @@ from connectors.utils import (
     retryable,
     url_encode,
 )
+from _asyncio import Task
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -149,7 +150,7 @@ END_SIGNAL = "FINISHED"
 CERT_FILE = "outlook_cert.cer"
 
 
-def ews_format_to_datetime(source_datetime, timezone):
+def ews_format_to_datetime(source_datetime: str, timezone: str) -> str:
     """Change datetime format to user account timezone
     Args:
         datetime: Datetime in UTC format
@@ -169,19 +170,19 @@ def ews_format_to_datetime(source_datetime, timezone):
         return source_datetime
 
 
-def _prefix_email(email) -> Optional[str]:
+def _prefix_email(email: str) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_display_name(user) -> Optional[str]:
+def _prefix_display_name(user: str) -> Optional[str]:
     return prefix_identity("name", user)
 
 
-def _prefix_user_id(user_id) -> Optional[str]:
+def _prefix_user_id(user_id: str) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
-def _prefix_job(job_title) -> Optional[str]:
+def _prefix_job(job_title: str) -> Optional[str]:
     return prefix_identity("job_title", job_title)
 
 
@@ -248,7 +249,7 @@ class ExchangeUsers:
     """Fetch users from Exchange Active Directory"""
 
     def __init__(
-        self, ad_server, domain, exchange_server, user, password, ssl_enabled, ssl_ca
+        self, ad_server: str, domain: str, exchange_server: str, user: str, password: str, ssl_enabled: bool, ssl_ca: str
     ) -> None:
         self.ad_server = Server(host=ad_server)
         self.domain = domain
@@ -271,7 +272,7 @@ class ExchangeUsers:
     async def close(self) -> None:
         await ManageCertificate().remove_certificate_file()
 
-    def _fetch_normal_users(self, search_query: str):
+    def _fetch_normal_users(self, search_query: str) -> Iterator[Dict[str, str]]:
         try:
             has_value_for_normal_users, _, response, _ = self._create_connection.search(
                 search_query,
@@ -290,7 +291,7 @@ class ExchangeUsers:
             msg = f"Something went wrong while fetching users. Error: {e}"
             raise UsersFetchFailed(msg) from e
 
-    def _fetch_admin_users(self, search_query: str):
+    def _fetch_admin_users(self, search_query: str) -> Iterator[str]:
         try:
             (
                 has_value_for_admin_users,
@@ -354,7 +355,7 @@ class ExchangeUsers:
 class Office365Users:
     """Fetch users from Office365 Active Directory"""
 
-    def __init__(self, client_id, client_secret, tenant_id) -> None:
+    def __init__(self, client_id: str, client_secret: str, tenant_id: str) -> None:
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.client_secret = client_secret
@@ -390,7 +391,7 @@ class Office365Users:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=UnauthorizedException,
     )
-    async def _fetch_token(self):
+    async def _fetch_token(self) -> str:
         try:
             async with self._get_session.post(
                 url=f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token",
@@ -411,7 +412,7 @@ class Office365Users:
         interval=RETRY_INTERVAL,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def get_users(self):
+    async def get_users(self) -> Iterator[Task]:
         access_token = await self._fetch_token()
         filter_ = url_encode("accountEnabled eq true")
         url = f"https://graph.microsoft.com/v1.0/users?$top={TOP}&$filter={filter_}"
@@ -590,7 +591,7 @@ class OutlookDocFormatter:
 class OutlookClient:
     """Outlook client to handle API calls made to Outlook"""
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self._logger = logger
@@ -683,7 +684,7 @@ class OutlookDataSource(BaseDataSource):
     incremental_sync_enabled = True
     dls_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to the Outlook
 
         Args:
@@ -824,7 +825,7 @@ class OutlookDataSource(BaseDataSource):
             },
         }
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         """Check if document level security is enabled. This method checks whether document level security (DLS) is enabled based on the provided configuration.
 
         Returns:
@@ -850,7 +851,7 @@ class OutlookDataSource(BaseDataSource):
             elif users.get("attributes", {}).get("mail"):
                 yield await self._user_access_control_doc_for_server(users=users)
 
-    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
+    async def _user_access_control_doc(self, user: Dict[str, str]) -> Dict[str, Any]:
         user_id = user.get("id", "")
         display_name = user.get("displayName", "")
         user_email = user.get("mail", "")
@@ -873,7 +874,7 @@ class OutlookDataSource(BaseDataSource):
             access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
         )
 
-    async def _user_access_control_doc_for_server(self, users) -> Dict[str, Any]:
+    async def _user_access_control_doc_for_server(self, users: Dict[str, Union[Dict[str, str], str]]) -> Dict[str, Any]:
         name_metadata = users.get("dn", "").split("=", 1)[1]
         display_name = name_metadata.split(",", 1)[0]
         user_email = users.get("attributes", {}).get("mail")
@@ -894,7 +895,7 @@ class OutlookDataSource(BaseDataSource):
             access_control=[_prefixed_user_id, _prefixed_display_name, _prefixed_email]
         )
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(self, document: Dict[str, Union[str, List[str], int, List[int]]], access_control: List[str]) -> Dict[str, Union[str, List[str], int, List[int]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)

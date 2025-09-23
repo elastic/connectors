@@ -7,7 +7,7 @@ import asyncio
 import os
 from contextlib import AsyncExitStack
 from functools import partial
-from typing import Dict, List, Union
+from typing import Generator, Optional, Dict, List, Union
 
 import aioboto3
 import fastjsonschema
@@ -20,8 +20,10 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import hash_id
+from _asyncio import Future
+from unittest.mock import MagicMock
 
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_MAX_RETRY_ATTEMPTS = 5
@@ -37,7 +39,7 @@ else:
 class S3Client:
     """Amazon S3 client to handle method calls made to S3"""
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self.configuration = configuration
         self._logger = logger
         self.session = aioboto3.Session(
@@ -55,7 +57,7 @@ class S3Client:
     def set_logger(self, logger_) -> None:
         self._logger = logger_
 
-    async def client(self, region=None):
+    async def client(self, region: None=None):
         """This method creates context manager and client session object for s3.
         Args:
             region (str): Name of bucket region. Defaults to None
@@ -94,7 +96,7 @@ class S3Client:
         s3 = await self.client()
         await s3.list_buckets()
 
-    async def get_bucket_list(self):
+    async def get_bucket_list(self) -> List[str]:
         """Returns bucket list from list_buckets response
 
         Returns:
@@ -143,7 +145,7 @@ class S3Client:
                     f"Something went wrong while fetching documents from {bucket}. Error: {exception}"
                 )
 
-    async def get_bucket_region(self, bucket_name):
+    async def get_bucket_region(self, bucket_name: str) -> None:
         """This method return the name of region for a bucket.
         Args
             bucket_name (str): Name of bucket
@@ -179,10 +181,10 @@ class S3AdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source) -> None:
+    def __init__(self, source: "S3DataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
+    async def validate(self, advanced_rules: Union[Dict[str, List[str]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -207,7 +209,7 @@ class S3DataSource(BaseDataSource):
     service_type = "s3"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the connection to the Amazon S3.
 
         Args:
@@ -306,7 +308,7 @@ class S3DataSource(BaseDataSource):
                         ),
                     )
 
-    async def get_content(self, doc, s3_client, timestamp=None, doit=None):
+    async def get_content(self, doc: Dict[str, Union[str, int]], s3_client: Union[MagicMock, str], timestamp: None=None, doit: Optional[Union[bool, int]]=None) -> Generator[Future, None, Optional[Union[Dict[str, str], Dict[str, Union[str, bytes]]]]]:
         if not (doit):
             return
 

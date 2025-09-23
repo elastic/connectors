@@ -14,7 +14,6 @@ from typing import List, Optional, Sized
 import fastjsonschema
 from asyncpg.exceptions._base import InternalClientError
 from fastjsonschema import JsonSchemaValueException
-from pyre_extensions import PyreReadOnly
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import ProgrammingError
@@ -513,7 +512,7 @@ class MSSQLDataSource(BaseDataSource):
         )
         return row
 
-    async def get_primary_key(self, tables: Optional[PyreReadOnly[Sized]]) -> List[str]:
+    async def get_primary_key(self, tables: Optional[Sized]) -> List[str]:
         self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
@@ -528,7 +527,7 @@ class MSSQLDataSource(BaseDataSource):
     async def yield_rows_for_query(
         self,
         primary_key_columns,
-        tables: Optional[PyreReadOnly[Sized]],
+        tables: Optional[Sized],
         query: Optional[str] = None,
     ):
         if query is None:

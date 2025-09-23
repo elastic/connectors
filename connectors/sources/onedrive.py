@@ -10,7 +10,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from functools import cached_property, partial
-from typing import Any, Dict, List, Optional, Union
+from typing import Callable, Generator, Iterator, Tuple, Any, Dict, List, Optional, Union
 from urllib import parse
 
 import aiohttp
@@ -33,7 +33,7 @@ from connectors.filtering.validation import (
     SyncRuleValidationResult,
 )
 from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import (
     CacheWithTimeout,
     CancellableSleeps,
@@ -41,6 +41,8 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from _asyncio import Future, Task
+from asyncio.tasks import _GatheringFuture
 
 RETRIES = 3
 RETRY_INTERVAL = 2
@@ -85,19 +87,19 @@ else:
     GRAPH_API_AUTH_URL: str = "https://login.microsoftonline.com"
 
 
-def _prefix_email(email) -> Optional[str]:
+def _prefix_email(email: str) -> Optional[str]:
     return prefix_identity("email", email)
 
 
-def _prefix_user(user) -> Optional[str]:
+def _prefix_user(user: str) -> Optional[str]:
     return prefix_identity("user", user)
 
 
-def _prefix_user_id(user_id) -> Optional[str]:
+def _prefix_user_id(user_id: str) -> Optional[str]:
     return prefix_identity("user_id", user_id)
 
 
-def _prefix_group(group) -> Optional[str]:
+def _prefix_group(group: str) -> Optional[str]:
     return prefix_identity("group", group)
 
 
@@ -144,10 +146,10 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
     SCHEMA_DEFINITION = {"type": "array", "items": RULES_OBJECT_SCHEMA_DEFINITION}
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source) -> None:
+    def __init__(self, source: "OneDriveDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
+    async def validate(self, advanced_rules: Union[List[Dict[str, List[Union[str, List[str]]]]], List[Union[Dict[str, List[str]], Dict[str, Union[str, List[str]]]]], List[Dict[str, Union[str, List[str]]]], Dict[str, List[str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -170,7 +172,7 @@ class OneDriveAdvancedRulesValidator(AdvancedRulesValidator):
 class AccessToken:
     """Class for handling access token for Microsoft Graph APIs"""
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self.tenant_id = configuration["tenant_id"]
         self.client_id = configuration["client_id"]
         self.client_secret = configuration["client_secret"]
@@ -232,7 +234,7 @@ class AccessToken:
 class OneDriveClient:
     """Client Class for API calls to OneDrive"""
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         self._sleeps = CancellableSleeps()
         self.configuration = configuration
         self.retry_count = self.configuration["retry_count"]
@@ -271,7 +273,7 @@ class OneDriveClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def get(self, url, header=None):
+    async def get(self, url: str, header: None=None) -> Iterator[Task]:
         access_token = await self.token.get()
         headers = {"authorization": f"Bearer {access_token}"}
         if header:
@@ -291,7 +293,7 @@ class OneDriveClient:
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
         skipped_exceptions=NotFound,
     )
-    async def post(self, url, payload=None):
+    async def post(self, url: str, payload: None=None) -> Iterator[Task]:
         access_token = await self.token.get()
         headers = {
             "authorization": f"Bearer {access_token}",
@@ -316,7 +318,7 @@ class OneDriveClient:
             await self._sleeps.sleep(retry_seconds)
             raise
 
-    async def _handle_client_side_errors(self, e):
+    async def _handle_client_side_errors(self, e: ClientResponseError) -> Iterator[Task]:
         if e.status == 429 or e.status == 503:
             response_headers = e.headers or {}
             retry_seconds = DEFAULT_RETRY_SECONDS
@@ -439,7 +441,7 @@ class OneDriveDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup the connection to OneDrive
 
         Args:
@@ -547,7 +549,7 @@ class OneDriveDataSource(BaseDataSource):
             self._logger.exception("Error while connecting to OneDrive")
             raise
 
-    async def get_content(self, file, download_url, timestamp=None, doit: bool = False):
+    async def get_content(self, file: Dict[str, Union[str, int]], download_url: str, timestamp: None=None, doit: bool = False) -> Generator[Future, None, Optional[Dict[str, str]]]:
         """Extracts the content for allowed file types.
 
         Args:
@@ -584,7 +586,7 @@ class OneDriveDataSource(BaseDataSource):
             ),
         )
 
-    def prepare_doc(self, file) -> Dict[str, Any]:
+    def prepare_doc(self, file: Dict[str, Optional[Union[str, Dict[str, str], int, List[str]]]]) -> Dict[str, Any]:
         file_info = file.get("file", {}) or {}
 
         modified_document = {
@@ -601,7 +603,7 @@ class OneDriveDataSource(BaseDataSource):
             modified_document[ACCESS_CONTROL] = file[ACCESS_CONTROL]
         return modified_document
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         if self._features is None:
             return False
 
@@ -610,7 +612,7 @@ class OneDriveDataSource(BaseDataSource):
 
         return self.configuration["use_document_level_security"]
 
-    async def _decorate_with_access_control(self, document, user_id):
+    async def _decorate_with_access_control(self, document: Dict[str, Union[str, Dict[str, str], int]], user_id: None) -> Dict[str, Union[str, Dict[str, str], int, List[str]]]:
         if self._dls_enabled():
             entity_permissions = await self.get_entity_permission(
                 user_id=user_id, file_id=document.get("id")
@@ -620,7 +622,7 @@ class OneDriveDataSource(BaseDataSource):
             )
         return document
 
-    async def _user_access_control_doc(self, user) -> Dict[str, Any]:
+    async def _user_access_control_doc(self, user: Dict[str, Union[str, List[Dict[str, str]]]]) -> Dict[str, Any]:
         email = user.get("mail")
         username = user.get("userPrincipalName")
 
@@ -650,7 +652,7 @@ class OneDriveDataSource(BaseDataSource):
             "created_at": user.get("createdDateTime", iso_utc()),
         } | es_access_control_query(access_control)
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         if not self._dls_enabled():
             self._logger.warning("DLS is not enabled. Skipping")
             return
@@ -659,7 +661,7 @@ class OneDriveDataSource(BaseDataSource):
         async for user in self.client.list_users(include_groups=True):
             yield await self._user_access_control_doc(user=user)
 
-    async def get_entity_permission(self, user_id, file_id):
+    async def get_entity_permission(self, user_id: Optional[str], file_id: str) -> List[str]:
         if not self._dls_enabled():
             return []
 
@@ -703,15 +705,15 @@ class OneDriveDataSource(BaseDataSource):
 
         return permissions
 
-    def _prepare_batch(self, request_id, url) -> Dict[str, Any]:
+    def _prepare_batch(self, request_id: str, url: str) -> Dict[str, Any]:
         return {"id": str(request_id), "method": "GET", "url": url, "retry_count": "0"}
 
-    def pop_batch_requests(self, batched_apis):
+    def pop_batch_requests(self, batched_apis: List[Dict[str, str]]) -> List[Dict[str, str]]:
         batch = batched_apis[: min(GRAPH_API_MAX_BATCH_SIZE, len(batched_apis))]
         batched_apis[:] = batched_apis[len(batch) :]
         return batch
 
-    def lookup_request_by_id(self, requests, response_id):
+    def lookup_request_by_id(self, requests: List[Dict[str, str]], response_id: str) -> Dict[str, str]:
         for request in requests:
             if request.get("id") == response_id:
                 return request
@@ -750,7 +752,7 @@ class OneDriveDataSource(BaseDataSource):
                     else:
                         batched_apis.append(request)
 
-    def send_document_to_es(self, entity: Dict[str, Any], download_url):
+    def send_document_to_es(self, entity: Dict[str, Any], download_url: Optional[str]) -> Union[Tuple[Dict[str, Optional[Union[str, int, List[str]]]], None], Tuple[Dict[str, Optional[Union[str, int]]], None], Tuple[Dict[str, Union[str, int, List[str]]], partial], Tuple[Dict[str, Union[str, int]], partial]]:
         entity = self.prepare_doc(entity)
 
         if entity["type"] == FILE and download_url:
@@ -759,8 +761,8 @@ class OneDriveDataSource(BaseDataSource):
             return entity, None
 
     async def _bounbed_concurrent_tasks(
-        self, items, max_concurrency, calling_func, **kwargs
-    ):
+        self, items: List[Dict[str, Union[str, Dict[str, str], int]]], max_concurrency: int, calling_func: Callable, **kwargs
+    ) -> Generator[_GatheringFuture, None, List[Dict[str, Union[str, Dict[str, str], int, List[str]]]]]:
         async def process_item(item, semaphore):
             async with semaphore:
                 return await calling_func(item, **kwargs)
@@ -771,7 +773,7 @@ class OneDriveDataSource(BaseDataSource):
 
         return await asyncio.gather(*tasks)
 
-    def build_owned_files_url(self, user) -> Dict[str, Any]:
+    def build_owned_files_url(self, user: Dict[str, Union[str, List[Dict[str, str]]]]) -> Dict[str, Any]:
         user_id = user.get("id")
         files_uri = f"{ENDPOINTS[DELTA].format(user_id=user_id)}?$select={ITEM_FIELDS}"
 

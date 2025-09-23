@@ -17,6 +17,8 @@ from copy import deepcopy
 
 from connectors.logger import DocumentLogger, logger
 from connectors.utils import CancellableSleeps
+from typing import Any, Callable, DefaultDict, Dict, List, Optional, Tuple, Type, Union
+from unittest.mock import Mock
 
 __all__ = [
     "MultiService",
@@ -34,7 +36,7 @@ class ServiceAlreadyRunningError(Exception):
 _SERVICES = {}
 
 
-def get_services(names, config) -> "MultiService":
+def get_services(names: List[str], config: DefaultDict[Any, Any]) -> "MultiService":
     """Instantiates a list of services given their names and a config.
 
     returns a `MultiService` instance.
@@ -50,7 +52,7 @@ def get_service(name, config):
 class _Registry(type):
     """Metaclass used to register a service class in an internal registry."""
 
-    def __new__(cls, name, bases, dct):
+    def __new__(cls: type, name: str, bases: Tuple[()], dct: Dict[str, Optional[Union[str, Callable]]]) -> type:
         service_name = dct.get("name")
         class_instance = super().__new__(cls, name, bases, dct)
         if service_name is not None:
@@ -69,7 +71,7 @@ class BaseService(metaclass=_Registry):
 
     name = None  # using None here avoids registering this class
 
-    def __init__(self, config, service_name) -> None:
+    def __init__(self, config: Dict[str, Any], service_name: str) -> None:
         self.config = config
         self.logger = DocumentLogger(
             f"[{service_name}]", {"service_name": service_name}
@@ -102,7 +104,7 @@ class BaseService(metaclass=_Registry):
         finally:
             self.stop()
 
-    def raise_if_spurious(self, exception) -> None:
+    def raise_if_spurious(self, exception: TypeError) -> None:
         errors, first = self.errors
         errors += 1
 
@@ -118,7 +120,7 @@ class BaseService(metaclass=_Registry):
         self.errors[0] = errors
         self.errors[1] = first
 
-    def _parse_connectors(self):
+    def _parse_connectors(self) -> Dict[str, Dict[str, str]]:
         connectors = {}
         configured_connectors = deepcopy(self.config.get("connectors"))
         if configured_connectors is not None:
@@ -147,7 +149,7 @@ class BaseService(metaclass=_Registry):
 
         return connectors
 
-    def _override_es_config(self, connector):
+    def _override_es_config(self, connector: Mock) -> Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]:
         es_config = deepcopy(self.es_config)
         if connector.id not in self.connectors:
             return es_config
@@ -182,7 +184,7 @@ class MultiService:
             except asyncio.CancelledError:
                 logger.error("Service did not handle cancellation gracefully.")
 
-    def shutdown(self, sig) -> None:
+    def shutdown(self, sig: str) -> None:
         logger.info(f"Caught {sig}. Graceful shutdown.")
 
         for service in self._services:

@@ -15,6 +15,10 @@ from elasticsearch.helpers import async_scan
 from connectors.es import TIMESTAMP_FIELD
 from connectors.es.client import ESClient
 from connectors.logger import logger
+from _asyncio import Task
+from elastic_transport import ApiResponse, HeadApiResponse, ObjectApiResponse
+from typing import Any, Dict, Generator, List, Optional, Union
+from unittest.mock import AsyncMock
 
 
 class ESManagementClient(ESClient):
@@ -31,12 +35,12 @@ class ESManagementClient(ESClient):
     This client, on the contrary, is used to manage a number of indices outside of connector protocol operations.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int, float]]) -> None:
         logger.debug(f"ESManagementClient connecting to {config['host']}")
         # initialize ESIndex instance
         super().__init__(config)
 
-    async def ensure_exists(self, indices=None) -> None:
+    async def ensure_exists(self, indices: Optional[List[str]]=None) -> None:
         if indices is None:
             indices = []
 
@@ -50,7 +54,7 @@ class ESManagementClient(ESClient):
                 )
                 logger.debug(f"Created index {index}")
 
-    async def create_content_index(self, search_index_name, language_code):
+    async def create_content_index(self, search_index_name: str, language_code: Optional[str]) -> Union[ObjectApiResponse, ApiResponse, AsyncMock]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.indices.create,
@@ -59,7 +63,7 @@ class ESManagementClient(ESClient):
         )
 
     async def ensure_ingest_pipeline_exists(
-        self, pipeline_id, version, description, processors
+        self, pipeline_id: Union[str, int], version: int, description: str, processors: List[Union[str, Dict[str, Dict[str, Union[str, List[str], bool]]]]]
     ) -> None:
         try:
             await self._retrier.execute_with_retry(
@@ -76,12 +80,12 @@ class ESManagementClient(ESClient):
                 )
             )
 
-    async def delete_indices(self, indices) -> None:
+    async def delete_indices(self, indices: List[str]) -> None:
         await self._retrier.execute_with_retry(
             partial(self.client.indices.delete, index=indices, ignore_unavailable=True)
         )
 
-    async def clean_index(self, index_name):
+    async def clean_index(self, index_name: str) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.delete_by_query,
@@ -91,7 +95,7 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def list_indices(self, index: str = "*"):
+    async def list_indices(self, index: str = "*") -> Dict[Any, Any]:
         """
         List indices using Elasticsearch.stats API. Includes the number of documents in each index.
         """
@@ -125,12 +129,12 @@ class ESManagementClient(ESClient):
 
         return indices
 
-    async def index_exists(self, index_name):
+    async def index_exists(self, index_name: str) -> Union[HeadApiResponse, AsyncMock]:
         return await self._retrier.execute_with_retry(
             partial(self.client.indices.exists, index=index_name)
         )
 
-    async def get_index_or_alias(self, index_name, ignore_unavailable: bool = False):
+    async def get_index_or_alias(self, index_name: str, ignore_unavailable: bool = False) -> Optional[Union[Dict[str, Dict[Any, Any]], Dict[str, Dict[str, Dict[Any, Any]]]]]:
         """
         Get index definition (mappings and settings) by its name or its alias.
         """
@@ -169,7 +173,7 @@ class ESManagementClient(ESClient):
 
         return None
 
-    async def upsert(self, _id, index_name, doc):
+    async def upsert(self, _id: str, index_name: str, doc: Dict[str, str]) -> AsyncMock:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.index,
@@ -179,7 +183,7 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def bulk_insert(self, operations, pipeline):
+    async def bulk_insert(self, operations: List[Union[Dict[str, Dict[str, str]], Dict[str, str], Any]], pipeline: str) -> Generator[Task, None, Union[ObjectApiResponse, Dict[str, List[Dict[str, Dict[str, str]]]], Dict[str, Union[bool, List[Dict[str, Dict[str, Union[Dict[str, str], str]]]]]], Dict[str, List[Any]]]]:
         return await self._retrier.execute_with_retry(
             partial(
                 self.client.bulk,
@@ -188,7 +192,7 @@ class ESManagementClient(ESClient):
             )
         )
 
-    async def yield_existing_documents_metadata(self, index):
+    async def yield_existing_documents_metadata(self, index: str) -> None:
         """Returns an iterator on the `id` and `_timestamp` fields of all documents in an index.
 
         WARNING
@@ -211,7 +215,7 @@ class ESManagementClient(ESClient):
 
             yield doc_id, timestamp
 
-    async def get_connector_secret(self, connector_secret_id):
+    async def get_connector_secret(self, connector_secret_id: str) -> str:
         secret = await self._retrier.execute_with_retry(
             partial(
                 self.client.perform_request,
@@ -221,7 +225,7 @@ class ESManagementClient(ESClient):
         )
         return secret.get("value")
 
-    async def create_connector_secret(self, secret_value):
+    async def create_connector_secret(self, secret_value: str) -> str:
         secret = await self._retrier.execute_with_retry(
             partial(
                 self.client.perform_request,

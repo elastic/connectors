@@ -8,14 +8,15 @@ import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, Union
+from typing import Generator, List, Optional, Any, Dict, Union
 
 import aiohttp
 from aiohttp.client_exceptions import ClientResponseError
 
-from connectors.logger import logger
-from connectors.source import BaseDataSource
+from connectors.logger import ExtraLogger, logger
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.utils import CancellableSleeps, dict_slice, retryable
+from _asyncio import Task
 
 BASE_URL = "https://slack.com/api"
 
@@ -52,7 +53,7 @@ class SlackAPIError(Exception):
 
 
 class SlackClient:
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: Union[Dict[str, Union[bool, str, int]], DataSourceConfiguration]) -> None:
         self.token = configuration["token"]
         self._http_session = aiohttp.ClientSession(
             headers=self._headers(),
@@ -62,7 +63,7 @@ class SlackClient:
         self._logger = logger
         self._sleeps = CancellableSleeps()
 
-    def set_logger(self, logger_) -> None:
+    def set_logger(self, logger_: ExtraLogger) -> None:
         self._logger = logger_
 
     async def ping(self) -> bool:
@@ -149,13 +150,13 @@ class SlackClient:
             if not cursor:
                 break
 
-    def _add_cursor(self, url, cursor) -> str:
+    def _add_cursor(self, url: str, cursor: str) -> str:
         return f"{url}&{CURSOR}={cursor}"
 
-    def _get_next_cursor(self, response):
+    def _get_next_cursor(self, response: Dict[str, Union[bool, List[Dict[str, Union[bool, str]]], Dict[str, str], List[Dict[str, str]], List[Union[Dict[str, Union[int, str]], Dict[str, str]]]]]) -> Optional[str]:
         return response.get(RESPONSE_METADATA, {}).get(NEXT_CURSOR)
 
-    async def _get_json(self, absolute_url):
+    async def _get_json(self, absolute_url: str) -> Generator[Task, None, Dict[str, Any]]:
         self._logger.debug(f"Fetching url: {absolute_url}")
         async with self._call_api(absolute_url) as resp:
             json_content = await resp.json()
@@ -167,7 +168,7 @@ class SlackClient:
 
     @asynccontextmanager
     @retryable(retries=3)
-    async def _call_api(self, absolute_url):
+    async def _call_api(self, absolute_url: str):
         try:
             async with self._http_session.get(
                 absolute_url,
@@ -177,7 +178,7 @@ class SlackClient:
         except ClientResponseError as e:
             await self._handle_client_response_error(e)
 
-    async def _handle_client_response_error(self, e):
+    async def _handle_client_response_error(self, e: ClientResponseError):
         if e.status == 429:
             response_headers = e.headers or {}
             if "Retry-After" in response_headers:
@@ -209,7 +210,7 @@ class SlackDataSource(BaseDataSource):
     name = "Slack"
     service_type = "slack"
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Set up the connection to the Slack.
 
         Args:
@@ -301,7 +302,7 @@ class SlackDataSource(BaseDataSource):
             ):
                 yield self.remap_message(message, channel)
 
-    def get_username(self, user):
+    def get_username(self, user: Dict[str, str]) -> str:
         """
         Given a user record from slack, try to find a good username for it.
         This is hard, because no one property is reliably present and optimal.
@@ -323,7 +324,7 @@ class SlackDataSource(BaseDataSource):
                 "id"
             ]  # Some Users do not have any names (like Bots). For these, we fall back on ID
 
-    def remap_user(self, user) -> Dict[str, Any]:
+    def remap_user(self, user: Dict[str, Any]) -> Dict[str, Any]:
         user_profile = user.get("profile", {})
         return {
             "_id": user["id"],
@@ -347,7 +348,7 @@ class SlackDataSource(BaseDataSource):
             ),
         )
 
-    def remap_channel(self, channel) -> Dict[str, Any]:
+    def remap_channel(self, channel: Dict[str, Union[bool, str]]) -> Dict[str, Any]:
         topic = channel.get("topic", {})
         topic_creator_id = topic.get("creator")
         purpose = channel.get("purpose", {})
@@ -374,7 +375,7 @@ class SlackDataSource(BaseDataSource):
             ),
         )
 
-    def remap_message(self, message, channel) -> Dict[str, Any]:
+    def remap_message(self, message: Dict[str, Union[int, str]], channel: Dict[str, Union[bool, str, int]]) -> Dict[str, Any]:
         user_id = message.get("user", message.get("bot_id"))
 
         def convert_usernames(

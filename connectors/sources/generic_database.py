@@ -5,13 +5,14 @@
 #
 import asyncio
 from abc import ABC, abstractmethod
-from typing import List, Optional, Sized
+from typing import Any, Dict, Iterator, Union, List, Optional, Sized
 
 from asyncpg.exceptions._base import InternalClientError
-from pyre_extensions import PyreReadOnly
 from sqlalchemy.exc import ProgrammingError
 
 from connectors.utils import RetryStrategy, retryable
+from _asyncio import Future, Task
+from functools import partial
 
 WILDCARD = "*"
 
@@ -20,7 +21,7 @@ DEFAULT_RETRY_COUNT = 3
 DEFAULT_WAIT_MULTIPLIER = 2
 
 
-def configured_tables(tables):
+def configured_tables(tables: Union[str, List[str]]) -> List[Union[str, Any]]:
     """Split a string containing a comma-seperated list of tables by comma and strip the table names.
 
     Filter out `None` and zero-length values from the tables.
@@ -45,12 +46,12 @@ def configured_tables(tables):
     )
 
 
-def is_wildcard(tables) -> bool:
+def is_wildcard(tables: Union[str, List[str]]) -> bool:
     return tables in (WILDCARD, [WILDCARD])
 
 
 def map_column_names(
-    column_names, schema=None, tables: Optional[PyreReadOnly[Sized]] = None
+    column_names: List[Union[str, Any]], schema: Optional[str]=None, tables: Optional[Sized] = None
 ) -> List[str]:
     prefix = ""
     if schema and len(schema.strip()) > 0:
@@ -60,7 +61,7 @@ def map_column_names(
     return [f"{prefix}{column}".lower() for column in column_names]
 
 
-def hash_id(tables, row, primary_key_columns) -> str:
+def hash_id(tables: List[str], row: Dict[str, Union[str, int]], primary_key_columns: List[str]) -> str:
     """Generates an id using table names as prefix in sorted order and primary key values.
 
     Example:
@@ -79,11 +80,11 @@ def hash_id(tables, row, primary_key_columns) -> str:
 
 
 async def fetch(
-    cursor_func,
+    cursor_func: partial,
     fetch_columns: bool = False,
     fetch_size: int = DEFAULT_FETCH_SIZE,
     retry_count: int = DEFAULT_RETRY_COUNT,
-):
+) -> Iterator[Union[Task, Future]]:
     @retryable(
         retries=retry_count,
         interval=DEFAULT_WAIT_MULTIPLIER,

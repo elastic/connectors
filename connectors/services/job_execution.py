@@ -17,12 +17,14 @@ from connectors.services.base import BaseService
 from connectors.source import get_source_klass
 from connectors.sync_job_runner import SyncJobRunner
 from connectors.utils import ConcurrentTasks
+from typing import Dict, List, Union
+from unittest.mock import Mock
 
 
 class JobExecutionService(BaseService):
     name = "execute"
 
-    def __init__(self, config, service_name) -> None:
+    def __init__(self, config: Dict[str, Union[str, Dict[str, Union[float, int, str]], List[Dict[str, str]], Dict[str, str], Dict[str, Union[str, bool, Dict[str, Union[int, bool, Dict[str, Union[bool, int, float]]]], int]]]], service_name: str) -> None:
         super().__init__(config, service_name)
         self.idling = self.service_config["idling"]
         self.source_list = config["sources"]
@@ -51,7 +53,7 @@ class JobExecutionService(BaseService):
     def should_execute(self, connector, sync_job):
         raise NotImplementedError()
 
-    async def _sync(self, sync_job) -> None:
+    async def _sync(self, sync_job: Mock) -> None:
         if sync_job.service_type not in self.source_list:
             msg = f"Couldn't find data source class for {sync_job.service_type}"
             raise DataSourceError(msg)

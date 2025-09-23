@@ -7,13 +7,12 @@
 
 import ssl
 from functools import cached_property, partial
-from typing import List, Optional, Sized
+from typing import Any, Dict, Generator, Tuple, Union, List, Optional, Sized
 from urllib.parse import quote
 
 import fastjsonschema
 from asyncpg.exceptions._base import InternalClientError
 from fastjsonschema import JsonSchemaValueException
-from pyre_extensions import PyreReadOnly
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -23,7 +22,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource
+from connectors.source import DataSourceConfiguration, BaseDataSource
 from connectors.sources.generic_database import (
     DEFAULT_FETCH_SIZE,
     DEFAULT_RETRY_COUNT,
@@ -41,6 +40,8 @@ from connectors.utils import (
     iso_utc,
     retryable,
 )
+from _asyncio import Task
+from connectors.logger import ExtraLogger
 
 FETCH_LIMIT = 1000
 
@@ -103,10 +104,10 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
 
     SCHEMA = fastjsonschema.compile(definition=SCHEMA_DEFINITION)
 
-    def __init__(self, source) -> None:
+    def __init__(self, source: "PostgreSQLDataSource") -> None:
         self.source = source
 
-    async def validate(self, advanced_rules):
+    async def validate(self, advanced_rules: Union[List[Dict[str, Union[str, List[str]]]], List[Dict[str, str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -119,7 +120,7 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
         interval=DEFAULT_WAIT_MULTIPLIER,
         strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
     )
-    async def _remote_validation(self, advanced_rules) -> SyncRuleValidationResult:
+    async def _remote_validation(self, advanced_rules: List[Dict[str, Union[str, List[str]]]]) -> SyncRuleValidationResult:
         try:
             PostgreSQLAdvancedRulesValidator.SCHEMA(advanced_rules)
         except JsonSchemaValueException as e:
@@ -158,16 +159,16 @@ class PostgreSQLAdvancedRulesValidator(AdvancedRulesValidator):
 class PostgreSQLClient:
     def __init__(
         self,
-        host,
-        port,
-        user,
-        password,
-        database,
-        schema,
-        tables,
-        ssl_enabled,
-        ssl_ca,
-        logger_,
+        host: str,
+        port: Union[str, int],
+        user: str,
+        password: str,
+        database: str,
+        schema: str,
+        tables: Union[List[str], str],
+        ssl_enabled: bool,
+        ssl_ca: str,
+        logger_: Optional[ExtraLogger],
         retry_count: int = DEFAULT_RETRY_COUNT,
         fetch_size: int = DEFAULT_FETCH_SIZE,
     ) -> None:
@@ -218,7 +219,7 @@ class PostgreSQLClient:
             )
             raise
 
-    async def ping(self):
+    async def ping(self) -> Generator[Task, None, Tuple[int]]:
         return await anext(
             fetch(
                 cursor_func=partial(self.get_cursor, self.queries.ping()),
@@ -248,7 +249,7 @@ class PostgreSQLClient:
             for table in tables:
                 yield table
 
-    async def get_table_row_count(self, table):
+    async def get_table_row_count(self, table: str) -> int:
         [row_count] = await anext(
             fetch(
                 cursor_func=partial(
@@ -264,7 +265,7 @@ class PostgreSQLClient:
         )
         return row_count
 
-    async def get_table_primary_key(self, table):
+    async def get_table_primary_key(self, table: str) -> List[str]:
         primary_keys = [
             key
             async for [key] in fetch(
@@ -284,7 +285,7 @@ class PostgreSQLClient:
 
         return primary_keys
 
-    async def get_table_last_update_time(self, table):
+    async def get_table_last_update_time(self, table: str) -> str:
         self._logger.debug(f"Fetching last updated time for table '{table}'")
         [last_update_time] = await anext(
             fetch(
@@ -374,7 +375,7 @@ class PostgreSQLClient:
 
             self._logger.info(f"Found {record_count} records for '{query}' query")
 
-    def _get_connect_args(self):
+    def _get_connect_args(self) -> Dict[Any, Any]:
         """Convert string to pem format and create an SSL context
 
         Returns:
@@ -397,7 +398,7 @@ class PostgreSQLDataSource(BaseDataSource):
     service_type = "postgresql"
     advanced_rules_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         """Setup connection to the PostgreSQL database-server configured by user
 
         Args:
@@ -425,7 +426,7 @@ class PostgreSQLDataSource(BaseDataSource):
         self.postgresql_client.set_logger(self._logger)
 
     @classmethod
-    def get_default_configuration(cls):
+    def get_default_configuration(cls) -> Dict[str, Dict[str, Union[str, int, bool, List[str], List[Dict[str, Union[bool, str]]]]]]:
         return {
             "host": {
                 "label": "Host",
@@ -513,7 +514,7 @@ class PostgreSQLDataSource(BaseDataSource):
             msg = f"Can't connect to Postgresql on {self.postgresql_client.host}."
             raise Exception(msg) from e
 
-    def row2doc(self, row, doc_id, table, timestamp):
+    def row2doc(self, row: Dict[str, Union[str, int]], doc_id: str, table: Union[List[str], str], timestamp: str) -> Dict[str, Union[str, int, List[str]]]:
         row.update(
             {
                 "_id": doc_id,
@@ -525,7 +526,7 @@ class PostgreSQLDataSource(BaseDataSource):
         )
         return row
 
-    async def get_primary_key(self, tables):
+    async def get_primary_key(self, tables: List[str]) -> Tuple[List[str], List[str]]:
         self._logger.debug(f"Extracting primary keys for tables: {tables}")
         primary_key_columns = []
         for table in tables:
@@ -669,7 +670,7 @@ class PostgreSQLDataSource(BaseDataSource):
     async def yield_rows_for_query(
         self,
         primary_key_columns,
-        tables: Optional[PyreReadOnly[Sized]],
+        tables: Optional[Sized],
         query=None,
         row_count=None,
         order_by_columns=None,

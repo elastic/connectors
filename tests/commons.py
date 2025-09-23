@@ -9,7 +9,6 @@ from random import choices
 from typing import Any, List, Optional, Sized, Union
 
 from faker.proxy import Faker
-from pyre_extensions import PyreReadOnly
 
 
 class AsyncIterator:
@@ -80,7 +79,7 @@ class AsyncIterator:
 
 class WeightedFakeProvider:
     def __init__(
-        self, seed=None, weights: Optional[PyreReadOnly[Sized]] = None
+        self, seed=None, weights: Optional[Sized] = None
     ) -> None:
         self.seed = seed
         if weights and len(weights) != 4:

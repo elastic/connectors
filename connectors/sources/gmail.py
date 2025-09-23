@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the Elastic License 2.0.
 #
 from functools import cached_property
-from typing import Any, Dict, List, Union
+from typing import Optional, Any, Dict, List, Union
 
 import fastjsonschema
 from aiogoogle import AuthError
@@ -15,7 +15,7 @@ from connectors.filtering.validation import (
     AdvancedRulesValidator,
     SyncRuleValidationResult,
 )
-from connectors.source import BaseDataSource, ConfigurableFieldValueError
+from connectors.source import DataSourceConfiguration, BaseDataSource, ConfigurableFieldValueError
 from connectors.sources.google import (
     GMailClient,
     GoogleDirectoryClient,
@@ -30,6 +30,8 @@ from connectors.utils import (
     iso_utc,
     validate_email_address,
 )
+from connectors.protocol.connectors import Filter
+from unittest.mock import AsyncMock
 
 CUSTOMER_ID_LABEL = "Google customer id"
 
@@ -55,7 +57,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
         definition=SCHEMA_DEFINITION,
     )
 
-    async def validate(self, advanced_rules) -> SyncRuleValidationResult:
+    async def validate(self, advanced_rules: Dict[str, Union[List[int], List[str]]]) -> SyncRuleValidationResult:
         if len(advanced_rules) == 0:
             return SyncRuleValidationResult.valid_result(
                 SyncRuleValidationResult.ADVANCED_RULES
@@ -75,7 +77,7 @@ class GMailAdvancedRulesValidator(AdvancedRulesValidator):
             )
 
 
-def _message_doc(message) -> Dict[str, Any]:
+def _message_doc(message: Dict[str, Optional[Union[int, str]]]) -> Dict[str, Any]:
     timestamp_field = "_timestamp"
 
     # We're using the `_attachment` field here so the attachment processor on the ES side decodes the base64 value
@@ -99,7 +101,7 @@ def _message_doc(message) -> Dict[str, Any]:
     return es_doc
 
 
-def _filtering_enabled(filtering):
+def _filtering_enabled(filtering: Optional[Filter]) -> bool:
     return filtering is not None and filtering.has_advanced_rules()
 
 
@@ -112,7 +114,7 @@ class GMailDataSource(BaseDataSource):
     dls_enabled = True
     incremental_sync_enabled = True
 
-    def __init__(self, configuration) -> None:
+    def __init__(self, configuration: DataSourceConfiguration) -> None:
         super().__init__(configuration=configuration)
 
     @classmethod
@@ -249,7 +251,7 @@ class GMailDataSource(BaseDataSource):
             subject=self.configuration["subject"],
         )
 
-    def _gmail_client(self, subject) -> GMailClient:
+    def _gmail_client(self, subject: str) -> GMailClient:
         """Instantiates a GMail client for a corresponding subject.
         Args:
             subject (str): Email address for the subject.
@@ -277,17 +279,17 @@ class GMailDataSource(BaseDataSource):
                 self._logger.exception(f"Error while connecting to {service_name}.")
                 raise
 
-    def _dls_enabled(self):
+    def _dls_enabled(self) -> bool:
         return (
             self._features is not None
             and self._features.document_level_security_enabled()
             and self.configuration["use_document_level_security"]
         )
 
-    def access_control_query(self, access_control):
+    def access_control_query(self, access_control: List[str]) -> Dict[str, Dict[str, Dict[str, Union[Dict[str, List[str]], str]]]]:
         return es_access_control_query(access_control)
 
-    def _user_access_control_doc(self, user, access_control) -> Dict[str, Any]:
+    def _user_access_control_doc(self, user: Dict[str, str], access_control: List[str]) -> Dict[str, Any]:
         email = user.get(UserFields.EMAIL.value)
         created_at = user.get(UserFields.CREATION_DATE.value)
 
@@ -297,7 +299,7 @@ class GMailDataSource(BaseDataSource):
             "created_at": created_at or iso_utc(),
         } | self.access_control_query(access_control)
 
-    def _decorate_with_access_control(self, document, access_control):
+    def _decorate_with_access_control(self, document: Dict[str, str], access_control: List[str]) -> Dict[str, Union[str, List[str]]]:
         if self._dls_enabled():
             document[ACCESS_CONTROL] = list(
                 set(document.get(ACCESS_CONTROL, []) + access_control)
@@ -305,7 +307,7 @@ class GMailDataSource(BaseDataSource):
 
         return document
 
-    async def get_access_control(self):
+    async def get_access_control(self) -> None:
         """Yields all users found in the Google Workspace associated with the configured service account.
 
         Yields:
@@ -324,8 +326,8 @@ class GMailDataSource(BaseDataSource):
                 yield self._user_access_control_doc(user, access_control)
 
     async def _message_doc_with_access_control(
-        self, access_control, gmail_client, message
-    ):
+        self, access_control: List[str], gmail_client: AsyncMock, message: Dict[str, str]
+    ) -> Dict[str, Union[str, List[str]]]:
         message_id = message.get("id")
         message_content = await gmail_client.message(message_id)
         message_content["id"] = message_id
@@ -337,7 +339,7 @@ class GMailDataSource(BaseDataSource):
 
         return message_doc_with_access_control
 
-    async def get_docs(self, filtering=None):
+    async def get_docs(self, filtering: None=None) -> None:
         """Yields messages for all users present in the Google Workspace.
         Includes spam and trash messages, if the corresponding configuration value is set to `True`.
 
