@@ -262,6 +262,8 @@ class JiraClient:
 
     async def paginated_api_call(self, url_name, jql=None, **kwargs):
         """Make a paginated API call for Jira objects using the passed url_name with retry for the failed API calls.
+        Most Jira API endpoints use offset-based pagination. However, some endpoints use cursor-based pagination.
+        This method handles both.
 
         Args:
             url_name (str): URL Name to identify the API endpoint to hit
@@ -270,17 +272,12 @@ class JiraClient:
         Yields:
             response: Return api response.
         """
-        cursor_based_pagination = [ISSUES]
+        is_cursor_based_pagination = url_name == ISSUES
+        pagination_arg = {"next_page_token": "null"} if is_cursor_based_pagination else {"start_at": 0}
 
-        next_page_token = "null"  # noqa: S105
-        start_at = 0
-        if url_name in cursor_based_pagination:
-            pagination_arg = {"next_page_token": next_page_token}
-        else:
-            pagination_arg = {"start_at": start_at}
-
+        pagination_arg_str = ", ".join(f"{k}: {v}" for k, v in pagination_arg.items())
         self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> {pagination_arg}, maxResults: {FETCH_SIZE} and jql query: {jql}"
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> {pagination_arg_str}, maxResults: {FETCH_SIZE} and jql query: {jql}"
         )
         while True:
             try:
@@ -304,13 +301,14 @@ class JiraClient:
                     response_json = await response.json()
                     yield response_json
 
-                    if url_name in cursor_based_pagination:
+                    if is_cursor_based_pagination:
                         next_page_token = response_json.get("nextPageToken")
                         if not next_page_token:
                             return
                         pagination_arg = {"next_page_token": next_page_token}
                     else:
                         total = response_json["total"]
+                        start_at = pagination_arg["start_at"]
                         if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
                             return
                         start_at += FETCH_SIZE
@@ -318,7 +316,7 @@ class JiraClient:
 
             except Exception as exception:
                 self._logger.warning(
-                    f"Skipping data for type: {url_name}, query params: jql={jql}, nextPageToken={next_page_token}, maxResults={FETCH_SIZE}. Error: {exception}."
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, {pagination_arg_str.replace(': ', '=')}, maxResults={FETCH_SIZE}. Error: {exception}."
                 )
                 break
 
