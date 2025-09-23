@@ -281,7 +281,8 @@ class JiraClient:
 
         pagination_arg_str = ", ".join(f"{k}: {v}" for k, v in pagination_arg.items())
         self._logger.info(
-            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> {pagination_arg_str}, maxResults: {FETCH_SIZE} and jql query: {jql}"
+            f"Started pagination for the API endpoint: {URLS[url_name]} to host: {self.host_url} with the parameters -> "
+            f"{pagination_arg_str}, maxResults: {FETCH_SIZE} and jql query: {jql}"
         )
         while True:
             try:
@@ -305,22 +306,26 @@ class JiraClient:
                     response_json = await response.json()
                     yield response_json
 
+                    # is there another page? if not, we're done, otherwise update cursor/offset.
                     if is_cursor_based_pagination:
                         next_page_token = response_json.get("nextPageToken")
                         if not next_page_token:
                             return
-                        pagination_arg = {"next_page_token": next_page_token}
-                    else:
+                        pagination_arg["next_page_token"] = next_page_token
+                    else:  # offset-based pagination
                         total = response_json["total"]
                         start_at = pagination_arg["start_at"]
                         if start_at + FETCH_SIZE > total or total <= FETCH_SIZE:
                             return
                         start_at += FETCH_SIZE
-                        pagination_arg = {"start_at": start_at}
+                        pagination_arg["start_at"] = start_at
 
             except Exception as exception:
+                pagination_str = ", ".join(
+                    f"{k}={v}" for k, v in pagination_arg.items()
+                )
                 self._logger.warning(
-                    f"Skipping data for type: {url_name}, query params: jql={jql}, {pagination_arg_str.replace(': ', '=')}, maxResults={FETCH_SIZE}. Error: {exception}."
+                    f"Skipping data for type: {url_name}, query params: jql={jql}, {pagination_str}, maxResults={FETCH_SIZE}. Error: {exception}."
                 )
                 break
 
