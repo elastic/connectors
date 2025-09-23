@@ -273,7 +273,11 @@ class JiraClient:
             response: Return api response.
         """
         is_cursor_based_pagination = url_name == ISSUES
-        pagination_arg = {"next_page_token": "null"} if is_cursor_based_pagination else {"start_at": 0}
+        pagination_arg = (
+            {"next_page_token": "null"}
+            if is_cursor_based_pagination
+            else {"start_at": 0}
+        )
 
         pagination_arg_str = ", ".join(f"{k}: {v}" for k, v in pagination_arg.items())
         self._logger.info(
