@@ -50,7 +50,7 @@ install-agent: .venv/bin/elastic-ingest
 	.venv/bin/pip install -e ".[tests,ftest]"
 
 clean:
-	rm -rf bin lib .venv include elasticsearch_connector.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
+	rm -rf bin lib .venv include elasticsearch_connectors.egg-info .coverage site-packages pyvenv.cfg include.site.python*.greenlet dist
 
 lint: .venv/bin/python .venv/bin/ruff .venv/bin/elastic-ingest
 	.venv/bin/ruff check connectors
